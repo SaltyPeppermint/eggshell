@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.6,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "eggshell"
+version = "0.0.1"
+description = "Python Wrappper around egg"
+authors = [ {name = "heinimann", email = "heinimann@tu-berlin.de"} ]
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Topic :: Software Development :: Compilers",
+    "Development Status :: 2 - Pre-Alpha",
+]
+dynamic = ["version"]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+
+[project.urls]
+homepage = "https://github.com/SaltyPeppermint/egg-ml/eggshell"

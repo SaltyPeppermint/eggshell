@@ -1,0 +1,31 @@
+[package]
+name = "eggshell"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# The name of the native library.
+# This is the name which will be used in Python to import the library
+# If you change this, you must also change the name of the
+# `#[pymodule]` in `src/lib.rs`.
+name = "eggshell"
+# "cdylib" is necessary to produce a shared library for Python to import from.
+# To use it from both Python and Rust, you need "cdylib" and "rlib".
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+anyhow = "1.0.86"
+clap = { version = "4.5.4", features = ["derive"] }
+colored = "2.1.0"
+csv = "1.3.0"
+egg = { version = "0.9.5", features = ["serde-1"] }
+hashbrown = { version = "0.14.5", features = ["rayon", "serde"] }
+indexmap = { version = "2.2.6", features = ["rayon", "serde"] }
+log = "0.4.21"
+more-asserts = "0.3.1"
+ordered-float = "4.2.0"
+pyo3 = { version = "0.21.2", features = ["anyhow", "hashbrown"] }
+rayon = "1.10.0"
+serde = { version = "1.0.203", features = ["derive"] }
+serde_json = { version = "1.0.117", features = ["indexmap"] }
+thiserror = "1.0.61"
