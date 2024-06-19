@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "eggshell"
 version = "0.0.1"
 description = "Python Wrappper around egg"
-authors = [ {name = "heinimann", email = "heinimann@tu-berlin.de"} ]
+authors = [ {name = "Nicole Heinimann", email = "heinimann@tu-berlin.de"} ]
 requires-python = ">=3.8"
 license = {file = "LICENSE"}
 classifiers = [
