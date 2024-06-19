@@ -3,6 +3,7 @@ name = "eggshell"
 version = "0.1.0"
 edition = "2021"
 exclude = ["test.log", ".vscode/", "data/", ".*"]
+license = "GPL-3.0-or-later"
 
 [lib]
 # The name of the native library.

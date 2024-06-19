@@ -8,7 +8,7 @@ version = "0.0.1"
 description = "Python Wrappper around egg"
 authors = [ {name = "Nicole Heinimann", email = "heinimann@tu-berlin.de"} ]
 requires-python = ">=3.8"
-license = {file = "LICENSE"}
+license = "GPL-3.0-or-later"
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
