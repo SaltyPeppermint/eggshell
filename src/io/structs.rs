@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use pyo3::prelude::*;
 
-use crate::eqsat::results::{EqsatStats, EqsatResult};
+use crate::eqsat::results::{EqsatResult, EqsatStats};
 use crate::eqsat::utils::RunnerArgs;
 use crate::extraction::ExtractResult;
 
@@ -46,18 +46,19 @@ pub struct OtherSolverData {
     pub time: f64,
 }
 
+#[pymethods]
 impl Expression {
+    #[allow(clippy::cast_possible_wrap)]
     #[must_use]
-    pub(crate) fn new(
-        index: usize,
-        expression: String,
-        halide_data: Option<OtherSolverData>,
-    ) -> Self {
-        Self {
-            index,
-            term: expression,
-            other_solver: halide_data,
-        }
+    #[getter]
+    pub fn index_as_int(&self) -> i64 {
+        self.index as i64
+    }
+
+    #[must_use]
+    #[getter]
+    pub fn term(&self) -> String {
+        self.term.to_string()
     }
 }
 

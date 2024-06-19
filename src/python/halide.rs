@@ -4,24 +4,25 @@ use hashbrown::HashMap as HashBrownMap;
 use pyo3::prelude::*;
 use serde::Serialize;
 
-use crate::eqsat::results::{EqsatStats, EqsatResult};
+use crate::eqsat::results;
 use crate::eqsat::utils::RunnerArgs;
-use crate::eqsat::Eqsat;
 use crate::errors::EggShellError;
+use crate::extraction::Extractor;
 use crate::flattened::Vertex;
 use crate::trs::halide::Halide;
 use crate::trs::Trs;
+use crate::{cost_fn, eqsat, extraction};
 
 /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
 /// for the Halide Trs
 #[pyclass]
 #[derive(Debug, Clone)]
-pub struct PyEqsatHalide {
-    pub(crate) eqsat: Eqsat<Halide>,
+pub struct Eqsat {
+    pub(crate) eqsat: eqsat::Eqsat<Halide>,
 }
 
 #[pymethods]
-impl PyEqsatHalide {
+impl Eqsat {
     #[new]
     /// Set up a new equality staturation with the term.
     ///
@@ -30,7 +31,7 @@ impl PyEqsatHalide {
     /// Will error if the start_term could not be parsed.
     /// For more, see [`Eqsat`]
     fn new(index: usize) -> Result<Self, EggShellError> {
-        let eqsat = Eqsat::new(index)?;
+        let eqsat = eqsat::Eqsat::new(index)?;
         Ok(Self { eqsat })
     }
 
@@ -76,15 +77,15 @@ impl PyEqsatHalide {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    fn prove_once(&mut self, start_term: &str) -> Result<PyProveResult, EggShellError> {
+    fn prove_once(&mut self, start_term: &str) -> Result<EqsatResult, EggShellError> {
         let start_expr = start_term
             .parse()
             .map_err(|_| EggShellError::TermParse(start_term.into()))?;
         let goals = Halide::prove_goals();
         let r = match self.eqsat.run_goal_once(&start_expr, &goals) {
-            EqsatResult::Solved(result) => PyProveResult::Solved { result },
-            EqsatResult::Undecidable => PyProveResult::Undecidable {},
-            EqsatResult::LimitReached(remaining) => PyProveResult::LimitReached {
+            results::EqsatResult::Solved(result) => EqsatResult::Solved { result },
+            results::EqsatResult::Undecidable => EqsatResult::Undecidable {},
+            results::EqsatResult::LimitReached(remaining) => EqsatResult::LimitReached {
                 edges: remaining.edges,
                 vertices: remaining.vertices,
             },
@@ -93,12 +94,12 @@ impl PyEqsatHalide {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    fn simplify_once(&mut self, start_term: &str) -> Result<PyProveResult, EggShellError> {
+    fn simplify_once(&mut self, start_term: &str) -> Result<EqsatResult, EggShellError> {
         let start_expr = start_term
             .parse()
             .map_err(|_| EggShellError::TermParse(start_term.into()))?;
         let remaining = self.eqsat.run_simplify_once(&start_expr);
-        Ok(PyProveResult::LimitReached {
+        Ok(EqsatResult::LimitReached {
             edges: remaining.edges,
             vertices: remaining.vertices,
         })
@@ -111,14 +112,14 @@ impl PyEqsatHalide {
     }
 
     #[must_use]
-    fn stats_history(&self) -> Vec<EqsatStats> {
+    fn stats_history(&self) -> Vec<results::EqsatStats> {
         self.eqsat.stats_history().to_vec()
     }
 }
 
 #[pyclass]
 #[derive(PartialEq, Debug, Clone, Serialize)]
-pub enum PyProveResult {
+pub enum EqsatResult {
     Solved {
         result: String,
     },
@@ -130,7 +131,7 @@ pub enum PyProveResult {
 }
 
 #[pymethods]
-impl PyProveResult {
+impl EqsatResult {
     /// Returns `true` if the py prove result is [`Solved`].
     ///
     /// [`Solved`]: PyProveResult::Solved
@@ -159,9 +160,9 @@ impl PyProveResult {
     #[must_use]
     pub fn type_str(&self) -> String {
         match self {
-            PyProveResult::Solved { result: _ } => "Solved".into(),
-            PyProveResult::Undecidable {} => "Undecidable".into(),
-            PyProveResult::LimitReached {
+            EqsatResult::Solved { result: _ } => "Solved".into(),
+            EqsatResult::Undecidable {} => "Undecidable".into(),
+            EqsatResult::LimitReached {
                 vertices: _,
                 edges: _,
             } => "LimitReached".into(),
@@ -188,6 +189,71 @@ impl PyProveResult {
     }
 }
 
+/// Extracts the best term based on the values given in the hashmap.
+/// The key is the index in the vector of nodes.
+///
+/// # Errors
+///
+/// Will return [`EggShellError::MissingEqsat`] if no equality saturation has
+/// previously been run
+#[allow(clippy::needless_pass_by_value)]
+#[pyfunction]
+pub fn extract_with_costs_bottom_up(
+    eqsat: Eqsat,
+    node_costs: HashBrownMap<usize, f64>,
+) -> Result<HashBrownMap<String, f64>, EggShellError> {
+    let class_specific_costs = eqsat.eqsat.remap_costs(&node_costs)?;
+    let cost_fn = cost_fn::LookupCost::new(class_specific_costs);
+
+    let last_egraph = eqsat
+        .eqsat
+        .last_egraph()
+        .ok_or(EggShellError::MissingEqsat)?;
+    let last_roots = eqsat
+        .eqsat
+        .last_roots()
+        .ok_or(EggShellError::MissingEqsat)?;
+    let extractor = extraction::BottomUp::new(cost_fn, last_egraph);
+    let extracted = extractor.extract(last_roots);
+
+    let stringified = extracted
+        .iter()
+        .map(|x| (x.expr.to_string(), x.cost))
+        .collect();
+    Ok(stringified)
+}
+
+/// Extracts the best term based on the term size
+///
+/// # Errors
+///
+/// Will return [`EggShellError::MissingEqsat`] if no equality saturation has
+/// previously been run.
+#[allow(clippy::needless_pass_by_value)]
+#[pyfunction]
+pub fn extract_ast_size_bottom_up(
+    eqsat: Eqsat,
+) -> Result<HashBrownMap<String, f64>, EggShellError> {
+    let cost_fn = cost_fn::ExprSize;
+
+    let last_egraph = eqsat
+        .eqsat
+        .last_egraph()
+        .ok_or(EggShellError::MissingEqsat)?;
+    let last_roots = eqsat
+        .eqsat
+        .last_roots()
+        .ok_or(EggShellError::MissingEqsat)?;
+    let extractor = extraction::BottomUp::new(cost_fn, last_egraph);
+    let extracted = extractor.extract(last_roots);
+
+    let stringified = extracted
+        .iter()
+        .map(|x| (x.expr.to_string(), x.cost))
+        .collect();
+    Ok(stringified)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,32 +261,32 @@ mod tests {
     #[test]
     fn basic_eqsat_solved_true() {
         let false_stmt = "( == 0 0 )";
-        let mut eqsat = PyEqsatHalide::new(0).unwrap();
+        let mut eqsat = Eqsat::new(0).unwrap();
         let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyProveResult::Solved { result: "1".into() }, result);
+        assert_eq!(EqsatResult::Solved { result: "1".into() }, result);
     }
 
     #[test]
     fn basic_eqsat_solved_false() {
         let false_stmt = "( == 1 0 )";
-        let mut eqsat = PyEqsatHalide::new(0).unwrap();
+        let mut eqsat = Eqsat::new(0).unwrap();
         let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyProveResult::Solved { result: "0".into() }, result);
+        assert_eq!(EqsatResult::Solved { result: "0".into() }, result);
     }
 
     #[test]
     fn simple_eqsat_solved_true() {
         let true_stmt = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )";
-        let mut eqsat = PyEqsatHalide::new(0).unwrap();
+        let mut eqsat = Eqsat::new(0).unwrap();
         let result = eqsat.prove_once(true_stmt).unwrap();
-        assert_eq!(PyProveResult::Solved { result: "1".into() }, result);
+        assert_eq!(EqsatResult::Solved { result: "1".into() }, result);
     }
 
     #[test]
     fn simple_eqsat_solved_false() {
         let false_stmt = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )";
-        let mut eqsat = PyEqsatHalide::new(0).unwrap();
+        let mut eqsat = Eqsat::new(0).unwrap();
         let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyProveResult::Solved { result: "0".into() }, result);
+        assert_eq!(EqsatResult::Solved { result: "0".into() }, result);
     }
 }

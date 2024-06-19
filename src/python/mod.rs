@@ -1,3 +1,1 @@
-pub mod eqsat;
-pub mod extraction;
-pub mod io;
+pub mod halide;

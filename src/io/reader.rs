@@ -1,12 +1,15 @@
 use std::fs::File;
 
-use csv::{self, StringRecord};
+use csv;
+use csv::StringRecord;
+use pyo3::prelude::*;
 
 use super::structs::{Expression, OtherSolverData};
 use crate::errors::EggShellError;
 
 /// Reads expressions from a csv file into an `ExpressionStruct` Vector.
 #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
+#[pyfunction]
 pub fn read_expressions(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
     // Declare the vector and the reader
     let file = File::open(file_path)?;
@@ -22,25 +25,25 @@ pub fn read_expressions(file_path: &str) -> Result<Vec<Expression>, EggShellErro
                     .expect("No index means csv is broken.");
                 let expression = record.get(1).expect("No expression means csv is broken.");
                 // Check if Halide's resluts are included then add them if they are
-                let halide_data = parse_halide(&record)?;
+                let other_solver_data = parse_other_solver(&record)?;
 
                 // Push the new ExpressionStruct initialized with the values extracted into the vector.
-                Ok(Expression::new(
+                Ok(Expression {
                     index,
-                    (*expression).to_string(),
-                    halide_data,
-                ))
+                    term: (*expression).to_string(),
+                    other_solver: other_solver_data,
+                })
             })
         })
         .collect()
 }
 
-fn parse_halide(record: &StringRecord) -> Result<Option<OtherSolverData>, EggShellError> {
-    if let (Some(halide_result), Some(halide_time)) = (record.get(2), record.get(3)) {
-        let halide_time = halide_time.parse()?;
+fn parse_other_solver(record: &StringRecord) -> Result<Option<OtherSolverData>, EggShellError> {
+    if let (Some(halide_result), Some(other_time)) = (record.get(2), record.get(3)) {
+        let other_time = other_time.parse()?;
         Ok(Some(OtherSolverData {
             result: halide_result.into(),
-            time: halide_time,
+            time: other_time,
         }))
     } else {
         Ok(None)
