@@ -5,7 +5,9 @@ use csv::Writer;
 use serde::Serialize;
 
 /// Writes the results (a vector of [`Serialize`] items, most likeley
-/// [`crate::eqsat::results::EqsatResult`]) into a CSV file.
+/// [`EqsatResult`]) into a CSV file.
+///
+/// [`EqsatResult`]: `crate::eqsat::results::EqsatResult`
 #[allow(clippy::missing_errors_doc)]
 pub fn write_results_csv<T: Serialize>(path: &str, results: &[T]) -> anyhow::Result<()> {
     let mut wtr = Writer::from_path(path)?;
@@ -18,7 +20,9 @@ pub fn write_results_csv<T: Serialize>(path: &str, results: &[T]) -> anyhow::Res
 }
 
 /// Writes the results (a vector of [`Serialize`] items, most likeley
-/// [`crate::eqsat::results::EqsatResult`]) into a JSON file.
+/// [`EqsatResult`]) into a JSON file.
+///
+/// [`EqsatResult`]: `crate::eqsat::results::EqsatResult`
 #[allow(clippy::missing_errors_doc)]
 pub fn write_results_json<T: Serialize>(path: &str, results: &[T]) -> anyhow::Result<()> {
     let file = File::open(path)?;

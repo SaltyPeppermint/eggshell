@@ -29,7 +29,7 @@ where
     L: Language,
     N: Analysis<L>,
 {
-    /// Find the cheapest (lowest cost) represented `RecExpr` in the
+    /// Find the cheapest (lowest cost) represented [`egg::RecExpr`] in the
     /// given eclass.
     /// Technically this would also work with non-roots but it isnt tested.
     fn find_best(&self, root: ClassId) -> (RecExpr<L>, Cost) {
@@ -58,7 +58,7 @@ where
         }
     }
 
-    /// Extract the best terms in [`Self::egraph`] from the roots
+    /// Extract the best terms from the roots
     fn extract(mut self, roots: &[ClassId]) -> Vec<ExtractResult<L>>
     where
         N: Analysis<L>,

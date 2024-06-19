@@ -277,8 +277,8 @@ where
     ///
     /// # Errors
     ///
-    /// Will return `EggShellError::MissingEqsat` if no equality saturation has
-    /// previously been run and `self.last_egraph` is therefore empty.
+    /// Will return [`EggShellError::MissingEqsat`] if no equality saturation has
+    /// previously been run and [`Self::last_egraph`] is therefore empty.
     pub fn remap_costs(
         &self,
         node_costs: &HashBrownMap<usize, f64>,

@@ -9,7 +9,7 @@ use crate::argparse::EqsatArgs;
 
 pub(crate) type ClassId = egg::Id;
 
-/// Struct to hold the arguments with which the [`Runner`] is set up
+/// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[pyclass]
 #[derive(Clone, Debug, Serialize)]
 pub struct RunnerArgs {

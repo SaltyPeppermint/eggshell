@@ -7,7 +7,9 @@ use pyo3::prelude::*;
 use super::structs::{Expression, OtherSolverData};
 use crate::errors::EggShellError;
 
-/// Reads expressions from a csv file into an `ExpressionStruct` Vector.
+/// Reads expressions from a csv file into a vector of [`Expression`] Vector.
+///
+/// [`Expression`]: super::structs::Expression
 #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
 #[pyfunction]
 pub fn read_expressions(file_path: &str) -> Result<Vec<Expression>, EggShellError> {

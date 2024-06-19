@@ -15,16 +15,23 @@ use crate::eqsat::ClassId;
 pub struct FlatGraph {
     /// Roots of the [`FlatGraph`], if any
     pub roots: HashBrownSet<ClassId>,
-    /// Vector of Vertices that could be [`Vertex::EClass`] or [`Vertex::ENode`]
+    /// Vector of Vertices that could be [`EClass`] or [`ENode`]
+    ///
+    /// [`EClass`]: Vertex::EClass
+    /// [`ENode`]: Vertex::ENode
     pub vertices: Vec<Vertex>,
-    /// [`FlatGraph::edges`] contains the directed edges between the vertices of the
+    /// [`edges`] contains the directed edges between the vertices of the
     /// graph.
     ///     Key:    From where the edges are going
     ///     Value:  To which (0-n) vertices the edges are going.
     ///             The order here is important!
+    ///
+    /// [`edges`]: FlatGraph::edges
     pub edges: HashBrownMap<usize, Vec<usize>>,
     /// Mapping the Ids of the or [`egg::EClass`] in the original [`EGraph`] to
-    /// indices into [`FlatGraph::vertices`].
+    /// indices into [`vertices`].
+    ///
+    /// [`vertices`]: FlatGraph::vertices
     pub eclass_ids: HashBrownMap<ClassId, usize>,
 }
 
@@ -99,20 +106,6 @@ impl FlatGraph {
         self
     }
 
-    // pub(crate) fn children_of(&self, vertex_idx: usize) -> &[usize] {
-    //     self.edges[&vertex_idx].as_ref()
-    // }
-
-    // /// Get the number of eclasses in here
-    // pub(crate) fn n_eclasses(&self) -> usize {
-    //     self.eclass_ids.len()
-    // }
-
-    // /// Get the number of eclasses in here
-    // pub(crate) fn eclasses(&self) -> impl Iterator<Item = &usize> {
-    //     self.eclass_ids.values()
-    // }
-
     pub(crate) fn remap_costs(
         &self,
         node_costs: &HashBrownMap<usize, f64>,
@@ -166,10 +159,10 @@ impl Vertex {
         matches!(self, Self::ENode { .. })
     }
 
-    /// Returns the expression in the enode if it a root [`ENode`].
+    /// Returns the expression in the [`ENode`].
     /// Otherwise empty String
     ///
-    /// [`EClass`]: Vertex::EClass
+    /// [`ENode`]: Vertex::ENode
     #[must_use]
     pub fn enode_content(&self) -> String {
         if let Vertex::ENode { expr } = self {
