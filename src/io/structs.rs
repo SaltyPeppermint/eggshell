@@ -51,7 +51,7 @@ impl Expression {
     #[allow(clippy::cast_possible_wrap)]
     #[must_use]
     #[getter]
-    pub fn index_as_int(&self) -> i64 {
+    pub fn index(&self) -> i64 {
         self.index as i64
     }
 

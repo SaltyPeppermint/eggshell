@@ -2,13 +2,12 @@ use std::time::Duration;
 
 use hashbrown::HashMap as HashBrownMap;
 use pyo3::prelude::*;
-use serde::Serialize;
 
+use super::EqsatResult;
 use crate::eqsat::results;
 use crate::eqsat::utils::RunnerArgs;
 use crate::errors::EggShellError;
 use crate::extraction::Extractor;
-use crate::flattened::Vertex;
 use crate::trs::halide::Halide;
 use crate::trs::Trs;
 use crate::{cost_fn, eqsat, extraction};
@@ -17,9 +16,7 @@ use crate::{cost_fn, eqsat, extraction};
 /// for the Halide Trs
 #[pyclass]
 #[derive(Debug, Clone)]
-pub struct Eqsat {
-    pub(crate) eqsat: eqsat::Eqsat<Halide>,
-}
+pub struct Eqsat(eqsat::Eqsat<Halide>);
 
 #[pymethods]
 impl Eqsat {
@@ -32,28 +29,28 @@ impl Eqsat {
     /// For more, see [`Eqsat`]
     fn new(index: usize) -> Result<Self, EggShellError> {
         let eqsat = eqsat::Eqsat::new(index)?;
-        Ok(Self { eqsat })
+        Ok(Self(eqsat))
     }
 
     /// See [`Eqsat`]
     fn set_phase_limit(&mut self, phase_limit: usize) {
-        self.eqsat.set_phase_limit(Some(phase_limit));
+        self.0.set_phase_limit(Some(phase_limit));
     }
 
     /// See [`Eqsat`]
     fn unset_phase_limit(&mut self) {
-        self.eqsat.set_phase_limit(None);
+        self.0.set_phase_limit(None);
     }
 
     /// See [`Eqsat`]
     fn set_time_limit(&mut self, time_limit: f64) {
-        self.eqsat
+        self.0
             .set_time_limit(Some(Duration::from_secs_f64(time_limit)));
     }
 
     /// See [`Eqsat`]
     fn unset_time_limit(&mut self) {
-        self.eqsat.set_time_limit(None);
+        self.0.set_time_limit(None);
     }
 
     /// See [`Eqsat`]
@@ -63,17 +60,17 @@ impl Eqsat {
         nodes: Option<usize>,
         time: Option<f64>,
     ) {
-        self.eqsat.set_runner_arg_values(iter, nodes, time);
+        self.0.set_runner_arg_values(iter, nodes, time);
     }
 
     /// See [`Eqsat`]
     fn set_runner_args(&mut self, runner_args: RunnerArgs) {
-        self.eqsat.set_runner_args(runner_args);
+        self.0.set_runner_args(runner_args);
     }
 
     /// See [`Eqsat`]
     fn set_iteration_check(&mut self, iteration_check: bool) {
-        self.eqsat.set_iteration_check(iteration_check);
+        self.0.set_iteration_check(iteration_check);
     }
 
     #[allow(clippy::missing_errors_doc)]
@@ -82,7 +79,7 @@ impl Eqsat {
             .parse()
             .map_err(|_| EggShellError::TermParse(start_term.into()))?;
         let goals = Halide::prove_goals();
-        let r = match self.eqsat.run_goal_once(&start_expr, &goals) {
+        let r = match self.0.run_goal_once(&start_expr, &goals) {
             results::EqsatResult::Solved(result) => EqsatResult::Solved { result },
             results::EqsatResult::Undecidable => EqsatResult::Undecidable {},
             results::EqsatResult::LimitReached(remaining) => EqsatResult::LimitReached {
@@ -98,7 +95,7 @@ impl Eqsat {
         let start_expr = start_term
             .parse()
             .map_err(|_| EggShellError::TermParse(start_term.into()))?;
-        let remaining = self.eqsat.run_simplify_once(&start_expr);
+        let remaining = self.0.run_simplify_once(&start_expr);
         Ok(EqsatResult::LimitReached {
             edges: remaining.edges,
             vertices: remaining.vertices,
@@ -108,84 +105,12 @@ impl Eqsat {
     /// See [`Eqsat`]
     #[must_use]
     fn limit_reached(&self) -> bool {
-        self.eqsat.limit_reached()
+        self.0.limit_reached()
     }
 
     #[must_use]
     fn stats_history(&self) -> Vec<results::EqsatStats> {
-        self.eqsat.stats_history().to_vec()
-    }
-}
-
-#[pyclass]
-#[derive(PartialEq, Debug, Clone, Serialize)]
-pub enum EqsatResult {
-    Solved {
-        result: String,
-    },
-    Undecidable {},
-    LimitReached {
-        vertices: Vec<Vertex>,
-        edges: HashBrownMap<usize, Vec<usize>>,
-    },
-}
-
-#[pymethods]
-impl EqsatResult {
-    /// Returns `true` if the py prove result is [`Solved`].
-    ///
-    /// [`Solved`]: PyProveResult::Solved
-    #[must_use]
-    pub fn is_solved(&self) -> bool {
-        matches!(self, Self::Solved { .. })
-    }
-
-    /// Returns `true` if the py prove result is [`Undecidable`].
-    ///
-    /// [`Undecidable`]: PyProveResult::Undecidable
-    #[must_use]
-    pub fn is_undecidable(&self) -> bool {
-        matches!(self, Self::Undecidable { .. })
-    }
-
-    /// Returns `true` if the py prove result is [`LimitReached`].
-    ///
-    /// [`LimitReached`]: PyProveResult::LimitReached
-    #[must_use]
-    pub fn is_limit_reached(&self) -> bool {
-        matches!(self, Self::LimitReached { .. })
-    }
-
-    /// Returns the type as a string
-    #[must_use]
-    pub fn type_str(&self) -> String {
-        match self {
-            EqsatResult::Solved { result: _ } => "Solved".into(),
-            EqsatResult::Undecidable {} => "Undecidable".into(),
-            EqsatResult::LimitReached {
-                vertices: _,
-                edges: _,
-            } => "LimitReached".into(),
-        }
-    }
-
-    /// Returns the content of limit reched
-    #[allow(clippy::type_complexity)]
-    pub fn unpack_limit_reached(
-        &self,
-    ) -> Result<(Vec<Vertex>, HashBrownMap<usize, Vec<usize>>), EggShellError> {
-        if let Self::LimitReached { vertices, edges } = self {
-            return Ok((vertices.clone(), edges.clone()));
-        }
-        Err(EggShellError::TupleUnpacking("LimitReached".into()))
-    }
-
-    /// Returns the content of limit reched
-    pub fn unpack_solved(&self) -> Result<String, EggShellError> {
-        if let Self::Solved { result } = self {
-            return Ok(result.clone());
-        }
-        Err(EggShellError::TupleUnpacking("Solved".into()))
+        self.0.stats_history().to_vec()
     }
 }
 
@@ -202,17 +127,11 @@ pub fn extract_with_costs_bottom_up(
     eqsat: Eqsat,
     node_costs: HashBrownMap<usize, f64>,
 ) -> Result<HashBrownMap<String, f64>, EggShellError> {
-    let class_specific_costs = eqsat.eqsat.remap_costs(&node_costs)?;
+    let class_specific_costs = eqsat.0.remap_costs(&node_costs)?;
     let cost_fn = cost_fn::LookupCost::new(class_specific_costs);
 
-    let last_egraph = eqsat
-        .eqsat
-        .last_egraph()
-        .ok_or(EggShellError::MissingEqsat)?;
-    let last_roots = eqsat
-        .eqsat
-        .last_roots()
-        .ok_or(EggShellError::MissingEqsat)?;
+    let last_egraph = eqsat.0.last_egraph().ok_or(EggShellError::MissingEqsat)?;
+    let last_roots = eqsat.0.last_roots().ok_or(EggShellError::MissingEqsat)?;
     let extractor = extraction::BottomUp::new(cost_fn, last_egraph);
     let extracted = extractor.extract(last_roots);
 
@@ -236,14 +155,8 @@ pub fn extract_ast_size_bottom_up(
 ) -> Result<HashBrownMap<String, f64>, EggShellError> {
     let cost_fn = cost_fn::ExprSize;
 
-    let last_egraph = eqsat
-        .eqsat
-        .last_egraph()
-        .ok_or(EggShellError::MissingEqsat)?;
-    let last_roots = eqsat
-        .eqsat
-        .last_roots()
-        .ok_or(EggShellError::MissingEqsat)?;
+    let last_egraph = eqsat.0.last_egraph().ok_or(EggShellError::MissingEqsat)?;
+    let last_roots = eqsat.0.last_roots().ok_or(EggShellError::MissingEqsat)?;
     let extractor = extraction::BottomUp::new(cost_fn, last_egraph);
     let extracted = extractor.extract(last_roots);
 
