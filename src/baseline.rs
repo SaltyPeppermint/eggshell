@@ -1,25 +1,25 @@
 use std::time::Duration;
 
-use egg::RecExpr;
+use egg::{CostFunction, Extractor, RecExpr};
+use serde::Serialize;
 
 use crate::argparse::EqsatArgs;
-use crate::cost_fn::ExprSize;
 use crate::eqsat::results::EqsatResult;
 use crate::eqsat::Eqsat;
-use crate::extraction::{BottomUp, ExtractResult, Extractor};
-use crate::flattened::FlatGraph;
 use crate::io::structs::{EqsatReport, Expression};
 use crate::trs::Trs;
 
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn prove_expressions<R>(
+pub fn prove_expressions<R, C>(
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
     iter_check: bool,
-) -> Vec<EqsatReport<R::Language, String, FlatGraph>>
+) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
+    C: CostFunction<R::Language>,
+    C::Cost: Serialize,
 {
     // For each expression try to prove it then push the results into the results vector.
     let prove_pattern = R::prove_goals();
@@ -51,15 +51,19 @@ where
 /// Using multiple phases, no forking, only ever extracting a single expression
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn pulse_prove_expressions<R>(
+pub fn pulse_prove_expressions<R, C, T>(
+    helper_cost_fn: T,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
     time_limit: Option<Duration>,
     phase_limit: Option<usize>,
     iter_check: bool,
-) -> Vec<EqsatReport<R::Language, String, FlatGraph>>
+) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
+    C: CostFunction<R::Language>,
+    C::Cost: Serialize,
+    T: Fn() -> C,
 {
     // For each expression try to prove it then push the results into the results vector.
     let prove_pattern = R::prove_goals();
@@ -68,7 +72,7 @@ where
         .iter()
         .map(|expression| {
             println!("Starting Expression: {}", expression.index);
-            let first_expr: RecExpr<R::Language> = expression.term.parse().unwrap();
+            let first_expr = expression.term.parse::<RecExpr<R::Language>>().unwrap();
             let mut start_expr = first_expr.clone();
             let mut eqsat: Eqsat<R> = Eqsat::new(expression.index)
                 .unwrap()
@@ -89,10 +93,16 @@ where
                     break eqsat_result;
                 }
 
-                let extractor = BottomUp::new(ExprSize, eqsat.last_egraph().unwrap());
-                let extracted = extractor.extract(eqsat.last_roots().unwrap());
+                let cf = helper_cost_fn();
+                let extractor = Extractor::new(eqsat.last_egraph().unwrap(), cf);
+                let extracted: Vec<_> = eqsat
+                    .last_roots()
+                    .unwrap()
+                    .iter()
+                    .map(|root| extractor.find_best(*root))
+                    .collect();
 
-                start_expr = extracted.last().unwrap().expr.clone();
+                start_expr = extracted.last().unwrap().1.clone();
                 extracted_expr.push(extracted);
             };
 
@@ -112,12 +122,16 @@ where
 /// Runs Simple to simplify the expressions passed as vector using the different params passed.
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn simplify_expressions<R>(
+pub fn simplify_expressions<R, C, T>(
+    helper_cost_fn: T,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
-) -> Vec<EqsatReport<R::Language, String, FlatGraph>>
+) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
+    C: CostFunction<R::Language>,
+    C::Cost: Serialize,
+    T: Fn() -> C,
 {
     exprs_vect
         .iter()
@@ -127,9 +141,16 @@ where
             let mut eqsat: Eqsat<R> = Eqsat::new(expression.index)
                 .unwrap()
                 .with_runner_args(eqsat_args.into());
-            let flat_graph = eqsat.run_simplify_once(start_expr);
-            let extractor = BottomUp::new(ExprSize, eqsat.last_egraph().unwrap());
-            let extracted = extractor.extract(eqsat.last_roots().unwrap());
+            let processed_egraph = eqsat.run_simplify_once(start_expr);
+
+            let cf = helper_cost_fn();
+            let extractor = Extractor::new(&processed_egraph, cf);
+            let extracted: Vec<_> = eqsat
+                .last_roots()
+                .unwrap()
+                .iter()
+                .map(|root| extractor.find_best(*root))
+                .collect();
 
             make_report(
                 start_expr.clone(),
@@ -137,7 +158,7 @@ where
                 expression,
                 None,
                 eqsat_args,
-                EqsatResult::LimitReached(flat_graph),
+                EqsatResult::LimitReached(Box::new(processed_egraph)),
                 vec![extracted],
             )
         })
@@ -147,14 +168,18 @@ where
 /// Using multiple phases, no forking, only ever extracting a single expression
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn pulse_simplify_expressions<R>(
+pub fn pulse_simplify_expressions<R, C, T>(
+    helper_cost_fn: T,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
     time_limit: Option<Duration>,
     phase_limit: Option<usize>,
-) -> Vec<EqsatReport<R::Language, String, FlatGraph>>
+) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
+    C: CostFunction<R::Language>,
+    C::Cost: Serialize,
+    T: Fn() -> C,
 {
     // For each expression try to prove it then push the results into the results vector.
     exprs_vect
@@ -171,17 +196,23 @@ where
 
             let mut extracted_expr = Vec::new();
 
-            let flat_graph = loop {
-                let eqsat_result = eqsat.run_simplify_once(&start_expr);
+            let egraph = loop {
+                let processed_egraph = eqsat.run_simplify_once(&start_expr);
 
                 if eqsat.limit_reached() {
-                    break eqsat_result;
+                    break processed_egraph;
                 }
 
-                let extractor = BottomUp::new(ExprSize, eqsat.last_egraph().unwrap());
-                let extracted = extractor.extract(eqsat.last_roots().unwrap());
+                let cf = helper_cost_fn();
+                let extractor = Extractor::new(&processed_egraph, cf);
+                let extracted: Vec<_> = eqsat
+                    .last_roots()
+                    .unwrap()
+                    .iter()
+                    .map(|root| extractor.find_best(*root))
+                    .collect();
 
-                start_expr = extracted.last().unwrap().expr.clone();
+                start_expr = extracted.last().unwrap().1.clone();
                 extracted_expr.push(extracted);
             };
 
@@ -191,24 +222,27 @@ where
                 expression,
                 None,
                 eqsat_args,
-                EqsatResult::LimitReached(flat_graph),
+                EqsatResult::LimitReached(Box::new(egraph)),
                 extracted_expr,
             )
         })
         .collect()
 }
 
-fn make_report<R, T, U>(
+#[allow(clippy::type_complexity)]
+fn make_report<R, C>(
     first_expr: RecExpr<R::Language>,
     eqsat: &Eqsat<R>,
     expression: &Expression,
     iteration_check: Option<bool>,
     eqsat_args: &EqsatArgs,
-    final_result: EqsatResult<T, U>,
-    extracted_exprs: Vec<Vec<ExtractResult<R::Language>>>,
-) -> EqsatReport<R::Language, T, U>
+    final_result: EqsatResult<R::Language, R::Analysis>,
+    extracted_exprs: Vec<Vec<(C::Cost, RecExpr<R::Language>)>>,
+) -> EqsatReport<R::Language, R::Analysis, C>
 where
     R: Trs,
+    C: CostFunction<R::Language>,
+    C::Cost: Serialize,
 {
     let stats_history = eqsat.stats_history().to_vec();
     EqsatReport {

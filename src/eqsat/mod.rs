@@ -1,4 +1,3 @@
-pub(crate) mod hooks;
 pub mod results;
 pub(crate) mod utils;
 
@@ -6,12 +5,10 @@ use std::time::Duration;
 
 use colored::Colorize;
 use egg::{EGraph, Pattern, RecExpr, Rewrite, StopReason};
-use hashbrown::HashMap as HashBrownMap;
 use log::info;
 use serde::Serialize;
 
 use crate::errors::EggShellError;
-use crate::flattened::FlatGraph;
 use crate::trs::Trs;
 use results::{EqsatReport, EqsatResult, EqsatStats};
 use utils::RunnerArgs;
@@ -32,7 +29,6 @@ where
     runner_args: RunnerArgs,
     iteration_check: bool,
     stats_history: Vec<EqsatStats>,
-    last_flat_graph: Option<FlatGraph>,
     last_egraph: Option<EGraph<R::Language, R::Analysis>>,
     last_roots: Option<Vec<ClassId>>,
 }
@@ -57,17 +53,10 @@ where
             iteration_check: true,
             total_time: Duration::default(),
             runner_args: RunnerArgs::default(),
-            last_flat_graph: None,
             last_egraph: None,
             last_roots: None,
             stats_history: Vec::new(),
         })
-    }
-
-    /// Set the maximum number of phases.
-    /// Defaults is 10
-    pub fn set_phase_limit(&mut self, phase_limit: Option<usize>) {
-        self.phases_limit = phase_limit;
     }
 
     /// With the maximum number of phases.
@@ -78,17 +67,25 @@ where
         self
     }
 
-    /// Set the maximum number of phases.
-    /// Defaults is 10
-    pub fn set_time_limit(&mut self, time_limit: Option<Duration>) {
-        self.time_limit = time_limit;
-    }
-
     /// With the maximum number of phases.
     /// Defaults is 10
     #[must_use]
     pub fn with_time_limit(mut self, time_limit: Option<Duration>) -> Self {
         self.time_limit = time_limit;
+        self
+    }
+
+    /// With the runner parameters.
+    #[must_use]
+    pub fn with_runner_args(mut self, runner_params: RunnerArgs) -> Self {
+        self.runner_args = runner_params;
+        self
+    }
+
+    /// With the intra-iteration check on or off
+    #[must_use]
+    pub fn with_iteration_check(mut self, iteration_check: bool) -> Self {
+        self.iteration_check = iteration_check;
         self
     }
 
@@ -101,54 +98,6 @@ where
         }
     }
 
-    /// Set the runner parameters.
-    pub fn set_runner_arg_values(
-        &mut self,
-        iter: Option<usize>,
-        nodes: Option<usize>,
-        time: Option<f64>,
-    ) {
-        let time = time.map(Duration::from_secs_f64);
-        self.runner_args = RunnerArgs::new(iter, nodes, time);
-    }
-
-    /// Set the runner parameters.
-    pub fn set_runner_args(&mut self, runner_args: RunnerArgs) {
-        self.runner_args = runner_args;
-    }
-
-    /// With the runner parameters.
-    #[must_use]
-    pub fn with_runner_arg_values(
-        mut self,
-        iter: Option<usize>,
-        nodes: Option<usize>,
-        time: Option<f64>,
-    ) -> Self {
-        let time = time.map(Duration::from_secs_f64);
-        self.runner_args = RunnerArgs::new(iter, nodes, time);
-        self
-    }
-
-    /// With the runner parameters.
-    #[must_use]
-    pub fn with_runner_args(mut self, runner_params: RunnerArgs) -> Self {
-        self.runner_args = runner_params;
-        self
-    }
-
-    /// Set the intra-iteration check on or off
-    pub fn set_iteration_check(&mut self, iteration_check: bool) {
-        self.iteration_check = iteration_check;
-    }
-
-    /// With the intra-iteration check on or off
-    #[must_use]
-    pub fn with_iteration_check(mut self, iteration_check: bool) -> Self {
-        self.iteration_check = iteration_check;
-        self
-    }
-
     /// Run one loop of Equality Saturation to prove an expression is equal to a number
     /// of goals
     #[allow(clippy::missing_panics_doc)]
@@ -157,29 +106,29 @@ where
         &mut self,
         start_expr: &RecExpr<R::Language>,
         goals: &[Pattern<R::Language>],
-    ) -> EqsatResult<String, FlatGraph> {
+    ) -> EqsatResult<R::Language, R::Analysis> {
         let ruleset = R::maximum_ruleset();
         let rules = R::rules(&ruleset);
         let EqsatReport {
             egraph,
             roots,
             stats,
-            stop_reason,
-        } = self.single_eqsat(self.phase, start_expr, &rules, Some(goals));
-        self.stats_history.push(stats);
+        } = self.single_eqsat(self.phase, start_expr, &rules);
 
         if let Some(expr) = utils::check_solved(goals, &egraph, *roots.last().unwrap()) {
+            self.stats_history.push(stats);
             info!("{}", "Solved:".bright_green().bold());
             info!("{expr}");
             return EqsatResult::Solved(expr);
         }
-        if matches!(stop_reason, StopReason::Saturated) {
+        if matches!(stats.stop_reason, StopReason::Saturated) {
+            self.stats_history.push(stats);
             info!("{}", "Showed to be undecidable!".bright_green().bold());
             return EqsatResult::Undecidable;
         }
 
-        let flat = FlatGraph::from_egraph(&egraph, &roots);
-        self.last_flat_graph = Some(flat.clone());
+        self.stats_history.push(stats);
+
         self.last_egraph = Some(egraph);
         self.last_roots = Some(roots);
         info!("{}", "Ran out of Ressources:".bright_green().bold());
@@ -188,14 +137,17 @@ where
             "Iterations {}",
             self.stats_history.last().unwrap().iterations
         );
-        EqsatResult::LimitReached(flat)
+        EqsatResult::LimitReached(Box::new(self.last_egraph.clone().unwrap()))
     }
 
     /// Run one loop of Equality Saturation to prove an expression is equal to a number
     /// of goals
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
-    pub fn run_simplify_once(&mut self, start_expr: &RecExpr<R::Language>) -> FlatGraph {
+    pub fn run_simplify_once(
+        &mut self,
+        start_expr: &RecExpr<R::Language>,
+    ) -> EGraph<R::Language, R::Analysis> {
         let ruleset = R::maximum_ruleset();
         let rules = R::rules(&ruleset);
         // if we simplify, we have no goals obviously
@@ -204,12 +156,10 @@ where
             roots,
             stats,
             ..
-        } = self.single_eqsat(self.phase, start_expr, &rules, None);
+        } = self.single_eqsat(self.phase, start_expr, &rules);
         self.stats_history.push(stats);
 
-        let flat = FlatGraph::from_egraph(&egraph, &roots);
-        self.last_flat_graph = Some(flat.clone());
-        self.last_egraph = Some(egraph);
+        self.last_egraph = Some(egraph.clone());
         self.last_roots = Some(roots);
         info!("{}", "Ran out of Ressources:".bright_green().bold());
         info!("Nodes: {}", self.stats_history.last().unwrap().egraph_size);
@@ -217,7 +167,7 @@ where
             "Iterations {}",
             self.stats_history.last().unwrap().iterations
         );
-        flat
+        egraph
     }
 
     /// Runs single cycle of to prove an expression to be equal to the goals
@@ -229,7 +179,6 @@ where
         phase: usize,
         start_expr: &RecExpr<R::Language>,
         rules: &[Rewrite<R::Language, R::Analysis>],
-        goals: Option<&[Pattern<R::Language>]>,
     ) -> EqsatReport<R> {
         // Set up the goals we will check for.
         let mut total_time = self.total_time;
@@ -238,17 +187,7 @@ where
         println!("Simplifying expression:");
         println!("{start_expr}");
 
-        let runner = if self.iteration_check {
-            if let Some(goals) = goals {
-                let hook = hooks::run_check_iter_hook(goals);
-                utils::build_runner(&self.runner_args, start_expr).with_hook(hook)
-            } else {
-                utils::build_runner(&self.runner_args, start_expr)
-            }
-        } else {
-            utils::build_runner(&self.runner_args, start_expr)
-        }
-        .run(rules.iter());
+        let runner = utils::build_runner(&self.runner_args, start_expr).run(rules.iter());
 
         let exec_time: f64 = runner.iterations.iter().map(|i| i.total_time).sum();
         total_time += Duration::from_secs_f64(exec_time);
@@ -263,30 +202,9 @@ where
             runner.iterations.iter().map(|i| i.n_rebuilds).sum(),
             phase + 1,
             total_time,
-            results::stringify_stop_reason(&runner.stop_reason),
-        );
-        EqsatReport::new(
-            runner.egraph,
-            runner.roots,
-            stats,
             runner.stop_reason.unwrap(),
-        )
-    }
-    /// Extracts the best term based on the values given in the hashmap.
-    /// The key is the index in the vector of nodes.
-    ///
-    /// # Errors
-    ///
-    /// Will return [`EggShellError::MissingEqsat`] if no equality saturation has
-    /// previously been run and [`Self::last_egraph`] is therefore empty.
-    pub fn remap_costs(
-        &self,
-        node_costs: &HashBrownMap<usize, f64>,
-    ) -> Result<HashBrownMap<ClassId, Vec<f64>>, EggShellError> {
-        match &self.last_flat_graph {
-            Some(flat_graph) => Ok(flat_graph.remap_costs(node_costs)),
-            None => Err(EggShellError::MissingEqsat),
-        }
+        );
+        EqsatReport::new(runner.egraph, runner.roots, stats)
     }
 
     pub fn stats_history(&self) -> &[EqsatStats] {
@@ -322,7 +240,7 @@ mod tests {
         let goals = Halide::prove_goals();
         let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
         let result = eqsat.run_goal_once(&false_stmt, &goals);
-        assert_eq!(EqsatResult::Solved("1".into()), result);
+        assert_eq!("1", result.stringify_solved());
     }
 
     #[test]
@@ -331,7 +249,7 @@ mod tests {
         let goals = Halide::prove_goals();
         let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
         let result = eqsat.run_goal_once(&false_stmt, &goals);
-        assert_eq!(EqsatResult::Solved("0".into()), result);
+        assert_eq!("0", result.stringify_solved());
     }
 
     #[test]
@@ -341,7 +259,7 @@ mod tests {
 
         let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
         let result = eqsat.run_goal_once(&true_stmt, &goals);
-        assert_eq!(EqsatResult::Solved("1".into()), result);
+        assert_eq!("1", result.stringify_solved());
     }
 
     #[test]
@@ -353,6 +271,6 @@ mod tests {
 
         let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
         let result = eqsat.run_goal_once(&false_stmt, &goals);
-        assert_eq!(EqsatResult::Solved("0".into()), result);
+        assert_eq!("0", result.stringify_solved());
     }
 }

@@ -1,6 +1,6 @@
-use std::time::Duration;
+use std::{fmt::Display, time::Duration};
 
-use egg::{EGraph, StopReason};
+use egg::{Analysis, EGraph, Language, StopReason};
 use pyo3::pyclass;
 use serde::Serialize;
 
@@ -8,37 +8,33 @@ use crate::{io::structs::OtherSolverData, trs::Trs};
 
 use super::ClassId;
 
-/// Stringify the [`StopReason`] of the runner
-#[must_use]
-pub(crate) fn stringify_stop_reason(reason: &Option<StopReason>) -> String {
-    match reason {
-        Some(reason) => match reason {
-            StopReason::Saturated => "Saturated!".into(),
-            StopReason::IterationLimit(i) => format!("Reached iteration limit {i}"),
-            StopReason::NodeLimit(i) => format!("Reached node limit {i}"),
-            StopReason::TimeLimit(i) => format!("Reached time limit {i}"),
-            StopReason::Other(i) => format!("Other Reason: {i}"),
-        },
-        None => String::new(),
-    }
-}
-
 /// A goal attempt can have 3 outcomes:
 /// Solved, undecidable
 /// or we ran out of ressources before we decide anything.
-#[derive(Serialize, Debug, Clone, PartialEq)]
-pub enum EqsatResult<T, U> {
-    Solved(T),
+#[derive(Serialize, Debug, Clone)]
+pub enum EqsatResult<L, N>
+where
+    L: Language + Serialize + Display,
+    N: Analysis<L> + Serialize,
+    N::Data: Serialize + Clone,
+{
+    Solved(String),
     Undecidable,
-    LimitReached(U),
+    LimitReached(Box<EGraph<L, N>>),
 }
 
-impl<T: ToString, U> EqsatResult<T, U> {
-    pub fn stringify_solved(self) -> EqsatResult<String, U> {
+impl<L, N> EqsatResult<L, N>
+where
+    L: Language + Serialize + Display,
+    N: Analysis<L> + Serialize,
+    N::Data: Serialize + Clone,
+{
+    #[must_use]
+    pub fn stringify_solved(self) -> String {
         match self {
-            EqsatResult::Solved(x) => EqsatResult::Solved(x.to_string()),
-            EqsatResult::Undecidable => todo!(),
-            EqsatResult::LimitReached(x) => EqsatResult::LimitReached(x),
+            EqsatResult::Solved(solution) => solution,
+            EqsatResult::Undecidable => String::from("UNDECIDEABLE!"),
+            EqsatResult::LimitReached(egraph) => format!("{:#?}", egraph.dump()),
         }
     }
 }
@@ -62,7 +58,7 @@ pub struct EqsatStats {
     /// The time it took to prove the expression
     pub time: Duration,
     /// The reason the execution stopped
-    runner_stop_reason: String,
+    pub stop_reason: StopReason,
     /// The condition of the rule
     condition: Option<String>,
     /// Halide Data for the expression
@@ -81,7 +77,7 @@ impl EqsatStats {
         rebuilds: usize,
         phases: usize,
         total_time: Duration,
-        runner_stop_reason: String,
+        stop_reason: StopReason,
     ) -> Self {
         Self {
             index,
@@ -91,7 +87,7 @@ impl EqsatStats {
             rebuilds,
             phases,
             time: total_time,
-            runner_stop_reason,
+            stop_reason,
             condition: None,
             halide_data: None,
         }
@@ -102,7 +98,6 @@ pub struct EqsatReport<R: Trs> {
     pub egraph: EGraph<R::Language, R::Analysis>,
     pub roots: Vec<ClassId>,
     pub stats: EqsatStats,
-    pub stop_reason: StopReason,
 }
 
 impl<R: Trs> EqsatReport<R> {
@@ -110,13 +105,11 @@ impl<R: Trs> EqsatReport<R> {
         egraph: EGraph<R::Language, R::Analysis>,
         roots: Vec<ClassId>,
         stats: EqsatStats,
-        stop_reason: StopReason,
     ) -> Self {
         Self {
             egraph,
             roots,
             stats,
-            stop_reason,
         }
     }
 }

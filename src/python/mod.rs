@@ -1,27 +1,20 @@
 pub mod halide;
 
-use hashbrown::HashMap as HashBrownMap;
 use pyo3::prelude::*;
 use serde::Serialize;
 
 use crate::errors::EggShellError;
-use crate::flattened::Vertex;
 
 #[pyclass]
 #[derive(PartialEq, Debug, Clone, Serialize)]
-pub enum EqsatResult {
-    Solved {
-        result: String,
-    },
+pub enum PyEqsatResult {
+    Solved { result: String },
     Undecidable {},
-    LimitReached {
-        vertices: Vec<Vertex>,
-        edges: HashBrownMap<usize, Vec<usize>>,
-    },
+    LimitReached { egraph_serialized: String },
 }
 
 #[pymethods]
-impl EqsatResult {
+impl PyEqsatResult {
     /// Returns `true` if the py prove result is [`Solved`].
     ///
     /// [`Solved`]: PyProveResult::Solved
@@ -50,22 +43,19 @@ impl EqsatResult {
     #[must_use]
     pub fn type_str(&self) -> String {
         match self {
-            EqsatResult::Solved { result: _ } => "Solved".into(),
-            EqsatResult::Undecidable {} => "Undecidable".into(),
-            EqsatResult::LimitReached {
-                vertices: _,
-                edges: _,
+            PyEqsatResult::Solved { result: _ } => "Solved".into(),
+            PyEqsatResult::Undecidable {} => "Undecidable".into(),
+            PyEqsatResult::LimitReached {
+                egraph_serialized: _,
             } => "LimitReached".into(),
         }
     }
 
     /// Returns the content of limit reched
     #[allow(clippy::type_complexity)]
-    pub fn unpack_limit_reached(
-        &self,
-    ) -> Result<(Vec<Vertex>, HashBrownMap<usize, Vec<usize>>), EggShellError> {
-        if let Self::LimitReached { vertices, edges } = self {
-            return Ok((vertices.clone(), edges.clone()));
+    pub fn unpack_limit_reached(&self) -> Result<String, EggShellError> {
+        if let Self::LimitReached { egraph_serialized } = self {
+            return Ok(egraph_serialized.to_owned());
         }
         Err(EggShellError::TupleUnpacking("LimitReached".into()))
     }

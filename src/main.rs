@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use clap::Parser;
 
+use egg::AstSize;
 use eggshell::argparse::{CliArgs, EqsatArgs, Mode, Strategy};
 use eggshell::io::reader;
 use eggshell::io::writer;
@@ -27,8 +28,11 @@ fn prove(strategy: &Strategy, args: &EqsatArgs, iter_check: bool) {
     match strategy {
         Strategy::Simple => {
             let expression_vect = reader::read_expressions(&args.expressions_file).unwrap();
-            let reports =
-                eggshell::baseline::prove_expressions::<Halide>(&expression_vect, args, iter_check);
+            let reports = eggshell::baseline::prove_expressions::<Halide, AstSize>(
+                &expression_vect,
+                args,
+                iter_check,
+            );
             writer::write_results_csv("tmp/results_simplify.csv", &reports).unwrap();
         }
         Strategy::Pulse {
@@ -36,7 +40,8 @@ fn prove(strategy: &Strategy, args: &EqsatArgs, iter_check: bool) {
             phase_limit,
         } => {
             let expression_vect = reader::read_expressions(&args.expressions_file).unwrap();
-            let reports = eggshell::baseline::pulse_prove_expressions::<Halide>(
+            let reports = eggshell::baseline::pulse_prove_expressions::<Halide, AstSize, _>(
+                astsize_cost_fn_factory,
                 &expression_vect,
                 args,
                 Some(Duration::from_secs_f64(*time_limit)),
@@ -52,8 +57,11 @@ fn simplify(strategy: &Strategy, args: &EqsatArgs) {
     match strategy {
         Strategy::Simple => {
             let expression_vect = reader::read_expressions(&args.expressions_file).unwrap();
-            let reports =
-                eggshell::baseline::simplify_expressions::<Halide>(&expression_vect, args);
+            let reports = eggshell::baseline::simplify_expressions::<Halide, AstSize, _>(
+                astsize_cost_fn_factory,
+                &expression_vect,
+                args,
+            );
             writer::write_results_csv("tmp/results_simplify.csv", &reports).unwrap();
         }
         Strategy::Pulse {
@@ -61,7 +69,8 @@ fn simplify(strategy: &Strategy, args: &EqsatArgs) {
             phase_limit,
         } => {
             let expression_vect = reader::read_expressions(&args.expressions_file).unwrap();
-            let reports = eggshell::baseline::pulse_simplify_expressions::<Halide>(
+            let reports = eggshell::baseline::pulse_simplify_expressions::<Halide, AstSize, _>(
+                astsize_cost_fn_factory,
                 &expression_vect,
                 args,
                 Some(Duration::from_secs_f64(*time_limit)),
@@ -70,4 +79,8 @@ fn simplify(strategy: &Strategy, args: &EqsatArgs) {
             writer::write_results_csv("tmp/results_simplify.csv", &reports).unwrap();
         }
     }
+}
+
+fn astsize_cost_fn_factory() -> AstSize {
+    AstSize
 }

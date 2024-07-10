@@ -18,8 +18,10 @@ pub struct RunnerArgs {
     pub time: Option<Duration>,
 }
 
+#[pymethods]
 impl RunnerArgs {
     #[must_use]
+    #[new]
     pub(crate) fn new(iter: Option<usize>, nodes: Option<usize>, time: Option<Duration>) -> Self {
         Self { iter, nodes, time }
     }
