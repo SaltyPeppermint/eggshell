@@ -27,7 +27,6 @@ where
     phase: usize,
     total_time: Duration,
     runner_args: RunnerArgs,
-    iteration_check: bool,
     stats_history: Vec<EqsatStats>,
     last_egraph: Option<EGraph<R::Language, R::Analysis>>,
     last_roots: Option<Vec<ClassId>>,
@@ -50,7 +49,6 @@ where
             phases_limit: Some(10),
             time_limit: None,
             phase: 0,
-            iteration_check: true,
             total_time: Duration::default(),
             runner_args: RunnerArgs::default(),
             last_egraph: None,
@@ -79,13 +77,6 @@ where
     #[must_use]
     pub fn with_runner_args(mut self, runner_params: RunnerArgs) -> Self {
         self.runner_args = runner_params;
-        self
-    }
-
-    /// With the intra-iteration check on or off
-    #[must_use]
-    pub fn with_iteration_check(mut self, iteration_check: bool) -> Self {
-        self.iteration_check = iteration_check;
         self
     }
 
@@ -213,10 +204,6 @@ where
 
     pub fn total_time(&self) -> Duration {
         self.total_time
-    }
-
-    pub fn iteration_check(&self) -> bool {
-        self.iteration_check
     }
 
     pub fn last_egraph(&self) -> Option<&EGraph<R::Language, R::Analysis>> {

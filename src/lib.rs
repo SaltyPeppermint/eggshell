@@ -7,6 +7,7 @@ pub mod errors;
 pub mod io;
 mod python;
 pub mod trs;
+pub mod utils;
 
 use pyo3::prelude::*;
 

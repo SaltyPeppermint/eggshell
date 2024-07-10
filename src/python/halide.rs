@@ -41,10 +41,6 @@ impl Eqsat {
                 let r = runner_args.extract()?;
                 eqsat = eqsat.with_runner_args(r);
             }
-            if let Some(iteration_check) = bound.get_item("iteration_check")? {
-                let i = iteration_check.extract()?;
-                eqsat = eqsat.with_iteration_check(i);
-            }
         }
         Ok(Self(eqsat))
     }

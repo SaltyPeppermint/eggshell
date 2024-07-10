@@ -31,7 +31,6 @@ where
             let start_expr = &expression.term.parse().unwrap();
             let mut eqsat: Eqsat<R> = Eqsat::new(expression.index)
                 .unwrap()
-                .with_iteration_check(iter_check)
                 .with_runner_args(eqsat_args.into());
             let eqsat_result = eqsat.run_goal_once(start_expr, &prove_pattern);
 
@@ -51,8 +50,8 @@ where
 /// Using multiple phases, no forking, only ever extracting a single expression
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn pulse_prove_expressions<R, C, T>(
-    helper_cost_fn: T,
+pub fn pulse_prove_expressions<R, C>(
+    cost_fn: &C,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
     time_limit: Option<Duration>,
@@ -61,9 +60,8 @@ pub fn pulse_prove_expressions<R, C, T>(
 ) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
-    C: CostFunction<R::Language>,
+    C: CostFunction<R::Language> + Clone,
     C::Cost: Serialize,
-    T: Fn() -> C,
 {
     // For each expression try to prove it then push the results into the results vector.
     let prove_pattern = R::prove_goals();
@@ -76,7 +74,6 @@ where
             let mut start_expr = first_expr.clone();
             let mut eqsat: Eqsat<R> = Eqsat::new(expression.index)
                 .unwrap()
-                .with_iteration_check(iter_check)
                 .with_time_limit(time_limit)
                 .with_phase_limit(phase_limit)
                 .with_runner_args(eqsat_args.into());
@@ -93,8 +90,7 @@ where
                     break eqsat_result;
                 }
 
-                let cf = helper_cost_fn();
-                let extractor = Extractor::new(eqsat.last_egraph().unwrap(), cf);
+                let extractor = Extractor::new(eqsat.last_egraph().unwrap(), cost_fn.clone());
                 let extracted: Vec<_> = eqsat
                     .last_roots()
                     .unwrap()
@@ -122,16 +118,15 @@ where
 /// Runs Simple to simplify the expressions passed as vector using the different params passed.
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn simplify_expressions<R, C, T>(
-    helper_cost_fn: T,
+pub fn simplify_expressions<R, C>(
+    cost_fn: &C,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
 ) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
-    C: CostFunction<R::Language>,
+    C: CostFunction<R::Language> + Clone,
     C::Cost: Serialize,
-    T: Fn() -> C,
 {
     exprs_vect
         .iter()
@@ -143,8 +138,7 @@ where
                 .with_runner_args(eqsat_args.into());
             let processed_egraph = eqsat.run_simplify_once(start_expr);
 
-            let cf = helper_cost_fn();
-            let extractor = Extractor::new(&processed_egraph, cf);
+            let extractor = Extractor::new(&processed_egraph, cost_fn.clone());
             let extracted: Vec<_> = eqsat
                 .last_roots()
                 .unwrap()
@@ -168,8 +162,8 @@ where
 /// Using multiple phases, no forking, only ever extracting a single expression
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn pulse_simplify_expressions<R, C, T>(
-    helper_cost_fn: T,
+pub fn pulse_simplify_expressions<R, C>(
+    cost_fn: &C,
     exprs_vect: &[Expression],
     eqsat_args: &EqsatArgs,
     time_limit: Option<Duration>,
@@ -177,9 +171,8 @@ pub fn pulse_simplify_expressions<R, C, T>(
 ) -> Vec<EqsatReport<R::Language, R::Analysis, C>>
 where
     R: Trs,
-    C: CostFunction<R::Language>,
+    C: CostFunction<R::Language> + Clone,
     C::Cost: Serialize,
-    T: Fn() -> C,
 {
     // For each expression try to prove it then push the results into the results vector.
     exprs_vect
@@ -203,8 +196,7 @@ where
                     break processed_egraph;
                 }
 
-                let cf = helper_cost_fn();
-                let extractor = Extractor::new(&processed_egraph, cf);
+                let extractor = Extractor::new(&processed_egraph, cost_fn.clone());
                 let extracted: Vec<_> = eqsat
                     .last_roots()
                     .unwrap()
