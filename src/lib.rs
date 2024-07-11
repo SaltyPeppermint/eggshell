@@ -27,7 +27,7 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // IO
     let io_m = PyModule::new_bound(m.py(), "io")?;
-    io_m.add_function(wrap_pyfunction!(io::reader::read_expressions, m)?)?;
+    io_m.add_function(wrap_pyfunction!(io::reader::read_exprs, m)?)?;
     io_m.add_class::<Expression>()?;
     m.add_submodule(&io_m)?;
 

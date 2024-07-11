@@ -175,7 +175,7 @@ where
         let mut total_time = self.total_time;
 
         println!("====================================");
-        println!("Simplifying expression:");
+        println!("Simplifying Expression:");
         println!("{start_expr}");
 
         let runner = utils::build_runner(&self.runner_args, start_expr).run(rules.iter());

@@ -41,16 +41,16 @@ pub enum Mode {
 pub struct EqsatArgs {
     /// Location of the file of expressions to churn through with Eqsat
     #[arg(short, long)]
-    pub expressions_file: String,
+    pub expr_file: String,
     /// Maximum number of iterations per phase
     #[arg(short, long, default_value_t = 30)]
-    pub iter: usize,
+    pub iter_limit: usize,
     /// Maximum number of nodes per phase
     #[arg(short, long, default_value_t = 10000)]
     pub nodes: usize,
     /// Maximum time spent in a single phase
     #[arg(short, long, default_value_t = 3.0)]
-    pub time: f64,
+    pub time_limit: f64,
 }
 
 /// Subcommands for the specific strategies

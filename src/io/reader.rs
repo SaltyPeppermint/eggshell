@@ -12,7 +12,7 @@ use crate::errors::EggShellError;
 /// [`Expression`]: super::structs::Expression
 #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
 #[pyfunction]
-pub fn read_expressions(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
+pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
     // Declare the vector and the reader
     let file = File::open(file_path)?;
     let mut rdr = csv::Reader::from_reader(file);
@@ -51,35 +51,3 @@ fn parse_other_solver(record: &StringRecord) -> Result<Option<OtherSolverData>, 
         Ok(None)
     }
 }
-
-// /// Reads the expressions in the format specified for the work done for the paper variant.
-// #[allow(clippy::missing_errors_doc)]
-// fn read_expressions_paper(file_path: &str) -> Result<Vec<(String, String)>, EggShellError> {
-//     let mut expressions_vect = Vec::new();
-//     let file = File::open(file_path)?;
-//     let mut rdr = csv::ReaderBuilder::new().delimiter(b';').from_reader(file);
-//     for result in rdr.records() {
-//         let record = result?;
-//         let infix = record[0].to_string();
-//         let prefix = record[1].to_string();
-//         expressions_vect.push((infix, prefix));
-//     }
-//     Ok(expressions_vect)
-// }
-
-// /// Reads the rules from a CSV file then pareses them into a Rule Vector.
-// #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
-// fn read_rules(file_path: &str) -> Result<Vec<Rule>, EggShellError> {
-//     let mut rules_vect: Vec<Rule> = Vec::new();
-//     let file = File::open(file_path)?;
-//     let mut rdr = csv::Reader::from_reader(file);
-//     for result in rdr.records() {
-//         let record = result?;
-//         let index = record[0].parse::<usize>().unwrap();
-//         let lhs = record[2].to_string();
-//         let rhs = record[3].to_string();
-//         let condition = record[4].to_string();
-//         rules_vect.push(Rule::new(index, lhs, rhs, Some(condition)));
-//     }
-//     Ok(rules_vect)
-// }

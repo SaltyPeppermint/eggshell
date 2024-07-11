@@ -43,9 +43,9 @@ impl From<&EqsatArgs> for RunnerArgs {
     #[must_use]
     fn from(arg_params: &EqsatArgs) -> Self {
         Self {
-            iter: Some(arg_params.iter),
+            iter: Some(arg_params.iter_limit),
             nodes: Some(arg_params.nodes),
-            time: Some(Duration::from_secs_f64(arg_params.time)),
+            time: Some(Duration::from_secs_f64(arg_params.time_limit)),
         }
     }
 }
