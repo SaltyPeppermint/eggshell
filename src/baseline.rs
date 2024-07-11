@@ -26,9 +26,7 @@ where
 
     println!("Starting Expression: {}", expr.index);
     let start_expr = &expr.term.parse().unwrap();
-    let mut eqsat: Eqsat<R> = Eqsat::new(expr.index)
-        .unwrap()
-        .with_runner_args(eqsat_args.into());
+    let mut eqsat: Eqsat<R> = Eqsat::new(expr.index).with_runner_args(eqsat_args.into());
     let eqsat_result = eqsat.run_goal_once(start_expr, &prove_pattern);
 
     make_report(
@@ -63,7 +61,6 @@ where
     let first_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
     let mut start_expr = first_expr.clone();
     let mut eqsat: Eqsat<R> = Eqsat::new(expr.index)
-        .unwrap()
         .with_time_limit(time_limit)
         .with_phase_limit(phase_limit)
         .with_runner_args(eqsat_args.into());
@@ -117,18 +114,13 @@ where
 {
     println!("Starting Expression: {}", expr.index);
     let start_expr = &expr.term.parse().unwrap();
-    let mut eqsat: Eqsat<R> = Eqsat::new(expr.index)
-        .unwrap()
-        .with_runner_args(eqsat_args.into());
+    let mut eqsat: Eqsat<R> = Eqsat::new(expr.index).with_runner_args(eqsat_args.into());
     let processed_egraph = eqsat.run_simplify_once(start_expr);
 
     let extractor = Extractor::new(&processed_egraph, cost_fn.clone());
-    let extracted: Vec<_> = eqsat
-        .last_roots()
-        .unwrap()
-        .iter()
-        .map(|root| extractor.find_best(*root))
-        .collect();
+    let root = eqsat.last_single_root().unwrap();
+    let extracted = vec![extractor.find_best(*root)];
+    let final_result = EqsatResult::LimitReached(Box::new(processed_egraph));
 
     make_report(
         start_expr.clone(),
@@ -136,7 +128,7 @@ where
         expr,
         None,
         eqsat_args,
-        EqsatResult::LimitReached(Box::new(processed_egraph)),
+        final_result,
         vec![extracted],
     )
 }
@@ -159,7 +151,6 @@ where
     let first_expr: RecExpr<R::Language> = expr.term.parse().unwrap();
     let mut start_expr = first_expr.clone();
     let mut eqsat: Eqsat<R> = Eqsat::new(expr.index)
-        .unwrap()
         .with_time_limit(time_limit)
         .with_phase_limit(phase_limit)
         .with_runner_args(eqsat_args.into());
@@ -168,22 +159,19 @@ where
 
     let egraph = loop {
         let processed_egraph = eqsat.run_simplify_once(&start_expr);
-
         if eqsat.limit_reached() {
             break processed_egraph;
         }
 
         let extractor = Extractor::new(&processed_egraph, cost_fn.clone());
-        let extracted: Vec<_> = eqsat
-            .last_roots()
-            .unwrap()
-            .iter()
-            .map(|root| extractor.find_best(*root))
-            .collect();
+        let root = eqsat.last_single_root().unwrap();
+        let extracted = vec![extractor.find_best(*root)];
 
         start_expr = extracted.last().unwrap().1.clone();
         extracted_expr.push(extracted);
     };
+
+    let final_result = EqsatResult::LimitReached(Box::new(egraph));
 
     make_report(
         first_expr,
@@ -191,7 +179,7 @@ where
         expr,
         None,
         eqsat_args,
-        EqsatResult::LimitReached(Box::new(egraph)),
+        final_result,
         extracted_expr,
     )
 }

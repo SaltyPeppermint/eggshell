@@ -27,7 +27,7 @@ impl Eqsat {
     #[new]
     #[pyo3(signature = (index, **py_kwargs))]
     fn new(index: usize, py_kwargs: Option<&Bound<'_, PyDict>>) -> Result<Self, PyErr> {
-        let mut eqsat = eqsat::Eqsat::new(index)?;
+        let mut eqsat = eqsat::Eqsat::new(index);
         if let Some(bound) = py_kwargs {
             if let Some(time_limit) = bound.get_item("time_limit")? {
                 let t = time_limit.extract()?;

@@ -41,28 +41,7 @@ pub struct ConstantFold;
 impl Analysis<Math> for ConstantFold {
     type Data = Option<i64>;
 
-    // fn merge(&self, a: &mut Self::Data, b: Self::Data) -> Option<Ordering> {
-    //     match (a.as_mut(), &b) {
-    //         (None, None) => Some(Ordering::Equal),
-    //         (None, Some(_)) => {
-    //             *a = b;
-    //             Some(Ordering::Less)
-    //         }
-    //         (Some(_), None) => Some(Ordering::Greater),
-    //         (Some(_), Some(_)) => Some(Ordering::Equal),
-    //     }
-    // if a.is_none() && b.is_some() {
-    //     *a = b
-    // }
-    // cmp
-    // }
-
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
-        // egg::merge_option(to, from, |a, b| {
-        //     assert_eq!(*a, b, "Merged non-equal constants");
-        //     dbg!((a, b));
-        //     DidMerge(false, false)
-        // })
         egg::merge_option(to, from, egg::merge_min)
     }
 
@@ -101,25 +80,6 @@ impl Analysis<Math> for ConstantFold {
             _ => return None,
         })
     }
-
-    // fn modify(egraph: &mut EGraph, id: Id) {
-    //     let class = &egraph[id].data;
-    //     if let Some(c) = class {
-    //         let added = egraph.add(Math::Constant(*c));
-    //         let _ = egraph.union(id, added);
-    //         let union_id = egraph.find(id);
-    //         // to not prune, comment this out
-    //         egraph[union_id].nodes.retain(egg::Language::is_leaf);
-
-    //         debug_assert!(
-    //             !egraph[union_id].nodes.is_empty(),
-    //             "empty eclass! {:#?}",
-    //             egraph[union_id]
-    //         );
-    //         #[cfg(debug_assertions)]
-    //         egraph[id].assert_unique_leaves();
-    //     }
-    // }
 
     fn modify(egraph: &mut EGraph, id: Id) {
         let data = egraph[id].data;
@@ -297,11 +257,6 @@ impl Trs for Halide {
     fn maximum_ruleset() -> Self::Rulesets {
         Ruleset::Full
     }
-
-    // #[must_use]
-    // fn analysis() -> Self::Analysis {
-    //     ConstantFold
-    // }
 
     #[must_use]
     fn prove_goals() -> Vec<egg::Pattern<Self::Language>> {

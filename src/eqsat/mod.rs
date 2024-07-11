@@ -8,7 +8,6 @@ use egg::{EGraph, Pattern, RecExpr, Rewrite, StopReason};
 use log::info;
 use serde::Serialize;
 
-use crate::errors::EggShellError;
 use crate::trs::Trs;
 use results::{EqsatReport, EqsatResult, EqsatStats};
 use utils::RunnerArgs;
@@ -43,8 +42,9 @@ where
     ///
     /// Will return an error if the starting term is not parsable in the
     /// [`Trs::Language`].
-    pub fn new(index: usize) -> Result<Self, EggShellError> {
-        Ok(Self {
+    #[must_use]
+    pub fn new(index: usize) -> Self {
+        Self {
             index,
             phases_limit: Some(10),
             time_limit: None,
@@ -54,7 +54,7 @@ where
             last_egraph: None,
             last_roots: None,
             stats_history: Vec::new(),
-        })
+        }
     }
 
     /// With the maximum number of phases.
@@ -213,6 +213,10 @@ where
     pub fn last_roots(&self) -> Option<&Vec<ClassId>> {
         self.last_roots.as_ref()
     }
+
+    pub fn last_single_root(&self) -> Option<&ClassId> {
+        self.last_roots().and_then(|roots| roots.last())
+    }
 }
 
 #[cfg(test)]
@@ -225,7 +229,7 @@ mod tests {
     fn basic_eqsat_solved_true() {
         let false_stmt: RecExpr<Math> = "( == 0 0 )".parse().unwrap();
         let goals = Halide::prove_goals();
-        let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
+        let mut eqsat = Eqsat::<Halide>::new(0);
         let result = eqsat.run_goal_once(&false_stmt, &goals);
         assert_eq!("1", result.stringify_solved());
     }
@@ -234,7 +238,7 @@ mod tests {
     fn basic_eqsat_solved_false() {
         let false_stmt: RecExpr<Math> = "( == 1 0 )".parse().unwrap();
         let goals = Halide::prove_goals();
-        let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
+        let mut eqsat = Eqsat::<Halide>::new(0);
         let result = eqsat.run_goal_once(&false_stmt, &goals);
         assert_eq!("0", result.stringify_solved());
     }
@@ -244,7 +248,7 @@ mod tests {
         let true_stmt: RecExpr<Math> = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )".parse().unwrap();
         let goals = Halide::prove_goals();
 
-        let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
+        let mut eqsat = Eqsat::<Halide>::new(0);
         let result = eqsat.run_goal_once(&true_stmt, &goals);
         assert_eq!("1", result.stringify_solved());
     }
@@ -256,7 +260,7 @@ mod tests {
             .unwrap();
         let goals = Halide::prove_goals();
 
-        let mut eqsat = Eqsat::<Halide>::new(0).unwrap();
+        let mut eqsat = Eqsat::<Halide>::new(0);
         let result = eqsat.run_goal_once(&false_stmt, &goals);
         assert_eq!("0", result.stringify_solved());
     }
