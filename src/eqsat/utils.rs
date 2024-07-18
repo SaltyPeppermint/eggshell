@@ -1,17 +1,12 @@
-use std::fmt::Display;
 use std::time::Duration;
 
-use egg::{Analysis, EGraph, Language, Pattern, RecExpr, Runner, Searcher};
+use egg::{Analysis, Language, RecExpr, Runner};
 use pyo3::prelude::*;
 use serde::Serialize;
 
-use crate::argparse::EqsatArgs;
-
-pub(crate) type ClassId = egg::Id;
-
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[pyclass]
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RunnerArgs {
     pub iter: Option<usize>,
     pub nodes: Option<usize>,
@@ -39,17 +34,6 @@ impl Default for RunnerArgs {
     }
 }
 
-impl From<&EqsatArgs> for RunnerArgs {
-    #[must_use]
-    fn from(arg_params: &EqsatArgs) -> Self {
-        Self {
-            iter: Some(arg_params.iter_limit),
-            nodes: Some(arg_params.nodes),
-            time: Some(Duration::from_secs_f64(arg_params.time_limit)),
-        }
-    }
-}
-
 #[must_use]
 pub(crate) fn build_runner<L, N>(runner_params: &RunnerArgs, expr: &RecExpr<L>) -> Runner<L, N>
 where
@@ -71,20 +55,20 @@ where
     runner.with_expr(expr)
 }
 
-#[must_use]
-pub(crate) fn check_solved<L, N>(
-    goals: &[Pattern<L>],
-    egraph: &EGraph<L, N>,
-    id: ClassId,
-) -> Option<String>
-where
-    L: Language + Display,
-    N: Analysis<L>,
-{
-    for goal in goals {
-        if (goal.search_eclass(egraph, id)).is_some() {
-            return Some(goal.ast.to_string());
-        }
-    }
-    None
-}
+// #[must_use]
+// pub(crate) fn check_solved<L, N>(
+//     goals: &[Pattern<L>],
+//     egraph: &EGraph<L, N>,
+//     id: Id,
+// ) -> Option<String>
+// where
+//     L: Language + Display,
+//     N: Analysis<L>,
+// {
+//     for goal in goals {
+//         if (goal.search_eclass(egraph, id)).is_some() {
+//             return Some(goal.ast.to_string());
+//         }
+//     }
+//     None
+// }

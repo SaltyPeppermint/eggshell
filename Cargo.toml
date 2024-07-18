@@ -16,18 +16,13 @@ name = "eggshell"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.86"
-clap = { version = "4.5.4", features = ["derive"] }
-colored = "2.1.0"
 csv = "1.3.0"
 egg = { version = "0.9.5", features = ["serde-1"] }
 hashbrown = { version = "0.14.5", features = ["rayon", "serde"] }
-indexmap = { version = "2.2.6", features = ["rayon", "serde"] }
 log = "0.4.21"
-more-asserts = "0.3.1"
-ordered-float = "4.2.0"
-pyo3 = { version = "0.21.2", features = ["anyhow", "hashbrown"] }
+nom = "7.1.3"
+pyo3 = { version = "0.21.2", features = ["hashbrown", "auto-initialize"] }
 rayon = "1.10.0"
 serde = { version = "1.0.203", features = ["derive"] }
-serde_json = { version = "1.0.117", features = ["indexmap"] }
+serde_json = { version = "1.0.117" }
 thiserror = "1.0.61"

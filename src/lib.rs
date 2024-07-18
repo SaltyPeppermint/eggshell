@@ -1,7 +1,5 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-pub mod argparse;
-pub mod baseline;
 pub mod eqsat;
 pub mod errors;
 pub mod io;
@@ -11,7 +9,7 @@ pub mod utils;
 
 use pyo3::prelude::*;
 
-use crate::eqsat::results::EqsatStats;
+// use crate::eqsat::results::EqsatStats;
 use crate::errors::EggShellException;
 use crate::io::structs::Expression;
 
@@ -23,7 +21,6 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "EggShellException",
         m.py().get_type_bound::<EggShellException>(),
     )?;
-    m.add_class::<EqsatStats>()?;
 
     // IO
     let io_m = PyModule::new_bound(m.py(), "io")?;
@@ -33,12 +30,15 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // General Eqsat
     let eqsat_m = PyModule::new_bound(m.py(), "eqsat")?;
-    eqsat_m.add_class::<python::PyEqsatResult>()?;
+    eqsat_m.add_class::<python::PyLang>()?;
     m.add_submodule(&eqsat_m)?;
 
     // Halide
     let halide_m = PyModule::new_bound(eqsat_m.py(), "halide")?;
-    halide_m.add_class::<python::halide::Eqsat>()?;
+    halide_m.add_class::<python::halide::NewEqsat>()?;
+    halide_m.add_class::<python::halide::FinishedEqsat>()?;
+    halide_m.add_class::<python::halide2::NewEqsat>()?;
+    halide_m.add_class::<python::halide2::FinishedEqsat>()?;
     eqsat_m.add_submodule(&halide_m)?;
 
     Ok(())

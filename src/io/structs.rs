@@ -1,34 +1,34 @@
 use std::fmt::Display;
 use std::time::Duration;
 
-use egg::{Analysis, CostFunction, Language, RecExpr};
+use egg::{CostFunction, Language, RecExpr};
 use serde::Serialize;
 
 use pyo3::prelude::*;
 
-use crate::eqsat::results::{EqsatResult, EqsatStats};
+// use crate::eqsat::results::EqsatResult;
 use crate::eqsat::utils::RunnerArgs;
 
 /// Used to represent an expression
 #[derive(Serialize, Debug)]
-pub struct EqsatReport<L, N, C>
+pub struct EqsatReport<L, C>
 where
     L: Language + Display + Serialize,
-    N: Analysis<L> + Serialize,
-    N::Data: Serialize + Clone,
+    // N: Analysis<L> + Serialize,
+    // N::Data: Serialize + Clone,
     C: CostFunction<L>,
     C::Cost: Serialize,
 {
     pub index: usize,
     pub first_expr: RecExpr<L>,
-    pub stats_history: Vec<EqsatStats>,
+    // pub stats_history: Vec<EqsatStats>,
     pub iteration_check: Option<bool>,
     pub total_time: Duration,
     pub runner_args: RunnerArgs,
     // Optional solver data, this is not really generic...
     pub other_solver_data: Option<OtherSolverData>,
     pub extracted_exprs: Vec<Vec<(C::Cost, RecExpr<L>)>>,
-    pub final_result: EqsatResult<L, N>,
+    // pub final_result: EqsatResult<L, N>,
 }
 
 /// Used to represent an expression

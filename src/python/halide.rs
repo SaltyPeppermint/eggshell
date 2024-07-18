@@ -1,126 +1,104 @@
-use std::fmt::Debug;
-use std::time::Duration;
+// /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
+// #[pyo3::pyclass]
+// #[derive(Debug, Clone, serde::Serialize)]
+// pub struct NewEqsat(crate::eqsat::Eqsat<crate::trs::halide::Halide, crate::eqsat::New>);
 
-use pyo3::prelude::*;
-use pyo3::types::PyDict;
+// /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
+// #[pyo3::pyclass]
+// #[derive(Debug, Clone, serde::Serialize)]
+// pub struct FinishedEqsat(crate::eqsat::Eqsat<crate::trs::halide::Halide, crate::eqsat::Finished>);
 
-use super::PyEqsatResult;
-use crate::eqsat;
-use crate::eqsat::results;
-use crate::errors::EggShellError;
-use crate::trs::halide::Halide;
-use crate::trs::Trs;
+// #[pyo3::pymethods]
+// impl NewEqsat {
+//     /// Set up a new equality staturation with the term.
+//     ///
+//     /// # Errors
+//     ///
+//     /// Will error if the start_term could not be parsed.
+//     /// For more, see [`Eqsat`]
+//     #[new]
+//     #[pyo3(signature = (index, **py_kwargs))]
+//     fn new(
+//         index: usize,
+//         py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+//     ) -> pyo3::PyResult<Self> {
+//         let eqsat = crate::eqsat::Eqsat::new(index);
+//         if let Some(bound) = py_kwargs {
+//             let iter_limit = pyo3::types::PyDictMethods::get_item(bound, "iter_limit")?
+//                 .map(|t| pyo3::types::PyAnyMethods::extract(&t))
+//                 .transpose()?;
 
-/// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
-#[pyclass]
-#[derive(Debug, Clone)]
-pub struct Eqsat(eqsat::Eqsat<Halide>);
+//             let node_limit = pyo3::types::PyDictMethods::get_item(bound, "node_limit")?
+//                 .map(|t| pyo3::types::PyAnyMethods::extract(&t))
+//                 .transpose()?;
 
-#[pymethods]
-impl Eqsat {
-    /// Set up a new equality staturation with the term.
-    ///
-    /// # Errors
-    ///
-    /// Will error if the start_term could not be parsed.
-    /// For more, see [`Eqsat`]
-    #[new]
-    #[pyo3(signature = (index, **py_kwargs))]
-    fn new(index: usize, py_kwargs: Option<&Bound<'_, PyDict>>) -> Result<Self, PyErr> {
-        let mut eqsat = eqsat::Eqsat::new(index);
-        if let Some(bound) = py_kwargs {
-            if let Some(time_limit) = bound.get_item("time_limit")? {
-                let t = time_limit.extract()?;
-                eqsat = eqsat.with_time_limit(Some(Duration::from_secs_f64(t)));
-            }
-            if let Some(phase_limit) = bound.get_item("phase_limit")? {
-                let p = phase_limit.extract()?;
-                eqsat = eqsat.with_phase_limit(Some(p));
-            }
-            if let Some(runner_args) = bound.get_item("phase_limit")? {
-                let r = runner_args.extract()?;
-                eqsat = eqsat.with_runner_args(r);
-            }
-        }
-        Ok(Self(eqsat))
-    }
+//             let time_limit = pyo3::types::PyDictMethods::get_item(bound, "time_limit")?
+//                 .map(|t| pyo3::types::PyAnyMethods::extract(&t))
+//                 .transpose()?;
 
-    // /// See [`Eqsat`]
-    // fn set_iteration_check(&mut self, iteration_check: bool) {
-    //     self.0.set_iteration_check(iteration_check);
-    // }
-    #[allow(clippy::missing_errors_doc)]
-    fn prove_once(&mut self, start_term: &str) -> Result<PyEqsatResult, PyErr> {
-        let start_expr = start_term
-            .parse()
-            .map_err(|_| EggShellError::TermParse(start_term.into()))?;
-        let goals = Halide::prove_goals();
-        let r = match self.0.run_goal_once(&start_expr, &goals) {
-            results::EqsatResult::Solved(result) => PyEqsatResult::Solved { result },
-            results::EqsatResult::Undecidable => PyEqsatResult::Undecidable {},
-            results::EqsatResult::LimitReached(egraph) => PyEqsatResult::LimitReached {
-                egraph_serialized: format!("{:#?}", egraph.dump()),
-            },
-        };
-        Ok(r)
-    }
+//             let runner_args =
+//                 crate::eqsat::utils::RunnerArgs::new(iter_limit, node_limit, time_limit);
+//             Ok(Self(eqsat.with_runner_args(runner_args)))
+//         } else {
+//             Ok(Self(eqsat))
+//         }
+//     }
 
-    #[allow(clippy::missing_errors_doc)]
-    fn simplify_once(&mut self, start_term: &str) -> Result<PyEqsatResult, PyErr> {
-        let start_expr = start_term
-            .parse()
-            .map_err(|_| EggShellError::TermParse(start_term.into()))?;
-        let remaining = self.0.run_simplify_once(&start_expr);
-        Ok(PyEqsatResult::LimitReached {
-            egraph_serialized: format!("{:#?}", remaining.dump()),
-        })
-    }
+//     #[allow(clippy::missing_errors_doc)]
+//     fn run(&mut self, start_term: &str) -> pyo3::PyResult<FinishedEqsat> {
+//         let start_expr = start_term
+//             .parse()
+//             .map_err(|_| crate::errors::EggShellError::TermParse(start_term.into()))?;
+//         let rules = <crate::trs::halide::Halide as crate::trs::Trs>::rules(
+//             &<crate::trs::halide::Halide as crate::trs::Trs>::maximum_ruleset(),
+//         );
+//         let r = self.0.run(&start_expr, &rules);
 
-    /// See [`Eqsat`]
-    #[must_use]
-    fn limit_reached(&self) -> bool {
-        self.0.limit_reached()
-    }
+//         Ok(FinishedEqsat(r))
+//     }
 
-    #[must_use]
-    fn stats_history(&self) -> Vec<results::EqsatStats> {
-        self.0.stats_history().to_vec()
-    }
-}
+//     pub fn get_runner_args(&self) -> crate::eqsat::utils::RunnerArgs {
+//         self.0.runner_args().clone()
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[pyo3::pymethods]
+// impl FinishedEqsat {
+//     #[allow(clippy::missing_errors_doc)]
+//     #[pyo3(signature = (**py_kwargs))]
+//     fn extract(
+//         &mut self,
+//         py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+//     ) -> pyo3::PyResult<Vec<(usize, super::PyLang)>> {
+//         let extracted = if let Some(bound) = py_kwargs {
+//             if let Some(cost_fn_name) =
+//                 pyo3::types::PyDictMethods::get_item(bound, "cost_function")?
+//             {
+//                 let cost_fn_name = pyo3::types::PyAnyMethods::extract(&cost_fn_name)?;
+//                 match cost_fn_name {
+//                     "ast_size" => self.0.extract(crate::utils::AstSize2),
+//                     "ast_depth" => self.0.extract(crate::utils::AstDepth2),
+//                     _ => {
+//                         return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
+//                             format!("{cost_fn_name} is not a valid cost function"),
+//                         ))
+//                     }
+//                 }
+//             } else {
+//                 return Err(pyo3::PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
+//                     "Specified non-existent arguments",
+//                 ));
+//             }
+//         } else {
+//             self.0.extract(crate::utils::AstSize2)
+//         };
+//         Ok(extracted
+//             .iter()
+//             .map(|(cost, term)| (*cost, term.into()))
+//             .collect::<Vec<_>>())
+//     }
 
-    #[test]
-    fn basic_eqsat_solved_true() {
-        let false_stmt = "( == 0 0 )";
-        let mut eqsat = Eqsat::new(0, None).unwrap();
-        let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyEqsatResult::Solved { result: "1".into() }, result);
-    }
-
-    #[test]
-    fn basic_eqsat_solved_false() {
-        let false_stmt = "( == 1 0 )";
-        let mut eqsat = Eqsat::new(0, None).unwrap();
-        let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyEqsatResult::Solved { result: "0".into() }, result);
-    }
-
-    #[test]
-    fn simple_eqsat_solved_true() {
-        let true_stmt = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )";
-        let mut eqsat = Eqsat::new(0, None).unwrap();
-        let result = eqsat.prove_once(true_stmt).unwrap();
-        assert_eq!(PyEqsatResult::Solved { result: "1".into() }, result);
-    }
-
-    #[test]
-    fn simple_eqsat_solved_false() {
-        let false_stmt = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )";
-        let mut eqsat = Eqsat::new(0, None).unwrap();
-        let result = eqsat.prove_once(false_stmt).unwrap();
-        assert_eq!(PyEqsatResult::Solved { result: "0".into() }, result);
-    }
-}
+//     pub fn get_runner_args(&self) -> crate::eqsat::utils::RunnerArgs {
+//         self.0.runner_args().clone()
+//     }
+// }

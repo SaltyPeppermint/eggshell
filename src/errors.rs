@@ -14,36 +14,20 @@ create_exception!(
 
 #[derive(Error, Debug)]
 pub enum EggShellError {
-    #[error("No Equality Saturation was run on the Egraph!")]
-    MissingEqsat,
-    #[error("Already returned a result!")]
-    AlreadyFinished,
     #[error("Could not parse the given term: {0}")]
     TermParse(String),
-    #[error("Error occured during parsing/reading")]
-    Io(String),
-    #[error("You tried to unpack the wrong tuple! This is a: {0}")]
-    TupleUnpacking(String),
+    #[error("Error occured during IO")]
+    Io(#[from] io::Error),
+    #[error("Error occured during float parsing")]
+    FloatParse(#[from] ParseFloatError),
+    #[error("Error occured during csv parsing")]
+    Csv(#[from] csv::Error),
+    #[error("Error occured during JSON serialization")]
+    Serialize(#[from] serde_json::Error),
+    #[error("Invalid Argument")]
+    InvalidArgument(String),
     #[error("Unknown Error happend!")]
     Unknown,
-}
-
-impl From<csv::Error> for EggShellError {
-    fn from(value: csv::Error) -> Self {
-        EggShellError::Io(value.to_string())
-    }
-}
-
-impl From<io::Error> for EggShellError {
-    fn from(value: io::Error) -> Self {
-        EggShellError::Io(value.to_string())
-    }
-}
-
-impl From<ParseFloatError> for EggShellError {
-    fn from(value: ParseFloatError) -> Self {
-        EggShellError::Io(value.to_string())
-    }
 }
 
 impl std::convert::From<EggShellError> for PyErr {
