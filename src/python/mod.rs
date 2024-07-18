@@ -27,7 +27,7 @@ pub enum PyLang {
     /// (func-name arg1 arg2)
     Application {
         /// Can't use a Box<PyLang> cause then pyo3 would freak out
-        head: String,
+        head: Box<PyLang>,
         tail: Vec<PyLang>,
     },
 }
@@ -36,6 +36,17 @@ pub enum PyLang {
 impl PyLang {
     fn __eq__(&self, other: &Self) -> bool {
         self == other
+    }
+}
+
+impl<'source> pyo3::FromPyObject<'source> for std::boxed::Box<PyLang> {
+    fn extract(ob: &'source pyo3::PyAny) -> pyo3::PyResult<Self> {
+        ob.extract::<PyLang>().map(Box::new)
+    }
+}
+impl pyo3::IntoPy<pyo3::PyObject> for std::boxed::Box<PyLang> {
+    fn into_py(self, py: pyo3::Python<'_>) -> pyo3::PyObject {
+        (*self).into_py(py)
     }
 }
 
@@ -51,7 +62,7 @@ fn rec_fmt(s_expr: &PyLang, f: &mut std::fmt::Formatter) -> Result<(), std::fmt:
     match s_expr {
         PyLang::Literal { str_repr } => write!(f, " {str_repr}"),
         PyLang::Application { head, tail } => {
-            write!(f, " {head}")?;
+            rec_fmt(head, f)?;
             write!(f, " (")?;
             for inner_s_expr in tail {
                 rec_fmt(inner_s_expr, f)?;
@@ -96,9 +107,11 @@ fn parse_literal(i: &str) -> IResult<&str, PyLang, VerboseError<&str>> {
     Ok((i, literal))
 }
 
-fn parse_head(i: &str) -> IResult<&str, String, VerboseError<&str>> {
+fn parse_head(i: &str) -> IResult<&str, Box<PyLang>, VerboseError<&str>> {
     let (i, t) = delimited(multispace0, alphanumeric1, multispace0).parse(i)?;
-    let head = t.to_string();
+    let head = Box::new(PyLang::Literal {
+        str_repr: t.to_string(),
+    });
     Ok((i, head))
 }
 
@@ -129,8 +142,9 @@ mod tests {
     #[test]
     fn parse_basic() {
         let lhs = PyLang::Application {
-            head: "foo".to_string(),
-
+            head: Box::new(PyLang::Literal {
+                str_repr: "foo".to_string(),
+            }),
             tail: vec![
                 PyLang::Literal {
                     str_repr: "bar".to_string(),
@@ -150,7 +164,9 @@ mod tests {
     #[test]
     fn print_basic() {
         let lhs = PyLang::Application {
-            head: "foo".to_string(),
+            head: Box::new(PyLang::Literal {
+                str_repr: "foo".to_string(),
+            }),
             tail: vec![
                 PyLang::Literal {
                     str_repr: "bar".to_string(),
@@ -171,9 +187,13 @@ mod tests {
     #[test]
     fn parse_nested() {
         let lhs = PyLang::Application {
-            head: "nom".to_string(),
+            head: Box::new(PyLang::Literal {
+                str_repr: "nom".to_string(),
+            }),
             tail: vec![PyLang::Application {
-                head: "nim".to_string(),
+                head: Box::new(PyLang::Literal {
+                    str_repr: "nim".to_string(),
+                }),
                 tail: vec![
                     PyLang::Literal {
                         str_repr: "nam".to_string(),
@@ -191,10 +211,13 @@ mod tests {
     #[test]
     fn print_nested() {
         let lhs = PyLang::Application {
-            head: "nom".to_string(),
+            head: Box::new(PyLang::Literal {
+                str_repr: "nom".to_string(),
+            }),
             tail: vec![PyLang::Application {
-                head: "nim".to_string(),
-
+                head: Box::new(PyLang::Literal {
+                    str_repr: "nim".to_string(),
+                }),
                 tail: vec![PyLang::Literal {
                     str_repr: "nam".to_string(),
                 }],
@@ -208,10 +231,14 @@ mod tests {
     #[test]
     fn parse_complicated() {
         let lhs = PyLang::Application {
-            head: "a".to_string(),
+            head: Box::new(PyLang::Literal {
+                str_repr: "a".to_string(),
+            }),
             tail: vec![
                 PyLang::Application {
-                    head: "b".to_string(),
+                    head: Box::new(PyLang::Literal {
+                        str_repr: "b".to_string(),
+                    }),
                     tail: vec![
                         PyLang::Literal {
                             str_repr: "c".to_string(),
@@ -222,7 +249,9 @@ mod tests {
                     ],
                 },
                 PyLang::Application {
-                    head: "e".to_string(),
+                    head: Box::new(PyLang::Literal {
+                        str_repr: "e".to_string(),
+                    }),
                     tail: vec![PyLang::Literal {
                         str_repr: "f".to_string(),
                     }],
