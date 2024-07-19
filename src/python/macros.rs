@@ -1,3 +1,5 @@
+/// Macro to generate a manuaol monomorphization via a wrapper cause
+/// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty) => {
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
@@ -12,12 +14,6 @@ macro_rules! monomorphize {
 
         #[pyo3::pymethods]
         impl NewEqsat {
-            /// Set up a new equality staturation with the term.
-            ///
-            /// # Errors
-            ///
-            /// Will error if the start_term could not be parsed.
-            /// For more, see [`Eqsat`]
             #[new]
             #[pyo3(signature = (index, **py_kwargs))]
             fn new(
@@ -107,6 +103,8 @@ macro_rules! monomorphize {
     };
 }
 
+/// Macro to generate the necessary implementations so pyo3 doesnt freak out about
+/// self-referential types using boxes
 macro_rules! pyboxable {
     ($type: ty) => {
         impl<'source> pyo3::FromPyObject<'source> for std::boxed::Box<$type> {

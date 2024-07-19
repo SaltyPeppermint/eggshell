@@ -20,7 +20,6 @@ pub enum PyLang {
     },
     /// (func-name arg1 arg2)
     Application {
-        /// Can't use a Box<PyLang> cause then pyo3 would freak out
         head: Box<PyLang>,
         tail: Vec<PyLang>,
     },

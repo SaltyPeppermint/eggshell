@@ -1,35 +1,5 @@
-use std::fmt::Display;
-use std::time::Duration;
-
-use egg::{CostFunction, Language, RecExpr};
-use serde::Serialize;
-
 use pyo3::prelude::*;
-
-// use crate::eqsat::results::EqsatResult;
-use crate::eqsat::utils::RunnerArgs;
-
-/// Used to represent an expression
-#[derive(Serialize, Debug)]
-pub struct EqsatReport<L, C>
-where
-    L: Language + Display + Serialize,
-    // N: Analysis<L> + Serialize,
-    // N::Data: Serialize + Clone,
-    C: CostFunction<L>,
-    C::Cost: Serialize,
-{
-    pub index: usize,
-    pub first_expr: RecExpr<L>,
-    // pub stats_history: Vec<EqsatStats>,
-    pub iteration_check: Option<bool>,
-    pub total_time: Duration,
-    pub runner_args: RunnerArgs,
-    // Optional solver data, this is not really generic...
-    pub other_solver_data: Option<OtherSolverData>,
-    pub extracted_exprs: Vec<Vec<(C::Cost, RecExpr<L>)>>,
-    // pub final_result: EqsatResult<L, N>,
-}
+use serde::Serialize;
 
 /// Used to represent an expression
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -41,15 +11,6 @@ pub struct Expression {
     pub term: String,
     /// Optional halide data
     pub other_solver: Option<OtherSolverData>,
-}
-
-/// Holds (optional) additional data of other solver results
-#[derive(Serialize, Debug, Clone, PartialEq)]
-pub struct OtherSolverData {
-    /// Other Solvers's result for proving the expression
-    pub result: String,
-    /// The time it took the other solver to prove the expression
-    pub time: f64,
 }
 
 #[pymethods]
@@ -66,6 +27,15 @@ impl Expression {
     pub fn term(&self) -> String {
         self.term.to_string()
     }
+}
+
+/// Holds (optional) additional data of other solver results
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct OtherSolverData {
+    /// Other Solvers's result for proving the expression
+    pub result: String,
+    /// The time it took the other solver to prove the expression
+    pub time: f64,
 }
 
 // /// Represents a [`Rule`] of the TRS
@@ -91,4 +61,26 @@ impl Expression {
 //             condition,
 //         }
 //     }
+// }
+
+// /// Used to represent an expression
+// #[derive(Serialize, Debug)]
+// struct EqsatReport<L, C>
+// where
+//     L: Language + Display + Serialize,
+//     // N: Analysis<L> + Serialize,
+//     // N::Data: Serialize + Clone,
+//     C: CostFunction<L>,
+//     C::Cost: Serialize,
+// {
+//     pub index: usize,
+//     pub first_expr: RecExpr<L>,
+//     // pub stats_history: Vec<EqsatStats>,
+//     pub iteration_check: Option<bool>,
+//     pub total_time: Duration,
+//     pub runner_args: RunnerArgs,
+//     // Optional solver data, this is not really generic...
+//     pub other_solver_data: Option<OtherSolverData>,
+//     pub extracted_exprs: Vec<Vec<(C::Cost, RecExpr<L>)>>,
+//     // pub final_result: EqsatResult<L, N>,
 // }

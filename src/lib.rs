@@ -1,11 +1,11 @@
 #![warn(clippy::all, clippy::pedantic)]
 
-pub mod eqsat;
-pub mod errors;
-pub mod io;
+mod eqsat;
+mod errors;
+mod io;
 mod python;
-pub mod trs;
-pub mod utils;
+mod trs;
+mod utils;
 
 use pyo3::prelude::*;
 
@@ -28,18 +28,18 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     io_m.add_class::<Expression>()?;
     m.add_submodule(&io_m)?;
 
-    // General Eqsat
+    // Eqsat
     let eqsat_m = PyModule::new_bound(m.py(), "eqsat")?;
-    eqsat_m.add_class::<python::PyLang>()?;
-    m.add_submodule(&eqsat_m)?;
 
-    // Halide
+    // Halide specific eqsat generated eqsats
     let halide_m = PyModule::new_bound(eqsat_m.py(), "halide")?;
     halide_m.add_class::<python::halide::NewEqsat>()?;
     halide_m.add_class::<python::halide::FinishedEqsat>()?;
-    halide_m.add_class::<python::halide2::NewEqsat>()?;
-    halide_m.add_class::<python::halide2::FinishedEqsat>()?;
     eqsat_m.add_submodule(&halide_m)?;
+
+    // Pylang works for all langs that implement Display
+    eqsat_m.add_class::<python::PyLang>()?;
+    m.add_submodule(&eqsat_m)?;
 
     Ok(())
 }
