@@ -3,6 +3,8 @@ use std::fmt::Display;
 use egg::{Language, RecExpr};
 use pyo3::prelude::*;
 
+use super::macros::pyboxable;
+
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum PyLang {
@@ -16,7 +18,7 @@ pub enum PyLang {
     },
 }
 
-super::macros::pyboxable!(PyLang);
+pyboxable!(PyLang);
 
 #[pymethods]
 impl PyLang {
@@ -77,7 +79,7 @@ fn parse_rec_expr_rec<L: Language + Display>(node: &L, rec_expr: &RecExpr<L>) ->
 
 #[cfg(test)]
 mod tests {
-    use crate::trs::halide::Math;
+    use crate::trs::halide::MathEquations;
 
     use super::*;
 
@@ -96,7 +98,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<Math> = "( == 0 0 )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "( == 0 0 )".parse().unwrap();
         dbg!(&rhs);
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
@@ -147,7 +149,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<Math> = "( == ( + 1 1 ) 2 )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "( == ( + 1 1 ) 2 )".parse().unwrap();
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
     }
@@ -227,7 +229,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<Math> = "( == ( + ( + 1 0 ) 1 ) ( + 1 1 ) )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "( == ( + ( + 1 0 ) 1 ) ( + 1 1 ) )".parse().unwrap();
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
     }

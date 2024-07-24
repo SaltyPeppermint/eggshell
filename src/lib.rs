@@ -31,11 +31,23 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Eqsat
     let eqsat_m = PyModule::new_bound(m.py(), "eqsat")?;
 
-    // Halide specific eqsat generated eqsats
+    // Arithmatic specific generated eqsats
+    let arithmatic_m = PyModule::new_bound(eqsat_m.py(), "arithmatic")?;
+    arithmatic_m.add_class::<python::arithmatic::NewEqsat>()?;
+    arithmatic_m.add_class::<python::arithmatic::FinishedEqsat>()?;
+    eqsat_m.add_submodule(&arithmatic_m)?;
+
+    // Halide specific generated eqsats
     let halide_m = PyModule::new_bound(eqsat_m.py(), "halide")?;
     halide_m.add_class::<python::halide::NewEqsat>()?;
     halide_m.add_class::<python::halide::FinishedEqsat>()?;
     eqsat_m.add_submodule(&halide_m)?;
+
+    // SimpleLang specific generated eqsats
+    let simple_m = PyModule::new_bound(eqsat_m.py(), "simple")?;
+    simple_m.add_class::<python::simple::NewEqsat>()?;
+    simple_m.add_class::<python::simple::FinishedEqsat>()?;
+    eqsat_m.add_submodule(&simple_m)?;
 
     // Pylang works for all langs that implement Display
     eqsat_m.add_class::<python::PyLang>()?;

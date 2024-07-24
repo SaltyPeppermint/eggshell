@@ -133,7 +133,7 @@ where
 #[cfg(test)]
 mod tests {
     use crate::{
-        trs::halide::{Halide, Math},
+        trs::halide::{Halide, MathEquations},
         utils::AstSize2,
     };
 
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn basic_eqsat_solved_true() {
-        let false_stmt: RecExpr<Math> = "( == 0 0 )".parse().unwrap();
+        let false_stmt: RecExpr<MathEquations> = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
         let eqsat = Eqsat::<Halide, _>::new(0);
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn basic_eqsat_solved_false() {
-        let false_stmt: RecExpr<Math> = "( == 1 0 )".parse().unwrap();
+        let false_stmt: RecExpr<MathEquations> = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
         let eqsat = Eqsat::<Halide, _>::new(0);
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn simple_eqsat_solved_true() {
-        let true_stmt: RecExpr<Math> = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )".parse().unwrap();
+        let true_stmt: RecExpr<MathEquations> = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
         let eqsat = Eqsat::<Halide, _>::new(0);
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn simple_eqsat_solved_false() {
-        let false_stmt: RecExpr<Math> = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
+        let false_stmt: RecExpr<MathEquations> = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
             .parse()
             .unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());

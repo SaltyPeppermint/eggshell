@@ -1,9 +1,15 @@
 use std::fmt::Display;
 
-use egg::{Analysis, FromOp, Language, Pattern, Rewrite};
+use egg::{Analysis, FromOp, Language, Rewrite};
 use serde::Serialize;
 
-pub mod halide;
+pub(crate) mod arithmatic;
+pub(crate) mod halide;
+pub(crate) mod simple;
+
+pub use arithmatic::Arithmatic;
+pub use halide::Halide;
+pub use simple::Simple;
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -23,7 +29,7 @@ pub trait Trs: Serialize {
 
     fn rules(ruleset_class: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
     fn maximum_ruleset() -> Self::Rulesets;
-    fn prove_goals() -> Vec<Pattern<Self::Language>>;
+    // fn prove_goals() -> Vec<Pattern<Self::Language>>;
 }
 
 // /// [`EGraph`] parameterized by the Trs
