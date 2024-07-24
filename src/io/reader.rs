@@ -1,10 +1,9 @@
-use std::{fs::File, num::ParseFloatError};
+use std::fs::File;
 
 use csv;
-use csv::StringRecord;
 use pyo3::prelude::*;
 
-use super::structs::{Expression, OtherSolverData};
+use super::structs::Expression;
 use crate::errors::EggShellError;
 
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.
@@ -26,27 +25,12 @@ pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
                 .parse::<usize>()
                 .expect("No index means csv is broken.");
             let expr_str = record.get(1).expect("No expression means csv is broken.");
-            // Check if Halide's resluts are included then add them if they are
-            let other_solver_data = parse_other_solver(&record)?;
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.
             Ok(Expression {
                 index,
                 term: (*expr_str).to_string(),
-                other_solver: other_solver_data,
             })
         })
         .collect()
-}
-
-fn parse_other_solver(record: &StringRecord) -> Result<Option<OtherSolverData>, ParseFloatError> {
-    if let (Some(halide_result), Some(other_time)) = (record.get(2), record.get(3)) {
-        let other_time = other_time.parse()?;
-        Ok(Some(OtherSolverData {
-            result: halide_result.into(),
-            time: other_time,
-        }))
-    } else {
-        Ok(None)
-    }
 }

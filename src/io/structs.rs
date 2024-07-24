@@ -9,8 +9,6 @@ pub struct Expression {
     pub index: usize,
     /// the string of the expression
     pub term: String,
-    /// Optional halide data
-    pub other_solver: Option<OtherSolverData>,
 }
 
 #[pymethods]
