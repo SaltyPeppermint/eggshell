@@ -2,9 +2,9 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 
 use egg::{Analysis, AstSize, CostFunction, DidMerge, EGraph, Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::hashcons::ExprHashCons;
+use crate::{HashMap, HashSet};
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
     type Data: Debug;
@@ -25,11 +25,11 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
 pub fn one_shot_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<L, N>>(
     egraph: &EGraph<L, N>,
     analysis: &mut B,
-    data: &mut FxHashMap<Id, B::Data>,
+    data: &mut HashMap<Id, B::Data>,
 ) {
     assert!(egraph.clean);
 
-    let mut analysis_pending = FxHashSetQueuePop::<(L, Id)>::new();
+    let mut analysis_pending = HashSetQueuePop::<(L, Id)>::new();
     // works with queue but IndexSet is stack
     // IndexSet::<(L, Id)>::default();
 
@@ -49,8 +49,8 @@ pub fn one_shot_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<L, 
 fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<L, N>>(
     egraph: &EGraph<L, N>,
     analysis: &mut B,
-    data: &mut FxHashMap<Id, B::Data>,
-    analysis_pending: &mut FxHashSetQueuePop<(L, Id)>,
+    data: &mut HashMap<Id, B::Data>,
+    analysis_pending: &mut HashSetQueuePop<(L, Id)>,
 ) {
     while let Some((node, id)) = analysis_pending.pop() {
         let u_node = node.clone().map_children(|id| egraph.find(id)); // find_mut?
@@ -79,15 +79,15 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
     }
 }
 
-pub struct FxHashSetQueuePop<T> {
-    map: FxHashSet<T>,
+pub struct HashSetQueuePop<T> {
+    map: HashSet<T>,
     queue: std::collections::VecDeque<T>,
 }
 
-impl<T: Eq + std::hash::Hash + Clone> FxHashSetQueuePop<T> {
+impl<T: Eq + std::hash::Hash + Clone> HashSetQueuePop<T> {
     pub fn new() -> Self {
-        FxHashSetQueuePop {
-            map: FxHashSet::default(),
+        HashSetQueuePop {
+            map: HashSet::default(),
             queue: std::collections::VecDeque::new(),
         }
     }
@@ -148,7 +148,7 @@ where
 {
     exprs: &'a mut ExprHashCons<L>,
     cost_fn: &'a mut CF,
-    extracted: &'a FxHashMap<Id, (CF::Cost, Id)>,
+    extracted: &'a HashMap<Id, (CF::Cost, Id)>,
 }
 
 impl<'a, L, CF> ExtractContainsAnalysis<'a, L, CF>
@@ -159,7 +159,7 @@ where
     pub fn new(
         exprs: &'a mut ExprHashCons<L>,
         cost_fn: &'a mut CF,
-        extracted: &'a FxHashMap<Id, (CF::Cost, Id)>,
+        extracted: &'a HashMap<Id, (CF::Cost, Id)>,
     ) -> Self {
         Self {
             exprs,
@@ -205,7 +205,7 @@ where
         let mut candidates = Vec::new();
 
         for (matching_child, matching) in &children_matching {
-            let mut to_selected = FxHashMap::default();
+            let mut to_selected = HashMap::default();
 
             for (child, any) in &children_any {
                 let selected = if child == matching_child {
@@ -335,7 +335,7 @@ mod tests {
         egraph.union(a, apz);
         egraph.rebuild();
 
-        let mut data = FxHashMap::default();
+        let mut data = HashMap::default();
         one_shot_analysis(&egraph, &mut AstSize, &mut data);
 
         assert_eq!(data[&egraph.find(apz)], 1);

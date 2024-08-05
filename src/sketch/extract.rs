@@ -1,53 +1,53 @@
 use std::mem::Discriminant;
 
+use crate::{HashMap, HashSet};
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
-use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::analysis::{ExtractAnalysis, ExtractContainsAnalysis, SatisfiesContainsAnalysis};
+use super::analysis::{self, ExtractAnalysis, ExtractContainsAnalysis, SatisfiesContainsAnalysis};
 use super::hashcons::ExprHashCons;
 use super::utils;
 use super::{Sketch, SketchNode};
 
 /// Is the `id` e-class of `egraph` representing at least one program satisfying `s`?
 pub fn eclass_satisfies_sketch<L: Language, A: Analysis<L>>(
-    s: &Sketch<L>,
+    sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
     id: Id,
 ) -> bool {
-    satisfies_sketch(s, egraph).contains(&id)
+    satisfies_sketch(sketch, egraph).contains(&id)
 }
 
 /// Returns the set of e-classes of `egraph` that represent at least one program satisfying `s`.
 pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
-    s: &Sketch<L>,
+    sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
-) -> FxHashSet<Id> {
+) -> HashSet<Id> {
     assert!(egraph.clean);
-    let mut memo = FxHashMap::<Id, FxHashSet<Id>>::default();
-    let sketch_nodes = s.as_ref();
-    let sketch_root = Id::from(sketch_nodes.len() - 1);
+    let mut memo = HashMap::<Id, HashSet<Id>>::default();
+    // let sketch_nodes = s.as_ref();
+    let sketch_root = Id::from(sketch.as_ref().len() - 1);
     let classes_by_op = utils::new_classes_by_op(egraph);
-    satisfies_sketch_rec(sketch_nodes, sketch_root, egraph, &classes_by_op, &mut memo)
+    satisfies_sketch_rec(sketch, sketch_root, egraph, &classes_by_op, &mut memo)
 }
 
 fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
-    s_nodes: &[SketchNode<L>],
-    s_index: Id,
+    sketch: &Sketch<L>,
+    sid: Id,
     egraph: &EGraph<L, A>,
-    classes_by_op: &FxHashMap<Discriminant<L>, FxHashSet<Id>>,
-    memo: &mut FxHashMap<Id, FxHashSet<Id>>,
-) -> FxHashSet<Id> {
-    if let Some(value) = memo.get(&s_index) {
+    classes_by_op: &HashMap<Discriminant<L>, HashSet<Id>>,
+    memo: &mut HashMap<Id, HashSet<Id>>,
+) -> HashSet<Id> {
+    if let Some(value) = memo.get(&sid) {
         return value.clone();
     };
 
-    let result = match &s_nodes[usize::from(s_index)] {
+    let result = match &sketch[sid] {
         SketchNode::Any => egraph.classes().map(|c| c.id).collect(),
         SketchNode::Node(node) => {
             let children_matches = node
                 .children()
                 .iter()
-                .map(|sid| satisfies_sketch_rec(s_nodes, *sid, egraph, classes_by_op, memo))
+                .map(|csid| satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo))
                 .collect::<Vec<_>>();
 
             if let Some(potential_ids) = utils::classes_matching_op(node, classes_by_op) {
@@ -73,41 +73,41 @@ fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
                     })
                     .collect()
             } else {
-                FxHashSet::default()
+                HashSet::default()
             }
         }
-        SketchNode::Contains(sid) => {
+        SketchNode::Contains(csid) => {
             let contained_matched =
-                satisfies_sketch_rec(s_nodes, *sid, egraph, classes_by_op, memo);
+                satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo);
 
             let mut data = egraph
                 .classes()
                 .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
-                .collect::<FxHashMap<_, bool>>();
+                .collect::<HashMap<_, bool>>();
 
-            super::analysis::one_shot_analysis(egraph, &mut SatisfiesContainsAnalysis, &mut data);
+            analysis::one_shot_analysis(egraph, &mut SatisfiesContainsAnalysis, &mut data);
 
             data.iter()
                 .filter_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
                 .collect()
         }
-        SketchNode::Or(sids) => {
-            let matches = sids
+        SketchNode::Or(csids) => {
+            let matches = csids
                 .iter()
-                .map(|sid| satisfies_sketch_rec(s_nodes, *sid, egraph, classes_by_op, memo));
+                .map(|csid| satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo));
             matches
                 .reduce(|a, b| a.union(&b).copied().collect())
                 .expect("empty or sketch")
         }
     };
 
-    memo.insert(s_index, result.clone());
+    memo.insert(sid, result.clone());
     result
 }
 
 /// Returns the best program satisfying `s` according to `cost_fn` that is represented in the `id` e-class of `egraph`, if it exists.
 pub fn eclass_extract_sketch<L, A, CF>(
-    s: &Sketch<L>,
+    sketch: &Sketch<L>,
     cost_fn: CF,
     egraph: &EGraph<L, A>,
     id: Id,
@@ -118,7 +118,7 @@ where
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    let (exprs, eclass_to_best) = extract_sketch(s, cost_fn, egraph);
+    let (exprs, eclass_to_best) = extract_sketch(sketch, cost_fn, egraph);
     eclass_to_best
         .get(&id)
         .map(|(best_cost, best_id)| (best_cost.clone(), exprs.extract(*best_id)))
@@ -126,10 +126,10 @@ where
 
 #[allow(clippy::type_complexity)]
 fn extract_sketch<L, A, CF>(
-    s: &Sketch<L>,
+    sketch: &Sketch<L>,
     mut cost_fn: CF,
     egraph: &EGraph<L, A>,
-) -> (ExprHashCons<L>, FxHashMap<Id, (CF::Cost, Id)>)
+) -> (ExprHashCons<L>, HashMap<Id, (CF::Cost, Id)>)
 where
     L: Language,
     A: Analysis<L>,
@@ -137,21 +137,20 @@ where
     CF::Cost: Ord,
 {
     assert!(egraph.clean);
-    let mut memo = FxHashMap::<Id, FxHashMap<Id, (CF::Cost, Id)>>::default();
-    let sketch_nodes = s.as_ref();
-    let sketch_root = Id::from(sketch_nodes.len() - 1);
+    let mut memo = HashMap::<Id, HashMap<Id, (CF::Cost, Id)>>::default();
+    let sketch_root = Id::from(sketch.as_ref().len() - 1);
     let mut exprs = ExprHashCons::new();
 
-    let mut extracted = FxHashMap::default();
+    let mut extracted = HashMap::default();
     let mut analysis = ExtractAnalysis {
         exprs: &mut exprs,
         cost_fn: &mut cost_fn,
     };
     let classes_by_op = utils::new_classes_by_op(egraph);
-    super::analysis::one_shot_analysis(egraph, &mut analysis, &mut extracted);
+    analysis::one_shot_analysis(egraph, &mut analysis, &mut extracted);
 
     let res = extract_sketch_rec(
-        sketch_nodes,
+        sketch,
         sketch_root,
         &mut cost_fn,
         &classes_by_op,
@@ -165,35 +164,35 @@ where
 
 #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn extract_sketch_rec<L, A, CF>(
-    s_nodes: &[SketchNode<L>],
-    s_index: Id,
+    sketch: &Sketch<L>,
+    sid: Id,
     cost_fn: &mut CF,
-    classes_by_op: &FxHashMap<Discriminant<L>, FxHashSet<Id>>,
+    classes_by_op: &HashMap<Discriminant<L>, HashSet<Id>>,
     egraph: &EGraph<L, A>,
     exprs: &mut ExprHashCons<L>,
-    extracted: &FxHashMap<Id, (CF::Cost, Id)>,
-    memo: &mut FxHashMap<Id, FxHashMap<Id, (CF::Cost, Id)>>,
-) -> FxHashMap<Id, (CF::Cost, Id)>
+    extracted: &HashMap<Id, (CF::Cost, Id)>,
+    memo: &mut HashMap<Id, HashMap<Id, (CF::Cost, Id)>>,
+) -> HashMap<Id, (CF::Cost, Id)>
 where
     L: Language,
     A: Analysis<L>,
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    if let Some(value) = memo.get(&s_index) {
+    if let Some(value) = memo.get(&sid) {
         return value.clone();
     };
 
-    let result = match &s_nodes[usize::from(s_index)] {
+    let result = match &sketch[sid] {
         SketchNode::Any => extracted.clone(),
         SketchNode::Node(node) => {
             let children_matches = node
                 .children()
                 .iter()
-                .map(|sid| {
+                .map(|child_sid| {
                     extract_sketch_rec(
-                        s_nodes,
-                        *sid,
+                        sketch,
+                        *child_sid,
                         cost_fn,
                         classes_by_op,
                         egraph,
@@ -224,7 +223,7 @@ where
                             }
 
                             if matches.len() == matched.len() {
-                                let to_match: FxHashMap<_, _> =
+                                let to_match: HashMap<_, _> =
                                     matched.children().iter().zip(matches.iter()).collect();
                                 candidates.push((
                                     cost_fn.cost(matched, |c| to_match[&c].0.clone()),
@@ -242,13 +241,13 @@ where
                     })
                     .collect()
             } else {
-                FxHashMap::default()
+                HashMap::default()
             }
         }
-        SketchNode::Contains(sid) => {
+        SketchNode::Contains(inner_sid) => {
             let contained_matches = extract_sketch_rec(
-                s_nodes,
-                *sid,
+                sketch,
+                *inner_sid,
                 cost_fn,
                 classes_by_op,
                 egraph,
@@ -260,22 +259,22 @@ where
             let mut data = egraph
                 .classes()
                 .map(|eclass| (eclass.id, contained_matches.get(&eclass.id).cloned()))
-                .collect::<FxHashMap<_, _>>();
+                .collect::<HashMap<_, _>>();
 
             let mut analysis = ExtractContainsAnalysis::new(exprs, cost_fn, extracted);
 
-            super::analysis::one_shot_analysis(egraph, &mut analysis, &mut data);
+            analysis::one_shot_analysis(egraph, &mut analysis, &mut data);
 
             data.into_iter()
                 .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchNode::Or(sids) => {
-            let matches = sids
+        SketchNode::Or(inner_sids) => {
+            let matches = inner_sids
                 .iter()
                 .map(|sid| {
                     extract_sketch_rec(
-                        s_nodes,
+                        sketch,
                         *sid,
                         cost_fn,
                         classes_by_op,
@@ -286,7 +285,7 @@ where
                     )
                 })
                 .collect::<Vec<_>>();
-            let mut matching_ids = FxHashSet::default();
+            let mut matching_ids = HashSet::default();
             for m in &matches {
                 matching_ids.extend(m.keys());
             }
@@ -307,7 +306,7 @@ where
         }
     };
 
-    memo.insert(s_index, result.clone());
+    memo.insert(sid, result.clone());
     result
 }
 
@@ -366,7 +365,7 @@ mod tests {
     #[test]
     fn simple_extract_cost() {
         fn comp_eclass_extracted_sketch<L, A, CF>(
-            s: &Sketch<L>,
+            sketch: &Sketch<L>,
             cost_fn_1: CF,
             cost_fn_2: CF,
             egraph: &EGraph<L, A>,
@@ -380,9 +379,9 @@ mod tests {
         {
             use std::time::Instant;
             let t1 = Instant::now();
-            let res1 = crate::sketch::extract::eclass_extract_sketch(s, cost_fn_1, egraph, id);
+            let res1 = super::eclass_extract_sketch(sketch, cost_fn_1, egraph, id);
             let t2 = Instant::now();
-            let res2 = crate::sketch::recursive::eclass_extract_sketch(s, cost_fn_2, egraph, id);
+            let res2 = super::eclass_extract_sketch(sketch, cost_fn_2, egraph, id);
             let t3 = Instant::now();
             assert_eq!(res1.is_some(), res2.is_some());
             if let (Some((c1, _)), Some((c2, _))) = (&res1, &res2) {

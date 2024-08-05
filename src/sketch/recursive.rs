@@ -1,5 +1,6 @@
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
-use rustc_hash::FxHashMap;
+
+use crate::HashMap;
 
 use super::analysis::ExtractAnalysis;
 use super::hashcons::ExprHashCons;
@@ -7,7 +8,7 @@ use super::{analysis, utils};
 use super::{Sketch, SketchNode};
 
 pub fn eclass_extract_sketch<L, N, CF>(
-    s: &Sketch<L>,
+    sketch: &Sketch<L>,
     mut cost_fn: CF,
     egraph: &EGraph<L, N>,
     id: Id,
@@ -19,18 +20,17 @@ where
     CF::Cost: Ord,
 {
     assert!(egraph.clean);
-    let mut memo = FxHashMap::<(Id, Id), Option<(CF::Cost, Id)>>::default();
-    let sketch_nodes = s.as_ref();
-    let sketch_root = Id::from(sketch_nodes.len() - 1);
+    let mut memo = HashMap::<(Id, Id), Option<(CF::Cost, Id)>>::default();
+    let sketch_root = Id::from(sketch.as_ref().len() - 1);
     let mut exprs = ExprHashCons::new();
 
-    let mut extracted = FxHashMap::default();
+    let mut extracted = HashMap::default();
     let mut analysis = ExtractAnalysis::new(&mut exprs, &mut cost_fn);
     analysis::one_shot_analysis(egraph, &mut analysis, &mut extracted);
 
     let best_option = extract_rec(
         id,
-        sketch_nodes,
+        sketch,
         sketch_root,
         &mut cost_fn,
         egraph,
@@ -45,13 +45,13 @@ where
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn extract_rec<L, N, CF>(
     id: Id,
-    s_nodes: &[SketchNode<L>],
-    s_index: Id,
+    sketch: &Sketch<L>,
+    sid: Id,
     cost_fn: &mut CF,
     egraph: &EGraph<L, N>,
     exprs: &mut ExprHashCons<L>,
-    extracted: &FxHashMap<Id, (CF::Cost, Id)>,
-    memo: &mut FxHashMap<(Id, Id), Option<(CF::Cost, Id)>>,
+    extracted: &HashMap<Id, (CF::Cost, Id)>,
+    memo: &mut HashMap<(Id, Id), Option<(CF::Cost, Id)>>,
 ) -> Option<(CF::Cost, Id)>
 where
     L: Language,
@@ -59,11 +59,11 @@ where
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    if let Some(value) = memo.get(&(id, s_index)) {
+    if let Some(value) = memo.get(&(id, sid)) {
         return value.clone();
     };
 
-    let result = match &s_nodes[usize::from(s_index)] {
+    let result = match &sketch[sid] {
         SketchNode::Any => extracted.get(&id).cloned(),
         SketchNode::Node(node) => {
             let eclass = &egraph[id];
@@ -72,10 +72,10 @@ where
             let mnode = &node.clone().map_children(|_| Id::from(0));
             let _ = utils::for_each_matching_node(eclass, mnode, |matched| {
                 let mut matches = Vec::new();
-                for (sid, id) in node.children().iter().zip(matched.children()) {
-                    if let Some(m) =
-                        extract_rec(*id, s_nodes, *sid, cost_fn, egraph, exprs, extracted, memo)
-                    {
+                for (inner_sid, child_id) in node.children().iter().zip(matched.children()) {
+                    if let Some(m) = extract_rec(
+                        *child_id, sketch, *inner_sid, cost_fn, egraph, exprs, extracted, memo,
+                    ) {
                         matches.push(m);
                     } else {
                         break;
@@ -83,7 +83,7 @@ where
                 }
 
                 if matches.len() == matched.len() {
-                    let to_match: FxHashMap<_, _> =
+                    let to_match: HashMap<_, _> =
                         matched.children().iter().zip(matches.iter()).collect();
                     candidates.push((
                         cost_fn.cost(matched, |c| to_match[&c].0.clone()),
@@ -96,32 +96,34 @@ where
 
             candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
         }
-        SketchNode::Contains(sid) => {
-            memo.insert((id, s_index), None); // avoid cycles
+        SketchNode::Contains(inner_sid) => {
+            memo.insert((id, sid), None); // avoid cycles
 
             let eclass = &egraph[id];
             let mut candidates = Vec::new();
             candidates.extend(extract_rec(
-                id, s_nodes, *sid, cost_fn, egraph, exprs, extracted, memo,
+                id, sketch, *inner_sid, cost_fn, egraph, exprs, extracted, memo,
             ));
 
             for enode in &eclass.nodes {
                 let children_matching: Vec<_> = enode
                     .children()
                     .iter()
-                    .filter_map(|&c| {
-                        extract_rec(c, s_nodes, s_index, cost_fn, egraph, exprs, extracted, memo)
-                            .map(move |x| (c, x))
+                    .filter_map(|&child_id| {
+                        extract_rec(
+                            child_id, sketch, sid, cost_fn, egraph, exprs, extracted, memo,
+                        )
+                        .map(move |x| (child_id, x))
                     })
                     .collect();
                 let children_any: Vec<_> = enode
                     .children()
                     .iter()
-                    .map(|&c| (c, extracted[&egraph.find(c)].clone()))
+                    .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
                     .collect();
 
                 for (matching_child, matching) in &children_matching {
-                    let mut to_selected = FxHashMap::default();
+                    let mut to_selected = HashMap::default();
 
                     for (child, any) in &children_any {
                         let selected = if child == matching_child {
@@ -141,14 +143,16 @@ where
 
             candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
         }
-        SketchNode::Or(sids) => sids
+        SketchNode::Or(inner_sids) => inner_sids
             .iter()
-            .filter_map(|sid| {
-                extract_rec(id, s_nodes, *sid, cost_fn, egraph, exprs, extracted, memo)
+            .filter_map(|inner_sid| {
+                extract_rec(
+                    id, sketch, *inner_sid, cost_fn, egraph, exprs, extracted, memo,
+                )
             })
             .min_by(|x, y| x.0.cmp(&y.0)),
     };
 
-    memo.insert((id, s_index), result.clone());
+    memo.insert((id, sid), result.clone());
     result
 }

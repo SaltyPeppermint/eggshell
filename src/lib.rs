@@ -14,9 +14,13 @@ mod utils;
 
 use pyo3::prelude::*;
 
-// use crate::eqsat::results::EqsatStats;
 use crate::errors::EggShellException;
 use crate::io::structs::Expression;
+
+type HashMap<K, V> = hashbrown::HashMap<K, V>;
+type HashSet<T> = hashbrown::HashSet<T>;
+// type HashMap<K, V> = rustc_hash::crate::HashMap<K, V>;
+// type HashSet<K, V> = rustc_hash::crate::HashSet<K, V>;
 
 /// A Python module implemented in Rust.
 #[allow(clippy::missing_errors_doc)]

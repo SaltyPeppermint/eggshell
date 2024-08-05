@@ -1,7 +1,8 @@
 use std::mem::Discriminant;
 
 use egg::{Analysis, EClass, EGraph, Id, Language};
-use rustc_hash::{FxHashMap, FxHashSet};
+
+use crate::{HashMap, HashSet};
 
 /// Apply a function for each node in a eclass
 /// Copied from <https://github.com/egraphs-good/egg/blob/347326d2e8ebbacca12d8e1398b86eff6dcfb2c5/src/machine.rs#L37>
@@ -43,12 +44,12 @@ where
             "matching node {:?}\nstart={}\n{:?} != {:?}\nnodes: {:?}",
             node,
             start,
-            matching.clone().collect::<FxHashSet<_>>(),
+            matching.clone().collect::<HashSet<_>>(),
             eclass
                 .nodes
                 .iter()
                 .filter(|n| node.matches(n))
-                .collect::<FxHashSet<_>>(),
+                .collect::<HashSet<_>>(),
             eclass.nodes
         );
         matching.try_for_each(&mut f)
@@ -57,19 +58,19 @@ where
 
 /// Workaround since an identical data struct `classes_by_op` is private in the egraph struct
 /// Using just the discriminant is ok since it is again checked in the `for_each_matching_node` function
-pub fn new_classes_by_op<L, N>(egraph: &EGraph<L, N>) -> FxHashMap<Discriminant<L>, FxHashSet<Id>>
+pub fn new_classes_by_op<L, N>(egraph: &EGraph<L, N>) -> HashMap<Discriminant<L>, HashSet<Id>>
 where
     L: Language,
     N: Analysis<L>,
 {
-    let mut classes_by_op: FxHashMap<Discriminant<L>, FxHashSet<Id>> = FxHashMap::default();
+    let mut classes_by_op: HashMap<Discriminant<L>, HashSet<Id>> = HashMap::default();
     for class in egraph.classes() {
         for node in &class.nodes {
             let key = std::mem::discriminant(node);
             if let Some(ids) = classes_by_op.get_mut(&key) {
                 ids.insert(class.id);
             } else {
-                classes_by_op.insert(key, FxHashSet::default());
+                classes_by_op.insert(key, HashSet::default());
             }
         }
     }
@@ -78,8 +79,8 @@ where
 
 pub fn classes_matching_op<'a, L: Language>(
     enode: &'a L,
-    classes_by_op: &'a FxHashMap<Discriminant<L>, FxHashSet<Id>>,
-) -> Option<&'a FxHashSet<Id>> {
+    classes_by_op: &'a HashMap<Discriminant<L>, HashSet<Id>>,
+) -> Option<&'a HashSet<Id>> {
     let key = std::mem::discriminant(enode);
     classes_by_op.get(&key)
 }
