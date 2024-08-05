@@ -67,11 +67,12 @@ where
     for class in egraph.classes() {
         for node in &class.nodes {
             let key = std::mem::discriminant(node);
-            if let Some(ids) = classes_by_op.get_mut(&key) {
-                ids.insert(class.id);
-            } else {
-                classes_by_op.insert(key, HashSet::default());
-            }
+            classes_by_op
+                .entry(key)
+                .and_modify(|ids| {
+                    ids.insert(class.id);
+                })
+                .or_default();
         }
     }
     classes_by_op
