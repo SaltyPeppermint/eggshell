@@ -46,7 +46,7 @@ macro_rules! monomorphize {
             fn run(&mut self, start_term: &str) -> pyo3::PyResult<FinishedEqsat> {
                 let start_expr = start_term
                     .parse()
-                    .map_err(|_| $crate::errors::EggShellError::TermParse(start_term.into()))?;
+                    .map_err(|e| $crate::errors::EggError::RecExprParse(e))?;
                 let rules = <$type as $crate::trs::Trs>::rules(
                     &<$type as $crate::trs::Trs>::maximum_ruleset(),
                 );
@@ -74,8 +74,8 @@ macro_rules! monomorphize {
                     {
                         let cost_fn_name = pyo3::types::PyAnyMethods::extract(&cost_fn_name)?;
                         match cost_fn_name {
-                            "ast_size" => self.0.extract($crate::utils::AstSize2),
-                            "ast_depth" => self.0.extract($crate::utils::AstDepth2),
+                            "ast_size" => self.0.classic_extract($crate::utils::AstSize2),
+                            "ast_depth" => self.0.classic_extract($crate::utils::AstDepth2),
                             _ => {
                                 return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
                                     format!("{cost_fn_name} is not a valid cost function"),
@@ -88,7 +88,7 @@ macro_rules! monomorphize {
                         ));
                     }
                 } else {
-                    self.0.extract($crate::utils::AstSize2)
+                    self.0.classic_extract($crate::utils::AstSize2)
                 };
                 Ok(extracted
                     .iter()

@@ -4,6 +4,7 @@ mod eqsat;
 mod errors;
 mod io;
 mod python;
+mod sketches;
 mod trs;
 mod utils;
 

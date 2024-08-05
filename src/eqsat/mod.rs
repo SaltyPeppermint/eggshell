@@ -6,6 +6,7 @@ use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;
 use serde::Serialize;
 
+use crate::sketches::SketchNode;
 use crate::trs::Trs;
 use utils::RunnerArgs;
 
@@ -44,10 +45,6 @@ where
 {
     pub fn runner_args(&self) -> &RunnerArgs {
         &self.runner_args
-    }
-
-    pub fn index(&self) -> usize {
-        self.index
     }
 }
 
@@ -115,7 +112,7 @@ where
 {
     // Extract
     #[allow(clippy::missing_panics_doc)]
-    pub fn extract<CF>(&self, cost_fn: CF) -> Vec<(CF::Cost, RecExpr<R::Language>)>
+    pub fn classic_extract<CF>(&self, cost_fn: CF) -> Vec<(CF::Cost, RecExpr<R::Language>)>
     where
         CF: CostFunction<R::Language>,
     {
@@ -127,6 +124,20 @@ where
             .iter()
             .map(|root| extractor.find_best(*root))
             .collect()
+    }
+
+    // Extract
+    #[allow(clippy::missing_panics_doc)]
+    pub fn sketch_extract<CF>(
+        &self,
+        cost_fn: CF,
+        sketches: &[SketchNode<R::Language>],
+    ) -> Vec<(CF::Cost, RecExpr<R::Language>)>
+    where
+        CF: CostFunction<R::Language>,
+    {
+        let egraph = self.egraph.as_ref().unwrap();
+        todo!()
     }
 }
 
@@ -146,7 +157,7 @@ mod tests {
 
         let eqsat = Eqsat::<Halide, _>::new(0);
         let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.extract(AstSize2);
+        let extracted = result.classic_extract(AstSize2);
         assert_eq!("1", extracted[0].1.to_string());
     }
 
@@ -157,7 +168,7 @@ mod tests {
 
         let eqsat = Eqsat::<Halide, _>::new(0);
         let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.extract(AstSize2);
+        let extracted = result.classic_extract(AstSize2);
         assert_eq!("0", extracted[0].1.to_string());
     }
 
@@ -168,7 +179,7 @@ mod tests {
 
         let eqsat = Eqsat::<Halide, _>::new(0);
         let result = eqsat.run(&true_stmt, &rules);
-        let extracted = result.extract(AstSize2);
+        let extracted = result.classic_extract(AstSize2);
         assert_eq!("1", extracted[0].1.to_string());
     }
 
@@ -181,7 +192,7 @@ mod tests {
 
         let eqsat = Eqsat::<Halide, _>::new(0);
         let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.extract(AstSize2);
+        let extracted = result.classic_extract(AstSize2);
         assert_eq!("0", extracted[0].1.to_string());
     }
 }

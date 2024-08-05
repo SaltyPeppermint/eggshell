@@ -1,4 +1,5 @@
-use std::fmt::Display;
+use std::fmt;
+use std::fmt::{Display, Formatter};
 
 use egg::{Language, RecExpr};
 use pyo3::prelude::*;
@@ -7,40 +8,33 @@ use super::macros::pyboxable;
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
-pub enum PyLang {
-    Literal {
-        str_repr: String,
-    },
-    /// (func-name arg1 arg2)
-    Application {
-        head: Box<PyLang>,
-        tail: Vec<PyLang>,
-    },
+pub struct PyLang {
+    pub(crate) x: String,
+    pub(crate) xs: Vec<PyLang>,
 }
 
 pyboxable!(PyLang);
 
-#[pymethods]
-impl PyLang {
-    fn __eq__(&self, other: &Self) -> bool {
-        self == other
-    }
-}
+// #[pymethods]
+// impl PyLang {
+//     fn __eq__(&self, other: &Self) -> bool {
+//         self == other
+//     }
+// }
 
 impl Display for PyLang {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PyLang::Literal { str_repr } => write!(f, "{str_repr}"),
-            PyLang::Application { head, tail } => {
-                write!(f, "( ")?;
-                head.fmt(f)?;
-                write!(f, " ")?;
-                for inner_s_expr in tail {
-                    inner_s_expr.fmt(f)?;
-                    write!(f, " ")?;
-                }
-                write!(f, ")")
-            }
+    #[allow(clippy::redundant_closure_for_method_calls)]
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if self.xs.is_empty() {
+            write!(f, "{}", self.x)
+        } else {
+            let inner = self
+                .xs
+                .iter()
+                .map(|x| x.to_string())
+                .collect::<Vec<_>>()
+                .join(" ");
+            write!(f, "({} {})", self.x, inner)
         }
     }
 }
@@ -56,24 +50,16 @@ impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
 }
 
 fn parse_rec_expr_rec<L: Language + Display>(node: &L, rec_expr: &RecExpr<L>) -> PyLang {
-    if node.is_leaf() {
-        PyLang::Literal {
-            str_repr: node.to_string(),
-        }
-    } else {
-        PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: node.to_string(),
-            }),
-            tail: node
-                .children()
-                .iter()
-                .map(|child_id| {
-                    let child = &rec_expr[*child_id];
-                    parse_rec_expr_rec(child, rec_expr)
-                })
-                .collect(),
-        }
+    PyLang {
+        x: node.to_string(),
+        xs: node
+            .children()
+            .iter()
+            .map(|child_id| {
+                let child = &rec_expr[*child_id];
+                parse_rec_expr_rec(child, rec_expr)
+            })
+            .collect(),
     }
 }
 
@@ -85,20 +71,20 @@ mod tests {
 
     #[test]
     fn parse_basic() {
-        let lhs = PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: "==".to_string(),
-            }),
-            tail: vec![
-                PyLang::Literal {
-                    str_repr: "0".to_string(),
+        let lhs = PyLang {
+            x: "==".to_string(),
+            xs: vec![
+                PyLang {
+                    x: "0".to_string(),
+                    xs: vec![],
                 },
-                PyLang::Literal {
-                    str_repr: "0".to_string(),
+                PyLang {
+                    x: "0".to_string(),
+                    xs: vec![],
                 },
             ],
         };
-        let rhs: RecExpr<MathEquations> = "( == 0 0 )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "(== 0 0)".parse().unwrap();
         dbg!(&rhs);
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
@@ -106,130 +92,127 @@ mod tests {
 
     #[test]
     fn print_basic() {
-        let lhs = PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: "==".to_string(),
-            }),
-            tail: vec![
-                PyLang::Literal {
-                    str_repr: "0".to_string(),
+        let lhs = PyLang {
+            x: "==".to_string(),
+            xs: vec![
+                PyLang {
+                    x: "0".to_string(),
+                    xs: vec![],
                 },
-                PyLang::Literal {
-                    str_repr: "0".to_string(),
+                PyLang {
+                    x: "0".to_string(),
+                    xs: vec![],
                 },
             ],
         }
         .to_string();
-        let rhs = "( == 0 0 )";
+        let rhs = "(== 0 0)";
         assert_eq!(&lhs, rhs);
     }
 
     #[test]
     fn parse_nested() {
-        let lhs = PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: "==".to_string(),
-            }),
-            tail: vec![
-                PyLang::Application {
-                    head: Box::new(PyLang::Literal {
-                        str_repr: "+".to_string(),
-                    }),
-                    tail: vec![
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+        let lhs = PyLang {
+            x: "==".to_string(),
+
+            xs: vec![
+                PyLang {
+                    x: "+".to_string(),
+                    xs: vec![
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
                     ],
                 },
-                PyLang::Literal {
-                    str_repr: "2".to_string(),
+                PyLang {
+                    x: "2".to_string(),
+                    xs: vec![],
                 },
             ],
         };
-        let rhs: RecExpr<MathEquations> = "( == ( + 1 1 ) 2 )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "(== (+ 1 1) 2)".parse().unwrap();
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
     }
 
     #[test]
     fn print_nested() {
-        let lhs = PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: "==".to_string(),
-            }),
-            tail: vec![
-                PyLang::Application {
-                    head: Box::new(PyLang::Literal {
-                        str_repr: "+".to_string(),
-                    }),
-                    tail: vec![
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+        let lhs = PyLang {
+            x: "==".to_string(),
+
+            xs: vec![
+                PyLang {
+                    x: "+".to_string(),
+                    xs: vec![
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
                     ],
                 },
-                PyLang::Literal {
-                    str_repr: "2".to_string(),
+                PyLang {
+                    x: "2".to_string(),
+                    xs: vec![],
                 },
             ],
         }
         .to_string();
-        let rhs = "( == ( + 1 1 ) 2 )";
+        let rhs = "(== (+ 1 1) 2)";
         assert_eq!(&lhs, rhs);
     }
 
     #[test]
     fn parse_complex() {
-        let lhs = PyLang::Application {
-            head: Box::new(PyLang::Literal {
-                str_repr: "==".to_string(),
-            }),
-            tail: vec![
-                PyLang::Application {
-                    head: Box::new(PyLang::Literal {
-                        str_repr: "+".to_string(),
-                    }),
-                    tail: vec![
-                        PyLang::Application {
-                            head: Box::new(PyLang::Literal {
-                                str_repr: "+".to_string(),
-                            }),
-                            tail: vec![
-                                PyLang::Literal {
-                                    str_repr: "1".to_string(),
+        let lhs = PyLang {
+            x: "==".to_string(),
+            xs: vec![
+                PyLang {
+                    x: "+".to_string(),
+                    xs: vec![
+                        PyLang {
+                            x: "+".to_string(),
+                            xs: vec![
+                                PyLang {
+                                    x: "1".to_string(),
+                                    xs: vec![],
                                 },
-                                PyLang::Literal {
-                                    str_repr: "0".to_string(),
+                                PyLang {
+                                    x: "0".to_string(),
+                                    xs: vec![],
                                 },
                             ],
                         },
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
                     ],
                 },
-                PyLang::Application {
-                    head: Box::new(PyLang::Literal {
-                        str_repr: "+".to_string(),
-                    }),
-                    tail: vec![
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+                PyLang {
+                    x: "+".to_string(),
+                    xs: vec![
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
-                        PyLang::Literal {
-                            str_repr: "1".to_string(),
+                        PyLang {
+                            x: "1".to_string(),
+                            xs: vec![],
                         },
                     ],
                 },
             ],
         };
-        let rhs: RecExpr<MathEquations> = "( == ( + ( + 1 0 ) 1 ) ( + 1 1 ) )".parse().unwrap();
+        let rhs: RecExpr<MathEquations> = "(== (+ (+ 1 0) 1) (+ 1 1))".parse().unwrap();
         let rhs = (&rhs).into();
         assert_eq!(lhs, rhs);
     }
