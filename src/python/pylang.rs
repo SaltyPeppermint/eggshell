@@ -23,7 +23,6 @@ pyboxable!(PyLang);
 // }
 
 impl Display for PyLang {
-    #[allow(clippy::redundant_closure_for_method_calls)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.xs.is_empty() {
             write!(f, "{}", self.x)

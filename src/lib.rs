@@ -1,10 +1,14 @@
 #![warn(clippy::all, clippy::pedantic)]
+#![allow(
+    clippy::redundant_closure_for_method_calls,
+    clippy::module_name_repetitions
+)]
 
 mod eqsat;
 mod errors;
 mod io;
 mod python;
-mod sketches;
+mod sketch;
 mod trs;
 mod utils;
 
@@ -34,20 +38,20 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Arithmatic specific generated eqsats
     let arithmatic_m = PyModule::new_bound(eqsat_m.py(), "arithmatic")?;
-    arithmatic_m.add_class::<python::arithmatic::NewEqsat>()?;
-    arithmatic_m.add_class::<python::arithmatic::FinishedEqsat>()?;
+    arithmatic_m.add_class::<python::arithmatic::Eqsat>()?;
+    arithmatic_m.add_class::<python::arithmatic::EqsatResult>()?;
     eqsat_m.add_submodule(&arithmatic_m)?;
 
     // Halide specific generated eqsats
     let halide_m = PyModule::new_bound(eqsat_m.py(), "halide")?;
-    halide_m.add_class::<python::halide::NewEqsat>()?;
-    halide_m.add_class::<python::halide::FinishedEqsat>()?;
+    halide_m.add_class::<python::halide::Eqsat>()?;
+    halide_m.add_class::<python::halide::EqsatResult>()?;
     eqsat_m.add_submodule(&halide_m)?;
 
     // SimpleLang specific generated eqsats
     let simple_m = PyModule::new_bound(eqsat_m.py(), "simple")?;
-    simple_m.add_class::<python::simple::NewEqsat>()?;
-    simple_m.add_class::<python::simple::FinishedEqsat>()?;
+    simple_m.add_class::<python::simple::Eqsat>()?;
+    simple_m.add_class::<python::simple::EqsatResult>()?;
     eqsat_m.add_submodule(&simple_m)?;
 
     // Pylang works for all langs that implement Display

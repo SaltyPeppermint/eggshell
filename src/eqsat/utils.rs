@@ -35,7 +35,7 @@ impl Default for RunnerArgs {
 }
 
 #[must_use]
-pub(crate) fn build_runner<L, N>(runner_params: &RunnerArgs, expr: &RecExpr<L>) -> Runner<L, N>
+pub(crate) fn build_runner<L, N>(runner_params: &RunnerArgs, exprs: &[RecExpr<L>]) -> Runner<L, N>
 where
     L: Language,
     N: Analysis<L> + Default,
@@ -52,7 +52,10 @@ where
     if let Some(time_limit) = runner_params.time {
         runner = runner.with_time_limit(time_limit);
     };
-    runner.with_expr(expr)
+    for expr in exprs {
+        runner = runner.with_expr(expr);
+    }
+    runner
 }
 
 // #[must_use]

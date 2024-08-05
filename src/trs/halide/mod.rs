@@ -188,6 +188,7 @@ fn compare_constants(
 }
 
 /// Enum for the Ruleset to use
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Arithmetic,

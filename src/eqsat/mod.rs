@@ -1,57 +1,36 @@
 pub(crate) mod utils;
 
-use std::marker::PhantomData;
-
 use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;
 use serde::Serialize;
 
-use crate::sketches::SketchNode;
+use crate::sketch::extract;
+use crate::sketch::Sketch;
 use crate::trs::Trs;
 use utils::RunnerArgs;
 
-pub trait State {}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct New;
-
-impl State for New {}
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Finished;
-
-impl State for Finished {}
-
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug, Serialize)]
-pub struct Eqsat<R, S>
+pub struct Eqsat<R>
 where
     R: Trs,
-    S: State,
 {
-    _state: PhantomData<S>,
     index: usize,
     runner_args: RunnerArgs,
-    // stats_history: Vec<EqsatStats>,
-    egraph: Option<EGraph<R::Language, R::Analysis>>,
-    roots: Option<Vec<Id>>,
-    report: Option<Report>,
+    start_expr: Vec<RecExpr<R::Language>>, // stats_history: Vec<EqsatStats>,
+                                           // egraph: Option<EGraph<R::Language, R::Analysis>>,
+                                           // roots: Option<Vec<Id>>,
+                                           // report: Option<Report>,
 }
 
-impl<R, S> Eqsat<R, S>
+impl<R> Eqsat<R>
 where
     R: Trs,
-    S: State,
 {
     pub fn runner_args(&self) -> &RunnerArgs {
         &self.runner_args
     }
-}
 
-impl<R> Eqsat<R, New>
-where
-    R: Trs,
-{
     /// Create a new Equality Saturation
     /// Is generic over a given [`Trs`]
     ///
@@ -62,12 +41,9 @@ where
     #[must_use]
     pub fn new(index: usize) -> Self {
         Self {
-            _state: PhantomData,
             index,
             runner_args: RunnerArgs::default(),
-            egraph: None,
-            roots: None,
-            report: None,
+            start_expr: Vec::new(),
         }
     }
 
@@ -84,60 +60,89 @@ where
     #[must_use]
     pub fn run(
         &self,
-        start_expr: &RecExpr<R::Language>,
+        start_exprs: &[RecExpr<R::Language>],
         rules: &[Rewrite<R::Language, R::Analysis>],
-    ) -> Eqsat<R, Finished> {
+    ) -> EqsatResult<R> {
         println!("====================================");
         println!("Running with Expression:");
-        println!("{start_expr}");
+        for expr in start_exprs {
+            println!("{expr}");
+        }
 
-        let runner = utils::build_runner(&self.runner_args, start_expr).run(rules.iter());
+        let runner = utils::build_runner(&self.runner_args, start_exprs).run(rules.iter());
 
         let report = runner.report();
         info!("{}", &report);
-        Eqsat {
-            _state: PhantomData,
+        EqsatResult {
             index: self.index,
             runner_args: self.runner_args.clone(),
-            egraph: Some(runner.egraph),
-            roots: Some(runner.roots),
-            report: Some(report),
+            egraph: runner.egraph,
+            roots: runner.roots,
+            report,
         }
     }
 }
 
-impl<R> Eqsat<R, Finished>
+/// API accessible struct holding the equality Saturation
+#[derive(Clone, Debug, Serialize)]
+pub struct EqsatResult<R>
+where
+    R: Trs,
+{
+    index: usize,
+    runner_args: RunnerArgs,
+    // stats_history: Vec<EqsatStats>,
+    egraph: EGraph<R::Language, R::Analysis>,
+    roots: Vec<Id>,
+    report: Report,
+}
+
+impl<R> EqsatResult<R>
 where
     R: Trs,
 {
     // Extract
     #[allow(clippy::missing_panics_doc)]
-    pub fn classic_extract<CF>(&self, cost_fn: CF) -> Vec<(CF::Cost, RecExpr<R::Language>)>
+    pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<R::Language>)
     where
         CF: CostFunction<R::Language>,
     {
-        let egraph = self.egraph.as_ref().unwrap();
-        let extractor = Extractor::new(egraph, cost_fn);
-        self.roots
-            .as_ref()
-            .unwrap()
-            .iter()
-            .map(|root| extractor.find_best(*root))
-            .collect()
+        let extractor = Extractor::new(&self.egraph, cost_fn);
+        extractor.find_best(root)
     }
 
-    // Extract
+    //Extract
     #[allow(clippy::missing_panics_doc)]
     pub fn sketch_extract<CF>(
         &self,
+        root: Id,
         cost_fn: CF,
-        sketches: &[SketchNode<R::Language>],
-    ) -> Vec<(CF::Cost, RecExpr<R::Language>)>
+        sketch: &Sketch<R::Language>,
+    ) -> (CF::Cost, RecExpr<R::Language>)
     where
         CF: CostFunction<R::Language>,
+        CF::Cost: Ord,
     {
-        let egraph = self.egraph.as_ref().unwrap();
-        todo!()
+        extract::eclass_extract_sketch(sketch, cost_fn, &self.egraph, root).unwrap()
+    }
+
+    //Extract
+    #[allow(clippy::missing_panics_doc)]
+    pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<R::Language>) -> bool {
+        let root = self.roots[root_index];
+        extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
+    }
+
+    pub fn roots(&self) -> &[Id] {
+        &self.roots
+    }
+
+    pub fn report(&self) -> &Report {
+        &self.report
+    }
+
+    pub fn egraph(&self) -> &EGraph<R::Language, R::Analysis> {
+        &self.egraph
     }
 }
 
@@ -155,10 +160,11 @@ mod tests {
         let false_stmt: RecExpr<MathEquations> = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide, _>::new(0);
-        let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.classic_extract(AstSize2);
-        assert_eq!("1", extracted[0].1.to_string());
+        let eqsat = Eqsat::<Halide>::new(0);
+        let result = eqsat.run(&[false_stmt], &rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!("1", term.to_string());
     }
 
     #[test]
@@ -166,10 +172,11 @@ mod tests {
         let false_stmt: RecExpr<MathEquations> = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide, _>::new(0);
-        let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.classic_extract(AstSize2);
-        assert_eq!("0", extracted[0].1.to_string());
+        let eqsat = Eqsat::<Halide>::new(0);
+        let result = eqsat.run(&[false_stmt], &rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!("0", term.to_string());
     }
 
     #[test]
@@ -177,10 +184,11 @@ mod tests {
         let true_stmt: RecExpr<MathEquations> = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )".parse().unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide, _>::new(0);
-        let result = eqsat.run(&true_stmt, &rules);
-        let extracted = result.classic_extract(AstSize2);
-        assert_eq!("1", extracted[0].1.to_string());
+        let eqsat = Eqsat::<Halide>::new(0);
+        let result = eqsat.run(&[true_stmt], &rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!("1", term.to_string());
     }
 
     #[test]
@@ -190,9 +198,10 @@ mod tests {
             .unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide, _>::new(0);
-        let result = eqsat.run(&false_stmt, &rules);
-        let extracted = result.classic_extract(AstSize2);
-        assert_eq!("0", extracted[0].1.to_string());
+        let eqsat = Eqsat::<Halide>::new(0);
+        let result = eqsat.run(&[false_stmt], &rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!("0", term.to_string());
     }
 }

@@ -1,10 +1,10 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-use egg::{Language, RecExpr};
+use egg::Language;
 use pyo3::prelude::*;
 
-use crate::sketches::SketchNode;
+use crate::sketch::{Sketch, SketchNode};
 
 use super::macros::pyboxable;
 
@@ -32,7 +32,6 @@ pub enum PySketch {
 pyboxable!(PySketch);
 
 impl Display for PySketch {
-    #[allow(clippy::redundant_closure_for_method_calls)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PySketch::Any {} => write!(f, "?"),
@@ -63,8 +62,8 @@ impl Display for PySketch {
     }
 }
 
-impl<L: Language + Display> From<&RecExpr<SketchNode<L>>> for PySketch {
-    fn from(rec_expr: &RecExpr<SketchNode<L>>) -> Self {
+impl<L: Language + Display> From<&Sketch<L>> for PySketch {
+    fn from(rec_expr: &Sketch<L>) -> Self {
         // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
         // "RecExprs must satisfy the invariant that enodes’ children must refer to elements that come before it in the list."
         // Therefore, in a RecExpr that has only one root, the last element must be the root.
@@ -75,7 +74,7 @@ impl<L: Language + Display> From<&RecExpr<SketchNode<L>>> for PySketch {
 
 fn parse_rec_expr_rec<L: Language + Display>(
     node: &SketchNode<L>,
-    rec_expr: &RecExpr<SketchNode<L>>,
+    rec_expr: &Sketch<L>,
 ) -> PySketch {
     match node {
         SketchNode::Any => PySketch::Any {},
@@ -102,12 +101,12 @@ fn parse_rec_expr_rec<L: Language + Display>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egg::{RecExpr, SymbolLang};
+    use egg::SymbolLang;
 
     #[test]
     fn parse_and_print_contains() {
         let string = "(contains (f ?))";
-        let sketch = string.parse::<RecExpr<SketchNode<SymbolLang>>>().unwrap();
+        let sketch = string.parse::<Sketch<SymbolLang>>().unwrap();
         let pysketch: PySketch = (&sketch).into();
         assert_eq!(pysketch.to_string(), string);
     }
@@ -115,7 +114,7 @@ mod tests {
     #[test]
     fn parse_and_print_or() {
         let string = "(or (f ?))";
-        let sketch = string.parse::<RecExpr<SketchNode<SymbolLang>>>().unwrap();
+        let sketch = string.parse::<Sketch<SymbolLang>>().unwrap();
         let pysketch: PySketch = (&sketch).into();
         assert_eq!(pysketch.to_string(), string);
     }
@@ -123,7 +122,7 @@ mod tests {
     #[test]
     fn parse_and_print_complex() {
         let string = "(or (g ?) (f (or (f ?) a)))";
-        let sketch = string.parse::<RecExpr<SketchNode<SymbolLang>>>().unwrap();
+        let sketch = string.parse::<Sketch<SymbolLang>>().unwrap();
         let pysketch: PySketch = (&sketch).into();
         assert_eq!(pysketch.to_string(), string);
     }

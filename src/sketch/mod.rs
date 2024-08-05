@@ -1,3 +1,12 @@
+// The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
+// Thank you very much for that!
+
+mod analysis;
+pub mod extract;
+mod hashcons;
+mod recursive;
+mod utils;
+
 use std::fmt::{self, Display, Formatter};
 
 use egg::{Id, Language, RecExpr};
@@ -6,7 +15,8 @@ use serde::Serialize;
 use crate::errors::SketchParseError;
 use crate::python::PySketch;
 
-// Mostly Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
+/// Simple alias
+pub type Sketch<L> = RecExpr<SketchNode<L>>;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize)]
 pub(crate) enum SketchNode<L: Language> {
@@ -98,7 +108,7 @@ where
     }
 }
 
-impl<L> TryFrom<&PySketch> for (Id, RecExpr<SketchNode<L>>)
+impl<L> TryFrom<&PySketch> for (Id, Sketch<L>)
 where
     L::Error: Display,
     L: Language + egg::FromOp,
@@ -107,7 +117,7 @@ where
 
     fn try_from(pysketch: &PySketch) -> Result<Self, Self::Error> {
         fn rec_try_from<L>(
-            rec_expr: &mut RecExpr<SketchNode<L>>,
+            rec_expr: &mut Sketch<L>,
             pysketch: &PySketch,
         ) -> Result<Id, SketchParseError<L::Error>>
         where
@@ -153,13 +163,13 @@ where
                 }
             }
         }
-        let mut rec_expr: RecExpr<SketchNode<L>> = "".parse().unwrap();
+        let mut rec_expr: Sketch<L> = "".parse().unwrap();
         let root_id = rec_try_from(&mut rec_expr, pysketch)?;
         Ok((root_id, rec_expr))
     }
 }
 
-impl<L> TryFrom<&PySketch> for RecExpr<SketchNode<L>>
+impl<L> TryFrom<&PySketch> for Sketch<L>
 where
     L::Error: Display,
     L: Language + egg::FromOp,
@@ -180,7 +190,7 @@ mod tests {
     #[test]
     fn parse_and_print() {
         let string = "(contains (f ?))";
-        let sketch = string.parse::<RecExpr<SketchNode<SymbolLang>>>().unwrap();
+        let sketch = string.parse::<Sketch<SymbolLang>>().unwrap();
 
         let mut sketch_ref = RecExpr::default();
         let any = sketch_ref.add(SketchNode::Any);

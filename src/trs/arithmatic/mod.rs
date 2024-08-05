@@ -6,8 +6,8 @@ use serde::Serialize;
 
 use super::Trs;
 
-pub type EGraph = egg::EGraph<Math, ConstantFold>;
-pub type Rewrite = egg::Rewrite<Math, ConstantFold>;
+type EGraph = egg::EGraph<Math, ConstantFold>;
+type Rewrite = egg::Rewrite<Math, ConstantFold>;
 
 pub type Constant = NotNan<f64>;
 
