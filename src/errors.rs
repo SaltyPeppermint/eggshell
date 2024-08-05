@@ -22,7 +22,7 @@ create_exception!(
     "Eggshell internal error."
 );
 
-impl std::convert::From<EggShellError> for PyErr {
+impl From<EggShellError> for PyErr {
     fn from(err: EggShellError) -> PyErr {
         EggShellException::new_err(err.to_string())
     }
@@ -43,7 +43,7 @@ create_exception!(
     "Eggshell internal error."
 );
 
-impl<E: Display> std::convert::From<EggError<E>> for PyErr {
+impl<E: Display> From<EggError<E>> for PyErr {
     fn from(err: EggError<E>) -> PyErr {
         EggException::new_err(err.to_string())
     }
@@ -64,7 +64,7 @@ create_exception!(
     "Eggshell internal error."
 );
 
-impl<E: Display> std::convert::From<SketchParseError<E>> for PyErr {
+impl<E: Display> From<SketchParseError<E>> for PyErr {
     fn from(err: SketchParseError<E>) -> PyErr {
         SketchParseException::new_err(err.to_string())
     }

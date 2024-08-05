@@ -71,35 +71,33 @@ mod tests {
     #[test]
     fn parse_basic() {
         let lhs = PyLang {
-            x: "==".to_string(),
+            x: "==".to_owned(),
             xs: vec![
                 PyLang {
-                    x: "0".to_string(),
+                    x: "0".to_owned(),
                     xs: vec![],
                 },
                 PyLang {
-                    x: "0".to_string(),
+                    x: "0".to_owned(),
                     xs: vec![],
                 },
             ],
         };
         let rhs: RecExpr<MathEquations> = "(== 0 0)".parse().unwrap();
-        dbg!(&rhs);
-        let rhs = (&rhs).into();
-        assert_eq!(lhs, rhs);
+        assert_eq!(lhs, (&rhs).into());
     }
 
     #[test]
     fn print_basic() {
         let lhs = PyLang {
-            x: "==".to_string(),
+            x: "==".to_owned(),
             xs: vec![
                 PyLang {
-                    x: "0".to_string(),
+                    x: "0".to_owned(),
                     xs: vec![],
                 },
                 PyLang {
-                    x: "0".to_string(),
+                    x: "0".to_owned(),
                     xs: vec![],
                 },
             ],
@@ -112,54 +110,53 @@ mod tests {
     #[test]
     fn parse_nested() {
         let lhs = PyLang {
-            x: "==".to_string(),
+            x: "==".to_owned(),
 
             xs: vec![
                 PyLang {
-                    x: "+".to_string(),
+                    x: "+".to_owned(),
                     xs: vec![
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "2".to_string(),
+                    x: "2".to_owned(),
                     xs: vec![],
                 },
             ],
         };
         let rhs: RecExpr<MathEquations> = "(== (+ 1 1) 2)".parse().unwrap();
-        let rhs = (&rhs).into();
-        assert_eq!(lhs, rhs);
+        assert_eq!(lhs, (&rhs).into());
     }
 
     #[test]
     fn print_nested() {
         let lhs = PyLang {
-            x: "==".to_string(),
+            x: "==".to_owned(),
 
             xs: vec![
                 PyLang {
-                    x: "+".to_string(),
+                    x: "+".to_owned(),
                     xs: vec![
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "2".to_string(),
+                    x: "2".to_owned(),
                     xs: vec![],
                 },
             ],
@@ -172,39 +169,39 @@ mod tests {
     #[test]
     fn parse_complex() {
         let lhs = PyLang {
-            x: "==".to_string(),
+            x: "==".to_owned(),
             xs: vec![
                 PyLang {
-                    x: "+".to_string(),
+                    x: "+".to_owned(),
                     xs: vec![
                         PyLang {
-                            x: "+".to_string(),
+                            x: "+".to_owned(),
                             xs: vec![
                                 PyLang {
-                                    x: "1".to_string(),
+                                    x: "1".to_owned(),
                                     xs: vec![],
                                 },
                                 PyLang {
-                                    x: "0".to_string(),
+                                    x: "0".to_owned(),
                                     xs: vec![],
                                 },
                             ],
                         },
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "+".to_string(),
+                    x: "+".to_owned(),
                     xs: vec![
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                         PyLang {
-                            x: "1".to_string(),
+                            x: "1".to_owned(),
                             xs: vec![],
                         },
                     ],
@@ -212,7 +209,6 @@ mod tests {
             ],
         };
         let rhs: RecExpr<MathEquations> = "(== (+ (+ 1 0) 1) (+ 1 1))".parse().unwrap();
-        let rhs = (&rhs).into();
-        assert_eq!(lhs, rhs);
+        assert_eq!(lhs, (&rhs).into());
     }
 }

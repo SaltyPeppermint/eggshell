@@ -23,7 +23,7 @@ impl Expression {
     #[must_use]
     #[getter]
     pub fn term(&self) -> String {
-        self.term.to_string()
+        self.term.clone()
     }
 }
 

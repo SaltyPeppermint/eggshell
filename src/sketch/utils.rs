@@ -8,13 +8,10 @@ use crate::{HashMap, HashSet};
 /// Copied from <https://github.com/egraphs-good/egg/blob/347326d2e8ebbacca12d8e1398b86eff6dcfb2c5/src/machine.rs#L37>
 /// Workaround so we don't use the private method in egg and can use the vanilla egg version and not
 /// <https://github.com/egraphs-good/egg/compare/main...Bastacyclop:egg:sges>
-pub fn for_each_matching_node<L, D>(
-    eclass: &EClass<L, D>,
-    node: &L,
-    mut f: impl FnMut(&L) -> Result<(), ()>,
-) -> Result<(), ()>
+pub fn for_each_matching_node<L, D, F>(eclass: &EClass<L, D>, node: &L, mut f: F) -> Result<(), ()>
 where
     L: Language,
+    F: FnMut(&L) -> Result<(), ()>,
 {
     if eclass.nodes.len() < 50 {
         eclass

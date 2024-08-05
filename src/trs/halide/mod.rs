@@ -105,9 +105,9 @@ impl Analysis<MathEquations> for EquationConstFold {
 }
 
 /// Checks if a constant is positive
-pub(crate) fn is_const_pos(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+pub(crate) fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get the constant
-    let var = var.parse().unwrap();
+    let var = var_str.parse().unwrap();
 
     // Get the substitutions where the constant appears
     move |egraph, _, subst| {
@@ -120,8 +120,8 @@ pub(crate) fn is_const_pos(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> boo
 }
 
 /// Checks if a constant is negative
-fn is_const_neg(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
+fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
 
     // Get the substitutions where the constant appears
     move |egraph, _, subst| {
@@ -134,8 +134,8 @@ fn is_const_neg(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Checks if a constant is equals zero
-fn is_not_zero(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
+fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
     let zero = MathEquations::Constant(0);
     // Check if any of the representations of the constant (nodes inside its eclass) is zero
     move |egraph, _, subst| !egraph[subst[var]].nodes.contains(&zero)
@@ -144,21 +144,21 @@ fn is_not_zero(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 /// Compares two constants c0 and c1
 fn compare_constants(
     // first constant
-    var: &str,
+    var_str_1: &str,
     // 2nd constant
-    var1: &str,
+    var_str_2: &str,
     // the comparison we're checking
     comp: &'static str,
 ) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get constants
-    let var: Var = var.parse().unwrap();
-    let var1: Var = var1.parse().unwrap();
+    let var_1: Var = var_str_1.parse().unwrap();
+    let var_2: Var = var_str_2.parse().unwrap();
 
     move |egraph, _, subst| {
         // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
-        egraph[subst[var1]].nodes.iter().any(|n1| match n1 {
+        egraph[subst[var_2]].nodes.iter().any(|n1| match n1 {
             // Get the eclass of the second constant then match it to c1
-            MathEquations::Constant(c1) => egraph[subst[var]].nodes.iter().any(|n| match n {
+            MathEquations::Constant(c1) => egraph[subst[var_1]].nodes.iter().any(|n| match n {
                 // match the comparison then do it
                 MathEquations::Constant(c) => match comp {
                     "<" => c < c1,
@@ -226,29 +226,29 @@ impl Trs for Halide {
         match ruleset_class {
             // Class that only contains arithmetic operations' rules
             Ruleset::Arithmetic => [
-                &add_rules[..],
-                &div_rules[..],
-                &modulo_rules[..],
-                &mul_rules[..],
-                &sub_rules[..],
+                (&*add_rules),
+                (&*div_rules),
+                (&*modulo_rules),
+                (&*mul_rules),
+                (&*sub_rules),
             ]
             .concat(),
             // All the rules
             Ruleset::Full => [
-                &add_rules[..],
-                &and_rules[..],
-                &andor_rules[..],
-                &div_rules[..],
-                &eq_rules[..],
-                &ineq_rules[..],
-                &lt_rules[..],
-                &max_rules[..],
-                &min_rules[..],
-                &modulo_rules[..],
-                &mul_rules[..],
-                &not_rules[..],
-                &or_rules[..],
-                &sub_rules[..],
+                (&*add_rules),
+                (&*and_rules),
+                (&*andor_rules),
+                (&*div_rules),
+                (&*eq_rules),
+                (&*ineq_rules),
+                (&*lt_rules),
+                (&*max_rules),
+                (&*min_rules),
+                (&*modulo_rules),
+                (&*mul_rules),
+                (&*not_rules),
+                (&*or_rules),
+                (&*sub_rules),
             ]
             .concat(),
         }

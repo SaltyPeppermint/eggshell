@@ -78,9 +78,9 @@ fn parse_rec_expr_rec<L: Language + Display>(
 ) -> PySketch {
     match node {
         SketchNode::Any => PySketch::Any {},
-        SketchNode::Node(node) => PySketch::Node {
-            s: node.to_string(),
-            children: node
+        SketchNode::Node(inner_node) => PySketch::Node {
+            s: inner_node.to_string(),
+            children: inner_node
                 .children()
                 .iter()
                 .map(|child_id| parse_rec_expr_rec(&rec_expr[*child_id], rec_expr))

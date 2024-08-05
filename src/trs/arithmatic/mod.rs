@@ -95,7 +95,7 @@ impl Analysis<Math> for ConstantFold {
                     &pat,
                     &format!("{c}").parse().unwrap(),
                     &Subst::default(),
-                    "constant_fold".to_string(),
+                    "constant_fold".to_owned(),
                 );
             } else {
                 let added = egraph.add(Math::Constant(c));
@@ -110,26 +110,29 @@ impl Analysis<Math> for ConstantFold {
     }
 }
 
-fn is_const_or_distinct_var(v: &str, w: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let v = v.parse().unwrap();
-    let w = w.parse().unwrap();
+fn is_const_or_distinct_var(
+    var_str_1: &str,
+    var_str_2: &str,
+) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var_1 = var_str_1.parse().unwrap();
+    let var_2 = var_str_2.parse().unwrap();
     move |egraph, _, subst| {
-        egraph.find(subst[v]) != egraph.find(subst[w])
-            && (egraph[subst[v]].data.is_some()
-                || egraph[subst[v]]
+        egraph.find(subst[var_1]) != egraph.find(subst[var_2])
+            && (egraph[subst[var_1]].data.is_some()
+                || egraph[subst[var_1]]
                     .nodes
                     .iter()
                     .any(|n| matches!(n, Math::Symbol(..))))
     }
 }
 
-fn is_const(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
+fn is_const(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
     move |egraph, _, subst| egraph[subst[var]].data.is_some()
 }
 
-fn is_sym(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
+fn is_sym(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
     move |egraph, _, subst| {
         egraph[subst[var]]
             .nodes
@@ -138,8 +141,8 @@ fn is_sym(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     }
 }
 
-fn is_not_zero(var: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var.parse().unwrap();
+fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+    let var = var_str.parse().unwrap();
     move |egraph, _, subst| {
         if let Some(n) = &egraph[subst[var]].data {
             *(n.0) != 0.0

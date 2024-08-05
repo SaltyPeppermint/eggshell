@@ -148,17 +148,17 @@ where
                 PySketch::Contains { s } => {
                     // Recursion reduces the number of the remaining elements in the PySketch by removing
                     // the wrapping `PySketch::Contains`
-                    let id = rec_try_from(rec_expr, s)?;
-                    let id = rec_expr.add(SketchNode::Contains(id));
+                    let inner_id = rec_try_from(rec_expr, s)?;
+                    let id = rec_expr.add(SketchNode::Contains(inner_id));
                     Ok(id)
                 }
                 PySketch::Or { ss } => {
                     // Recursions reduces the number of the remaining elements in the PySketch since the or is removed
-                    let ids = ss
+                    let inner_ids = ss
                         .iter()
                         .map(|child| rec_try_from(rec_expr, child))
                         .collect::<Result<_, _>>()?;
-                    let id = rec_expr.add(SketchNode::Or(ids));
+                    let id = rec_expr.add(SketchNode::Or(inner_ids));
                     Ok(id)
                 }
             }
