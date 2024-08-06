@@ -45,7 +45,7 @@ fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
     };
 
     let result = match &sketch[sketch_id] {
-        SketchNode::Any => egraph.classes().map(|c| c.id).collect(),
+        SketchNode::Any => egraph.classes().map(|eclass| eclass.id).collect(),
         SketchNode::Node(node) => {
             let children_matches = node
                 .children()

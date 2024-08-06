@@ -1,5 +1,4 @@
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
-use smallvec::SmallVec;
 
 use crate::HashMap;
 
@@ -131,7 +130,7 @@ where
             ));
 
             for enode in &eclass.nodes {
-                let children_matching: SmallVec<[_; 4]> = enode
+                let children_matching = enode
                     .children()
                     .iter()
                     .filter_map(|&child_id| {
@@ -140,12 +139,12 @@ where
                         )
                         .map(move |x| (child_id, x))
                     })
-                    .collect();
-                let children_any: SmallVec<[_; 4]> = enode
+                    .collect::<Vec<_>>();
+                let children_any = enode
                     .children()
                     .iter()
                     .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
-                    .collect();
+                    .collect::<Vec<_>>();
 
                 for (matching_child, matching) in &children_matching {
                     let mut to_selected = HashMap::default();
@@ -301,8 +300,7 @@ where
             memo.insert((id, sketch_id), None); // avoid cycles
 
             let eclass = &egraph[id];
-            let mut candidates = Vec::new();
-            candidates.extend(map_extract_rec(
+            let mut candidates = map_extract_rec(
                 id,
                 sketch,
                 *inner_sketch_id,
@@ -311,10 +309,12 @@ where
                 exprs,
                 extracted,
                 memo,
-            ));
+            )
+            .into_iter()
+            .collect::<Vec<_>>();
 
             for enode in &eclass.nodes {
-                let children_matching: SmallVec<[_; 4]> = enode
+                let children_matching = enode
                     .children()
                     .iter()
                     .filter_map(|&child_id| {
@@ -323,12 +323,12 @@ where
                         )
                         .map(move |x| (child_id, x))
                     })
-                    .collect();
-                let children_any: SmallVec<[_; 4]> = enode
+                    .collect::<Vec<_>>();
+                let children_any = enode
                     .children()
                     .iter()
                     .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
-                    .collect();
+                    .collect::<Vec<_>>();
 
                 for (matching_child, matching) in &children_matching {
                     let mut to_selected = HashMap::default();
