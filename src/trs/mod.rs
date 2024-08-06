@@ -3,9 +3,9 @@ use std::fmt::Display;
 use egg::{Analysis, FromOp, Language, Rewrite};
 use serde::Serialize;
 
-pub(crate) mod arithmatic;
-pub(crate) mod halide;
-pub(crate) mod simple;
+pub mod arithmatic;
+pub mod halide;
+pub mod simple;
 
 pub use arithmatic::Arithmatic;
 pub use halide::Halide;

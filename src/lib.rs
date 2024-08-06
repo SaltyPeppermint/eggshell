@@ -30,22 +30,23 @@
     clippy::unnecessary_safety_comment,
     clippy::unnecessary_safety_doc,
     clippy::unnecessary_self_imports,
-    clippy::verbose_file_reads
+    clippy::verbose_file_reads,
+    clippy::shadow_unrelated
 )]
-// clippy::unwrap_used // WANT TO USE THAT
+
 // clippy::cfg_not_test,
 // clippy::use_debug
 // clippy::shadow_unrelated
 // clippy::ref_patterns,
 // clippy::renamed_function_params,
 
-mod eqsat;
+pub mod eqsat;
 mod errors;
 mod io;
 mod python;
-mod sketch;
-mod trs;
-mod utils;
+pub mod sketch;
+pub mod trs;
+pub mod utils;
 
 use pyo3::prelude::*;
 

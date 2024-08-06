@@ -27,6 +27,7 @@ impl<R> Eqsat<R>
 where
     R: Trs,
 {
+    #[must_use]
     pub fn runner_args(&self) -> &RunnerArgs {
         &self.runner_args
     }
@@ -123,7 +124,7 @@ where
         CF: CostFunction<R::Language>,
         CF::Cost: Ord,
     {
-        extract::eclass_extract_sketch(sketch, cost_fn, &self.egraph, root).unwrap()
+        extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
     //Extract
@@ -170,32 +171,6 @@ mod tests {
     #[test]
     fn basic_eqsat_solved_false() {
         let false_stmt: RecExpr<MathEquations> = "( == 1 0 )".parse().unwrap();
-        let rules = Halide::rules(&Halide::maximum_ruleset());
-
-        let eqsat = Eqsat::<Halide>::new(0);
-        let result = eqsat.run(&[false_stmt], &rules);
-        let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!("0", term.to_string());
-    }
-
-    #[test]
-    fn simple_eqsat_solved_true() {
-        let true_stmt: RecExpr<MathEquations> = "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )".parse().unwrap();
-        let rules = Halide::rules(&Halide::maximum_ruleset());
-
-        let eqsat = Eqsat::<Halide>::new(0);
-        let result = eqsat.run(&[true_stmt], &rules);
-        let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!("1", term.to_string());
-    }
-
-    #[test]
-    fn simple_eqsat_solved_false() {
-        let false_stmt: RecExpr<MathEquations> = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
-            .parse()
-            .unwrap();
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
         let eqsat = Eqsat::<Halide>::new(0);

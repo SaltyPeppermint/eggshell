@@ -18,6 +18,9 @@ pub fn eclass_satisfies_sketch<L: Language, A: Analysis<L>>(
 }
 
 /// Returns the set of e-classes of `egraph` that represent at least one program satisfying `s`.
+/// # Panics
+/// Panics if the egraph isn't clean.
+/// Only give it clean egraphs!
 pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
     sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
@@ -32,22 +35,24 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
 
 fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
     sketch: &Sketch<L>,
-    sid: Id,
+    sketch_id: Id,
     egraph: &EGraph<L, A>,
     classes_by_op: &HashMap<Discriminant<L>, HashSet<Id>>,
     memo: &mut HashMap<Id, HashSet<Id>>,
 ) -> HashSet<Id> {
-    if let Some(value) = memo.get(&sid) {
+    if let Some(value) = memo.get(&sketch_id) {
         return value.clone();
     };
 
-    let result = match &sketch[sid] {
+    let result = match &sketch[sketch_id] {
         SketchNode::Any => egraph.classes().map(|c| c.id).collect(),
         SketchNode::Node(node) => {
             let children_matches = node
                 .children()
                 .iter()
-                .map(|csid| satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo))
+                .map(|child_sketch_id| {
+                    satisfies_sketch_rec(sketch, *child_sketch_id, egraph, classes_by_op, memo)
+                })
                 .collect::<Vec<_>>();
 
             if let Some(potential_ids) = utils::classes_matching_op(node, classes_by_op) {
@@ -62,7 +67,7 @@ fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
                             let children_match = children_matches
                                 .iter()
                                 .zip(matched.children())
-                                .all(|(matches, id)| matches.contains(id));
+                                .all(|(matches, child_id)| matches.contains(child_id));
                             if children_match {
                                 Err(())
                             } else {
@@ -76,9 +81,9 @@ fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
                 HashSet::default()
             }
         }
-        SketchNode::Contains(csid) => {
+        SketchNode::Contains(inner_sketch_id) => {
             let contained_matched =
-                satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo);
+                satisfies_sketch_rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo);
 
             let mut data = egraph
                 .classes()
@@ -91,22 +96,22 @@ fn satisfies_sketch_rec<L: Language, A: Analysis<L>>(
                 .filter_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
                 .collect()
         }
-        SketchNode::Or(csids) => {
-            let matches = csids
-                .iter()
-                .map(|csid| satisfies_sketch_rec(sketch, *csid, egraph, classes_by_op, memo));
+        SketchNode::Or(inner_sketch_ids) => {
+            let matches = inner_sketch_ids.iter().map(|inner_sketch_id| {
+                satisfies_sketch_rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo)
+            });
             matches
                 .reduce(|a, b| a.union(&b).copied().collect())
                 .expect("empty or sketch")
         }
     };
 
-    memo.insert(sid, result.clone());
+    memo.insert(sketch_id, result.clone());
     result
 }
 
 /// Returns the best program satisfying `s` according to `cost_fn` that is represented in the `id` e-class of `egraph`, if it exists.
-pub fn eclass_extract_sketch<L, A, CF>(
+pub fn eclass_extract<L, A, CF>(
     sketch: &Sketch<L>,
     cost_fn: CF,
     egraph: &EGraph<L, A>,
@@ -165,7 +170,7 @@ where
 #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn extract_sketch_rec<L, A, CF>(
     sketch: &Sketch<L>,
-    sid: Id,
+    sketch_id: Id,
     cost_fn: &mut CF,
     classes_by_op: &HashMap<Discriminant<L>, HashSet<Id>>,
     egraph: &EGraph<L, A>,
@@ -179,20 +184,20 @@ where
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    if let Some(value) = memo.get(&sid) {
+    if let Some(value) = memo.get(&sketch_id) {
         return value.clone();
     };
 
-    let result = match &sketch[sid] {
+    let result = match &sketch[sketch_id] {
         SketchNode::Any => extracted.clone(),
         SketchNode::Node(node) => {
             let children_matches = node
                 .children()
                 .iter()
-                .map(|child_sid| {
+                .map(|child_sketch_id| {
                     extract_sketch_rec(
                         sketch,
-                        *child_sid,
+                        *child_sketch_id,
                         cost_fn,
                         classes_by_op,
                         egraph,
@@ -214,8 +219,8 @@ where
                         let mnode = &node.clone().map_children(|_| Id::from(0));
                         let _ = utils::for_each_matching_node(eclass, mnode, |matched| {
                             let mut matches = Vec::new();
-                            for (cm, id) in children_matches.iter().zip(matched.children()) {
-                                if let Some(m) = cm.get(id) {
+                            for (cm, child_id) in children_matches.iter().zip(matched.children()) {
+                                if let Some(m) = cm.get(child_id) {
                                     matches.push(m);
                                 } else {
                                     break;
@@ -244,10 +249,10 @@ where
                 HashMap::default()
             }
         }
-        SketchNode::Contains(inner_sid) => {
+        SketchNode::Contains(inner_sketch_id) => {
             let contained_matches = extract_sketch_rec(
                 sketch,
-                *inner_sid,
+                *inner_sketch_id,
                 cost_fn,
                 classes_by_op,
                 egraph,
@@ -269,13 +274,13 @@ where
                 .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchNode::Or(inner_sids) => {
-            let matches = inner_sids
+        SketchNode::Or(inner_sketch_ids) => {
+            let matches = inner_sketch_ids
                 .iter()
-                .map(|sid| {
+                .map(|inner_sketch_id| {
                     extract_sketch_rec(
                         sketch,
-                        *sid,
+                        *inner_sketch_id,
                         cost_fn,
                         classes_by_op,
                         egraph,
@@ -306,7 +311,7 @@ where
         }
     };
 
-    memo.insert(sid, result.clone());
+    memo.insert(sketch_id, result.clone());
     result
 }
 
@@ -364,40 +369,6 @@ mod tests {
 
     #[test]
     fn simple_extract_cost() {
-        fn comp_eclass_extracted_sketch<L, A, CF>(
-            sketch: &Sketch<L>,
-            cost_fn_1: CF,
-            cost_fn_2: CF,
-            egraph: &EGraph<L, A>,
-            id: Id,
-        ) -> Option<(CF::Cost, RecExpr<L>)>
-        where
-            L: Language,
-            A: Analysis<L>,
-            CF: CostFunction<L>,
-            CF::Cost: 'static + Ord,
-        {
-            use std::time::Instant;
-            let t1 = Instant::now();
-            let res1 = super::eclass_extract_sketch(sketch, cost_fn_1, egraph, id);
-            let t2 = Instant::now();
-            let res2 = super::eclass_extract_sketch(sketch, cost_fn_2, egraph, id);
-            let t3 = Instant::now();
-            assert_eq!(res1.is_some(), res2.is_some());
-            if let (Some((c1, _)), Some((c2, _))) = (&res1, &res2) {
-                assert_eq!(c1, c2);
-            };
-            println!(
-                "e-class analysis extraction took: {:?}",
-                t2.duration_since(t1)
-            );
-            println!(
-                "recursive descent extraction took: {:?}\n",
-                t3.duration_since(t2)
-            );
-            res1
-        }
-
         let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
 
         let a_expr = "(g (f (v x)))".parse::<RecExpr<SymbolLang>>().unwrap();
@@ -411,8 +382,7 @@ mod tests {
         egraph.union(root_a, root_b);
         egraph.rebuild();
 
-        let (best_cost, best_expr) =
-            comp_eclass_extracted_sketch(&sketch, AstSize, AstSize, &egraph, root_a).unwrap();
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root_a).unwrap();
         assert_eq!(best_cost, 4);
         assert_eq!(best_expr, a_expr);
     }

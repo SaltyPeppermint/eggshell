@@ -53,6 +53,52 @@ where
     }
 }
 
+pub fn flat_map_matching_node<T, L, D, F>(eclass: &EClass<L, D>, node: &L, f: F) -> Vec<T>
+where
+    L: Language,
+    F: FnMut(&L) -> Option<T>,
+{
+    if eclass.nodes.len() < 50 {
+        eclass
+            .nodes
+            .iter()
+            .filter(|n| node.matches(n))
+            .flat_map(f)
+            .collect()
+    } else {
+        debug_assert!(node.all(|id| id == Id::from(0)));
+        debug_assert!(eclass.nodes.windows(2).all(|w| w[0] < w[1]));
+        let mut start = eclass.nodes.binary_search(node).unwrap_or_else(|i| i);
+        // let discrim = std::mem::discriminant(node);
+        while start > 0 {
+            if eclass.nodes[start - 1].matches(node) {
+                start -= 1;
+            } else {
+                break;
+            }
+        }
+        let matching = eclass.nodes[start..]
+            .iter()
+            .take_while(|&n| n.matches(node))
+            .filter(|n| node.matches(n));
+        debug_assert_eq!(
+            matching.clone().count(),
+            eclass.nodes.iter().filter(|n| node.matches(n)).count(),
+            "matching node {:?}\nstart={}\n{:?} != {:?}\nnodes: {:?}",
+            node,
+            start,
+            matching.clone().collect::<HashSet<_>>(),
+            eclass
+                .nodes
+                .iter()
+                .filter(|n| node.matches(n))
+                .collect::<HashSet<_>>(),
+            eclass.nodes
+        );
+        matching.flat_map(f).collect()
+    }
+}
+
 /// Workaround since an identical data struct `classes_by_op` is private in the egraph struct
 /// Using just the discriminant is ok since it is again checked in the `for_each_matching_node` function
 pub fn new_classes_by_op<L, N>(egraph: &EGraph<L, N>) -> HashMap<Discriminant<L>, HashSet<Id>>

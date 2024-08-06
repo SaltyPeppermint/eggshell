@@ -21,9 +21,9 @@ pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
             let record = result?;
             let index = record
                 .get(0)
-                .unwrap()
+                .expect("No index means csv is broken.")
                 .parse::<usize>()
-                .expect("No index means csv is broken.");
+                .expect("Wrong index means csv is broken.");
             let expr_str = record.get(1).expect("No expression means csv is broken.");
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.

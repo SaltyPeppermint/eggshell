@@ -144,21 +144,21 @@ fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 /// Compares two constants c0 and c1
 fn compare_constants(
     // first constant
-    var_str_1: &str,
+    var_str1: &str,
     // 2nd constant
-    var_str_2: &str,
+    var_str2: &str,
     // the comparison we're checking
     comp: &'static str,
 ) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get constants
-    let var_1: Var = var_str_1.parse().unwrap();
-    let var_2: Var = var_str_2.parse().unwrap();
+    let var1: Var = var_str1.parse().unwrap();
+    let var2: Var = var_str2.parse().unwrap();
 
     move |egraph, _, subst| {
         // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
-        egraph[subst[var_2]].nodes.iter().any(|n1| match n1 {
+        egraph[subst[var2]].nodes.iter().any(|n1| match n1 {
             // Get the eclass of the second constant then match it to c1
-            MathEquations::Constant(c1) => egraph[subst[var_1]].nodes.iter().any(|n| match n {
+            MathEquations::Constant(c1) => egraph[subst[var1]].nodes.iter().any(|n| match n {
                 // match the comparison then do it
                 MathEquations::Constant(c) => match comp {
                     "<" => c < c1,

@@ -111,15 +111,15 @@ impl Analysis<Math> for ConstantFold {
 }
 
 fn is_const_or_distinct_var(
-    var_str_1: &str,
-    var_str_2: &str,
+    var_str1: &str,
+    var_str2: &str,
 ) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var_1 = var_str_1.parse().unwrap();
-    let var_2 = var_str_2.parse().unwrap();
+    let var1 = var_str1.parse().unwrap();
+    let var2 = var_str2.parse().unwrap();
     move |egraph, _, subst| {
-        egraph.find(subst[var_1]) != egraph.find(subst[var_2])
-            && (egraph[subst[var_1]].data.is_some()
-                || egraph[subst[var_1]]
+        egraph.find(subst[var1]) != egraph.find(subst[var2])
+            && (egraph[subst[var1]].data.is_some()
+                || egraph[subst[var1]]
                     .nodes
                     .iter()
                     .any(|n| matches!(n, Math::Symbol(..))))

@@ -4,13 +4,14 @@
 mod analysis;
 pub mod extract;
 mod hashcons;
-mod recursive;
+pub mod recursive;
 mod utils;
 
 use std::fmt::{self, Display, Formatter};
 
 use egg::{Id, Language, RecExpr};
 use serde::Serialize;
+use smallvec::SmallVec;
 
 use crate::errors::SketchParseError;
 use crate::python::PySketch;
@@ -19,7 +20,7 @@ use crate::python::PySketch;
 pub type Sketch<L> = RecExpr<SketchNode<L>>;
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize)]
-pub(crate) enum SketchNode<L: Language> {
+pub enum SketchNode<L: Language> {
     /// Any program of the underlying [`Language`].
     ///
     /// Corresponds to the `?` syntax.
@@ -35,7 +36,7 @@ pub(crate) enum SketchNode<L: Language> {
     /// Programs that satisfy any of these sketches.
     ///
     /// Corresponds to the `(or s1 .. sn)` syntax.
-    Or(Vec<Id>),
+    Or(SmallVec<[Id; 4]>),
 }
 
 impl<L: Language> Language for SketchNode<L> {
@@ -100,7 +101,7 @@ where
                     )))
                 }
             }
-            "or" => Ok(Self::Or(children)),
+            "or" => Ok(Self::Or(children.into())),
             _ => L::from_op(op, children)
                 .map(Self::Node)
                 .map_err(SketchParseError::BadOp),
@@ -163,7 +164,9 @@ where
                 }
             }
         }
-        let mut rec_expr: Sketch<L> = "".parse().unwrap();
+        let mut rec_expr: Sketch<L> = ""
+            .parse()
+            .expect("Empty string is a known good expression for an empty rec_expr");
         let root_id = rec_try_from(&mut rec_expr, pysketch)?;
         Ok((root_id, rec_expr))
     }

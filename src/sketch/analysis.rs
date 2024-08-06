@@ -52,29 +52,37 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
     data: &mut HashMap<Id, B::Data>,
     analysis_pending: &mut HashSetQueuePop<(L, Id)>,
 ) {
-    while let Some((node, id)) = analysis_pending.pop() {
-        let u_node = node.clone().map_children(|id| egraph.find(id)); // find_mut?
+    while let Some((node, current_id)) = analysis_pending.pop() {
+        let u_node = node.clone().map_children(|child_id| egraph.find(child_id)); // find_mut?
 
         if u_node.all(|id| data.contains_key(&id)) {
-            let cid = egraph.find(id); // find_mut?
-            let eclass = &egraph[cid];
+            let canonical_id = egraph.find(current_id); // find_mut?
+            let eclass = &egraph[canonical_id];
             let node_data = analysis.make(egraph, &u_node, &|id| &data[&id]);
-            let new_data = match data.remove(&cid) {
+            let new_data = match data.remove(&canonical_id) {
                 None => {
-                    analysis_pending.extend(eclass.parents().map(|(n, id)| (n.clone(), id)));
+                    analysis_pending.extend(
+                        eclass
+                            .parents()
+                            .map(|(n, parent_id)| (n.clone(), parent_id)),
+                    );
                     node_data
                 }
                 Some(mut existing) => {
                     let DidMerge(may_not_be_existing, _) = analysis.merge(&mut existing, node_data);
                     if may_not_be_existing {
-                        analysis_pending.extend(eclass.parents().map(|(n, id)| (n.clone(), id)));
+                        analysis_pending.extend(
+                            eclass
+                                .parents()
+                                .map(|(n, parent_id)| (n.clone(), parent_id)),
+                        );
                     }
                     existing
                 }
             };
-            data.insert(cid, new_data);
+            data.insert(canonical_id, new_data);
         } else {
-            analysis_pending.insert((node, id));
+            analysis_pending.insert((node, current_id));
         }
     }
 }
