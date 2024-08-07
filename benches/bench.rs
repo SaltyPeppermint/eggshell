@@ -2,10 +2,11 @@ use criterion::black_box as bb;
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 
-use egg::{AstSize, EGraph, RecExpr, SymbolLang};
+use egg::{EGraph, RecExpr, SymbolLang};
 
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
+use eggshell::utils::AstSize2;
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
@@ -19,13 +20,15 @@ fn extraction(c: &mut Criterion) {
     egraph.rebuild();
 
     c.bench_function("default extract", |b| {
-        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a)))
     });
     c.bench_function("recursive for_each extract", |b| {
-        b.iter(|| recursive::for_each_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| {
+            recursive::for_each_eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a))
+        })
     });
     c.bench_function("recursive map extract", |b| {
-        b.iter(|| recursive::map_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| recursive::map_eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a)))
     });
 }
 

@@ -48,7 +48,7 @@ macro_rules! monomorphize {
                     .into_iter()
                     .map(|term| {
                         term.parse()
-                            .map_err(|e| $crate::errors::EggError::RecExprParse(e))
+                            .map_err(|e| $crate::python::EggError::RecExprParse(e))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 let rules = <$type as $crate::trs::Trs>::rules(
@@ -69,7 +69,7 @@ macro_rules! monomorphize {
         impl EqsatResult {
             #[allow(clippy::missing_errors_doc)]
             #[pyo3(signature = (root, **py_kwargs))]
-            fn extract(
+            fn classic_extract(
                 &mut self,
                 root: usize,
                 py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
@@ -103,6 +103,47 @@ macro_rules! monomorphize {
                 Ok((cost, (&term).into()))
             }
 
+            #[pyo3(signature = (root, sketch, **py_kwargs))]
+            fn sketch_extract(
+                &mut self,
+                root: usize,
+                sketch: $crate::python::PySketch,
+                py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+            ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
+                let (cost, term) = if let Some(bound) = py_kwargs {
+                    if let Some(cost_fn_name) =
+                        pyo3::types::PyDictMethods::get_item(bound, "cost_function")?
+                    {
+                        let cost_fn_name = pyo3::types::PyAnyMethods::extract(&cost_fn_name)?;
+                        match cost_fn_name {
+                            "ast_size" => self.0.sketch_extract(
+                                root.into(),
+                                $crate::utils::AstSize2,
+                                &sketch.try_into()?,
+                            ),
+                            "ast_depth" => self.0.sketch_extract(
+                                root.into(),
+                                $crate::utils::AstDepth2,
+                                &sketch.try_into()?,
+                            ),
+                            _ => {
+                                return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                                    format!("{cost_fn_name} is not a valid cost function"),
+                                ))
+                            }
+                        }
+                    } else {
+                        return Err(pyo3::PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
+                            "Specified non-existent arguments",
+                        ));
+                    }
+                } else {
+                    self.0
+                        .sketch_extract(root.into(), $crate::utils::AstSize2, &sketch.try_into()?)
+                };
+                Ok((cost, (&term).into()))
+            }
+
             #[getter]
             pub fn roots(&self) -> Vec<usize> {
                 self.0.roots().iter().map(|id| (*id).into()).collect()
@@ -120,6 +161,20 @@ macro_rules! monomorphize {
             //     <$type as $crate::trs::Trs>::Analysis,
             // > {
             //     self.0.egraph().clone()
+            // }
+
+            // #[allow(clippy::missing_panics_doc)]
+            // pub fn sketch_extract<CF>(
+            //     &self,
+            //     root: Id,
+            //     cost_fn: CF,
+            //     sketch: &Sketch<R::Language>,
+            // ) -> (CF::Cost, RecExpr<R::Language>)
+            // where
+            //     CF: CostFunction<R::Language>,
+            //     CF::Cost: Ord,
+            // {
+            //     extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
             // }
         }
     };

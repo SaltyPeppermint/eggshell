@@ -8,6 +8,7 @@ pub struct AstSize2;
 impl<L: Language> CostFunction<L> for AstSize2 {
     type Cost = usize;
 
+    #[inline]
     fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
     where
         C: FnMut(egg::Id) -> Self::Cost,
@@ -23,6 +24,7 @@ pub struct AstDepth2;
 impl<L: Language> CostFunction<L> for AstDepth2 {
     type Cost = usize;
 
+    #[inline]
     fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
     where
         C: FnMut(egg::Id) -> Self::Cost,

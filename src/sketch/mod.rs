@@ -10,10 +10,11 @@ mod utils;
 use std::fmt::{self, Display, Formatter};
 
 use egg::{Id, Language, RecExpr};
+use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 use smallvec::SmallVec;
+use thiserror::Error;
 
-use crate::errors::SketchParseError;
 use crate::python::PySketch;
 
 /// Simple alias
@@ -74,6 +75,27 @@ impl<L: Language + Display> Display for SketchNode<L> {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum SketchParseError<E: Display> {
+    #[error("wrong number of children: {0:?}")]
+    BadChildren(#[from] egg::FromOpError),
+    #[error(transparent)]
+    BadOp(E),
+}
+
+create_exception!(
+    eggshell,
+    SketchParseException,
+    PyException,
+    "Error parsing a Sketch."
+);
+
+impl<E: Display> From<SketchParseError<E>> for PyErr {
+    fn from(err: SketchParseError<E>) -> PyErr {
+        SketchParseException::new_err(err.to_string())
+    }
+}
+
 impl<L> egg::FromOp for SketchNode<L>
 where
     L::Error: Display,
@@ -117,8 +139,8 @@ where
     type Error = SketchParseError<L::Error>;
 
     fn try_from(pysketch: &PySketch) -> Result<Self, Self::Error> {
-        fn rec_try_from<L>(
-            rec_expr: &mut Sketch<L>,
+        fn rec<L>(
+            sketch: &mut Sketch<L>,
             pysketch: &PySketch,
         ) -> Result<Id, SketchParseError<L::Error>>
         where
@@ -130,7 +152,13 @@ where
             match pysketch {
                 // No recursion here
                 PySketch::Any {} => {
-                    let id = rec_expr.add(SketchNode::Any);
+                    let id = sketch.add(SketchNode::Any);
+                    Ok(id)
+                }
+                PySketch::Leaf { s } => {
+                    // Parses a simple terminal node from the language
+                    let node = L::from_op(s, vec![]).map_err(SketchParseError::BadOp)?;
+                    let id = sketch.add(SketchNode::Node(node));
                     Ok(id)
                 }
                 PySketch::Node { s, children } => {
@@ -139,36 +167,35 @@ where
                     // is the end of one of the recusions
                     let child_ids = children
                         .iter()
-                        .map(|child| rec_try_from(rec_expr, child))
+                        .map(|child| rec(sketch, child))
                         .collect::<Result<_, _>>()?;
                     let node = L::from_op(s, child_ids).map_err(SketchParseError::BadOp)?;
-                    let id = rec_expr.add(SketchNode::Node(node));
+                    let id = sketch.add(SketchNode::Node(node));
                     Ok(id)
                 }
-
                 PySketch::Contains { s } => {
                     // Recursion reduces the number of the remaining elements in the PySketch by removing
                     // the wrapping `PySketch::Contains`
-                    let inner_id = rec_try_from(rec_expr, s)?;
-                    let id = rec_expr.add(SketchNode::Contains(inner_id));
+                    let inner_id = rec(sketch, s)?;
+                    let id = sketch.add(SketchNode::Contains(inner_id));
                     Ok(id)
                 }
                 PySketch::Or { ss } => {
                     // Recursions reduces the number of the remaining elements in the PySketch since the or is removed
                     let inner_ids = ss
                         .iter()
-                        .map(|child| rec_try_from(rec_expr, child))
+                        .map(|child| rec(sketch, child))
                         .collect::<Result<_, _>>()?;
-                    let id = rec_expr.add(SketchNode::Or(inner_ids));
+                    let id = sketch.add(SketchNode::Or(inner_ids));
                     Ok(id)
                 }
             }
         }
-        let mut rec_expr: Sketch<L> = ""
+        let mut sketch: Sketch<L> = ""
             .parse()
-            .expect("Empty string is a known good expression for an empty rec_expr");
-        let root_id = rec_try_from(&mut rec_expr, pysketch)?;
-        Ok((root_id, rec_expr))
+            .expect("Empty string is a known good expression for an empty recursive expression");
+        let root_id = rec(&mut sketch, pysketch)?;
+        Ok((root_id, sketch))
     }
 }
 
@@ -179,9 +206,21 @@ where
 {
     type Error = SketchParseError<L::Error>;
 
-    fn try_from(value: &PySketch) -> Result<Self, Self::Error> {
-        let (_, rec_expr) = value.try_into()?;
-        Ok(rec_expr)
+    fn try_from(pysketch: &PySketch) -> Result<Self, Self::Error> {
+        let (_, sketch) = pysketch.try_into()?;
+        Ok(sketch)
+    }
+}
+
+impl<L> TryFrom<PySketch> for Sketch<L>
+where
+    L::Error: Display,
+    L: Language + egg::FromOp,
+{
+    type Error = SketchParseError<L::Error>;
+
+    fn try_from(pysketch: PySketch) -> Result<Self, Self::Error> {
+        (&pysketch).try_into()
     }
 }
 

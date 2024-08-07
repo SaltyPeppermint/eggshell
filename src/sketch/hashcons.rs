@@ -5,14 +5,14 @@ use crate::{HashMap, HashSet};
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
 pub(crate) struct ExprHashCons<L> {
-    rec_expr: RecExpr<L>,
+    expr: RecExpr<L>,
     memo: HashMap<L, Id>,
 }
 
 impl<L: Language> ExprHashCons<L> {
     pub(crate) fn new() -> Self {
         ExprHashCons {
-            rec_expr: RecExpr::default(),
+            expr: RecExpr::default(),
             memo: HashMap::default(),
         }
     }
@@ -21,12 +21,12 @@ impl<L: Language> ExprHashCons<L> {
         if let Some(id) = self.memo.get(&node) {
             *id
         } else {
-            self.rec_expr.add(node)
+            self.expr.add(node)
         }
     }
 
     pub(crate) fn extract(&self, id: Id) -> RecExpr<L> {
-        let all = self.rec_expr.as_ref();
+        let all = self.expr.as_ref();
 
         let mut used = HashSet::new();
         used.insert(id);

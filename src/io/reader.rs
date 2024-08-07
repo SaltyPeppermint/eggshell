@@ -4,14 +4,14 @@ use csv;
 use pyo3::prelude::*;
 
 use super::structs::Expression;
-use crate::errors::EggShellError;
+use super::IoError;
 
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.
 ///
 /// [`Expression`]: super::structs::Expression
 #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
 #[pyfunction]
-pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, EggShellError> {
+pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, IoError> {
     // Declare the vector and the reader
     let file = File::open(file_path)?;
     let mut rdr = csv::Reader::from_reader(file);

@@ -15,13 +15,6 @@ pub struct PyLang {
 
 pyboxable!(PyLang);
 
-// #[pymethods]
-// impl PyLang {
-//     fn __eq__(&self, other: &Self) -> bool {
-//         self == other
-//     }
-// }
-
 impl Display for PyLang {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.xs.is_empty() {
@@ -39,34 +32,32 @@ impl Display for PyLang {
 }
 
 impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
-    fn from(rec_expr: &RecExpr<L>) -> Self {
+    fn from(expr: &RecExpr<L>) -> Self {
+        fn rec<L: Language + Display>(node: &L, expr: &RecExpr<L>) -> PyLang {
+            PyLang {
+                x: node.to_string(),
+                xs: node
+                    .children()
+                    .iter()
+                    .map(|child_id| {
+                        let child = &expr[*child_id];
+                        rec(child, expr)
+                    })
+                    .collect(),
+            }
+        }
         // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
         // "RecExprs must satisfy the invariant that enodes’ children must refer to elements that come before it in the list."
         // Therefore, in a RecExpr that has only one root, the last element must be the root.
-        let root = rec_expr.as_ref().last().unwrap();
-        parse_rec_expr_rec(root, rec_expr)
-    }
-}
-
-fn parse_rec_expr_rec<L: Language + Display>(node: &L, rec_expr: &RecExpr<L>) -> PyLang {
-    PyLang {
-        x: node.to_string(),
-        xs: node
-            .children()
-            .iter()
-            .map(|child_id| {
-                let child = &rec_expr[*child_id];
-                parse_rec_expr_rec(child, rec_expr)
-            })
-            .collect(),
+        let root = expr.as_ref().last().unwrap();
+        rec(root, expr)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::trs::halide::MathEquations;
-
     use super::*;
+    use crate::trs::halide::MathEquations;
 
     #[test]
     fn parse_basic() {

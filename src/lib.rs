@@ -41,7 +41,6 @@
 // clippy::renamed_function_params,
 
 pub mod eqsat;
-mod errors;
 mod io;
 mod python;
 pub mod sketch;
@@ -49,9 +48,6 @@ pub mod trs;
 pub mod utils;
 
 use pyo3::prelude::*;
-
-use crate::errors::EggShellException;
-use crate::io::structs::Expression;
 
 type HashMap<K, V> = hashbrown::HashMap<K, V>;
 type HashSet<T> = hashbrown::HashSet<T>;
@@ -62,15 +58,10 @@ type HashSet<T> = hashbrown::HashSet<T>;
 #[allow(clippy::missing_errors_doc, clippy::shadow_reuse)]
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add(
-        "EggShellException",
-        m.py().get_type_bound::<EggShellException>(),
-    )?;
-
     // IO
     let io_m = PyModule::new_bound(m.py(), "io")?;
     io_m.add_function(wrap_pyfunction!(io::reader::read_exprs, m)?)?;
-    io_m.add_class::<Expression>()?;
+    io_m.add_class::<io::structs::Expression>()?;
     m.add_submodule(&io_m)?;
 
     // Eqsat
