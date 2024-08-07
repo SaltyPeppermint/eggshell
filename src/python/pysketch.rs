@@ -125,11 +125,19 @@ pub enum PySketchParseError {
 
     /// A or expression was found where with less than 2 children.
     #[error("Found an or with less than 2 children: {0:?}")]
-    BadOr(Vec<Sexp>),
+    BadChildrenOr(Vec<Sexp>),
+
+    /// A or expression was found where with less than 2 children.
+    #[error("Found an or in a terminal position: {0}")]
+    BadTerminalOr(Sexp),
 
     /// A contains expression was found where with more or less than 1 children.
     #[error("Found an 'contains' with more or less than 1 child: {0:?}")]
-    BadContains(Vec<Sexp>),
+    BadChildrenContains(Vec<Sexp>),
+
+    /// A or expression was found where with less than 2 children.
+    #[error("Found an or in a terminal position: {0}")]
+    BadTerminalContains(Sexp),
 
     /// An error occurred while parsing the s-expression itself, generally
     /// because the input had an invalid structure (e.g. unpaired parentheses).
@@ -159,6 +167,10 @@ impl FromStr for PySketch {
                 Sexp::Empty => Err(PySketchParseError::EmptySexp),
                 Sexp::String(s) => match s.as_str() {
                     "?" | "any" | "ANY" | "Any" => Ok(PySketch::Any {}),
+                    "or" | "OR" | "Or" => Err(PySketchParseError::BadTerminalOr(sexp.to_owned())),
+                    "contains" | "CONTAINS" | "Contains" => {
+                        Err(PySketchParseError::BadTerminalContains(sexp.to_owned()))
+                    }
                     _ => Ok(PySketch::Leaf { s: s.to_owned() }),
                 },
                 Sexp::List(list) if list.is_empty() => Err(PySketchParseError::EmptySexp),
@@ -173,10 +185,10 @@ impl FromStr for PySketch {
                             Ok(PySketch::Contains { s: Box::new(inner) })
                         }
                         ("contains" | "CONTAINS" | "Contains", _) => {
-                            Err(PySketchParseError::BadContains(list.to_owned()))
+                            Err(PySketchParseError::BadChildrenContains(list.to_owned()))
                         }
                         ("or" | "OR" | "Or", 0..=2) => {
-                            Err(PySketchParseError::BadOr(list.to_owned()))
+                            Err(PySketchParseError::BadChildrenOr(list.to_owned()))
                         }
                         ("or" | "OR" | "Or", _) => Ok(PySketch::Or {
                             children: list[1..].iter().map(rec).collect::<Result<_, _>>()?,
@@ -296,20 +308,44 @@ mod tests {
     }
 
     #[test]
-    fn bad_or() {
+    fn bad_children_or() {
         let expr = "(or f)";
         let parse_error = expr.parse::<PySketch>();
         eprintln!("{parse_error:?}");
-        assert!(matches!(parse_error, Err(PySketchParseError::BadOr(_))));
+        assert!(matches!(
+            parse_error,
+            Err(PySketchParseError::BadChildrenOr(_))
+        ));
     }
 
     #[test]
-    fn bad_contains() {
+    fn bad_terminal_or() {
+        let expr = "(f or)";
+        let parse_error = expr.parse::<PySketch>();
+        eprintln!("{parse_error:?}");
+        assert!(matches!(
+            parse_error,
+            Err(PySketchParseError::BadTerminalOr(_))
+        ));
+    }
+
+    #[test]
+    fn bad_children_contains() {
         let expr = "(contains f g)";
         let parse_error = expr.parse::<PySketch>();
         assert!(matches!(
             parse_error,
-            Err(PySketchParseError::BadContains(_))
+            Err(PySketchParseError::BadChildrenContains(_))
+        ));
+    }
+
+    #[test]
+    fn bad_terminal_contains() {
+        let expr = "(f contains)";
+        let parse_error = expr.parse::<PySketch>();
+        assert!(matches!(
+            parse_error,
+            Err(PySketchParseError::BadTerminalContains(_))
         ));
     }
 }
