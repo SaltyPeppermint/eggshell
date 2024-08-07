@@ -105,7 +105,7 @@ where
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
-            "?" => {
+            "?" | "any" | "ANY" | "Any" => {
                 if children.is_empty() {
                     Ok(Self::Any)
                 } else {
@@ -114,7 +114,7 @@ where
                     )))
                 }
             }
-            "contains" => {
+            "contains" | "CONTAINS" | "Contains" => {
                 if children.len() == 1 {
                     Ok(Self::Contains(children[0]))
                 } else {
@@ -123,7 +123,7 @@ where
                     )))
                 }
             }
-            "or" => Ok(Self::Or(children.into())),
+            "or" | "OR" | "Or" => Ok(Self::Or(children.into())),
             _ => L::from_op(op, children)
                 .map(Self::Node)
                 .map_err(SketchParseError::BadOp),
@@ -176,17 +176,17 @@ where
                 PySketch::Contains { s } => {
                     // Recursion reduces the number of the remaining elements in the PySketch by removing
                     // the wrapping `PySketch::Contains`
-                    let inner_id = rec(sketch, s)?;
-                    let id = sketch.add(SketchNode::Contains(inner_id));
+                    let child_id = rec(sketch, s)?;
+                    let id = sketch.add(SketchNode::Contains(child_id));
                     Ok(id)
                 }
-                PySketch::Or { ss } => {
+                PySketch::Or { children } => {
                     // Recursions reduces the number of the remaining elements in the PySketch since the or is removed
-                    let inner_ids = ss
+                    let child_ids = children
                         .iter()
                         .map(|child| rec(sketch, child))
                         .collect::<Result<_, _>>()?;
-                    let id = sketch.add(SketchNode::Or(inner_ids));
+                    let id = sketch.add(SketchNode::Or(child_ids));
                     Ok(id)
                 }
             }

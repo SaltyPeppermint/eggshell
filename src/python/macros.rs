@@ -68,37 +68,24 @@ macro_rules! monomorphize {
         #[pyo3::pymethods]
         impl EqsatResult {
             #[allow(clippy::missing_errors_doc)]
-            #[pyo3(signature = (root, **py_kwargs))]
+            #[pyo3(signature = (root, cost_fn="ast_size"))]
             fn classic_extract(
                 &mut self,
                 root: usize,
-                py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+                cost_fn: &str,
             ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
-                let (cost, term) = if let Some(bound) = py_kwargs {
-                    if let Some(cost_fn_name) =
-                        pyo3::types::PyDictMethods::get_item(bound, "cost_function")?
-                    {
-                        let cost_fn_name = pyo3::types::PyAnyMethods::extract(&cost_fn_name)?;
-                        match cost_fn_name {
-                            "ast_size" => {
-                                self.0.classic_extract(root.into(), $crate::utils::AstSize2)
-                            }
-                            "ast_depth" => self
-                                .0
-                                .classic_extract(root.into(), $crate::utils::AstDepth2),
-                            _ => {
-                                return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                                    format!("{cost_fn_name} is not a valid cost function"),
-                                ))
-                            }
+                let (cost, term) = {
+                    match cost_fn {
+                        "ast_size" => self.0.classic_extract(root.into(), $crate::utils::AstSize2),
+                        "ast_depth" => self
+                            .0
+                            .classic_extract(root.into(), $crate::utils::AstDepth2),
+                        _ => {
+                            return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                                format!("{cost_fn} is not a valid cost function"),
+                            ))
                         }
-                    } else {
-                        return Err(pyo3::PyErr::new::<pyo3::exceptions::PySyntaxError, _>(
-                            "Specified non-existent arguments",
-                        ));
                     }
-                } else {
-                    self.0.classic_extract(root.into(), $crate::utils::AstSize2)
                 };
                 Ok((cost, (&term).into()))
             }

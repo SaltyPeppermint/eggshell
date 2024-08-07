@@ -1,33 +1,120 @@
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use std::str::FromStr;
 
 use egg::{Language, RecExpr};
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-
-use super::macros::pyboxable;
+use pyo3::{create_exception, PyErr};
+use symbolic_expressions::{Sexp, SexpError};
+use thiserror::Error;
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyLang {
-    pub(crate) x: String,
-    pub(crate) xs: Vec<PyLang>,
+    s: String,
+    children: Vec<PyLang>,
 }
 
-pyboxable!(PyLang);
+#[pymethods]
+impl PyLang {
+    #[new]
+    pub fn new(s: String, children: Vec<PyLang>) -> Self {
+        PyLang { s, children }
+    }
+
+    #[staticmethod]
+    pub fn from_str(s_expr_str: &str) -> PyResult<Self> {
+        let py_sketch = s_expr_str.parse()?;
+        Ok(py_sketch)
+    }
+
+    pub fn stringify(&self) -> String {
+        self.to_string()
+    }
+}
 
 impl Display for PyLang {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if self.xs.is_empty() {
-            write!(f, "{}", self.x)
+        if self.children.is_empty() {
+            write!(f, "{}", self.s)
         } else {
             let inner = self
-                .xs
+                .children
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
-            write!(f, "({} {})", self.x, inner)
+            write!(f, "({} {})", self.s, inner)
         }
+    }
+}
+
+/// An error type for failures when attempting to parse an s-expression as a
+/// [`PyLang`].
+#[derive(Debug, Error)]
+pub enum PyLangParseError {
+    /// An empty s-expression was found. Usually this is caused by an
+    /// empty list "()" somewhere in the input.
+    #[error("found empty s-expression")]
+    EmptySexp,
+
+    /// A list was found where an operator was expected. This is caused by
+    /// s-expressions of the form "((a b c) d e f)."
+    #[error("found a list in the head position: {0}")]
+    HeadList(Sexp),
+
+    /// An error occurred while parsing the s-expression itself, generally
+    /// because the input had an invalid structure (e.g. unpaired parentheses).
+    #[error(transparent)]
+    BadSexp(SexpError),
+}
+
+create_exception!(
+    eggshell,
+    PyLangParseException,
+    PyException,
+    "Error parsing a PyLang."
+);
+
+impl From<PyLangParseError> for PyErr {
+    fn from(err: PyLangParseError) -> PyErr {
+        PyLangParseException::new_err(err.to_string())
+    }
+}
+
+impl FromStr for PyLang {
+    type Err = PyLangParseError;
+
+    fn from_str(s: &str) -> Result<Self, PyLangParseError> {
+        fn rec(sexp: &Sexp) -> Result<PyLang, PyLangParseError> {
+            match sexp {
+                Sexp::Empty => Err(PyLangParseError::EmptySexp),
+                Sexp::String(s) => Ok(PyLang {
+                    s: s.to_owned(),
+                    children: vec![],
+                }),
+                Sexp::List(list) if list.is_empty() => Err(PyLangParseError::EmptySexp),
+                Sexp::List(list) => match &list[0] {
+                    Sexp::Empty => unreachable!("Cannot be in head position"),
+                    empty_list @ Sexp::List(..) => {
+                        Err(PyLangParseError::HeadList(empty_list.to_owned()))
+                    }
+                    Sexp::String(s) => {
+                        let children: Vec<PyLang> =
+                            list[1..].iter().map(rec).collect::<Result<_, _>>()?;
+                        Ok(PyLang {
+                            s: s.to_owned(),
+                            children,
+                        })
+                    }
+                },
+            }
+        }
+
+        let sexp =
+            symbolic_expressions::parser::parse_str(s.trim()).map_err(PyLangParseError::BadSexp)?;
+        rec(&sexp)
     }
 }
 
@@ -35,8 +122,8 @@ impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
     fn from(expr: &RecExpr<L>) -> Self {
         fn rec<L: Language + Display>(node: &L, expr: &RecExpr<L>) -> PyLang {
             PyLang {
-                x: node.to_string(),
-                xs: node
+                s: node.to_string(),
+                children: node
                     .children()
                     .iter()
                     .map(|child_id| {
@@ -62,15 +149,15 @@ mod tests {
     #[test]
     fn parse_basic() {
         let lhs = PyLang {
-            x: "==".to_owned(),
-            xs: vec![
+            s: "==".to_owned(),
+            children: vec![
                 PyLang {
-                    x: "0".to_owned(),
-                    xs: vec![],
+                    s: "0".to_owned(),
+                    children: vec![],
                 },
                 PyLang {
-                    x: "0".to_owned(),
-                    xs: vec![],
+                    s: "0".to_owned(),
+                    children: vec![],
                 },
             ],
         };
@@ -81,15 +168,15 @@ mod tests {
     #[test]
     fn print_basic() {
         let lhs = PyLang {
-            x: "==".to_owned(),
-            xs: vec![
+            s: "==".to_owned(),
+            children: vec![
                 PyLang {
-                    x: "0".to_owned(),
-                    xs: vec![],
+                    s: "0".to_owned(),
+                    children: vec![],
                 },
                 PyLang {
-                    x: "0".to_owned(),
-                    xs: vec![],
+                    s: "0".to_owned(),
+                    children: vec![],
                 },
             ],
         }
@@ -101,25 +188,25 @@ mod tests {
     #[test]
     fn parse_nested() {
         let lhs = PyLang {
-            x: "==".to_owned(),
+            s: "==".to_owned(),
 
-            xs: vec![
+            children: vec![
                 PyLang {
-                    x: "+".to_owned(),
-                    xs: vec![
+                    s: "+".to_owned(),
+                    children: vec![
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "2".to_owned(),
-                    xs: vec![],
+                    s: "2".to_owned(),
+                    children: vec![],
                 },
             ],
         };
@@ -130,25 +217,25 @@ mod tests {
     #[test]
     fn print_nested() {
         let lhs = PyLang {
-            x: "==".to_owned(),
+            s: "==".to_owned(),
 
-            xs: vec![
+            children: vec![
                 PyLang {
-                    x: "+".to_owned(),
-                    xs: vec![
+                    s: "+".to_owned(),
+                    children: vec![
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "2".to_owned(),
-                    xs: vec![],
+                    s: "2".to_owned(),
+                    children: vec![],
                 },
             ],
         }
@@ -160,40 +247,40 @@ mod tests {
     #[test]
     fn parse_complex() {
         let lhs = PyLang {
-            x: "==".to_owned(),
-            xs: vec![
+            s: "==".to_owned(),
+            children: vec![
                 PyLang {
-                    x: "+".to_owned(),
-                    xs: vec![
+                    s: "+".to_owned(),
+                    children: vec![
                         PyLang {
-                            x: "+".to_owned(),
-                            xs: vec![
+                            s: "+".to_owned(),
+                            children: vec![
                                 PyLang {
-                                    x: "1".to_owned(),
-                                    xs: vec![],
+                                    s: "1".to_owned(),
+                                    children: vec![],
                                 },
                                 PyLang {
-                                    x: "0".to_owned(),
-                                    xs: vec![],
+                                    s: "0".to_owned(),
+                                    children: vec![],
                                 },
                             ],
                         },
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    x: "+".to_owned(),
-                    xs: vec![
+                    s: "+".to_owned(),
+                    children: vec![
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                         PyLang {
-                            x: "1".to_owned(),
-                            xs: vec![],
+                            s: "1".to_owned(),
+                            children: vec![],
                         },
                     ],
                 },

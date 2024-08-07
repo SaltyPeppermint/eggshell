@@ -86,8 +86,8 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     eqsat_m.add_submodule(&simple_m)?;
 
     // Pylang works for all langs that implement Display
-    eqsat_m.add_class::<python::PyLang>()?;
-    m.add_submodule(&eqsat_m)?;
+    m.add_class::<python::PyLang>()?;
+    m.add_class::<python::PySketch>()?;
 
     Ok(())
 }
