@@ -22,6 +22,7 @@ hashbrown = { version = "0.14.5", features = ["rayon", "serde"] }
 log = "0.4.21"
 ordered-float = { version = "4.2.1", features = ["serde"] }
 pyo3 = { version = "0.21.2", features = ["hashbrown"] }
+rand = "0.8.5"
 rayon = "1.10.0"
 serde = { version = "1.0.203", features = ["derive"] }
 smallvec = { version = "1.13.2", features = ["const_generics", "serde"] }

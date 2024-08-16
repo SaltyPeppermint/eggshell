@@ -4,23 +4,42 @@ macro_rules! monomorphize {
     ($type: ty) => {
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
         #[pyo3::pyclass]
-        #[derive(Debug, Clone, serde::Serialize)]
+        #[derive(Debug, Clone)]
         pub struct Eqsat($crate::eqsat::Eqsat<$type>);
 
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
         #[pyo3::pyclass]
-        #[derive(Debug, Clone, serde::Serialize)]
+        #[derive(Debug, Clone)]
         pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
+
+        /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
+        #[pyo3::pyclass]
+        #[derive(Debug, Clone)]
+        pub struct Rules(
+            Vec<
+                egg::Rewrite<
+                    <$type as $crate::trs::Trs>::Language,
+                    <$type as $crate::trs::Trs>::Analysis,
+                >,
+            >,
+        );
 
         #[pyo3::pymethods]
         impl Eqsat {
             #[new]
-            #[pyo3(signature = (index, **py_kwargs))]
+            #[pyo3(signature = (start_terms, **py_kwargs))]
             fn new(
-                index: usize,
+                start_terms: Vec<String>,
                 py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
             ) -> pyo3::PyResult<Self> {
-                let eqsat: $crate::eqsat::Eqsat<$type> = $crate::eqsat::Eqsat::new(index);
+                let start_exprs = start_terms
+                    .into_iter()
+                    .map(|term| term.parse())
+                    .collect::<Result<_, _>>()
+                    .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
+
+                let eqsat = $crate::eqsat::Eqsat::new(start_exprs);
+
                 if let Some(bound) = py_kwargs {
                     let iter_limit = pyo3::types::PyDictMethods::get_item(bound, "iter_limit")?
                         .map(|t| pyo3::types::PyAnyMethods::extract(&t))
@@ -34,8 +53,9 @@ macro_rules! monomorphize {
                         .map(|t| pyo3::types::PyAnyMethods::extract(&t))
                         .transpose()?;
 
-                    let runner_args =
-                        $crate::eqsat::utils::RunnerArgs::new(iter_limit, node_limit, time_limit);
+                    let runner_args = $crate::eqsat::utils::RunnerArgs::new(
+                        false, iter_limit, node_limit, time_limit,
+                    );
                     Ok(Self(eqsat.with_runner_args(runner_args)))
                 } else {
                     Ok(Self(eqsat))
@@ -43,18 +63,8 @@ macro_rules! monomorphize {
             }
 
             #[allow(clippy::missing_errors_doc)]
-            fn run(&mut self, start_terms: Vec<String>) -> pyo3::PyResult<EqsatResult> {
-                let start_exprs = start_terms
-                    .into_iter()
-                    .map(|term| {
-                        term.parse()
-                            .map_err(|e| $crate::python::EggError::RecExprParse(e))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                let rules = <$type as $crate::trs::Trs>::rules(
-                    &<$type as $crate::trs::Trs>::maximum_ruleset(),
-                );
-                let r = self.0.run(&start_exprs, &rules);
+            fn run(&self, rules: &Rules) -> pyo3::PyResult<EqsatResult> {
+                let r = self.0.run(&rules.0);
 
                 Ok(EqsatResult(r))
             }
@@ -62,6 +72,14 @@ macro_rules! monomorphize {
             #[getter]
             pub fn runner_args(&self) -> $crate::eqsat::utils::RunnerArgs {
                 self.0.runner_args().clone()
+            }
+
+            #[staticmethod]
+            fn make_rules() -> Rules {
+                let rules = <$type as $crate::trs::Trs>::rules(
+                    &<$type as $crate::trs::Trs>::maximum_ruleset(),
+                );
+                Rules(rules)
             }
         }
 

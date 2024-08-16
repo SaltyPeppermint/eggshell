@@ -4,7 +4,10 @@ use std::fmt::Debug;
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 
 use super::hashcons::ExprHashCons;
-use crate::{utils::AstSize2, HashMap, HashSet};
+use crate::{
+    utils::{AstSize2, UniqueQueue},
+    HashMap,
+};
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
     type Data: Debug;
@@ -29,7 +32,7 @@ pub fn one_shot_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<L, 
 ) {
     assert!(egraph.clean);
 
-    let mut analysis_pending = HashSetQueuePop::<(L, Id)>::new();
+    let mut analysis_pending = UniqueQueue::<(L, Id)>::default();
     // works with queue but IndexSet is stack
     // IndexSet::<(L, Id)>::default();
 
@@ -50,7 +53,7 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
     egraph: &EGraph<L, N>,
     analysis: &mut B,
     data: &mut HashMap<Id, B::Data>,
-    analysis_pending: &mut HashSetQueuePop<(L, Id)>,
+    analysis_pending: &mut UniqueQueue<(L, Id)>,
 ) {
     while let Some((node, current_id)) = analysis_pending.pop() {
         let u_node = node.clone().map_children(|child_id| egraph.find(child_id)); // find_mut?
@@ -84,41 +87,6 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
         } else {
             analysis_pending.insert((node, current_id));
         }
-    }
-}
-
-pub struct HashSetQueuePop<T> {
-    map: HashSet<T>,
-    queue: std::collections::VecDeque<T>,
-}
-
-impl<T: Eq + std::hash::Hash + Clone> HashSetQueuePop<T> {
-    pub fn new() -> Self {
-        HashSetQueuePop {
-            map: HashSet::default(),
-            queue: std::collections::VecDeque::new(),
-        }
-    }
-
-    pub fn insert(&mut self, t: T) {
-        if self.map.insert(t.clone()) {
-            self.queue.push_back(t);
-        }
-    }
-
-    pub fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
-        for t in iter {
-            self.insert(t);
-        }
-    }
-
-    pub fn pop(&mut self) -> Option<T> {
-        let res = self.queue.pop_front();
-        res.as_ref().map(|t| self.map.remove(t));
-        res
     }
 }
 

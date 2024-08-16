@@ -15,12 +15,8 @@ pub struct Eqsat<R>
 where
     R: Trs,
 {
-    index: usize,
     runner_args: RunnerArgs,
-    start_expr: Vec<RecExpr<R::Language>>, // stats_history: Vec<EqsatStats>,
-                                           // egraph: Option<EGraph<R::Language, R::Analysis>>,
-                                           // roots: Option<Vec<Id>>,
-                                           // report: Option<Report>,
+    start_exprs: Vec<RecExpr<R::Language>>,
 }
 
 impl<R> Eqsat<R>
@@ -40,12 +36,18 @@ where
     /// Will return an error if the starting term is not parsable in the
     /// [`Trs::Language`].
     #[must_use]
-    pub fn new(index: usize) -> Self {
+    pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
         Self {
-            index,
             runner_args: RunnerArgs::default(),
-            start_expr: Vec::new(),
+            start_exprs,
         }
+    }
+
+    /// With the runner parameters.
+    #[must_use]
+    pub fn with_explenation(mut self) -> Self {
+        self.runner_args.enable_expl = true;
+        self
     }
 
     /// With the runner parameters.
@@ -61,21 +63,17 @@ where
     #[must_use]
     pub fn run(
         &self,
-        start_exprs: &[RecExpr<R::Language>],
+        // start_exprs: &[RecExpr<R::Language>],
         rules: &[Rewrite<R::Language, R::Analysis>],
     ) -> EqsatResult<R> {
-        println!("====================================");
-        println!("Running with Expression:");
-        for expr in start_exprs {
-            println!("{expr}");
-        }
+        // println!("====================================");
+        // println!("Running with Expression:");
 
-        let runner = utils::build_runner(&self.runner_args, start_exprs).run(rules.iter());
+        let runner = utils::build_runner(&self.runner_args, &self.start_exprs).run(rules.iter());
 
         let report = runner.report();
         info!("{}", &report);
         EqsatResult {
-            index: self.index,
             runner_args: self.runner_args.clone(),
             egraph: runner.egraph,
             roots: runner.roots,
@@ -90,7 +88,6 @@ pub struct EqsatResult<R>
 where
     R: Trs,
 {
-    index: usize,
     runner_args: RunnerArgs,
     // stats_history: Vec<EqsatStats>,
     egraph: EGraph<R::Language, R::Analysis>,
@@ -149,20 +146,17 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        trs::halide::{Halide, MathEquations},
-        utils::AstSize2,
-    };
+    use crate::{trs::halide::Halide, utils::AstSize2};
 
     use super::*;
 
     #[test]
     fn basic_eqsat_solved_true() {
-        let false_stmt: RecExpr<MathEquations> = "( == 0 0 )".parse().unwrap();
+        let false_stmt = vec!["( == 0 0 )".parse().unwrap()];
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide>::new(0);
-        let result = eqsat.run(&[false_stmt], &rules);
+        let eqsat = Eqsat::<Halide>::new(false_stmt);
+        let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize2);
         assert_eq!("1", term.to_string());
@@ -170,11 +164,11 @@ mod tests {
 
     #[test]
     fn basic_eqsat_solved_false() {
-        let false_stmt: RecExpr<MathEquations> = "( == 1 0 )".parse().unwrap();
+        let false_stmt = vec!["( == 1 0 )".parse().unwrap()];
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
-        let eqsat = Eqsat::<Halide>::new(0);
-        let result = eqsat.run(&[false_stmt], &rules);
+        let eqsat = Eqsat::<Halide>::new(false_stmt);
+        let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize2);
         assert_eq!("0", term.to_string());

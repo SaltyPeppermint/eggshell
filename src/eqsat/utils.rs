@@ -11,14 +11,26 @@ pub struct RunnerArgs {
     pub iter: Option<usize>,
     pub nodes: Option<usize>,
     pub time: Option<Duration>,
+    pub enable_expl: bool,
 }
 
 #[pymethods]
 impl RunnerArgs {
     #[must_use]
     #[new]
-    pub(crate) fn new(iter: Option<usize>, nodes: Option<usize>, time: Option<Duration>) -> Self {
-        Self { iter, nodes, time }
+    #[pyo3(signature = (enable_expl=false, iter=None, nodes=None, time=None))]
+    pub(crate) fn new(
+        enable_expl: bool,
+        iter: Option<usize>,
+        nodes: Option<usize>,
+        time: Option<Duration>,
+    ) -> Self {
+        Self {
+            iter,
+            nodes,
+            time,
+            enable_expl,
+        }
     }
 }
 
@@ -30,6 +42,7 @@ impl Default for RunnerArgs {
             nodes: Some(100_000),
             // Do we actually want a time limit?
             time: Some(Duration::new(10, 0)),
+            enable_expl: false,
         }
     }
 }
