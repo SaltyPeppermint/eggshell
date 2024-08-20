@@ -70,7 +70,7 @@ where
     fn from_iter<T: IntoIterator<Item = U>>(iter: T) -> Self {
         let mut queue = Self::default();
         for t in iter {
-            queue.insert(t)
+            queue.insert(t);
         }
         queue
     }

@@ -52,8 +52,8 @@ impl Analysis<MathEquations> for EquationConstFold {
             MathEquations::Add([a, b]) => x(a)? + x(b)?,
             MathEquations::Sub([a, b]) => x(a)? - x(b)?,
             MathEquations::Mul([a, b]) => {
-                let x_a = x(a)?;
-                let x_b = x(b)?;
+                // let x_a = x(a)?;
+                // let x_b = x(b)?;
                 // println!("Found a multiplication: {x_a} * {x_b}");
                 x(a)? * x(b)?
             }

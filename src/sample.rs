@@ -28,20 +28,21 @@ pub struct Sample<L: Language + Display> {
 
 #[allow(clippy::missing_errors_doc)]
 pub fn sample<R: Trs>(
-    seeds: &[RecExpr<R::Language>],
+    seed_expr: &[RecExpr<R::Language>],
     seeds_per_egraph: usize,
     samples_per_egraph: usize,
     samples_per_eclass: usize,
     loop_limit: usize,
+    rng_seed: u64,
 ) -> Result<Vec<Sample<R::Language>>, SampleError> {
     let rules = R::rules(&R::maximum_ruleset());
-    let mut rng = StdRng::seed_from_u64(2024);
+    let mut rng = StdRng::seed_from_u64(rng_seed);
 
     if seeds_per_egraph == 0 {
         return Err(SampleError::BatchSizeError(seeds_per_egraph));
     }
 
-    Ok(seeds
+    Ok(seed_expr
         .chunks(seeds_per_egraph)
         .flat_map(|chunk| {
             let eqsat: EqsatResult<R> = Eqsat::new(chunk.to_vec()).with_explenation().run(&rules);
@@ -68,11 +69,9 @@ fn sample_egrpah<L: Language + Display, N: Analysis<L>>(
     let extractor = Extractor::new(egraph, AstSize2);
 
     let mut samples = HashSet::new();
-
     let mut raw_weights_memo = HashMap::new();
     for eclass in egraph.classes().choose_multiple(rng, samples_per_egraph) {
-        // let cost_fn = FunkyCostFn::new(&extract_history, desired_frequency);
-        for sample_id in 0..samples_per_eclass {
+        for _ in 0..samples_per_eclass {
             let expr = sample_term(
                 egraph,
                 eclass,
@@ -92,9 +91,7 @@ fn sample_egrpah<L: Language + Display, N: Analysis<L>>(
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 enum Choice<'a, L: Language> {
-    Open {
-        eclass_id: Id,
-    },
+    Open(Id),
     Picked {
         eclass_id: Id,
         pick: &'a L,
@@ -105,27 +102,27 @@ enum Choice<'a, L: Language> {
 impl<'a, L: Language> Choice<'a, L> {
     fn eclass_id(&self) -> Id {
         match self {
-            Choice::Picked { eclass_id, .. } | Choice::Open { eclass_id } => *eclass_id,
+            Choice::Picked { eclass_id, .. } | Choice::Open(eclass_id) => *eclass_id,
         }
     }
 
     fn children(&self) -> &'a [Choice<L>] {
         match self {
-            Choice::Open { .. } => &[],
+            Choice::Open(_) => &[],
             Choice::Picked { children, .. } => children,
         }
     }
 
-    fn pick(&self) -> Option<&'a L> {
-        match self {
-            Choice::Open { .. } => None,
-            Choice::Picked { pick, .. } => Some(pick),
-        }
-    }
+    // fn pick(&self) -> Option<&'a L> {
+    //     match self {
+    //         Choice::Open(_) => None,
+    //         Choice::Picked { pick, .. } => Some(pick),
+    //     }
+    // }
 
     fn collect_children(self, all: &mut Vec<(Id, L)>) {
         match self {
-            Choice::Open { .. } => {
+            Choice::Open(_) => {
                 panic!("Calling collect on an unfinished tree makes no sense")
             }
             Choice::Picked {
@@ -150,7 +147,7 @@ impl<'a, L: Language> Choice<'a, L> {
 
     fn next_open(&mut self) -> Option<&mut Self> {
         match self {
-            Choice::Open { .. } => Some(self),
+            Choice::Open(_) => Some(self),
             Choice::Picked { children, .. } => children.iter_mut().find_map(|c| c.next_open()),
         }
     }
@@ -180,8 +177,9 @@ impl<'a, L: Language> From<Choice<'a, L>> for RecExpr<L> {
         for (id, mut node) in picks {
             {
                 translation_table.entry(id).or_insert_with(|| {
+                    let new_id = Id::from(id_counter);
                     id_counter += 1;
-                    Id::from(id_counter - 1)
+                    new_id
                 });
                 for child_id in node.children_mut() {
                     *child_id = translation_table[child_id];
@@ -209,11 +207,8 @@ where
     CF::Cost: Sum + SampleBorrow<X> + Into<usize>,
     X: SampleUniform + for<'a> AddAssign<&'a X> + PartialOrd<X> + Clone + Default,
 {
-    let mut choices = Choice::Open {
-        eclass_id: root_eclass.id,
-    };
+    let mut choices = Choice::Open(root_eclass.id);
     let mut visited = HashSet::from([root_eclass.id]);
-
     let mut loop_count = 0;
 
     while let Some(next_open) = choices.next_open() {
@@ -227,14 +222,11 @@ where
                 .or_insert_with(|| calc_weights(eclass, extractor));
 
             let urgency = f64::sqrt((loop_count - loop_limit) as f64);
-            // dbg!(urgency);
-            // dbg!(&open_choices.len());
 
             let pick = eclass
                 .nodes
                 .choose_weighted(rng, |node| (raw_weights[node] as f64).powf(urgency))
                 .expect("Infallible weight calculation.");
-            // dbg!(pick);
             pick
         };
 
@@ -253,14 +245,10 @@ where
             children: pick
                 .children()
                 .iter()
-                .map(|child_id| Choice::Open {
-                    eclass_id: *child_id,
-                })
+                .map(|child_id| Choice::Open(*child_id))
                 .collect(),
         }
     }
-    // dbg!(&choices);
-
     RecExpr::from(choices)
 }
 
@@ -299,13 +287,13 @@ mod tests {
         let term = "(* (+ a b) 1)";
         let seeds = [term.parse().unwrap()];
 
-        let samples = sample::<Simple>(&seeds, 16, 2, 2, 2).unwrap();
+        let samples = sample::<Simple>(&seeds, 2, 2, 2, 4, 2024).unwrap();
 
         for sample in &samples {
-            println!("{}", sample.expr);
+            println!("{}: {}", sample.eclass, sample.expr);
         }
 
-        assert_eq!(4, samples.len());
+        assert_eq!(2, samples.len());
     }
 
     #[test]
@@ -314,13 +302,13 @@ mod tests {
         let term2 = "(+ (+ x 0) (* y 1))";
         let seeds = [term.parse().unwrap(), term2.parse().unwrap()];
 
-        let samples = sample::<Simple>(&seeds, 16, 2, 2, 4).unwrap();
+        let samples = sample::<Simple>(&seeds, 2, 2, 2, 4, 2024).unwrap();
 
         for sample in &samples {
-            println!("{}", sample.expr);
+            println!("{}: {}", sample.eclass, sample.expr);
         }
 
-        assert_eq!(7, samples.len());
+        assert_eq!(3, samples.len());
     }
 
     #[test]
@@ -328,10 +316,10 @@ mod tests {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seeds = [term.parse().unwrap()];
 
-        let samples = sample::<Halide>(&seeds, 16, 1, 16, 4).unwrap();
+        let samples = sample::<Halide>(&seeds, 2, 4, 32, 8, 2024).unwrap();
 
         for sample in &samples {
-            println!("{}", sample.expr);
+            println!("{}: {}", sample.eclass, sample.expr);
         }
 
         assert_eq!(7, samples.len());
