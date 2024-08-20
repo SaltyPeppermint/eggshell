@@ -54,7 +54,7 @@ impl Analysis<MathEquations> for EquationConstFold {
             MathEquations::Mul([a, b]) => {
                 let x_a = x(a)?;
                 let x_b = x(b)?;
-                println!("Found a multiplication: {x_a} * {x_b}");
+                // println!("Found a multiplication: {x_a} * {x_b}");
                 x(a)? * x(b)?
             }
             MathEquations::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,

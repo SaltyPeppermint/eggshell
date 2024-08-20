@@ -1,15 +1,18 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
+use std::iter::IntoIterator;
+use std::iter::Sum;
+use std::ops::AddAssign;
 
-use egg::{Analysis, CostFunction, EGraph, Extractor, Id, Language, RecExpr};
-use hashbrown::HashMap;
+use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language, RecExpr};
+use rand::distributions::uniform::{SampleBorrow, SampleUniform};
 use rand::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::{
-    eqsat::{Eqsat, EqsatResult},
-    trs::Trs,
-};
+use crate::eqsat::{Eqsat, EqsatResult};
+use crate::trs::Trs;
+use crate::utils::AstSize2;
+use crate::{HashMap, HashSet};
 
 #[derive(Error, Debug)]
 pub enum SampleError {
@@ -17,240 +20,320 @@ pub enum SampleError {
     BatchSizeError(usize),
 }
 
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Sample<L: Language + Display> {
     expr: RecExpr<L>,
     eclass: Id,
-    cost: usize,
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn sample<R: Trs>(
     seeds: &[RecExpr<R::Language>],
-    batchsize: usize,
-    samples_per_batch: usize,
+    seeds_per_egraph: usize,
+    samples_per_egraph: usize,
     samples_per_eclass: usize,
+    loop_limit: usize,
 ) -> Result<Vec<Sample<R::Language>>, SampleError> {
     let rules = R::rules(&R::maximum_ruleset());
     let mut rng = StdRng::seed_from_u64(2024);
 
-    if batchsize == 0 {
-        return Err(SampleError::BatchSizeError(batchsize));
+    if seeds_per_egraph == 0 {
+        return Err(SampleError::BatchSizeError(seeds_per_egraph));
     }
 
     Ok(seeds
-        .chunks(batchsize)
+        .chunks(seeds_per_egraph)
         .flat_map(|chunk| {
             let eqsat: EqsatResult<R> = Eqsat::new(chunk.to_vec()).with_explenation().run(&rules);
             let egraph = eqsat.egraph();
-            extract_samples(egraph, samples_per_batch, samples_per_eclass, &mut rng)
+            sample_egrpah(
+                egraph,
+                samples_per_egraph,
+                samples_per_eclass,
+                loop_limit,
+                &mut rng,
+            )
         })
         .collect())
 }
 
-fn extract_samples<L: Language + Display, N: Analysis<L>>(
+fn sample_egrpah<L: Language + Display, N: Analysis<L>>(
     egraph: &EGraph<L, N>,
-    samples_per_batch: usize,
+    samples_per_egraph: usize,
     samples_per_eclass: usize,
+    loop_limit: usize,
     rng: &mut StdRng,
-) -> Vec<Sample<L>> {
-    let mut samples = Vec::with_capacity(samples_per_batch * samples_per_eclass);
-    let mut extract_history: HashMap<L, u32> = HashMap::new();
-    for eclass in egraph.classes().choose_multiple(rng, samples_per_batch) {
-        for _ in 0..samples_per_eclass {
-            let cost_fn = FunkyCostFn::new(&extract_history);
-            let extractor = Extractor::new(egraph, cost_fn);
-            let (cost, expr) = extractor.find_best(eclass.id);
-            drop(extractor);
-            add_extracted(&mut extract_history, &expr, eclass.id);
-            let sample = Sample {
+) -> HashSet<Sample<L>> {
+    //let mut samples = Vec::with_capacity(samples_per_batch * samples_per_eclass);
+    let extractor = Extractor::new(egraph, AstSize2);
+
+    let mut samples = HashSet::new();
+
+    let mut raw_weights_memo = HashMap::new();
+    for eclass in egraph.classes().choose_multiple(rng, samples_per_egraph) {
+        // let cost_fn = FunkyCostFn::new(&extract_history, desired_frequency);
+        for sample_id in 0..samples_per_eclass {
+            let expr = sample_term(
+                egraph,
+                eclass,
+                &extractor,
+                loop_limit,
+                rng,
+                &mut raw_weights_memo,
+            );
+            samples.insert(Sample {
                 expr,
                 eclass: eclass.id,
-                cost,
-            };
-            samples.push(sample);
+            });
         }
     }
-
     samples
 }
 
-fn add_extracted<L: Language + std::hash::Hash>(
-    prev_extracted: &mut HashMap<L, u32>,
-    expr: &RecExpr<L>,
-    root_id: Id,
-) {
-    fn rec_add<L: Language + std::hash::Hash>(
-        prev_extracted: &mut HashMap<L, u32>,
-        expr: &RecExpr<L>,
-        id: Id,
-    ) {
-        let node = &expr[id];
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+enum Choice<'a, L: Language> {
+    Open {
+        eclass_id: Id,
+    },
+    Picked {
+        eclass_id: Id,
+        pick: &'a L,
+        children: Vec<Choice<'a, L>>,
+    },
+}
 
-        for child_id in node.children() {
-            rec_add(prev_extracted, expr, *child_id);
+impl<'a, L: Language> Choice<'a, L> {
+    fn eclass_id(&self) -> Id {
+        match self {
+            Choice::Picked { eclass_id, .. } | Choice::Open { eclass_id } => *eclass_id,
         }
+    }
 
-        // prev_extracted
-        //     .entry(node)
-        //     .and_modify(|c| *c += 1)
-        //     .or_insert(1);
+    fn children(&self) -> &'a [Choice<L>] {
+        match self {
+            Choice::Open { .. } => &[],
+            Choice::Picked { children, .. } => children,
+        }
+    }
 
-        if let Some(v) = prev_extracted.get_mut(node) {
-            *v += 1;
+    fn pick(&self) -> Option<&'a L> {
+        match self {
+            Choice::Open { .. } => None,
+            Choice::Picked { pick, .. } => Some(pick),
+        }
+    }
+
+    fn collect_children(self, all: &mut Vec<(Id, L)>) {
+        match self {
+            Choice::Open { .. } => {
+                panic!("Calling collect on an unfinished tree makes no sense")
+            }
+            Choice::Picked {
+                eclass_id,
+                pick,
+                children,
+            } => {
+                for child in children {
+                    child.collect_children(all);
+                }
+                all.push((eclass_id, pick.clone()));
+            }
+        }
+    }
+
+    fn all_choices(&'a self, all: &mut Vec<&'a Choice<'a, L>>) {
+        all.push(self);
+        for child in self.children() {
+            child.all_choices(all);
+        }
+    }
+
+    fn next_open(&mut self) -> Option<&mut Self> {
+        match self {
+            Choice::Open { .. } => Some(self),
+            Choice::Picked { children, .. } => children.iter_mut().find_map(|c| c.next_open()),
+        }
+    }
+}
+
+impl<'a, L: Language> IntoIterator for &'a Choice<'a, L> {
+    type Item = &'a Choice<'a, L>;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut all_children = Vec::new();
+        self.all_choices(&mut all_children);
+        all_children.into_iter()
+    }
+}
+
+impl<'a, L: Language> From<Choice<'a, L>> for RecExpr<L> {
+    fn from(choices: Choice<'a, L>) -> Self {
+        let mut picks = Vec::new();
+        let mut translation_table = HashMap::new();
+        let mut id_counter = 0;
+
+        choices.collect_children(&mut picks);
+
+        let mut expr = RecExpr::default();
+
+        for (id, mut node) in picks {
+            {
+                translation_table.entry(id).or_insert_with(|| {
+                    id_counter += 1;
+                    Id::from(id_counter - 1)
+                });
+                for child_id in node.children_mut() {
+                    *child_id = translation_table[child_id];
+                }
+                expr.add(node);
+            }
+        }
+        expr
+    }
+}
+
+#[allow(clippy::cast_precision_loss)]
+fn sample_term<'b, L, N, CF, X>(
+    egraph: &'b EGraph<L, N>,
+    root_eclass: &EClass<L, N::Data>,
+    extractor: &'b Extractor<CF, L, N>,
+    loop_limit: usize,
+    rng: &mut StdRng,
+    raw_weights_memo: &mut HashMap<Id, HashMap<&'b L, usize>>,
+) -> RecExpr<L>
+where
+    L: Language,
+    N: Analysis<L>,
+    CF: CostFunction<L>,
+    CF::Cost: Sum + SampleBorrow<X> + Into<usize>,
+    X: SampleUniform + for<'a> AddAssign<&'a X> + PartialOrd<X> + Clone + Default,
+{
+    let mut choices = Choice::Open {
+        eclass_id: root_eclass.id,
+    };
+    let mut visited = HashSet::from([root_eclass.id]);
+
+    let mut loop_count = 0;
+
+    while let Some(next_open) = choices.next_open() {
+        let eclass_id = egraph.find(next_open.eclass_id());
+        let eclass = &egraph[eclass_id];
+        let pick = if loop_limit > loop_count {
+            eclass.nodes.choose(rng).unwrap()
         } else {
-            prev_extracted.insert(node.clone(), 1);
+            let raw_weights = raw_weights_memo
+                .entry(eclass.id)
+                .or_insert_with(|| calc_weights(eclass, extractor));
+
+            let urgency = f64::sqrt((loop_count - loop_limit) as f64);
+            // dbg!(urgency);
+            // dbg!(&open_choices.len());
+
+            let pick = eclass
+                .nodes
+                .choose_weighted(rng, |node| (raw_weights[node] as f64).powf(urgency))
+                .expect("Infallible weight calculation.");
+            // dbg!(pick);
+            pick
+        };
+
+        visited.insert(eclass_id);
+
+        if pick
+            .children()
+            .iter()
+            .any(|child_id| visited.contains(child_id))
+        {
+            loop_count += 1;
+        }
+        *next_open = Choice::Picked {
+            eclass_id,
+            pick,
+            children: pick
+                .children()
+                .iter()
+                .map(|child_id| Choice::Open {
+                    eclass_id: *child_id,
+                })
+                .collect(),
         }
     }
+    // dbg!(&choices);
 
-    assert!(
-        expr.is_dag(),
-        "Something went horribly wrong, you cant extract something with cycles"
-    );
-    rec_add(prev_extracted, expr, root_id);
+    RecExpr::from(choices)
 }
 
-struct FunkyCostFn<'a, L: Language> {
-    prev_extracted: &'a HashMap<L, u32>,
+fn calc_weights<'a, L, N, CF>(
+    eclass: &'a EClass<L, N::Data>,
+    extractor: &'a Extractor<CF, L, N>,
+) -> HashMap<&'a L, usize>
+where
+    L: Language,
+    N: Analysis<L>,
+    CF: CostFunction<L>,
+    CF::Cost: Into<usize>,
+{
+    let costs = eclass.nodes.iter().map(|node| {
+        node.children()
+            .iter()
+            .map(|c| extractor.find_best_cost(*c).into())
+            .sum()
+    });
+    let max = costs.clone().max().unwrap_or(0);
+
+    costs
+        .zip(&eclass.nodes)
+        .map(move |(cost, node)| (node, max - cost + 1))
+        .collect()
 }
 
-impl<'a, L: Language> FunkyCostFn<'a, L> {
-    fn new(prev_extracted: &'a HashMap<L, u32>) -> Self {
-        Self { prev_extracted }
+#[cfg(test)]
+mod tests {
+    use crate::trs::{Halide, Simple};
+
+    use super::*;
+
+    #[test]
+    fn simple_sample() {
+        let term = "(* (+ a b) 1)";
+        let seeds = [term.parse().unwrap()];
+
+        let samples = sample::<Simple>(&seeds, 16, 2, 2, 2).unwrap();
+
+        for sample in &samples {
+            println!("{}", sample.expr);
+        }
+
+        assert_eq!(4, samples.len());
+    }
+
+    #[test]
+    fn multi_seed_sample() {
+        let term = "(* (+ a b) 1)";
+        let term2 = "(+ (+ x 0) (* y 1))";
+        let seeds = [term.parse().unwrap(), term2.parse().unwrap()];
+
+        let samples = sample::<Simple>(&seeds, 16, 2, 2, 4).unwrap();
+
+        for sample in &samples {
+            println!("{}", sample.expr);
+        }
+
+        assert_eq!(7, samples.len());
+    }
+
+    #[test]
+    fn halide_sample() {
+        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
+        let seeds = [term.parse().unwrap()];
+
+        let samples = sample::<Halide>(&seeds, 16, 1, 16, 4).unwrap();
+
+        for sample in &samples {
+            println!("{}", sample.expr);
+        }
+
+        assert_eq!(7, samples.len());
     }
 }
-
-impl<'a, L: Language> CostFunction<L> for FunkyCostFn<'a, L> {
-    type Cost = usize;
-
-    fn cost<C>(&mut self, enode: &L, mut costs: C) -> Self::Cost
-    where
-        C: FnMut(Id) -> Self::Cost,
-    {
-        let op_cost = self
-            .prev_extracted
-            .get(enode)
-            .copied()
-            .map_or(1, |n| 2usize.pow(n));
-        enode.fold(op_cost, |sum, id| sum + costs(id))
-    }
-}
-
-// #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-// struct NodeId {
-//     class_id: Id,
-//     node_idx: usize,
-// }
-
-// pub type Cost = NotNan<f64>;
-// pub const INFINITY: Cost = unsafe { NotNan::new_unchecked(std::f64::INFINITY) };
-// pub const EPSILON_ALLOWANCE: f64 = 0.00001;
-
-// #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-// enum Status {
-//     Doing,
-//     Done,
-// }
-
-// #[derive(Default, Clone)]
-// pub struct ExtractionResult {
-//     pub choices: HashMap<Id, NodeId>,
-// }
-
-// impl ExtractionResult {
-//     pub fn choose(&mut self, class_id: Id, node_id: NodeId) {
-//         self.choices.insert(class_id, node_id);
-//     }
-
-//     pub fn node_sum_cost<L, CF>(
-//         &self,
-//         // egraph: &EGraph<L, N>,
-//         node: &L,
-//         costs: &HashMap<Id, Cost>,
-//         cost_fn: &mut CF,
-//     ) -> Cost
-//     where
-//         L: Language,
-//         CF: CostFunction<L, Cost = Cost>,
-//     {
-//         let get_cost = |class_id| *costs.get(&class_id).unwrap_or(&INFINITY);
-//         cost_fn.cost(node, get_cost)
-//             + node
-//                 .children()
-//                 .iter()
-//                 .map(|child_id| costs.get(child_id).unwrap_or(&INFINITY))
-//                 .sum::<Cost>()
-//     }
-// }
-
-// /// A faster bottom up extractor inspired by the faster-greedy-dag extractor.
-// /// It should return an extraction result with the same cost as the bottom-up extractor.
-// ///
-// /// Bottom-up extraction works by iteratively computing the current best cost of each
-// /// node in the e-graph based on the current best costs of its children.
-// /// Extraction terminates when our estimates of the best cost for each node
-// /// reach a fixed point.
-// /// The baseline bottom-up implementation visits every node during each iteration
-// /// of the fixed point.
-// /// This algorithm instead only visits the nodes whose current cost estimate may change:
-// /// it does this by tracking parent-child relationships and storing relevant nodes
-// /// in a work list (UniqueQueue).
-// pub struct FasterBottomUpExtractor;
-
-// impl FasterBottomUpExtractor {
-//     fn extract<L: Language, N: Analysis<L>, CF: CostFunction<L, Cost = Cost>>(
-//         &self,
-//         egraph: &EGraph<L, N>,
-//         cost_fn: &mut CF,
-//         _roots: &[Id],
-//     ) -> ExtractionResult {
-//         // let mut parents = HashMap::<Id, Vec<usize>>::with_capacity(egraph.classes().len());
-//         // let n2c = |node_idx: &usize| egraph.nid_to_cid(node_idx);
-//         let mut analysis_pending = UniqueQueue::default();
-
-//         // Put in a child to look up its parent nodes identified by their class id and index in the parent class
-//         let mut parents = egraph
-//             .classes()
-//             .map(|class| (class.id, Vec::new()))
-//             .collect::<HashMap<Id, Vec<NodeId>>>();
-
-//         for class in egraph.classes() {
-//             for (node_idx, node) in class.nodes.iter().enumerate() {
-//                 for child in node.children() {
-//                     // compute parents of this enode
-//                     if let Some(node_parents) = parents.get_mut(child) {
-//                         node_parents.push(NodeId {
-//                             class_id: class.id,
-//                             node_idx,
-//                         });
-//                     }
-//                 }
-
-//                 // start the analysis from leaves
-//                 if node.is_leaf() {
-//                     analysis_pending.insert(NodeId {
-//                         class_id: class.id,
-//                         node_idx,
-//                     });
-//                 }
-//             }
-//         }
-
-//         let mut result = ExtractionResult::default();
-//         let mut costs = HashMap::<Id, Cost>::with_capacity(egraph.classes().len());
-
-//         while let Some(node_id) = analysis_pending.pop() {
-//             let NodeId { class_id, node_idx } = node_id;
-//             let node = &egraph[class_id].nodes[node_idx];
-//             let prev_cost = costs.get(&class_id).unwrap_or(&INFINITY);
-//             let cost = result.node_sum_cost(node, &costs, cost_fn);
-//             if cost < *prev_cost {
-//                 result.choose(class_id.clone(), node_id);
-//                 costs.insert(class_id.clone(), cost);
-//                 analysis_pending.extend(parents[&class_id].iter().copied());
-//             }
-//         }
-
-//         result
-//     }
-// }

@@ -42,7 +42,7 @@ Notably, insert/pop operations have O(1) expected amortized runtime complexity.
 
 Thanks @Bastacyclop for the implementation!
 */
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct UniqueQueue<T>
 where
     T: Eq + Hash + Clone,
@@ -60,6 +60,19 @@ where
             set: HashSet::default(),
             queue: std::collections::VecDeque::default(),
         }
+    }
+}
+
+impl<U> FromIterator<U> for UniqueQueue<U>
+where
+    U: Eq + Hash + Clone,
+{
+    fn from_iter<T: IntoIterator<Item = U>>(iter: T) -> Self {
+        let mut queue = Self::default();
+        for t in iter {
+            queue.insert(t)
+        }
+        queue
     }
 }
 
