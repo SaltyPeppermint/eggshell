@@ -36,9 +36,7 @@
 
 // clippy::cfg_not_test,
 // clippy::use_debug
-// clippy::shadow_unrelated
 // clippy::ref_patterns,
-// clippy::renamed_function_params,
 
 pub mod eqsat;
 mod io;

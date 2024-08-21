@@ -4,8 +4,13 @@ use criterion::{criterion_group, criterion_main};
 
 use egg::{EGraph, RecExpr, SymbolLang};
 
+use eggshell::eqsat::utils::EqsatConfBuilder;
+use eggshell::sampling;
+use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
+use eggshell::trs::simple::SimpleLanguage;
+use eggshell::trs::Simple;
 use eggshell::utils::AstSize2;
 
 fn extraction(c: &mut Criterion) {
@@ -35,6 +40,20 @@ fn extraction(c: &mut Criterion) {
 criterion_group!(
     name = benches;
     config = Criterion::default().significance_level(0.05).sample_size(1000);
-    targets = extraction
+    targets = extraction, sampling
 );
+
+fn sampling(c: &mut Criterion) {
+    let term = "(+ c (* (+ a b) 1))";
+    let seed: RecExpr<SimpleLanguage> = term.parse().unwrap();
+    let sampel_conf = SampleConfBuilder::new().build();
+    let eqsat_conf = EqsatConfBuilder::new().build();
+
+    c.bench_function("sample simple", |b| {
+        b.iter(|| {
+            sampling::sample::<Simple>(bb(seed.to_owned()), &sampel_conf, &eqsat_conf).unwrap()
+        })
+    });
+}
+
 criterion_main!(benches);

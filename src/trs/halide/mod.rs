@@ -6,13 +6,13 @@ use serde::Serialize;
 use super::Trs;
 
 // Defining aliases to reduce code.
-type EGraph = egg::EGraph<MathEquations, EquationConstFold>;
-type Rewrite = egg::Rewrite<MathEquations, EquationConstFold>;
+type EGraph = egg::EGraph<MathEquation, EquationConstFold>;
+type Rewrite = egg::Rewrite<MathEquation, EquationConstFold>;
 
 // Definition of the language used.
 define_language! {
     #[derive(Serialize)]
-    pub enum MathEquations {
+    pub enum MathEquation {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
@@ -38,44 +38,44 @@ define_language! {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct EquationConstFold;
 
-impl Analysis<MathEquations> for EquationConstFold {
+impl Analysis<MathEquation> for EquationConstFold {
     type Data = Option<i64>;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
         egg::merge_option(to, from, egg::merge_min)
     }
 
-    fn make(egraph: &EGraph, enode: &MathEquations) -> Self::Data {
+    fn make(egraph: &EGraph, enode: &MathEquation) -> Self::Data {
         let x = |i: &Id| egraph[*i].data.as_ref();
         Some(match enode {
-            MathEquations::Constant(c) => *c,
-            MathEquations::Add([a, b]) => x(a)? + x(b)?,
-            MathEquations::Sub([a, b]) => x(a)? - x(b)?,
-            MathEquations::Mul([a, b]) => {
+            MathEquation::Constant(c) => *c,
+            MathEquation::Add([a, b]) => x(a)? + x(b)?,
+            MathEquation::Sub([a, b]) => x(a)? - x(b)?,
+            MathEquation::Mul([a, b]) => {
                 // let x_a = x(a)?;
                 // let x_b = x(b)?;
                 // println!("Found a multiplication: {x_a} * {x_b}");
                 x(a)? * x(b)?
             }
-            MathEquations::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,
-            MathEquations::Max([a, b]) => std::cmp::max(*x(a)?, *x(b)?),
-            MathEquations::Min([a, b]) => std::cmp::min(*x(a)?, *x(b)?),
-            MathEquations::Not(a) => i64::from(*x(a)? == 0),
-            MathEquations::Lt([a, b]) => i64::from(x(a)? < x(b)?),
-            MathEquations::Gt([a, b]) => i64::from(x(a)? > x(b)?),
-            MathEquations::Let([a, b]) => i64::from(x(a)? <= x(b)?),
-            MathEquations::Get([a, b]) => i64::from(x(a)? >= x(b)?),
-            MathEquations::Mod([a, b]) => {
+            MathEquation::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,
+            MathEquation::Max([a, b]) => std::cmp::max(*x(a)?, *x(b)?),
+            MathEquation::Min([a, b]) => std::cmp::min(*x(a)?, *x(b)?),
+            MathEquation::Not(a) => i64::from(*x(a)? == 0),
+            MathEquation::Lt([a, b]) => i64::from(x(a)? < x(b)?),
+            MathEquation::Gt([a, b]) => i64::from(x(a)? > x(b)?),
+            MathEquation::Let([a, b]) => i64::from(x(a)? <= x(b)?),
+            MathEquation::Get([a, b]) => i64::from(x(a)? >= x(b)?),
+            MathEquation::Mod([a, b]) => {
                 if *x(b)? == 0 {
                     0
                 } else {
                     x(a)? % x(b)?
                 }
             }
-            MathEquations::Eq([a, b]) => i64::from(x(a)? == x(b)?),
-            MathEquations::IEq([a, b]) => i64::from(x(a)? != x(b)?),
-            MathEquations::And([a, b]) => i64::from(!(*x(a)? == 0 || *x(b)? == 0)),
-            MathEquations::Or([a, b]) => i64::from(*x(a)? == 1 || *x(b)? == 1),
+            MathEquation::Eq([a, b]) => i64::from(x(a)? == x(b)?),
+            MathEquation::IEq([a, b]) => i64::from(x(a)? != x(b)?),
+            MathEquation::And([a, b]) => i64::from(!(*x(a)? == 0 || *x(b)? == 0)),
+            MathEquation::Or([a, b]) => i64::from(*x(a)? == 1 || *x(b)? == 1),
 
             _ => return None,
         })
@@ -92,7 +92,7 @@ impl Analysis<MathEquations> for EquationConstFold {
             //         "constant_fold".to_string(),
             //     );
             // } else {
-            let added = egraph.add(MathEquations::Constant(c));
+            let added = egraph.add(MathEquation::Constant(c));
             let _ = egraph.union(id, added);
             // }
             // to not prune, comment this out
@@ -113,7 +113,7 @@ pub(crate) fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) ->
     move |egraph, _, subst| {
         // Check if any of the representations of ths constant (nodes inside its eclass) is positive
         egraph[subst[var]].nodes.iter().any(|n| match n {
-            MathEquations::Constant(c) => c > &0,
+            MathEquation::Constant(c) => c > &0,
             _ => false,
         })
     }
@@ -127,7 +127,7 @@ fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     move |egraph, _, subst| {
         //Check if any of the representations of ths constant (nodes inside its eclass) is negative
         egraph[subst[var]].nodes.iter().any(|n| match n {
-            MathEquations::Constant(c) => c < &0,
+            MathEquation::Constant(c) => c < &0,
             _ => false,
         })
     }
@@ -136,7 +136,7 @@ fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 /// Checks if a constant is equals zero
 fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
-    let zero = MathEquations::Constant(0);
+    let zero = MathEquation::Constant(0);
     // Check if any of the representations of the constant (nodes inside its eclass) is zero
     move |egraph, _, subst| !egraph[subst[var]].nodes.contains(&zero)
 }
@@ -158,9 +158,9 @@ fn compare_constants(
         // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
         egraph[subst[var2]].nodes.iter().any(|n1| match n1 {
             // Get the eclass of the second constant then match it to c1
-            MathEquations::Constant(c1) => egraph[subst[var1]].nodes.iter().any(|n| match n {
+            MathEquation::Constant(c1) => egraph[subst[var1]].nodes.iter().any(|n| match n {
                 // match the comparison then do it
-                MathEquations::Constant(c) => match comp {
+                MathEquation::Constant(c) => match comp {
                     "<" => c < c1,
                     "<a" => c < &c1.abs(),
                     "<=" => c <= c1,
@@ -200,7 +200,7 @@ pub enum Ruleset {
 pub struct Halide;
 
 impl Trs for Halide {
-    type Language = MathEquations;
+    type Language = MathEquation;
     type Analysis = EquationConstFold;
     type Rulesets = Ruleset;
 
