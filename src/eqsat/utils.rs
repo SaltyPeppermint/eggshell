@@ -6,63 +6,129 @@ use serde::Serialize;
 
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[pyclass]
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RunnerArgs {
-    pub iter: Option<usize>,
-    pub nodes: Option<usize>,
-    pub time: Option<Duration>,
-    pub enable_expl: bool,
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
+pub struct EqsatConf {
+    pub iter_limit: Option<usize>,
+    pub node_limit: Option<usize>,
+    pub time_limit: Option<Duration>,
+    pub explenation: bool,
 }
 
 #[pymethods]
-impl RunnerArgs {
+impl EqsatConf {
     #[must_use]
     #[new]
-    #[pyo3(signature = (enable_expl=false, iter=None, nodes=None, time=None))]
-    pub(crate) fn new(
-        enable_expl: bool,
-        iter: Option<usize>,
-        nodes: Option<usize>,
-        time: Option<Duration>,
+    #[pyo3(signature = (explenation=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(Duration::new(10, 0))))]
+    pub fn new(
+        explenation: bool,
+        iter_limit: Option<usize>,
+        node_limit: Option<usize>,
+        time_limit: Option<Duration>,
     ) -> Self {
         Self {
-            iter,
-            nodes,
-            time,
-            enable_expl,
+            iter_limit,
+            node_limit,
+            time_limit,
+            explenation,
         }
     }
 }
 
-impl Default for RunnerArgs {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct EqsatConfBuilder {
+    pub iter_limit: Option<usize>,
+    pub node_limit: Option<usize>,
+    pub time_limit: Option<Duration>,
+    pub explenation: bool,
+}
+
+impl EqsatConfBuilder {
     #[must_use]
-    fn default() -> Self {
+    pub fn new() -> Self {
         Self {
-            iter: Some(10_000_000),
-            nodes: Some(100_000),
+            iter_limit: Some(10_000_000),
+            node_limit: Some(100_000),
             // Do we actually want a time limit?
-            time: Some(Duration::new(10, 0)),
-            enable_expl: false,
+            time_limit: Some(Duration::new(10, 0)),
+            explenation: false,
         }
+    }
+
+    #[must_use]
+    pub fn iter_limit(mut self, iter: usize) -> Self {
+        self.iter_limit = Some(iter);
+        self
+    }
+
+    #[must_use]
+    pub fn without_iter_limit(mut self) -> Self {
+        self.iter_limit = None;
+        self
+    }
+
+    #[must_use]
+    pub fn node_limit(mut self, nodes: usize) -> Self {
+        self.node_limit = Some(nodes);
+        self
+    }
+
+    #[must_use]
+    pub fn without_node_limit(mut self) -> Self {
+        self.node_limit = None;
+        self
+    }
+
+    #[must_use]
+    pub fn time_limit(mut self, time: Duration) -> Self {
+        self.time_limit = Some(time);
+        self
+    }
+
+    #[must_use]
+    pub fn without_time_limit(mut self) -> Self {
+        self.time_limit = None;
+        self
+    }
+
+    #[must_use]
+    pub fn explenation(mut self, enabled: bool) -> Self {
+        self.explenation = enabled;
+        self
+    }
+
+    #[must_use]
+    pub fn build(self) -> EqsatConf {
+        EqsatConf {
+            iter_limit: self.iter_limit,
+            node_limit: self.node_limit,
+            time_limit: self.time_limit,
+            explenation: self.explenation,
+        }
+    }
+}
+
+impl Default for EqsatConfBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[must_use]
-pub(crate) fn build_runner<L, N>(runner_params: &RunnerArgs, exprs: &[RecExpr<L>]) -> Runner<L, N>
+pub(crate) fn build_runner<L, N>(runner_params: &EqsatConf, exprs: &[RecExpr<L>]) -> Runner<L, N>
 where
     L: Language,
     N: Analysis<L> + Default,
 {
     // Initialize a simple runner and run it.
     let mut runner = Runner::default();
-    if let Some(iter_limit) = runner_params.iter {
+    if let Some(iter_limit) = runner_params.iter_limit {
         runner = runner.with_iter_limit(iter_limit);
     };
-    if let Some(node_limit) = runner_params.nodes {
+    if let Some(node_limit) = runner_params.node_limit {
         runner = runner.with_node_limit(node_limit);
     };
 
-    if let Some(time_limit) = runner_params.time {
+    if let Some(time_limit) = runner_params.time_limit {
         runner = runner.with_time_limit(time_limit);
     };
     for expr in exprs {
@@ -70,21 +136,3 @@ where
     }
     runner
 }
-
-// #[must_use]
-// pub(crate) fn check_solved<L, N>(
-//     goals: &[Pattern<L>],
-//     egraph: &EGraph<L, N>,
-//     id: Id,
-// ) -> Option<String>
-// where
-//     L: Language + Display,
-//     N: Analysis<L>,
-// {
-//     for goal in goals {
-//         if (goal.search_eclass(egraph, id)).is_some() {
-//             return Some(goal.ast.to_string());
-//         }
-//     }
-//     None
-// }

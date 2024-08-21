@@ -43,7 +43,7 @@
 pub mod eqsat;
 mod io;
 mod python;
-pub mod sample;
+pub mod sampling;
 pub mod sketch;
 pub mod trs;
 pub mod utils;
