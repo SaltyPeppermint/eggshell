@@ -17,7 +17,7 @@ use crate::eqsat::{Eqsat, EqsatResult};
 use crate::trs::Trs;
 use crate::utils::AstSize2;
 use crate::{HashMap, HashSet};
-use choice::Choice;
+use choice::ChoiceList;
 
 pub use utils::{SampleConf, SampleConfBuilder};
 
@@ -25,6 +25,8 @@ pub use utils::{SampleConf, SampleConfBuilder};
 pub enum SampleError {
     #[error("Batchsize impossible: {0}")]
     BatchSizeError(usize),
+    #[error("Can't convert a non-finished list of choices")]
+    ChoiceError,
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
@@ -57,7 +59,7 @@ pub fn sample<R: Trs>(
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
     if eqsat_conf.explenation {
-        println!("Running without explenation");
+        println!("Running without explenation!");
     }
 
     let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
@@ -126,12 +128,12 @@ where
     CF::Cost: Sum + SampleBorrow<X> + Into<usize>,
     X: SampleUniform + for<'x> AddAssign<&'x X> + PartialOrd<X> + Clone + Default,
 {
-    let mut choices = Choice::Open(root_eclass.id);
+    let mut choices: ChoiceList<L> = ChoiceList::from(root_eclass.id);
     let mut visited = HashSet::from([root_eclass.id]);
     let mut loop_count = 0;
 
-    while let Some(next_open) = choices.next_open() {
-        let eclass_id = egraph.find(next_open.eclass_id());
+    while let Some(next_open_id) = choices.next_open() {
+        let eclass_id = egraph.find(next_open_id);
         let eclass = &egraph[eclass_id];
         let pick = if loop_limit > loop_count {
             eclass.nodes.choose(rng).unwrap()
@@ -158,15 +160,7 @@ where
         {
             loop_count += 1;
         }
-        *next_open = Choice::Picked {
-            eclass_id,
-            pick,
-            children: pick
-                .children()
-                .iter()
-                .map(|child_id| Choice::Open(*child_id))
-                .collect(),
-        }
+        choices.fill_next(pick);
     }
     // HOPEFULLY NOW NO LONGER NEEDED with better `From` Implementation
     // See sample_egraph
@@ -177,8 +171,7 @@ where
     //
     // let s = format!("{}", RecExpr::from(choices));
     // RecExpr::from_str(&s).unwrap()
-
-    RecExpr::from(choices)
+    choices.try_into().expect("No open choices should be left")
 }
 
 fn calc_weights<'a, L, N, CF>(
@@ -224,8 +217,14 @@ mod tests {
 
         let sample = sample::<Simple>(seed, &sampel_conf, &eqsat_conf).unwrap();
 
+        // for (eclass_id, exprs) in &sample.samples {
+        //     for expr in exprs {
+        //         println!("{}: {eclass_id}: {expr}", &sample.seed_exprs);
+        //     }
+        // }
+
         let n_samples = sample.samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(11usize, n_samples);
+        assert_eq!(13usize, n_samples);
     }
 
     #[test]
@@ -265,7 +264,7 @@ mod tests {
             .flat_map(|sample| sample.samples.iter().map(|(_, exprs)| exprs.len()))
             .sum();
 
-        assert_eq!(49usize, n_samples);
+        assert_eq!(46usize, n_samples);
     }
 
     #[test]
@@ -279,13 +278,6 @@ mod tests {
 
         let sample = sample::<Halide>(seed, &sampel_conf, &eqsat_conf).unwrap();
 
-        // let mut n_samples = 0;
-        // for (eclass_id, exprs) in &sample.samples {
-        //     for expr in exprs {
-        //         n_samples += 1;
-        //         // println!("{}: {eclass_id}: {expr}", &sample.seed_exprs);
-        //     }
-        // }
         let n_samples = sample.samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(256usize, n_samples);
     }

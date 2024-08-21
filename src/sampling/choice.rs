@@ -1,4 +1,3 @@
-use core::panic;
 use std::fmt::Debug;
 use std::iter::IntoIterator;
 
@@ -6,86 +5,111 @@ use egg::{Id, Language, RecExpr};
 use serde::Serialize;
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Choice<'a, L: Language> {
-    Open(Id),
-    Picked {
-        eclass_id: Id,
-        pick: &'a L,
-        children: Vec<Choice<'a, L>>,
-    },
+pub struct ChoiceList<L: Language> {
+    choices: Vec<Choice<L>>,
+    open_idx: usize,
 }
 
-impl<'a, L: Language> Choice<'a, L> {
+impl<L: Language> From<Id> for ChoiceList<L> {
+    fn from(id: Id) -> Self {
+        ChoiceList {
+            choices: vec![Choice::Open(id)],
+            open_idx: 0,
+        }
+    }
+}
+
+impl<L: Language> ChoiceList<L> {
+    pub fn new(choices: Vec<Choice<L>>) -> Self {
+        Self {
+            choices,
+            open_idx: 0,
+        }
+    }
+
+    pub fn next_open(&mut self) -> Option<Id> {
+        if self.choices.len() <= self.open_idx {
+            None
+        } else {
+            Some(self.choices[self.open_idx].eclass_id())
+        }
+    }
+
+    pub fn fill_next(&mut self, pick: &L) {
+        let mut owned_pick = pick.clone();
+
+        let new_open_choices = owned_pick
+            .children()
+            .iter()
+            .map(|child_id| Choice::Open(*child_id));
+
+        let old_len = self.choices.len();
+
+        self.choices.extend(new_open_choices);
+
+        for (i, child) in owned_pick.children_mut().iter_mut().enumerate() {
+            *child = Id::from(old_len + i);
+        }
+
+        self.choices[self.open_idx] = Choice::Picked {
+            eclass_id: Id::from(self.open_idx),
+            pick: owned_pick,
+        };
+
+        self.open_idx += 1;
+    }
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Choice<L: Language> {
+    Open(Id),
+    Picked { eclass_id: Id, pick: L },
+}
+
+impl<L: Language> Choice<L> {
     pub fn eclass_id(&self) -> Id {
         match self {
             Choice::Picked { eclass_id, .. } | Choice::Open(eclass_id) => *eclass_id,
         }
     }
 
-    fn children(&self) -> &'a [Choice<L>] {
+    fn pick(self) -> Option<L> {
         match self {
-            Choice::Open(_) => &[],
-            Choice::Picked { children, .. } => children,
-        }
-    }
-
-    fn collect_children(self, all: &mut Vec<L>) {
-        match self {
-            Choice::Open(_) => {
-                panic!("Calling collect on an unfinished tree makes no sense")
-            }
-            Choice::Picked { pick, children, .. } => {
-                for child in children {
-                    child.collect_children(all);
-                }
-                all.push(pick.clone());
-            }
-        }
-    }
-
-    fn all_choices(&'a self, all: &mut Vec<&'a Choice<'a, L>>) {
-        all.push(self);
-        for child in self.children() {
-            child.all_choices(all);
-        }
-    }
-
-    pub fn next_open(&mut self) -> Option<&mut Self> {
-        match self {
-            Choice::Open(_) => Some(self),
-            Choice::Picked { children, .. } => children.iter_mut().find_map(|c| c.next_open()),
+            Choice::Open(_) => None,
+            Choice::Picked { pick, .. } => Some(pick),
         }
     }
 }
 
-impl<'a, L: Language> IntoIterator for &'a Choice<'a, L> {
-    type Item = &'a Choice<'a, L>;
+impl<L: Language> IntoIterator for ChoiceList<L> {
+    type Item = Choice<L>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
     fn into_iter(self) -> Self::IntoIter {
-        let mut all_children = Vec::new();
-        self.all_choices(&mut all_children);
-        all_children.into_iter()
+        self.choices.into_iter()
     }
 }
 
-impl<'a, L: Language> From<Choice<'a, L>> for RecExpr<L> {
-    fn from(choices: Choice<'a, L>) -> Self {
-        let mut picks = Vec::new();
+impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
+    type Error = super::SampleError;
 
-        choices.collect_children(&mut picks);
+    fn try_from(choice_list: ChoiceList<L>) -> Result<Self, Self::Error> {
+        // let mut expr = RecExpr::default();
+        let len_1 = choice_list.choices.len() - 1;
 
-        let mut expr = RecExpr::default();
-
-        for (id_counter, mut node) in picks.into_iter().enumerate() {
-            {
-                for (idx, child_id) in node.children_mut().iter_mut().enumerate() {
-                    *child_id = Id::from(id_counter - idx - 1);
+        // Reversing so we get a sensible insertion order for RecExpr
+        Ok(choice_list
+            .choices
+            .into_iter()
+            .rev()
+            .map(|choice| {
+                let mut pick = choice.pick().ok_or(super::SampleError::ChoiceError)?;
+                for id in pick.children_mut() {
+                    *id = (len_1 - usize::from(*id)).into();
                 }
-
-                expr.add(node);
-            }
-        }
-        expr
+                Ok(pick)
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into())
     }
 }
