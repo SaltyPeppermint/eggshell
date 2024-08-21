@@ -22,7 +22,7 @@ impl<L: Language> ChoiceList<L> {
         if self.choices.len() <= self.open_idx {
             None
         } else {
-            Some(self.choices[self.open_idx].eclass_id())
+            Some(self.choices[self.open_idx].eclass_id().unwrap())
         }
     }
 
@@ -42,10 +42,7 @@ impl<L: Language> ChoiceList<L> {
             *child = Id::from(old_len + i);
         }
 
-        self.choices[self.open_idx] = Choice::Picked {
-            eclass_id: Id::from(self.open_idx),
-            pick: owned_pick,
-        };
+        self.choices[self.open_idx] = Choice::Picked(owned_pick);
 
         self.open_idx += 1;
     }
@@ -96,20 +93,21 @@ impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Choice<L: Language> {
     Open(Id),
-    Picked { eclass_id: Id, pick: L },
+    Picked(L),
 }
 
 impl<L: Language> Choice<L> {
-    pub fn eclass_id(&self) -> Id {
+    pub fn eclass_id(&self) -> Option<Id> {
         match self {
-            Choice::Picked { eclass_id, .. } | Choice::Open(eclass_id) => *eclass_id,
+            Choice::Open(eclass_id) => Some(*eclass_id),
+            Choice::Picked(_) => None,
         }
     }
 
     fn pick(self) -> Option<L> {
         match self {
             Choice::Open(_) => None,
-            Choice::Picked { pick, .. } => Some(pick),
+            Choice::Picked(pick) => Some(pick),
         }
     }
 }
