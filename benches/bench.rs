@@ -5,13 +5,18 @@ use criterion::{criterion_group, criterion_main};
 use egg::{EGraph, RecExpr, SymbolLang};
 
 use eggshell::eqsat::utils::EqsatConfBuilder;
+use eggshell::eqsat::Eqsat;
+use eggshell::eqsat::EqsatResult;
 use eggshell::sampling;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
 use eggshell::trs::simple::SimpleLanguage;
 use eggshell::trs::Simple;
+use eggshell::trs::Trs;
 use eggshell::utils::AstSize2;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
@@ -49,10 +54,15 @@ fn sampling(c: &mut Criterion) {
     let sampel_conf = SampleConfBuilder::new().build();
     let eqsat_conf = EqsatConfBuilder::new().build();
 
+    let rules = Simple::rules(&Simple::maximum_ruleset());
+    let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
+        .with_conf(eqsat_conf.clone())
+        .run(&rules);
+
+    let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+
     c.bench_function("sample simple", |b| {
-        b.iter(|| {
-            sampling::sample::<Simple>(bb(seed.to_owned()), &sampel_conf, &eqsat_conf).unwrap()
-        })
+        b.iter(|| sampling::sample(bb(eqsat.egraph()), &sampel_conf, &mut rng))
     });
 }
 

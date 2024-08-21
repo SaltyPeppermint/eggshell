@@ -13,8 +13,6 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::eqsat::utils::EqsatConf;
-use crate::eqsat::{Eqsat, EqsatResult};
-use crate::trs::Trs;
 use crate::utils::AstSize2;
 use crate::{HashMap, HashSet};
 use choice::ChoiceList;
@@ -37,46 +35,7 @@ pub struct Sample<L: Language + Display> {
     eqsat_conf: EqsatConf,
 }
 
-#[allow(clippy::missing_errors_doc)]
-pub fn sample_multiple<R: Trs>(
-    seed_expr: Vec<RecExpr<R::Language>>,
-    sample_conf: &SampleConf,
-    eqsat_conf: &EqsatConf,
-) -> Result<Vec<Sample<R::Language>>, SampleError> {
-    seed_expr
-        .into_iter()
-        .map(|seed| sample::<R>(seed, sample_conf, eqsat_conf))
-        .collect()
-}
-
-#[allow(clippy::missing_errors_doc)]
-pub fn sample<R: Trs>(
-    seed_expr: RecExpr<R::Language>,
-    sample_conf: &SampleConf,
-    eqsat_conf: &EqsatConf,
-) -> Result<Sample<R::Language>, SampleError> {
-    let rules = R::rules(&R::maximum_ruleset());
-    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-
-    if eqsat_conf.explenation {
-        println!("Running without explenation!");
-    }
-
-    let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-        .with_conf(eqsat_conf.clone())
-        .run(&rules);
-    let egraph = eqsat.egraph();
-    let samples = sample_egrpah(egraph, sample_conf, &mut rng);
-
-    Ok(Sample {
-        seed_exprs: seed_expr,
-        samples,
-        sample_conf: sample_conf.clone(),
-        eqsat_conf: eqsat_conf.clone(),
-    })
-}
-
-fn sample_egrpah<L: Language, N: Analysis<L>>(
+pub fn sample<L: Language, N: Analysis<L>>(
     egraph: &EGraph<L, N>,
     conf: &SampleConf,
     rng: &mut StdRng,
@@ -188,7 +147,8 @@ mod tests {
     use std::time::Duration;
 
     use crate::eqsat::utils::EqsatConfBuilder;
-    use crate::trs::{Halide, Simple};
+    use crate::eqsat::{Eqsat, EqsatResult};
+    use crate::trs::{Halide, Simple, Trs};
 
     use super::*;
     use utils::SampleConfBuilder;
@@ -200,7 +160,13 @@ mod tests {
         let sampel_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let sample = sample::<Simple>(seed, &sampel_conf, &eqsat_conf).unwrap();
+        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
+            .with_conf(eqsat_conf.clone())
+            .run(&rules);
+
+        let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+        let samples = sample(eqsat.egraph(), &sampel_conf, &mut rng);
 
         // for (eclass_id, exprs) in &sample.samples {
         //     for expr in exprs {
@@ -208,7 +174,7 @@ mod tests {
         //     }
         // }
 
-        let n_samples = sample.samples.iter().map(|(_, exprs)| exprs.len()).sum();
+        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(13usize, n_samples);
     }
 
@@ -219,11 +185,17 @@ mod tests {
         let sampel_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let sample = sample::<Simple>(seed, &sampel_conf, &eqsat_conf).unwrap();
+        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
+            .with_conf(eqsat_conf.clone())
+            .run(&rules);
+
+        let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+        let samples = sample(eqsat.egraph(), &sampel_conf, &mut rng);
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
-        for (_, exprs) in &sample.samples {
+        for (_, exprs) in &samples {
             for expr in exprs {
                 // println!("{}: {eclass_id}: {expr}", &sample.seed_exprs);
                 n_samples += 1;
@@ -242,14 +214,16 @@ mod tests {
         let sampel_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let samples = sample_multiple::<Simple>(seeds, &sampel_conf, &eqsat_conf).unwrap();
+        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let eqsat: EqsatResult<Simple> =
+            Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
 
-        let n_samples = samples
-            .iter()
-            .flat_map(|sample| sample.samples.iter().map(|(_, exprs)| exprs.len()))
-            .sum();
+        let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+        let samples = sample(eqsat.egraph(), &sampel_conf, &mut rng);
 
-        assert_eq!(46usize, n_samples);
+        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+
+        assert_eq!(47usize, n_samples);
     }
 
     #[test]
@@ -261,9 +235,22 @@ mod tests {
             .time_limit(Duration::from_secs_f64(0.2))
             .build();
 
-        let sample = sample::<Halide>(seed, &sampel_conf, &eqsat_conf).unwrap();
+        let rules = Halide::rules(&Halide::maximum_ruleset());
+        let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
+            .with_conf(eqsat_conf.clone())
+            .run(&rules);
 
-        let n_samples = sample.samples.iter().map(|(_, exprs)| exprs.len()).sum();
+        let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+        let samples = sample(eqsat.egraph(), &sampel_conf, &mut rng);
+
+        // for (eclass_id, exprs) in &sample.samples {
+        //     for expr in exprs {
+        //         println!("{}: {eclass_id}: {expr}", &sample.seed_exprs);
+        //     }
+        // }
+
+        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+
         assert_eq!(256usize, n_samples);
     }
 }
