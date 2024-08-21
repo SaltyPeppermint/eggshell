@@ -10,15 +10,6 @@ pub struct ChoiceList<L: Language> {
     open_idx: usize,
 }
 
-impl<L: Language> From<Id> for ChoiceList<L> {
-    fn from(id: Id) -> Self {
-        ChoiceList {
-            choices: vec![Choice::Open(id)],
-            open_idx: 0,
-        }
-    }
-}
-
 impl<L: Language> ChoiceList<L> {
     pub fn new(choices: Vec<Choice<L>>) -> Self {
         Self {
@@ -60,23 +51,11 @@ impl<L: Language> ChoiceList<L> {
     }
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Choice<L: Language> {
-    Open(Id),
-    Picked { eclass_id: Id, pick: L },
-}
-
-impl<L: Language> Choice<L> {
-    pub fn eclass_id(&self) -> Id {
-        match self {
-            Choice::Picked { eclass_id, .. } | Choice::Open(eclass_id) => *eclass_id,
-        }
-    }
-
-    fn pick(self) -> Option<L> {
-        match self {
-            Choice::Open(_) => None,
-            Choice::Picked { pick, .. } => Some(pick),
+impl<L: Language> From<Id> for ChoiceList<L> {
+    fn from(id: Id) -> Self {
+        ChoiceList {
+            choices: vec![Choice::Open(id)],
+            open_idx: 0,
         }
     }
 }
@@ -111,5 +90,26 @@ impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
             })
             .collect::<Result<Vec<_>, _>>()?
             .into())
+    }
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Choice<L: Language> {
+    Open(Id),
+    Picked { eclass_id: Id, pick: L },
+}
+
+impl<L: Language> Choice<L> {
+    pub fn eclass_id(&self) -> Id {
+        match self {
+            Choice::Picked { eclass_id, .. } | Choice::Open(eclass_id) => *eclass_id,
+        }
+    }
+
+    fn pick(self) -> Option<L> {
+        match self {
+            Choice::Open(_) => None,
+            Choice::Picked { pick, .. } => Some(pick),
+        }
     }
 }

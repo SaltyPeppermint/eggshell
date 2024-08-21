@@ -101,12 +101,6 @@ fn sample_egrpah<L: Language, N: Analysis<L>>(
                     )
                 })
                 .collect();
-            // HOPEFULLY NOW NO LONGER NEEDED with better `From` Implementation
-            // See sample_terms
-            // This deduplicates the expressions.
-            // Dedup only removes consecutive duplicates so we need to sort first
-            // exprs.sort();
-            // exprs.dedup();
             (eclass.id, exprs)
         })
         .collect()
@@ -162,15 +156,6 @@ where
         }
         choices.fill_next(pick);
     }
-    // HOPEFULLY NOW NO LONGER NEEDED with better `From` Implementation
-    // See sample_egraph
-    // this is a dirty hack to get dedup easily
-    // Essentiall, we are reassigning the Ids canonically.
-    // Should be doable with a simpler expression and then we wouldnt need to use the sort+dedup trick later
-    // And could rely on a hashset
-    //
-    // let s = format!("{}", RecExpr::from(choices));
-    // RecExpr::from_str(&s).unwrap()
     choices.try_into().expect("No open choices should be left")
 }
 
