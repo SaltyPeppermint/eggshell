@@ -51,12 +51,7 @@ impl Analysis<MathEquation> for EquationConstFold {
             MathEquation::Constant(c) => *c,
             MathEquation::Add([a, b]) => x(a)? + x(b)?,
             MathEquation::Sub([a, b]) => x(a)? - x(b)?,
-            MathEquation::Mul([a, b]) => {
-                let x_a = x(a)?;
-                let x_b = x(b)?;
-                println!("Found a multiplication: {x_a} * {x_b}");
-                x(a)? * x(b)?
-            }
+            MathEquation::Mul([a, b]) => x(a)? * x(b)?,
             MathEquation::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,
             MathEquation::Max([a, b]) => std::cmp::max(*x(a)?, *x(b)?),
             MathEquation::Min([a, b]) => std::cmp::min(*x(a)?, *x(b)?),
@@ -85,8 +80,9 @@ impl Analysis<MathEquation> for EquationConstFold {
         if let Some(c) = egraph[id].data {
             let added = egraph.add(MathEquation::Constant(c));
             let _ = egraph.union(id, added);
+            // dbg!(&egraph[id]);
             egraph[id].nodes.retain(egg::Language::is_leaf);
-            dbg!(egraph[id].leaves().collect::<Vec<_>>());
+            // dbg!(egraph[id].leaves().collect::<Vec<_>>());
 
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
@@ -186,6 +182,7 @@ pub fn compare_constants(
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Arithmetic,
+    ArithMinMax,
     Full,
 }
 
@@ -225,6 +222,16 @@ impl Trs for Halide {
                 (&*modulo_rules),
                 (&*mul_rules),
                 (&*sub_rules),
+            ]
+            .concat(),
+            Ruleset::ArithMinMax => [
+                (&*add_rules),
+                (&*div_rules),
+                (&*modulo_rules),
+                (&*mul_rules),
+                (&*sub_rules),
+                (&*max_rules),
+                (&*min_rules),
             ]
             .concat(),
             // All the rules

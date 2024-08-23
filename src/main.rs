@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use chrono::Local;
 use clap::Parser;
-use egg::{Id, Language, RecExpr};
+use egg::{Id, Language, RecExpr, Rewrite};
 use eggshell::io::structs::Expression;
 use hashbrown::{HashMap, HashSet};
 use rand::rngs::StdRng;
@@ -19,7 +19,7 @@ use eggshell::eqsat::{Eqsat, EqsatResult};
 use eggshell::io::reader;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sampling::{self, SampleConf};
-use eggshell::trs::{Halide, Trs};
+use eggshell::trs::{halide, Halide, Trs};
 
 // const CHUNKSIZE: usize = 3;
 // const N_SEEDS: usize = 20;
@@ -33,7 +33,7 @@ use eggshell::trs::{Halide, Trs};
 fn main() {
     let cli = Cli::parse();
 
-    let exprs = reader::read_exprs(&cli.file).unwrap();
+    let exprs = reader::read_exprs_json(&cli.file, &[]);
     let sample_conf = SampleConfBuilder::new().rng_seed(cli.rng_seed).build();
     let eqsat_conf = EqsatConfBuilder::new()
         .time_limit(Duration::from_secs_f64(0.5))
@@ -57,8 +57,9 @@ fn main() {
         &eqsat_conf,
         &cli,
     );
+    let rules = Halide::rules(&halide::Ruleset::ArithMinMax);
 
-    sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, &cli);
+    sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, rules, &cli);
 }
 
 #[derive(Parser)]
@@ -115,10 +116,10 @@ fn sample<R: Trs>(
     eqsat_conf: EqsatConf,
     sample_conf: SampleConf,
     folder: &str,
+    rules: Vec<Rewrite<R::Language, R::Analysis>>,
     cli: &Cli,
 ) {
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-    let rules = R::rules(&R::maximum_ruleset());
 
     let mut sample_list = Vec::new();
 

@@ -182,7 +182,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
 
-        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(12usize, n_samples);
     }
 
@@ -229,7 +229,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
 
-        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
         assert_eq!(49usize, n_samples);
     }
@@ -251,7 +251,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
 
-        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
         assert_eq!(256usize, n_samples);
     }

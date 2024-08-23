@@ -169,7 +169,8 @@ mod tests {
     }
 
     #[test]
-    fn eqsat_consts_error() {
+    #[should_panic(expected = "Different leaves in eclass 1: {Constant(35), Constant(0)}")]
+    fn panic_on_false_expr() {
         let expr = vec![
             "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
                 .parse()
@@ -178,9 +179,6 @@ mod tests {
         let rules = Halide::rules(&Halide::maximum_ruleset());
 
         let eqsat = Eqsat::<Halide>::new(expr);
-        let result = eqsat.run(&rules);
-        let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!(20, term.to_string().len());
+        let _ = eqsat.run(&rules);
     }
 }

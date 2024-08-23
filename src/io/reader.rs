@@ -2,23 +2,25 @@ use std::fs::File;
 use std::path::Path;
 
 use csv;
+use serde::{Deserialize, Serialize};
+
 // use pyo3::prelude::*;
 
 use super::structs::Expression;
-use super::IoError;
 
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.
 ///
 /// [`Expression`]: super::structs::Expression
-#[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
-pub fn read_exprs(file_path: &Path) -> Result<Vec<Expression>, IoError> {
+#[allow(clippy::missing_panics_doc)]
+#[must_use]
+pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
     // Declare the vector and the reader
-    let file = File::open(file_path)?;
+    let file = File::open(file_path).expect("CSV File needs to exist");
     let mut rdr = csv::Reader::from_reader(file);
     // Read each record and extract then cast the values.
     rdr.records()
         .map(|result| {
-            let record = result?;
+            let record = result.expect("CSV must be properly formatted");
             let index = record
                 .get(0)
                 .expect("No index means csv is broken.")
@@ -27,10 +29,45 @@ pub fn read_exprs(file_path: &Path) -> Result<Vec<Expression>, IoError> {
             let expr_str = record.get(1).expect("No expression means csv is broken.");
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.
-            Ok(Expression {
+            Expression {
                 index,
                 term: (*expr_str).to_string(),
-            })
+            }
+        })
+        .collect()
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct JsonExpression {
+    start: String,
+    end: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct JsonDatapoint {
+    expression: JsonExpression,
+    rules: Vec<String>,
+}
+
+#[allow(clippy::missing_panics_doc)]
+#[must_use]
+pub fn read_exprs_json(file_path: &Path, excluded_expr_ends: &[&str]) -> Vec<Expression> {
+    // Declare the vector and the reader
+    let file = File::open(file_path).expect("Json file must exist");
+    let data: Vec<JsonDatapoint> =
+        serde_json::from_reader(file).expect("Needs to be properly formatted json file");
+    // Read each record and extract then cast the values.
+    data.into_iter()
+        .enumerate()
+        .filter_map(|(index, entry)| {
+            if excluded_expr_ends.contains(&entry.expression.end.as_str()) {
+                None
+            } else {
+                Some(Expression {
+                    index,
+                    term: entry.expression.start,
+                })
+            }
         })
         .collect()
 }
