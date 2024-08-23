@@ -1,7 +1,8 @@
 use std::fs::File;
+use std::path::Path;
 
 use csv;
-use pyo3::prelude::*;
+// use pyo3::prelude::*;
 
 use super::structs::Expression;
 use super::IoError;
@@ -10,8 +11,7 @@ use super::IoError;
 ///
 /// [`Expression`]: super::structs::Expression
 #[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
-#[pyfunction]
-pub fn read_exprs(file_path: &str) -> Result<Vec<Expression>, IoError> {
+pub fn read_exprs(file_path: &Path) -> Result<Vec<Expression>, IoError> {
     // Declare the vector and the reader
     let file = File::open(file_path)?;
     let mut rdr = csv::Reader::from_reader(file);

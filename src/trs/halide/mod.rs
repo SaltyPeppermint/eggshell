@@ -42,7 +42,7 @@ impl Analysis<MathEquation> for EquationConstFold {
     type Data = Option<i64>;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
-        egg::merge_option(to, from, egg::merge_min)
+        egg::merge_option(to, from, egg::merge_max)
     }
 
     fn make(egraph: &EGraph, enode: &MathEquation) -> Self::Data {
@@ -52,9 +52,9 @@ impl Analysis<MathEquation> for EquationConstFold {
             MathEquation::Add([a, b]) => x(a)? + x(b)?,
             MathEquation::Sub([a, b]) => x(a)? - x(b)?,
             MathEquation::Mul([a, b]) => {
-                // let x_a = x(a)?;
-                // let x_b = x(b)?;
-                // println!("Found a multiplication: {x_a} * {x_b}");
+                let x_a = x(a)?;
+                let x_b = x(b)?;
+                println!("Found a multiplication: {x_a} * {x_b}");
                 x(a)? * x(b)?
             }
             MathEquation::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,
@@ -82,21 +82,11 @@ impl Analysis<MathEquation> for EquationConstFold {
     }
 
     fn modify(egraph: &mut EGraph, id: Id) {
-        let data = egraph[id].data;
-        if let Some(c) = data {
-            // if egraph.are_explanations_enabled() {
-            //     egraph.union_instantiations(
-            //         &pat,
-            //         &format!("{}", c).parse().unwrap(),
-            //         &Default::default(),
-            //         "constant_fold".to_string(),
-            //     );
-            // } else {
+        if let Some(c) = egraph[id].data {
             let added = egraph.add(MathEquation::Constant(c));
             let _ = egraph.union(id, added);
-            // }
-            // to not prune, comment this out
             egraph[id].nodes.retain(egg::Language::is_leaf);
+            dbg!(egraph[id].leaves().collect::<Vec<_>>());
 
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
@@ -105,7 +95,8 @@ impl Analysis<MathEquation> for EquationConstFold {
 }
 
 /// Checks if a constant is positive
-pub(crate) fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+#[allow(clippy::missing_panics_doc)]
+pub fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get the constant
     let var = var_str.parse().unwrap();
 
@@ -120,12 +111,13 @@ pub(crate) fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) ->
 }
 
 /// Checks if a constant is negative
-fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+#[allow(clippy::missing_panics_doc)]
+pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
 
     // Get the substitutions where the constant appears
     move |egraph, _, subst| {
-        //Check if any of the representations of ths constant (nodes inside its eclass) is negative
+        // Check if any of the representations of ths constant (nodes inside its eclass) is negative
         egraph[subst[var]].nodes.iter().any(|n| match n {
             MathEquation::Constant(c) => c < &0,
             _ => false,
@@ -134,7 +126,8 @@ fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Checks if a constant is equals zero
-fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
+#[allow(clippy::missing_panics_doc)]
+pub fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
     let zero = MathEquation::Constant(0);
     // Check if any of the representations of the constant (nodes inside its eclass) is zero
@@ -142,23 +135,24 @@ fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Compares two constants c0 and c1
-fn compare_constants(
+#[allow(clippy::missing_panics_doc)]
+pub fn compare_constants(
     // first constant
-    var_str1: &str,
+    var_str_1: &str,
     // 2nd constant
-    var_str2: &str,
+    var_str_2: &str,
     // the comparison we're checking
     comp: &'static str,
 ) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get constants
-    let var1: Var = var_str1.parse().unwrap();
-    let var2: Var = var_str2.parse().unwrap();
+    let var_1: Var = var_str_1.parse().unwrap();
+    let var_2: Var = var_str_2.parse().unwrap();
 
     move |egraph, _, subst| {
         // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
-        egraph[subst[var2]].nodes.iter().any(|n1| match n1 {
+        egraph[subst[var_2]].nodes.iter().any(|n1| match n1 {
             // Get the eclass of the second constant then match it to c1
-            MathEquation::Constant(c1) => egraph[subst[var1]].nodes.iter().any(|n| match n {
+            MathEquation::Constant(c1) => egraph[subst[var_1]].nodes.iter().any(|n| match n {
                 // match the comparison then do it
                 MathEquation::Constant(c) => match comp {
                     "<" => c < c1,

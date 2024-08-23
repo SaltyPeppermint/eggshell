@@ -2,25 +2,26 @@ use std::time::Duration;
 
 use egg::{Analysis, Language, RecExpr, Runner};
 use pyo3::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
+#[allow(clippy::unsafe_derive_deserialize)]
 #[pyclass]
-#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq)]
 pub struct EqsatConf {
     pub iter_limit: Option<usize>,
     pub node_limit: Option<usize>,
     pub time_limit: Option<Duration>,
-    pub explenation: bool,
+    pub explanation: bool,
 }
 
 #[pymethods]
 impl EqsatConf {
     #[must_use]
     #[new]
-    #[pyo3(signature = (explenation=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(Duration::new(10, 0))))]
+    #[pyo3(signature = (explanation=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(Duration::new(10, 0))))]
     pub fn new(
-        explenation: bool,
+        explanation: bool,
         iter_limit: Option<usize>,
         node_limit: Option<usize>,
         time_limit: Option<Duration>,
@@ -29,7 +30,7 @@ impl EqsatConf {
             iter_limit,
             node_limit,
             time_limit,
-            explenation,
+            explanation,
         }
     }
 }
@@ -39,7 +40,7 @@ pub struct EqsatConfBuilder {
     pub iter_limit: Option<usize>,
     pub node_limit: Option<usize>,
     pub time_limit: Option<Duration>,
-    pub explenation: bool,
+    pub explanation: bool,
 }
 
 impl EqsatConfBuilder {
@@ -50,7 +51,7 @@ impl EqsatConfBuilder {
             node_limit: Some(100_000),
             // Do we actually want a time limit?
             time_limit: Some(Duration::new(10, 0)),
-            explenation: false,
+            explanation: false,
         }
     }
 
@@ -91,8 +92,8 @@ impl EqsatConfBuilder {
     }
 
     #[must_use]
-    pub fn explenation(mut self, enabled: bool) -> Self {
-        self.explenation = enabled;
+    pub fn explanation(mut self, enabled: bool) -> Self {
+        self.explanation = enabled;
         self
     }
 
@@ -102,7 +103,7 @@ impl EqsatConfBuilder {
             iter_limit: self.iter_limit,
             node_limit: self.node_limit,
             time_limit: self.time_limit,
-            explenation: self.explenation,
+            explanation: self.explanation,
         }
     }
 }

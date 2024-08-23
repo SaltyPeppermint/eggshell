@@ -1,6 +1,6 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct SampleConf {
     pub samples_per_egraph: usize,
     pub samples_per_eclass: usize,
@@ -8,7 +8,7 @@ pub struct SampleConf {
     pub rng_seed: u64,
 }
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct SampleConfBuilder {
     samples_per_egraph: usize,
     samples_per_eclass: usize,

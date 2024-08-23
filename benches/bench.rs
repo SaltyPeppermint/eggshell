@@ -42,16 +42,10 @@ fn extraction(c: &mut Criterion) {
     });
 }
 
-criterion_group!(
-    name = benches;
-    config = Criterion::default().significance_level(0.05).sample_size(1000);
-    targets = extraction, sampling
-);
-
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
     let seed: RecExpr<SimpleLanguage> = term.parse().unwrap();
-    let sampel_conf = SampleConfBuilder::new().build();
+    let sample_conf = SampleConfBuilder::new().build();
     let eqsat_conf = EqsatConfBuilder::new().build();
 
     let rules = Simple::rules(&Simple::maximum_ruleset());
@@ -59,11 +53,17 @@ fn sampling(c: &mut Criterion) {
         .with_conf(eqsat_conf.clone())
         .run(&rules);
 
-    let mut rng = StdRng::seed_from_u64(sampel_conf.rng_seed);
+    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
     c.bench_function("sample simple", |b| {
-        b.iter(|| sampling::sample(bb(eqsat.egraph()), &sampel_conf, &mut rng))
+        b.iter(|| sampling::sample(bb(eqsat.egraph()), &sample_conf, &mut rng))
     });
 }
+
+criterion_group!(
+    name = benches;
+    config = Criterion::default().significance_level(0.05).sample_size(1000);
+    targets = extraction, sampling
+);
 
 criterion_main!(benches);

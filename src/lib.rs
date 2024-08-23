@@ -39,7 +39,7 @@
 // clippy::ref_patterns,
 
 pub mod eqsat;
-mod io;
+pub mod io;
 mod python;
 pub mod sampling;
 pub mod sketch;
@@ -58,10 +58,10 @@ type HashSet<T> = hashbrown::HashSet<T>;
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // IO
-    let io_m = PyModule::new_bound(m.py(), "io")?;
-    io_m.add_function(wrap_pyfunction!(io::reader::read_exprs, m)?)?;
-    io_m.add_class::<io::structs::Expression>()?;
-    m.add_submodule(&io_m)?;
+    // let io_m = PyModule::new_bound(m.py(), "io")?;
+    // io_m.add_function(wrap_pyfunction!(io::reader::read_exprs, m)?)?;
+    // io_m.add_class::<io::structs::Expression>()?;
+    // m.add_submodule(&io_m)?;
 
     // Eqsat
     let eqsat_m = PyModule::new_bound(m.py(), "eqsat")?;
