@@ -115,23 +115,26 @@ impl Default for EqsatConfBuilder {
 }
 
 #[must_use]
-pub(crate) fn build_runner<L, N>(runner_params: &EqsatConf, exprs: &[RecExpr<L>]) -> Runner<L, N>
+pub(crate) fn build_runner<L, N>(conf: &EqsatConf, exprs: &[RecExpr<L>]) -> Runner<L, N>
 where
     L: Language,
     N: Analysis<L> + Default,
 {
     // Initialize a simple runner and run it.
     let mut runner = Runner::default();
-    if let Some(iter_limit) = runner_params.iter_limit {
+    if let Some(iter_limit) = conf.iter_limit {
         runner = runner.with_iter_limit(iter_limit);
     };
-    if let Some(node_limit) = runner_params.node_limit {
+    if let Some(node_limit) = conf.node_limit {
         runner = runner.with_node_limit(node_limit);
     };
-
-    if let Some(time_limit) = runner_params.time_limit {
+    if let Some(time_limit) = conf.time_limit {
         runner = runner.with_time_limit(time_limit);
     };
+    if conf.explanation {
+        runner = runner.with_explanations_enabled();
+    };
+
     for expr in exprs {
         runner = runner.with_expr(expr);
     }

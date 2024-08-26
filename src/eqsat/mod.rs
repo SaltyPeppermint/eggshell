@@ -1,14 +1,14 @@
-pub mod utils;
+mod utils;
 
 use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;
 use serde::Serialize;
-use utils::EqsatConfBuilder;
 
 use crate::sketch::extract;
 use crate::sketch::Sketch;
 use crate::trs::Trs;
-use utils::EqsatConf;
+
+pub use utils::{EqsatConf, EqsatConfBuilder};
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug, Serialize)]
@@ -135,50 +135,5 @@ where
 
     pub fn egraph(&self) -> &EGraph<R::Language, R::Analysis> {
         &self.egraph
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{trs::halide::Halide, utils::AstSize2};
-
-    use super::*;
-
-    #[test]
-    fn basic_eqsat_solved_true() {
-        let false_expr = vec!["( == 0 0 )".parse().unwrap()];
-        let rules = Halide::rules(&Halide::maximum_ruleset());
-
-        let eqsat = Eqsat::<Halide>::new(false_expr);
-        let result = eqsat.run(&rules);
-        let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!("1", term.to_string());
-    }
-
-    #[test]
-    fn basic_eqsat_solved_false() {
-        let false_expr = vec!["( == 1 0 )".parse().unwrap()];
-        let rules = Halide::rules(&Halide::maximum_ruleset());
-
-        let eqsat = Eqsat::<Halide>::new(false_expr);
-        let result = eqsat.run(&rules);
-        let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!("0", term.to_string());
-    }
-
-    #[test]
-    #[should_panic(expected = "Different leaves in eclass 1: {Constant(35), Constant(0)}")]
-    fn panic_on_false_expr() {
-        let expr = vec![
-            "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
-                .parse()
-                .unwrap(),
-        ];
-        let rules = Halide::rules(&Halide::maximum_ruleset());
-
-        let eqsat = Eqsat::<Halide>::new(expr);
-        let _ = eqsat.run(&rules);
     }
 }

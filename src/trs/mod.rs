@@ -10,6 +10,7 @@ pub mod simple;
 pub use arithmatic::Arithmatic;
 pub use halide::Halide;
 pub use simple::Simple;
+use thiserror::Error;
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -28,9 +29,12 @@ pub trait Trs: Serialize {
     type Rulesets;
 
     fn rules(ruleset_class: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
-    fn maximum_ruleset() -> Self::Rulesets;
-    // fn prove_goals() -> Vec<Pattern<Self::Language>>;
 }
 
 // /// [`EGraph`] parameterized by the Trs
 // pub(crate) type TrsEGraph<R> = EGraph<<R as Trs>::Language, <R as Trs>::Analysis>;
+#[derive(Debug, Error)]
+pub enum TrsError {
+    #[error("wrong number of children: {0}")]
+    BadAnalysis(String),
+}

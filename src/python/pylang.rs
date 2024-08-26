@@ -144,7 +144,7 @@ impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::trs::halide::MathEquation;
+    use crate::trs::halide::HalideMath;
 
     #[test]
     fn parse_basic() {
@@ -161,7 +161,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<MathEquation> = "(== 0 0)".parse().unwrap();
+        let rhs: RecExpr<HalideMath> = "(== 0 0)".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
     }
 
@@ -210,7 +210,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<MathEquation> = "(== (+ 1 1) 2)".parse().unwrap();
+        let rhs: RecExpr<HalideMath> = "(== (+ 1 1) 2)".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
     }
 
@@ -286,7 +286,7 @@ mod tests {
                 },
             ],
         };
-        let rhs: RecExpr<MathEquation> = "(== (+ (+ 1 0) 1) (+ 1 1))".parse().unwrap();
+        let rhs: RecExpr<HalideMath> = "(== (+ (+ 1 0) 1) (+ 1 1))".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
     }
 }

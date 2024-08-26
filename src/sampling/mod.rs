@@ -12,7 +12,7 @@ use rand::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::eqsat::utils::EqsatConf;
+use crate::eqsat::EqsatConf;
 use crate::utils::AstSize2;
 use crate::{HashMap, HashSet};
 use choices::ChoiceList;
@@ -160,12 +160,11 @@ where
 mod tests {
     use std::time::Duration;
 
-    use crate::eqsat::utils::EqsatConfBuilder;
+    use crate::eqsat::EqsatConfBuilder;
     use crate::eqsat::{Eqsat, EqsatResult};
-    use crate::trs::{Halide, Simple, Trs};
+    use crate::trs::{halide, simple, Halide, Simple, Trs};
 
     use super::*;
-    use utils::SampleConfBuilder;
 
     #[test]
     fn simple_sample() {
@@ -174,7 +173,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let rules = Simple::rules(&simple::Ruleset::Full);
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -193,7 +192,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let rules = Simple::rules(&simple::Ruleset::Full);
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -222,7 +221,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&Simple::maximum_ruleset());
+        let rules = Simple::rules(&simple::Ruleset::Full);
         let eqsat: EqsatResult<Simple> =
             Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
 
@@ -243,7 +242,7 @@ mod tests {
             .time_limit(Duration::from_secs_f64(0.2))
             .build();
 
-        let rules = Halide::rules(&Halide::maximum_ruleset());
+        let rules = Halide::rules(&halide::Ruleset::Full);
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);

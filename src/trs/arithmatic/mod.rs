@@ -172,14 +172,4 @@ impl Trs for Arithmatic {
     fn rules(_ruleset_class: &Ruleset) -> Vec<Rewrite> {
         self::rules::rules()
     }
-
-    #[must_use]
-    fn maximum_ruleset() -> Self::Rulesets {
-        Ruleset::Full
-    }
-
-    // #[must_use]
-    // fn prove_goals() -> Vec<egg::Pattern<Self::Language>> {
-    //     panic!("THERE ARE NO PROVE GOALS HERE")
-    // }
 }

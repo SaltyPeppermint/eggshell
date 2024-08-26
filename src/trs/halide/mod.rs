@@ -1,18 +1,20 @@
+mod data;
 mod rules;
 
 use egg::{define_language, Analysis, DidMerge, Id, Subst, Symbol, Var};
 use serde::Serialize;
 
 use super::Trs;
+use data::HalideData;
 
 // Defining aliases to reduce code.
-type EGraph = egg::EGraph<MathEquation, EquationConstFold>;
-type Rewrite = egg::Rewrite<MathEquation, EquationConstFold>;
+type EGraph = egg::EGraph<HalideMath, HalideConstFold>;
+type Rewrite = egg::Rewrite<HalideMath, HalideConstFold>;
 
 // Definition of the language used.
 define_language! {
     #[derive(Serialize)]
-    pub enum MathEquation {
+    pub enum HalideMath {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
@@ -29,6 +31,7 @@ define_language! {
         "!=" = IEq([Id; 2]),
         "||" = Or([Id; 2]),
         "&&" = And([Id; 2]),
+        Bool(bool),
         Constant(i64),
         Symbol(Symbol),
     }
@@ -36,41 +39,80 @@ define_language! {
 
 /// Enabling Constant Folding through the Analysis of egg.
 #[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct EquationConstFold;
+pub struct HalideConstFold;
 
-impl Analysis<MathEquation> for EquationConstFold {
-    type Data = Option<i64>;
+impl Analysis<HalideMath> for HalideConstFold {
+    type Data = Option<HalideData>;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
-        egg::merge_option(to, from, egg::merge_max)
+        match (to.as_mut(), from) {
+            (None, Some(_)) => {
+                *to = from;
+                DidMerge(true, false)
+            }
+            (Some(_), None) => DidMerge(false, true),
+            (Some(_), Some(_)) | (None, None) => DidMerge(false, false),
+            // (Some(a), Some(b)) => match (a, b) {
+            //     (HalideData::Int(i_a), HalideData::Int(i_b)) => {
+            //         let cmp = (*i_a).cmp(&i_b);
+            //         match cmp {
+            //             Ordering::Less => DidMerge(false, true),
+            //             Ordering::Equal => DidMerge(false, false),
+            //             Ordering::Greater => {
+            //                 *to = from;
+            //                 DidMerge(true, false)
+            //             }
+            //         }
+            //     }
+            //     (HalideData::Bool(b_a), HalideData::Bool(b_b)) => {
+            //         if *b_a == b_b {
+            //             DidMerge(false, false)
+            //         } else {
+            //             panic!("Tried to merge false with true!")
+            //         }
+            //     }
+            //     _ => panic!("Tried to merge truth value with constant!"),
+            // },
+        }
     }
 
-    fn make(egraph: &EGraph, enode: &MathEquation) -> Self::Data {
-        let x = |i: &Id| egraph[*i].data.as_ref();
+    fn make(egraph: &EGraph, enode: &HalideMath) -> Self::Data {
+        let xi = |i: &Id| egraph[*i].data.map(|d| i64::try_from(d).unwrap());
+        let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
+        // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());
         Some(match enode {
-            MathEquation::Constant(c) => *c,
-            MathEquation::Add([a, b]) => x(a)? + x(b)?,
-            MathEquation::Sub([a, b]) => x(a)? - x(b)?,
-            MathEquation::Mul([a, b]) => x(a)? * x(b)?,
-            MathEquation::Div([a, b]) if *x(b)? != 0 => x(a)? / x(b)?,
-            MathEquation::Max([a, b]) => std::cmp::max(*x(a)?, *x(b)?),
-            MathEquation::Min([a, b]) => std::cmp::min(*x(a)?, *x(b)?),
-            MathEquation::Not(a) => i64::from(*x(a)? == 0),
-            MathEquation::Lt([a, b]) => i64::from(x(a)? < x(b)?),
-            MathEquation::Gt([a, b]) => i64::from(x(a)? > x(b)?),
-            MathEquation::Let([a, b]) => i64::from(x(a)? <= x(b)?),
-            MathEquation::Get([a, b]) => i64::from(x(a)? >= x(b)?),
-            MathEquation::Mod([a, b]) => {
-                if *x(b)? == 0 {
-                    0
+            HalideMath::Constant(c) => HalideData::Int(*c),
+            HalideMath::Add([a, b]) => (xi(a)? + xi(b)?).into(),
+            HalideMath::Sub([a, b]) => (xi(a)? - xi(b)?).into(),
+            HalideMath::Mul([a, b]) => (xi(a)? * xi(b)?).into(),
+            HalideMath::Div([a, b]) => {
+                // Important to check otherwise integer division loss or div 0 error
+                if xi(b)? != 0 && xi(a)? % xi(b)? == 0 {
+                    (xi(a)? / xi(b)?).into()
                 } else {
-                    x(a)? % x(b)?
+                    return None;
                 }
             }
-            MathEquation::Eq([a, b]) => i64::from(x(a)? == x(b)?),
-            MathEquation::IEq([a, b]) => i64::from(x(a)? != x(b)?),
-            MathEquation::And([a, b]) => i64::from(!(*x(a)? == 0 || *x(b)? == 0)),
-            MathEquation::Or([a, b]) => i64::from(*x(a)? == 1 || *x(b)? == 1),
+            HalideMath::Max([a, b]) => std::cmp::max(xi(a)?, xi(b)?).into(),
+            HalideMath::Min([a, b]) => std::cmp::min(xi(a)?, xi(b)?).into(),
+            HalideMath::Mod([a, b]) => {
+                if xi(b)? == 0 {
+                    HalideData::Int(0)
+                } else {
+                    (xi(a)? % xi(b)?).into()
+                }
+            }
+
+            HalideMath::Lt([a, b]) => (xi(a)? < xi(b)?).into(),
+            HalideMath::Gt([a, b]) => (xi(a)? > xi(b)?).into(),
+            HalideMath::Let([a, b]) => (xi(a)? <= xi(b)?).into(),
+            HalideMath::Get([a, b]) => (xi(a)? >= xi(b)?).into(),
+            HalideMath::Eq([a, b]) => (xi(a)? == xi(b)?).into(),
+            HalideMath::IEq([a, b]) => (xi(a)? != xi(b)?).into(),
+
+            HalideMath::Not(a) => (!xb(a)?).into(),
+            HalideMath::And([a, b]) => (xb(a)? && xb(b)?).into(),
+            HalideMath::Or([a, b]) => (xb(a)? || xb(b)?).into(),
 
             _ => return None,
         })
@@ -78,17 +120,54 @@ impl Analysis<MathEquation> for EquationConstFold {
 
     fn modify(egraph: &mut EGraph, id: Id) {
         if let Some(c) = egraph[id].data {
-            let added = egraph.add(MathEquation::Constant(c));
+            let added = match c {
+                HalideData::Int(i) => egraph.add(HalideMath::Constant(i)),
+                HalideData::Bool(b) => egraph.add(HalideMath::Bool(b)),
+            };
+
+            // let _ =
+            egraph.union_trusted(id, added, format!("eclass {id} contained analysis {c:?}"));
             let _ = egraph.union(id, added);
-            // dbg!(&egraph[id]);
+
             egraph[id].nodes.retain(egg::Language::is_leaf);
-            // dbg!(egraph[id].leaves().collect::<Vec<_>>());
+
+            // assert!(
+            //     !egraph[id].nodes.is_empty(),
+            //     "empty eclass! {:#?}",
+            //     egraph[id]
+            // );
+            // if !check_leaves(&egraph[id]) {
+            //     println!(" ");
+            //     let rec_exprs = &egraph[id]
+            //         .leaves()
+            //         .map(|v| RecExpr::from(vec![v.to_owned()]))
+            //         .collect::<Vec<_>>();
+
+            //     let mut expl = egraph.explain_equivalence(&rec_exprs[0], &rec_exprs[1]);
+            //     expl.check_proof(&Halide::rules(&Ruleset::BugRules));
+            //     println!("PROOF CHECKS OUT");
+
+            //     println!("{}", &expl.get_flat_string());
+            // }
 
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
         }
     }
 }
+
+// fn check_leaves<L, D>(class: &EClass<L, D>) -> bool
+// where
+//     L: egg::Language,
+// {
+//     let mut leaves = class.leaves();
+//     if let Some(first) = leaves.next() {
+//         if leaves.all(|l| l == first) {
+//             return true;
+//         }
+//     }
+//     false
+// }
 
 /// Checks if a constant is positive
 #[allow(clippy::missing_panics_doc)]
@@ -98,11 +177,18 @@ pub fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 
     // Get the substitutions where the constant appears
     move |egraph, _, subst| {
+        // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
         // Check if any of the representations of ths constant (nodes inside its eclass) is positive
-        egraph[subst[var]].nodes.iter().any(|n| match n {
-            MathEquation::Constant(c) => c > &0,
+        // egraph[subst[var]].data.iter().any(|n| match n {
+        //     HalideMath::Constant(c) => c > &0,
+        //     _ => false,
+        // })
+        // NEW CORRECT
+
+        match egraph[subst[var]].data {
+            Some(HalideData::Int(x)) => x > 0,
             _ => false,
-        })
+        }
     }
 }
 
@@ -114,10 +200,17 @@ pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get the substitutions where the constant appears
     move |egraph, _, subst| {
         // Check if any of the representations of ths constant (nodes inside its eclass) is negative
-        egraph[subst[var]].nodes.iter().any(|n| match n {
-            MathEquation::Constant(c) => c < &0,
+        // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
+        // egraph[subst[var]].nodes.iter().any(|n| match n {
+        //     HalideMath::Constant(c) => c < &0,
+        //     _ => false,
+        // })
+        // NEW CORRECT
+
+        match egraph[subst[var]].data {
+            Some(HalideData::Int(x)) => x < 0,
             _ => false,
-        })
+        }
     }
 }
 
@@ -125,9 +218,15 @@ pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 #[allow(clippy::missing_panics_doc)]
 pub fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
-    let zero = MathEquation::Constant(0);
-    // Check if any of the representations of the constant (nodes inside its eclass) is zero
-    move |egraph, _, subst| !egraph[subst[var]].nodes.contains(&zero)
+    // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
+    // let zero = HalideMath::Constant(0);
+    // // Check if any of the representations of the constant (nodes inside its eclass) is zero
+    // move |egraph, _, subst| !egraph[subst[var]].nodes.contains(&zero)
+    // NEW CORRECT
+    move |egraph, _, subst| match egraph[subst[var]].data {
+        Some(HalideData::Int(x)) => x != 0,
+        _ => false,
+    }
 }
 
 /// Compares two constants c0 and c1
@@ -146,34 +245,33 @@ pub fn compare_constants(
 
     move |egraph, _, subst| {
         // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
-        egraph[subst[var_2]].nodes.iter().any(|n1| match n1 {
-            // Get the eclass of the second constant then match it to c1
-            MathEquation::Constant(c1) => egraph[subst[var_1]].nodes.iter().any(|n| match n {
-                // match the comparison then do it
-                MathEquation::Constant(c) => match comp {
-                    "<" => c < c1,
-                    "<a" => c < &c1.abs(),
-                    "<=" => c <= c1,
-                    "<=+1" => c <= &(c1 + 1),
-                    "<=a" => c <= &c1.abs(),
-                    "<=-a" => c <= &(-c1.abs()),
-                    "<=-a+1" => c <= &(1 - c1.abs()),
-                    ">" => c > c1,
-                    ">a" => c > &c1.abs(),
-                    ">=" => c >= c1,
-                    ">=a" => c >= &(c1.abs()),
-                    ">=a-1" => c >= &(c1.abs() - 1),
-                    "!=" => c != c1,
-                    "%0" => (*c1 != 0) && (c % c1 == 0),
-                    "!%0" => (*c1 != 0) && (c % c1 != 0),
-                    "%0<" => (*c1 > 0) && (c % c1 == 0),
-                    "%0>" => (*c1 < 0) && (c % c1 == 0),
-                    _ => false,
-                },
+
+        let data_1 = egraph[subst[var_1]].data;
+        let data_2 = egraph[subst[var_2]].data;
+
+        match (data_1, data_2) {
+            (Some(HalideData::Int(c_1)), Some(HalideData::Int(c_2))) => match comp {
+                "<" => c_1 < c_2,
+                "<a" => c_1 < c_2.abs(),
+                "<=" => c_1 <= c_2,
+                "<=+1" => c_1 <= (c_2 + 1),
+                "<=a" => c_1 <= c_2.abs(),
+                "<=-a" => c_1 <= (-c_2.abs()),
+                "<=-a+1" => c_1 <= (1 - c_2.abs()),
+                ">" => c_1 > c_2,
+                ">a" => c_1 > c_2.abs(),
+                ">=" => c_1 >= c_2,
+                ">=a" => c_1 >= (c_2.abs()),
+                ">=a-1" => c_1 >= (c_2.abs() - 1),
+                "!=" => c_1 != c_2,
+                "%0" => (c_2 != 0) && (c_1 % c_2 == 0),
+                "!%0" => (c_2 != 0) && (c_1 % c_2 != 0),
+                "%0<" => (c_2 > 0) && (c_1 % c_2 == 0),
+                "%0>" => (c_2 < 0) && (c_1 % c_2 == 0),
                 _ => false,
-            }),
+            },
             _ => false,
-        })
+        }
     }
 }
 
@@ -182,7 +280,7 @@ pub fn compare_constants(
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Arithmetic,
-    ArithMinMax,
+    BugRules,
     Full,
 }
 
@@ -191,8 +289,8 @@ pub enum Ruleset {
 pub struct Halide;
 
 impl Trs for Halide {
-    type Language = MathEquation;
-    type Analysis = EquationConstFold;
+    type Language = HalideMath;
+    type Analysis = HalideConstFold;
     type Rulesets = Ruleset;
 
     /// takes an class of rules to use then returns the vector of their associated Rewrites
@@ -224,14 +322,15 @@ impl Trs for Halide {
                 (&*sub_rules),
             ]
             .concat(),
-            Ruleset::ArithMinMax => [
+            Ruleset::BugRules => [
                 (&*add_rules),
-                (&*div_rules),
-                (&*modulo_rules),
+                // (&*div_rules),
+                // (&*modulo_rules),
                 (&*mul_rules),
                 (&*sub_rules),
-                (&*max_rules),
-                (&*min_rules),
+                // (&*max_rules),
+                // (&*min_rules),
+                (&*lt_rules),
             ]
             .concat(),
             // All the rules
@@ -254,15 +353,75 @@ impl Trs for Halide {
             .concat(),
         }
     }
+}
 
-    #[must_use]
-    fn maximum_ruleset() -> Self::Rulesets {
-        Ruleset::Full
+#[cfg(test)]
+mod tests {
+    use crate::eqsat::{Eqsat, EqsatConfBuilder};
+    use crate::utils::AstSize2;
+
+    use super::*;
+
+    #[test]
+    fn basic_eqsat_solved_true() {
+        let false_expr = vec!["( == 0 0 )".parse().unwrap()];
+        let rules = Halide::rules(&Ruleset::Full);
+
+        let eqsat = Eqsat::<Halide>::new(false_expr);
+        let result = eqsat.run(&rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!(HalideMath::Bool(true), term[0.into()]);
     }
 
-    // #[must_use]
-    // fn prove_goals() -> Vec<egg::Pattern<Self::Language>> {
-    //     let goals = ["1".parse().unwrap(), "0".parse().unwrap()];
-    //     goals.to_vec()
-    // }
+    #[test]
+    fn basic_eqsat_solved_false() {
+        let false_expr = vec!["( == 1 0 )".parse().unwrap()];
+        let rules = Halide::rules(&Ruleset::Full);
+
+        let eqsat = Eqsat::<Halide>::new(false_expr);
+        let result = eqsat.run(&rules);
+        let root = result.roots().first().unwrap();
+        let (_, term) = result.classic_extract(*root, AstSize2);
+        assert_eq!(HalideMath::Bool(false), term[0.into()]);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn halide_false_expr() {
+        let expr = vec![
+            "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
+                .parse()
+                .unwrap(),
+        ];
+        let rules = Halide::rules(&Ruleset::BugRules);
+
+        let eqsat =
+            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let _ = eqsat.run(&rules);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn halide_false_expr2() {
+        let expr = vec!["( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
+            .parse()
+            .unwrap()];
+        let rules = Halide::rules(&Ruleset::BugRules);
+
+        let eqsat =
+            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let _ = eqsat.run(&rules);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn halide_false_expr3() {
+        let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
+        let rules = Halide::rules(&Ruleset::BugRules);
+
+        let eqsat =
+            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let _ = eqsat.run(&rules);
+    }
 }

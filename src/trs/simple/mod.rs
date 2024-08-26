@@ -3,13 +3,13 @@ use serde::Serialize;
 
 use super::Trs;
 
-pub type Rewrite = egg::Rewrite<SimpleLanguage, ()>;
+pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
     #[derive(Serialize)]
-    pub enum SimpleLanguage {
+    pub enum SimpleLang {
         Num(i32),
         "+" = Add([Id; 2]),
         "*" = Mul([Id; 2]),
@@ -37,7 +37,7 @@ pub enum Ruleset {
 pub struct Simple;
 
 impl Trs for Simple {
-    type Language = SimpleLanguage;
+    type Language = SimpleLang;
     type Analysis = ();
     type Rulesets = Ruleset;
 
@@ -47,14 +47,4 @@ impl Trs for Simple {
     fn rules(_ruleset_class: &Ruleset) -> Vec<Rewrite> {
         make_rules()
     }
-
-    #[must_use]
-    fn maximum_ruleset() -> Self::Rulesets {
-        Ruleset::Full
-    }
-
-    // #[must_use]
-    // fn prove_goals() -> Vec<egg::Pattern<Self::Language>> {
-    //     panic!("THERE ARE NO PROVE GOALS HERE")
-    // }
 }

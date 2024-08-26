@@ -53,9 +53,8 @@ macro_rules! monomorphize {
                         .map(|t| pyo3::types::PyAnyMethods::extract(&t))
                         .transpose()?;
 
-                    let runner_args = $crate::eqsat::utils::EqsatConf::new(
-                        false, iter_limit, node_limit, time_limit,
-                    );
+                    let runner_args =
+                        $crate::eqsat::EqsatConf::new(false, iter_limit, node_limit, time_limit);
                     Ok(Self(eqsat.with_conf(runner_args)))
                 } else {
                     Ok(Self(eqsat))
@@ -70,16 +69,8 @@ macro_rules! monomorphize {
             }
 
             #[getter]
-            pub fn runner_args(&self) -> $crate::eqsat::utils::EqsatConf {
+            pub fn runner_args(&self) -> $crate::eqsat::EqsatConf {
                 self.0.runner_args().clone()
-            }
-
-            #[staticmethod]
-            fn make_rules() -> Rules {
-                let rules = <$type as $crate::trs::Trs>::rules(
-                    &<$type as $crate::trs::Trs>::maximum_ruleset(),
-                );
-                Rules(rules)
             }
         }
 

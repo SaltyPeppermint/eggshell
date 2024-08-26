@@ -4,14 +4,13 @@ use criterion::{criterion_group, criterion_main};
 
 use egg::{EGraph, RecExpr, SymbolLang};
 
-use eggshell::eqsat::utils::EqsatConfBuilder;
-use eggshell::eqsat::Eqsat;
-use eggshell::eqsat::EqsatResult;
+use eggshell::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
 use eggshell::sampling;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
-use eggshell::trs::simple::SimpleLanguage;
+use eggshell::trs::simple;
+use eggshell::trs::simple::SimpleLang;
 use eggshell::trs::Simple;
 use eggshell::trs::Trs;
 use eggshell::utils::AstSize2;
@@ -44,11 +43,11 @@ fn extraction(c: &mut Criterion) {
 
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
-    let seed: RecExpr<SimpleLanguage> = term.parse().unwrap();
+    let seed: RecExpr<SimpleLang> = term.parse().unwrap();
     let sample_conf = SampleConfBuilder::new().build();
     let eqsat_conf = EqsatConfBuilder::new().build();
 
-    let rules = Simple::rules(&Simple::maximum_ruleset());
+    let rules = Simple::rules(&simple::Ruleset::Full);
     let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
         .with_conf(eqsat_conf.clone())
         .run(&rules);

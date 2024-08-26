@@ -14,8 +14,7 @@ use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use eggshell::eqsat::utils::{EqsatConf, EqsatConfBuilder};
-use eggshell::eqsat::{Eqsat, EqsatResult};
+use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
 use eggshell::io::reader;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sampling::{self, SampleConf};
@@ -57,7 +56,7 @@ fn main() {
         &eqsat_conf,
         &cli,
     );
-    let rules = Halide::rules(&halide::Ruleset::ArithMinMax);
+    let rules = Halide::rules(&halide::Ruleset::BugRules);
 
     sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, rules, &cli);
 }
