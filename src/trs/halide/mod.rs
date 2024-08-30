@@ -76,7 +76,7 @@ impl Analysis<HalideMath> for HalideConstFold {
         }
     }
 
-    fn make(egraph: &EGraph, enode: &HalideMath) -> Self::Data {
+    fn make(egraph: &mut EGraph, enode: &HalideMath) -> Self::Data {
         let xi = |i: &Id| egraph[*i].data.map(|d| i64::try_from(d).unwrap());
         let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
         // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());
@@ -155,19 +155,6 @@ impl Analysis<HalideMath> for HalideConstFold {
         }
     }
 }
-
-// fn check_leaves<L, D>(class: &EClass<L, D>) -> bool
-// where
-//     L: egg::Language,
-// {
-//     let mut leaves = class.leaves();
-//     if let Some(first) = leaves.next() {
-//         if leaves.all(|l| l == first) {
-//             return true;
-//         }
-//     }
-//     false
-// }
 
 /// Checks if a constant is positive
 #[allow(clippy::missing_panics_doc)]
@@ -280,7 +267,6 @@ pub fn compare_constants(
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Arithmetic,
-    BugRules,
     Full,
 }
 
@@ -320,17 +306,6 @@ impl Trs for Halide {
                 (&*modulo_rules),
                 (&*mul_rules),
                 (&*sub_rules),
-            ]
-            .concat(),
-            Ruleset::BugRules => [
-                (&*add_rules),
-                // (&*div_rules),
-                // (&*modulo_rules),
-                (&*mul_rules),
-                (&*sub_rules),
-                // (&*max_rules),
-                // (&*min_rules),
-                (&*lt_rules),
             ]
             .concat(),
             // All the rules
@@ -387,14 +362,13 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn halide_false_expr() {
         let expr = vec![
             "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
                 .parse()
                 .unwrap(),
         ];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = Halide::rules(&Ruleset::Full);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
@@ -402,12 +376,11 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn halide_false_expr2() {
         let expr = vec!["( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
             .parse()
             .unwrap()];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = Halide::rules(&Ruleset::Full);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
@@ -415,10 +388,9 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn halide_false_expr3() {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = Halide::rules(&Ruleset::Full);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());

@@ -41,6 +41,11 @@ pub enum SketchNode<L: Language> {
 }
 
 impl<L: Language> Language for SketchNode<L> {
+    type Discriminant = (
+        Option<std::mem::Discriminant<Self>>,
+        Option<std::mem::Discriminant<L>>,
+    );
+
     fn matches(&self, _other: &Self) -> bool {
         panic!("Comparing sketches to each other does not make sense!")
     }
@@ -60,6 +65,14 @@ impl<L: Language> Language for SketchNode<L> {
             Self::Node(n) => n.children_mut(),
             Self::Contains(s) => std::slice::from_mut(s),
             Self::Or(ss) => ss.as_mut_slice(),
+        }
+    }
+
+    fn discriminant(&self) -> Self::Discriminant {
+        let my_disc = std::mem::discriminant(self);
+        match self {
+            SketchNode::Node(n) => (None, Some(std::mem::discriminant(n))),
+            SketchNode::Contains(_) | SketchNode::Any | SketchNode::Or(_) => (Some(my_disc), None),
         }
     }
 }

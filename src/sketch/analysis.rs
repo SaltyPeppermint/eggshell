@@ -67,7 +67,7 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
                     analysis_pending.extend(
                         eclass
                             .parents()
-                            .map(|(n, parent_id)| (n.clone(), parent_id)),
+                            .flat_map(|parent_id| find_parent_nodes(parent_id, eclass.id, egraph)),
                     );
                     node_data
                 }
@@ -75,9 +75,9 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
                     let DidMerge(may_not_be_existing, _) = analysis.merge(&mut existing, node_data);
                     if may_not_be_existing {
                         analysis_pending.extend(
-                            eclass
-                                .parents()
-                                .map(|(n, parent_id)| (n.clone(), parent_id)),
+                            eclass.parents().flat_map(|parent_id| {
+                                find_parent_nodes(parent_id, eclass.id, egraph)
+                            }),
                         );
                     }
                     existing
@@ -88,6 +88,19 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
             analysis_pending.insert((node, current_id));
         }
     }
+}
+
+fn find_parent_nodes<L: Language, N: Analysis<L>>(
+    parent_id: Id,
+    child_id: Id,
+    egraph: &EGraph<L, N>,
+) -> impl Iterator<Item = (L, Id)> + '_ {
+    let parent_class = &egraph[parent_id];
+    parent_class
+        .nodes
+        .iter()
+        .filter(move |n| n.children().contains(&child_id))
+        .map(move |n| (n.to_owned(), parent_id))
 }
 
 impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for AstSize2 {

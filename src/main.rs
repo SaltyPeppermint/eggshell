@@ -42,7 +42,8 @@ fn main() {
     let uuid = Uuid::new_v4();
 
     let folder = format!(
-        "data/generated_samples/5k_dataset_{}-{}",
+        "data/generated_samples/{}_{}-{}",
+        cli.file.file_stem().unwrap().to_str().unwrap(),
         now.format("%Y-%m-%d_%H:%M:%S"),
         uuid
     );
@@ -56,7 +57,7 @@ fn main() {
         &eqsat_conf,
         &cli,
     );
-    let rules = Halide::rules(&halide::Ruleset::BugRules);
+    let rules = Halide::rules(&halide::Ruleset::Full);
 
     sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, rules, &cli);
 }
@@ -121,10 +122,16 @@ fn sample<R: Trs>(
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
     let mut sample_list = Vec::new();
+    let to_take = exprs.len().min(cli.n_seeds);
 
-    for (index, expr) in exprs.into_iter().take(cli.n_seeds).enumerate() {
+    for (index, expr) in exprs.into_iter().take(to_take).enumerate() {
+        println!(
+            "Working on Expression {}/{to_take}: {}",
+            index + 1,
+            expr.term
+        );
+
         let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-        println!("Working on expr: {}", seed_expr);
 
         let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
             .with_conf(eqsat_conf.clone())
