@@ -136,4 +136,8 @@ where
     pub fn egraph(&self) -> &EGraph<R::Language, R::Analysis> {
         &self.egraph
     }
+
+    pub fn egraph_mut(&mut self) -> &mut EGraph<R::Language, R::Analysis> {
+        &mut self.egraph
+    }
 }

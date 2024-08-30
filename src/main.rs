@@ -2,15 +2,17 @@ use std::fmt::Display;
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use chrono::Local;
 use clap::Parser;
-use egg::{Id, Language, RecExpr, Rewrite};
+use egg::{EGraph, Id, Language, RecExpr, Rewrite};
 use eggshell::io::structs::Expression;
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashSet;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -35,6 +37,7 @@ fn main() {
     let exprs = reader::read_exprs_json(&cli.file, &[]);
     let sample_conf = SampleConfBuilder::new().rng_seed(cli.rng_seed).build();
     let eqsat_conf = EqsatConfBuilder::new()
+        .explanation(cli.explanations)
         .time_limit(Duration::from_secs_f64(0.5))
         .build();
 
@@ -69,13 +72,16 @@ struct Cli {
 
     /// Sets a custom config file
     #[arg(short, long, default_value_t = 50)]
-    chunksize: usize,
+    batchsize: usize,
 
     #[arg(short, long, default_value_t = 100)]
     n_seeds: usize,
 
     #[arg(short, long, default_value_t = 2024)]
     rng_seed: u64,
+
+    #[arg(short, long, default_value_t = false)]
+    explanations: bool,
 }
 
 fn write_metadata(
@@ -118,40 +124,101 @@ fn sample<R: Trs>(
     rules: Vec<Rewrite<R::Language, R::Analysis>>,
     cli: &Cli,
 ) {
-    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
+    let file_id_ctr = AtomicUsize::new(0);
 
-    let mut sample_list = Vec::new();
+    exprs
+        .into_par_iter()
+        .take(cli.n_seeds)
+        .enumerate()
+        .for_each_init(
+            || (Vec::new(), StdRng::seed_from_u64(sample_conf.rng_seed)),
+            |(sample_list, rng), (seed_id, expr)| {
+                let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
+                println!("Working on expr: {}", seed_expr);
 
-    for (index, expr) in exprs.into_iter().take(cli.n_seeds).enumerate() {
-        let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-        println!("Working on expr: {}", seed_expr);
+                let mut eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
+                    .with_conf(eqsat_conf.clone())
+                    .run(&rules);
 
-        let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-            .with_conf(eqsat_conf.clone())
-            .run(&rules);
+                let generated = sampling::sample(eqsat.egraph(), &sample_conf, rng);
 
-        let generated = sampling::sample(eqsat.egraph(), &sample_conf, &mut rng);
+                let eclass_data = generated
+                    .into_iter()
+                    .map(|(id, generated)| {
+                        let explanations = if cli.explanations {
+                            Some(gen_explanations::<R>(&generated, eqsat.egraph_mut()))
+                        } else {
+                            None
+                        };
+                        EClassData {
+                            id,
+                            generated,
+                            explanations,
+                        }
+                    })
+                    .collect();
 
-        sample_list.push(DataEntry {
-            seed_id: index,
-            seed_expr,
-            generated,
-        });
+                sample_list.push(DataEntry {
+                    seed_id,
+                    seed_expr,
+                    eclass_data,
+                });
 
-        if index % cli.chunksize == 0 {
-            let mut f = BufWriter::new(
-                File::create(format!("{folder}/{}.json", index / cli.chunksize)).unwrap(),
-            );
-            serde_json::to_writer(&mut f, &sample_list).unwrap();
-            f.flush().unwrap();
-            sample_list.clear();
-        }
-    }
+                if sample_list.len() == cli.batchsize {
+                    let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
+                    let mut f =
+                        BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
+                    serde_json::to_writer(&mut f, &sample_list).unwrap();
+                    f.flush().unwrap();
+                    sample_list.clear();
+                }
+            },
+        );
+}
+
+fn gen_explanations<R: Trs>(
+    generated: &HashSet<RecExpr<R::Language>>,
+    egraph: &mut EGraph<R::Language, R::Analysis>,
+) -> Vec<ExplanationData> {
+    generated
+        .iter()
+        .enumerate()
+        .flat_map(|(lhs_idx, lhs)| {
+            generated
+                .iter()
+                .enumerate()
+                .flat_map(move |(rhs_idx, rhs)| {
+                    if lhs_idx == rhs_idx {
+                        return None;
+                    }
+                    Some((lhs_idx, lhs, rhs_idx, rhs))
+                })
+        })
+        .map(|(lhs_idx, lhs, rhs_idx, rhs)| ExplanationData {
+            from: lhs_idx,
+            to: rhs_idx,
+            explanation: egraph.explain_equivalence(lhs, rhs).get_flat_string(),
+        })
+        .collect()
 }
 
 #[derive(Serialize, Clone, Eq, PartialEq)]
 struct DataEntry<L: Language + Display> {
     seed_id: usize,
     seed_expr: RecExpr<L>,
-    generated: HashMap<Id, HashSet<RecExpr<L>>>,
+    eclass_data: Vec<EClassData<L>>,
+}
+
+#[derive(Serialize, Clone, Eq, PartialEq)]
+struct EClassData<L: Language + Display> {
+    id: Id,
+    generated: HashSet<RecExpr<L>>,
+    explanations: Option<Vec<ExplanationData>>,
+}
+
+#[derive(Serialize, Clone, Eq, PartialEq)]
+struct ExplanationData {
+    from: usize,
+    to: usize,
+    explanation: String,
 }

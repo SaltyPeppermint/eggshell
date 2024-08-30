@@ -18,12 +18,13 @@ use thiserror::Error;
 /// The [`Trs::rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
 pub trait Trs: Serialize {
-    type Language: Language + Display + Sync + Serialize + FromOp + 'static + Sync;
-    type Analysis: Analysis<Self::Language, Data: Sync + Serialize + Clone>
+    type Language: Language + Display + Serialize + FromOp + Send + Sync + 'static;
+    type Analysis: Analysis<Self::Language, Data: Serialize + Send + Sync + Clone>
         + Clone
         + Sync
         + Serialize
         + Default
+        + Send
         + Sync;
 
     type Rulesets;
