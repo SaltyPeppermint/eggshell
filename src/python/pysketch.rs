@@ -22,15 +22,18 @@ pub enum PySketch {
     /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     ///
     /// Corresponds to the `(language_node s1 .. sn)` syntax.
-    Node { s: String, children: Vec<PySketch> },
-    /// Programs made from this [`Language`] node whose children satisfy the given sketches.
-    ///
-    /// Corresponds to a single leaf node in the underlying language syntax.
-    Leaf { s: String },
+    Node {
+        lang_node: String,
+        children: Vec<PySketch>,
+    },
+    // /// Programs made from this [`Language`] node whose children satisfy the given sketches.
+    // ///
+    // /// Corresponds to a single leaf node in the underlying language syntax.
+    // Leaf { s: String },
     /// Programs that contain sub-programs satisfying the given sketch.
     ///
     /// Corresponds to the `(contains s)` syntax.
-    Contains { s: Box<PySketch> },
+    Contains { node: Box<PySketch> },
     /// Programs that satisfy any of these sketches.
     ///
     /// Corresponds to the `(or s1 .. sn)` syntax.
@@ -58,7 +61,7 @@ impl PySketch {
             )),
             ("or" | "OR" | "Or", _) => Ok(PySketch::Or { children }),
             ("contains" | "CONTAINS" | "Contains", 1) => Ok(PySketch::Contains {
-                s: Box::new(children.swap_remove(0))
+                node: Box::new(children.swap_remove(0))
             }),
             ("contains" | "CONTAINS" | "Contains", n) => Err(PyErr::new::<PyValueError, _>(
                         format!(
@@ -66,8 +69,7 @@ impl PySketch {
                         ),
                     )),
 
-            (s, 0) => Ok(PySketch::Leaf { s: s.to_owned() }),
-            (s, _) => Ok(PySketch::Node { s: s.to_owned(), children})
+            (s, _) => Ok(PySketch::Node { lang_node: s.parse()?, children})
         }
     }
 
@@ -87,7 +89,7 @@ impl Display for PySketch {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PySketch::Any {} => write!(f, "?"),
-            PySketch::Contains { s } => write!(f, "(contains {s})"),
+            PySketch::Contains { node } => write!(f, "(contains {node})"),
             PySketch::Or { children } => {
                 let inner = children
                     .iter()
@@ -96,14 +98,20 @@ impl Display for PySketch {
                     .join(" ");
                 write!(f, "(or {inner})")
             }
-            PySketch::Leaf { s } => write!(f, "{s}"),
-            PySketch::Node { s, children } => {
-                let inner = children
-                    .iter()
-                    .map(|x| x.to_string())
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                write!(f, "({s} {inner})")
+            PySketch::Node {
+                lang_node,
+                children,
+            } => {
+                if children.is_empty() {
+                    write!(f, "{lang_node}")
+                } else {
+                    let inner = children
+                        .iter()
+                        .map(|x| x.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    write!(f, "({lang_node} {inner})")
+                }
             }
         }
     }
@@ -171,7 +179,10 @@ impl FromStr for PySketch {
                     "contains" | "CONTAINS" | "Contains" => {
                         Err(PySketchParseError::BadTerminalContains(sexp.to_owned()))
                     }
-                    _ => Ok(PySketch::Leaf { s: s.to_owned() }),
+                    _ => Ok(PySketch::Node {
+                        lang_node: s.to_string(),
+                        children: vec![],
+                    }),
                 },
                 Sexp::List(list) if list.is_empty() => Err(PySketchParseError::EmptySexp),
                 Sexp::List(list) => match &list[0] {
@@ -182,7 +193,9 @@ impl FromStr for PySketch {
                     Sexp::String(s) => match (s.as_str(), list.len()) {
                         ("contains" | "CONTAINS" | "Contains", 2) => {
                             let inner = rec(&list[1])?;
-                            Ok(PySketch::Contains { s: Box::new(inner) })
+                            Ok(PySketch::Contains {
+                                node: Box::new(inner),
+                            })
                         }
                         ("contains" | "CONTAINS" | "Contains", _) => {
                             Err(PySketchParseError::BadChildrenContains(list.to_owned()))
@@ -194,7 +207,7 @@ impl FromStr for PySketch {
                             children: list[1..].iter().map(rec).collect::<Result<_, _>>()?,
                         }),
                         _ => Ok(PySketch::Node {
-                            s: s.to_owned(),
+                            lang_node: s.to_owned(),
                             children: list[1..].iter().map(rec).collect::<Result<_, _>>()?,
                         }),
                     },
@@ -213,24 +226,16 @@ impl<L: Language + Display> From<&Sketch<L>> for PySketch {
         fn rec<L: Language + Display>(node: &SketchNode<L>, sketch: &Sketch<L>) -> PySketch {
             match node {
                 SketchNode::Any => PySketch::Any {},
-                SketchNode::Node(inner_node) => {
-                    if inner_node.is_leaf() {
-                        PySketch::Leaf {
-                            s: inner_node.to_string(),
-                        }
-                    } else {
-                        PySketch::Node {
-                            s: inner_node.to_string(),
-                            children: inner_node
-                                .children()
-                                .iter()
-                                .map(|child_id| rec(&sketch[*child_id], sketch))
-                                .collect(),
-                        }
-                    }
-                }
+                SketchNode::Node(lang_node) => PySketch::Node {
+                    lang_node: lang_node.to_string(),
+                    children: lang_node
+                        .children()
+                        .iter()
+                        .map(|child_id| rec(&sketch[*child_id], sketch))
+                        .collect(),
+                },
                 SketchNode::Contains(id) => PySketch::Contains {
-                    s: rec(&sketch[*id], sketch).into(),
+                    node: rec(&sketch[*id], sketch).into(),
                 },
                 SketchNode::Or(ids) => PySketch::Or {
                     children: ids.iter().map(|id| rec(&sketch[*id], sketch)).collect(),

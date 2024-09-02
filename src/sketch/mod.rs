@@ -155,13 +155,10 @@ where
                     let id = sketch.add(SketchNode::Any);
                     Ok(id)
                 }
-                PySketch::Leaf { s } => {
-                    // Parses a simple terminal node from the language
-                    let node = L::from_op(s, vec![]).map_err(SketchParseError::BadOp)?;
-                    let id = sketch.add(SketchNode::Node(node));
-                    Ok(id)
-                }
-                PySketch::Node { s, children } => {
+                PySketch::Node {
+                    lang_node: s,
+                    children,
+                } => {
                     // The recursions operate on a stricktly smaller PySketch with less elements in it.
                     // If this node contains no children, the child_ids will be an empty vector and this
                     // is the end of one of the recusions
@@ -173,7 +170,7 @@ where
                     let id = sketch.add(SketchNode::Node(node));
                     Ok(id)
                 }
-                PySketch::Contains { s } => {
+                PySketch::Contains { node: s } => {
                     // Recursion reduces the number of the remaining elements in the PySketch by removing
                     // the wrapping `PySketch::Contains`
                     let child_id = rec(sketch, s)?;

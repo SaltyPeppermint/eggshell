@@ -12,15 +12,15 @@ use thiserror::Error;
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyLang {
-    s: String,
+    node: String,
     children: Vec<PyLang>,
 }
 
 #[pymethods]
 impl PyLang {
     #[new]
-    pub fn new(s: String, children: Vec<PyLang>) -> Self {
-        PyLang { s, children }
+    pub fn new(node: String, children: Vec<PyLang>) -> Self {
+        PyLang { node, children }
     }
 
     #[staticmethod]
@@ -37,7 +37,7 @@ impl PyLang {
 impl Display for PyLang {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         if self.children.is_empty() {
-            write!(f, "{}", self.s)
+            write!(f, "{}", self.node)
         } else {
             let inner = self
                 .children
@@ -45,7 +45,7 @@ impl Display for PyLang {
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
-            write!(f, "({} {})", self.s, inner)
+            write!(f, "({} {})", self.node, inner)
         }
     }
 }
@@ -91,7 +91,7 @@ impl FromStr for PyLang {
             match sexp {
                 Sexp::Empty => Err(PyLangParseError::EmptySexp),
                 Sexp::String(s) => Ok(PyLang {
-                    s: s.to_owned(),
+                    node: s.to_owned(),
                     children: vec![],
                 }),
                 Sexp::List(list) if list.is_empty() => Err(PyLangParseError::EmptySexp),
@@ -104,7 +104,7 @@ impl FromStr for PyLang {
                         let children: Vec<PyLang> =
                             list[1..].iter().map(rec).collect::<Result<_, _>>()?;
                         Ok(PyLang {
-                            s: s.to_owned(),
+                            node: s.to_owned(),
                             children,
                         })
                     }
@@ -122,7 +122,7 @@ impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
     fn from(expr: &RecExpr<L>) -> Self {
         fn rec<L: Language + Display>(node: &L, expr: &RecExpr<L>) -> PyLang {
             PyLang {
-                s: node.to_string(),
+                node: node.to_string(),
                 children: node
                     .children()
                     .iter()
@@ -153,7 +153,7 @@ where
             rec_expr: &mut RecExpr<L>,
         ) -> Result<Id, <L as egg::FromOp>::Error> {
             if let 0 = pylang.children.len() {
-                let node = L::from_op(&pylang.s, vec![])?;
+                let node = L::from_op(&pylang.node, vec![])?;
                 Ok(rec_expr.add(node))
             } else {
                 let children = pylang
@@ -161,7 +161,7 @@ where
                     .iter()
                     .map(|c| rec(c, rec_expr))
                     .collect::<Result<_, _>>()?;
-                let node = L::from_op(&pylang.s, children)?;
+                let node = L::from_op(&pylang.node, children)?;
                 Ok(rec_expr.add(node))
             }
         }
@@ -190,14 +190,14 @@ mod tests {
     #[test]
     fn parse_basic() {
         let lhs = PyLang {
-            s: "==".to_owned(),
+            node: "==".to_owned(),
             children: vec![
                 PyLang {
-                    s: "0".to_owned(),
+                    node: "0".to_owned(),
                     children: vec![],
                 },
                 PyLang {
-                    s: "0".to_owned(),
+                    node: "0".to_owned(),
                     children: vec![],
                 },
             ],
@@ -209,14 +209,14 @@ mod tests {
     #[test]
     fn print_basic() {
         let lhs = PyLang {
-            s: "==".to_owned(),
+            node: "==".to_owned(),
             children: vec![
                 PyLang {
-                    s: "0".to_owned(),
+                    node: "0".to_owned(),
                     children: vec![],
                 },
                 PyLang {
-                    s: "0".to_owned(),
+                    node: "0".to_owned(),
                     children: vec![],
                 },
             ],
@@ -229,24 +229,24 @@ mod tests {
     #[test]
     fn parse_nested() {
         let lhs = PyLang {
-            s: "==".to_owned(),
+            node: "==".to_owned(),
 
             children: vec![
                 PyLang {
-                    s: "+".to_owned(),
+                    node: "+".to_owned(),
                     children: vec![
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    s: "2".to_owned(),
+                    node: "2".to_owned(),
                     children: vec![],
                 },
             ],
@@ -258,24 +258,24 @@ mod tests {
     #[test]
     fn print_nested() {
         let lhs = PyLang {
-            s: "==".to_owned(),
+            node: "==".to_owned(),
 
             children: vec![
                 PyLang {
-                    s: "+".to_owned(),
+                    node: "+".to_owned(),
                     children: vec![
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    s: "2".to_owned(),
+                    node: "2".to_owned(),
                     children: vec![],
                 },
             ],
@@ -288,39 +288,39 @@ mod tests {
     #[test]
     fn parse_complex() {
         let lhs = PyLang {
-            s: "==".to_owned(),
+            node: "==".to_owned(),
             children: vec![
                 PyLang {
-                    s: "+".to_owned(),
+                    node: "+".to_owned(),
                     children: vec![
                         PyLang {
-                            s: "+".to_owned(),
+                            node: "+".to_owned(),
                             children: vec![
                                 PyLang {
-                                    s: "1".to_owned(),
+                                    node: "1".to_owned(),
                                     children: vec![],
                                 },
                                 PyLang {
-                                    s: "0".to_owned(),
+                                    node: "0".to_owned(),
                                     children: vec![],
                                 },
                             ],
                         },
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                     ],
                 },
                 PyLang {
-                    s: "+".to_owned(),
+                    node: "+".to_owned(),
                     children: vec![
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                         PyLang {
-                            s: "1".to_owned(),
+                            node: "1".to_owned(),
                             children: vec![],
                         },
                     ],
