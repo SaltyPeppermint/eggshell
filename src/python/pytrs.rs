@@ -1,7 +1,7 @@
 use super::macros::monomorphize;
 
 pub mod arithmatic {
-    super::monomorphize!(crate::trs::Arithmatic);
+    super::monomorphize!(crate::trs::Arithmetic);
 }
 
 pub mod halide {

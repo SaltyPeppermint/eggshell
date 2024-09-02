@@ -19,17 +19,17 @@ pub struct EqsatConf {
 impl EqsatConf {
     #[must_use]
     #[new]
-    #[pyo3(signature = (explanation=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(Duration::new(10, 0))))]
+    #[pyo3(signature = (explanation=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(10.0)))]
     pub fn new(
         explanation: bool,
         iter_limit: Option<usize>,
         node_limit: Option<usize>,
-        time_limit: Option<Duration>,
+        time_limit: Option<f64>,
     ) -> Self {
         Self {
             iter_limit,
             node_limit,
-            time_limit,
+            time_limit: time_limit.map(Duration::from_secs_f64),
             explanation,
         }
     }

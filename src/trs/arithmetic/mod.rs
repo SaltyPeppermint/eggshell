@@ -4,7 +4,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, PatternAst, Subst, 
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::Trs;
+use super::{Trs, TrsError};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -157,11 +157,22 @@ pub enum Ruleset {
     Full,
 }
 
+impl TryFrom<String> for Ruleset {
+    type Error = TrsError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "full" | "Full" | "FULL" => Ok(Self::Full),
+            _ => Err(TrsError::BadRulesetName(value)),
+        }
+    }
+}
+
 /// Halide Trs implementation
 #[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Arithmatic;
+pub struct Arithmetic;
 
-impl Trs for Arithmatic {
+impl Trs for Arithmetic {
     type Language = Math;
     type Analysis = ConstantFold;
     type Rulesets = Ruleset;

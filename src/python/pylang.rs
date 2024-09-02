@@ -2,7 +2,7 @@ use std::fmt;
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use egg::{Language, RecExpr};
+use egg::{FromOp, Id, Language, RecExpr};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::{create_exception, PyErr};
@@ -141,10 +141,51 @@ impl<L: Language + Display> From<&RecExpr<L>> for PyLang {
     }
 }
 
+impl<L> TryFrom<&PyLang> for RecExpr<L>
+where
+    L: Language + FromOp,
+{
+    type Error = <L as egg::FromOp>::Error;
+
+    fn try_from(value: &PyLang) -> Result<Self, Self::Error> {
+        fn rec<L: Language + FromOp>(
+            pylang: &PyLang,
+            rec_expr: &mut RecExpr<L>,
+        ) -> Result<Id, <L as egg::FromOp>::Error> {
+            if let 0 = pylang.children.len() {
+                let node = L::from_op(&pylang.s, vec![])?;
+                Ok(rec_expr.add(node))
+            } else {
+                let children = pylang
+                    .children
+                    .iter()
+                    .map(|c| rec(c, rec_expr))
+                    .collect::<Result<_, _>>()?;
+                let node = L::from_op(&pylang.s, children)?;
+                Ok(rec_expr.add(node))
+            }
+        }
+
+        let mut rec_expr = RecExpr::<L>::default();
+        rec(value, &mut rec_expr)?;
+        Ok(rec_expr)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::borrow::Borrow;
+
     use super::*;
     use crate::trs::halide::HalideMath;
+
+    #[test]
+    fn convert_pylang() {
+        let term = "(== (+ (+ 1 0) 1) (+ 1 1))";
+        let lhs: RecExpr<HalideMath> = term.parse::<PyLang>().unwrap().borrow().try_into().unwrap();
+        let rhs: RecExpr<HalideMath> = term.parse().unwrap();
+        assert_eq!(lhs, rhs);
+    }
 
     #[test]
     fn parse_basic() {

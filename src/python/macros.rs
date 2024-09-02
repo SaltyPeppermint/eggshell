@@ -12,60 +12,38 @@ macro_rules! monomorphize {
         #[derive(Debug, Clone)]
         pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
 
-        /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
-        #[pyo3::pyclass]
-        #[derive(Debug, Clone)]
-        pub struct Rules(
-            Vec<
-                egg::Rewrite<
-                    <$type as $crate::trs::Trs>::Language,
-                    <$type as $crate::trs::Trs>::Analysis,
-                >,
-            >,
-        );
-
         #[pyo3::pymethods]
         impl Eqsat {
             #[new]
-            #[pyo3(signature = (start_terms, **py_kwargs))]
-            fn new(
-                start_terms: Vec<String>,
-                py_kwargs: Option<&pyo3::Bound<'_, pyo3::types::PyDict>>,
+            pub fn new(
+                start_terms: Vec<$crate::python::PyLang>,
+                conf: Option<$crate::eqsat::utils::EqsatConf>,
             ) -> pyo3::PyResult<Self> {
                 let start_exprs = start_terms
                     .into_iter()
-                    .map(|term| term.parse())
+                    .map(|term| (&term).try_into())
+                    // Vec<egg::RecExpr<<$type as $crate::trs::Trs>::Language>>
                     .collect::<Result<_, _>>()
-                    .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
+                    .map_err(|e| {
+                        $crate::python::EggError::FromOp::<
+                            <<$type as $crate::trs::Trs>::Language as egg::FromOp>::Error,
+                        >(e)
+                    })?;
 
                 let eqsat = $crate::eqsat::Eqsat::new(start_exprs);
-
-                if let Some(bound) = py_kwargs {
-                    let iter_limit = pyo3::types::PyDictMethods::get_item(bound, "iter_limit")?
-                        .map(|t| pyo3::types::PyAnyMethods::extract(&t))
-                        .transpose()?;
-
-                    let node_limit = pyo3::types::PyDictMethods::get_item(bound, "node_limit")?
-                        .map(|t| pyo3::types::PyAnyMethods::extract(&t))
-                        .transpose()?;
-
-                    let time_limit = pyo3::types::PyDictMethods::get_item(bound, "time_limit")?
-                        .map(|t| pyo3::types::PyAnyMethods::extract(&t))
-                        .transpose()?;
-
-                    let runner_args =
-                        $crate::eqsat::EqsatConf::new(false, iter_limit, node_limit, time_limit);
-                    Ok(Self(eqsat.with_conf(runner_args)))
+                if let Some(c) = conf {
+                    Ok(Self(eqsat.with_conf(c)))
                 } else {
                     Ok(Self(eqsat))
                 }
             }
 
             #[allow(clippy::missing_errors_doc)]
-            fn run(&self, rules: &Rules) -> pyo3::PyResult<EqsatResult> {
-                let r = self.0.run(&rules.0);
-
-                Ok(EqsatResult(r))
+            pub fn run(&self, ruleset_name: String) -> pyo3::PyResult<EqsatResult> {
+                let ruleset = <$type as $crate::trs::Trs>::Rulesets::try_from(ruleset_name)?;
+                let rules = <$type as $crate::trs::Trs>::rules(&ruleset);
+                let result = self.0.run(&rules);
+                Ok(EqsatResult(result))
             }
 
             #[getter]

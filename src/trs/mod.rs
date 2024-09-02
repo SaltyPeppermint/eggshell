@@ -1,13 +1,14 @@
 use std::fmt::Display;
 
 use egg::{Analysis, FromOp, Language, Rewrite};
+use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
-pub mod arithmatic;
+pub mod arithmetic;
 pub mod halide;
 pub mod simple;
 
-pub use arithmatic::Arithmatic;
+pub use arithmetic::Arithmetic;
 pub use halide::Halide;
 pub use simple::Simple;
 use thiserror::Error;
@@ -27,7 +28,7 @@ pub trait Trs: Serialize {
         + Send
         + Sync;
 
-    type Rulesets;
+    type Rulesets: TryFrom<String>;
 
     fn rules(ruleset_class: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
@@ -38,4 +39,19 @@ pub trait Trs: Serialize {
 pub enum TrsError {
     #[error("wrong number of children: {0}")]
     BadAnalysis(String),
+    #[error("wrong number of children: {0}")]
+    BadRulesetName(String),
+}
+
+create_exception!(
+    eggshell,
+    TrsException,
+    PyException,
+    "Eggshell internal error."
+);
+
+impl From<TrsError> for PyErr {
+    fn from(err: TrsError) -> PyErr {
+        TrsException::new_err(err.to_string())
+    }
 }

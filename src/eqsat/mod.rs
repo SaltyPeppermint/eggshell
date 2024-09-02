@@ -1,4 +1,4 @@
-mod utils;
+pub mod utils;
 
 use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;

@@ -4,7 +4,7 @@ mod rules;
 use egg::{define_language, Analysis, DidMerge, Id, Subst, Symbol, Var};
 use serde::Serialize;
 
-use super::Trs;
+use super::{Trs, TrsError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -282,6 +282,18 @@ pub enum Ruleset {
     Arithmetic,
     BugRules,
     Full,
+}
+
+impl TryFrom<String> for Ruleset {
+    type Error = TrsError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "full" | "Full" | "FULL" => Ok(Self::Full),
+            "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
+            _ => Err(TrsError::BadRulesetName(value)),
+        }
+    }
 }
 
 /// Halide Trs implementation

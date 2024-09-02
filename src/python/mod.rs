@@ -19,6 +19,8 @@ pub use pytrs::*;
 pub enum EggError<E: Display> {
     #[error(transparent)]
     RecExprParse(#[from] egg::RecExprParseError<E>),
+    #[error(transparent)]
+    FromOp(#[from] egg::FromOpError),
 }
 
 create_exception!(

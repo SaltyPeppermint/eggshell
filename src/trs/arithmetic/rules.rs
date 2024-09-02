@@ -1,7 +1,7 @@
 use egg::rewrite as rw;
 
-use crate::trs::arithmatic;
-use crate::trs::arithmatic::Rewrite;
+use crate::trs::arithmetic;
+use crate::trs::arithmetic::Rewrite;
 
 #[rustfmt::skip]
 pub fn rules() -> Vec<Rewrite> { vec![
@@ -11,7 +11,7 @@ pub fn rules() -> Vec<Rewrite> { vec![
     rw!("assoc-mul"; "(* ?a (* ?b ?c))" => "(* (* ?a ?b) ?c)"),
 
     rw!("sub-canon"; "(- ?a ?b)" => "(+ ?a (* -1 ?b))"),
-    rw!("div-canon"; "(/ ?a ?b)" => "(* ?a (pow ?b -1))" if arithmatic::is_not_zero("?b")),
+    rw!("div-canon"; "(/ ?a ?b)" => "(* ?a (pow ?b -1))" if arithmetic::is_not_zero("?b")),
     // rw!("canon-sub"; "(+ ?a (* -1 ?b))"   => "(- ?a ?b)"),
     // rw!("canon-div"; "(* ?a (pow ?b -1))" => "(/ ?a ?b)" if is_not_zero("?b")),
 
@@ -23,22 +23,22 @@ pub fn rules() -> Vec<Rewrite> { vec![
     rw!("mul-one";  "?a" => "(* ?a 1)"),
 
     rw!("cancel-sub"; "(- ?a ?a)" => "0"),
-    rw!("cancel-div"; "(/ ?a ?a)" => "1" if arithmatic::is_not_zero("?a")),
+    rw!("cancel-div"; "(/ ?a ?a)" => "1" if arithmetic::is_not_zero("?a")),
 
     rw!("distribute"; "(* ?a (+ ?b ?c))"        => "(+ (* ?a ?b) (* ?a ?c))"),
     rw!("factor"    ; "(+ (* ?a ?b) (* ?a ?c))" => "(* ?a (+ ?b ?c))"),
 
     rw!("pow-mul"; "(* (pow ?a ?b) (pow ?a ?c))" => "(pow ?a (+ ?b ?c))"),
     rw!("pow0"; "(pow ?x 0)" => "1"
-        if arithmatic::is_not_zero("?x")),
+        if arithmetic::is_not_zero("?x")),
     rw!("pow1"; "(pow ?x 1)" => "?x"),
     rw!("pow2"; "(pow ?x 2)" => "(* ?x ?x)"),
     rw!("pow-recip"; "(pow ?x -1)" => "(/ 1 ?x)"
-        if arithmatic::is_not_zero("?x")),
-    rw!("recip-mul-div"; "(* ?x (/ 1 ?x))" => "1" if arithmatic::is_not_zero("?x")),
+        if arithmetic::is_not_zero("?x")),
+    rw!("recip-mul-div"; "(* ?x (/ 1 ?x))" => "1" if arithmetic::is_not_zero("?x")),
 
-    rw!("d-variable"; "(d ?x ?x)" => "1" if arithmatic::is_sym("?x")),
-    rw!("d-constant"; "(d ?x ?c)" => "0" if arithmatic::is_sym("?x") if arithmatic::is_const_or_distinct_var("?c", "?x")),
+    rw!("d-variable"; "(d ?x ?x)" => "1" if arithmetic::is_sym("?x")),
+    rw!("d-constant"; "(d ?x ?c)" => "0" if arithmetic::is_sym("?x") if arithmetic::is_const_or_distinct_var("?c", "?x")),
 
     rw!("d-add"; "(d ?x (+ ?a ?b))" => "(+ (d ?x ?a) (d ?x ?b))"),
     rw!("d-mul"; "(d ?x (* ?a ?b))" => "(+ (* ?a (d ?x ?b)) (* ?b (d ?x ?a)))"),
@@ -46,7 +46,7 @@ pub fn rules() -> Vec<Rewrite> { vec![
     rw!("d-sin"; "(d ?x (sin ?x))" => "(cos ?x)"),
     rw!("d-cos"; "(d ?x (cos ?x))" => "(* -1 (sin ?x))"),
 
-    rw!("d-ln"; "(d ?x (ln ?x))" => "(/ 1 ?x)" if arithmatic::is_not_zero("?x")),
+    rw!("d-ln"; "(d ?x (ln ?x))" => "(/ 1 ?x)" if arithmetic::is_not_zero("?x")),
 
     rw!("d-power";
         "(d ?x (pow ?f ?g))" =>
@@ -55,13 +55,13 @@ pub fn rules() -> Vec<Rewrite> { vec![
                   (/ ?g ?f))
                (* (d ?x ?g)
                   (ln ?f))))"
-        if arithmatic::is_not_zero("?f")
-        if arithmatic::is_not_zero("?g")
+        if arithmetic::is_not_zero("?f")
+        if arithmetic::is_not_zero("?g")
     ),
 
     rw!("i-one"; "(i 1 ?x)" => "?x"),
     rw!("i-power-const"; "(i (pow ?x ?c) ?x)" =>
-        "(/ (pow ?x (+ ?c 1)) (+ ?c 1))" if arithmatic::is_const("?c")),
+        "(/ (pow ?x (+ ?c 1)) (+ ?c 1))" if arithmetic::is_const("?c")),
     rw!("i-cos"; "(i (cos ?x) ?x)" => "(sin ?x)"),
     rw!("i-sin"; "(i (sin ?x) ?x)" => "(* -1 (cos ?x))"),
     rw!("i-sum"; "(i (+ ?f ?g) ?x)" => "(+ (i ?f ?x) (i ?g ?x))"),
