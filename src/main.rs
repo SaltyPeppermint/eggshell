@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use chrono::Local;
 use clap::Parser;
-use egg::{EGraph, Id, Language, RecExpr, Rewrite};
+use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use eggshell::io::structs::Expression;
 use hashbrown::HashSet;
 use rand::rngs::StdRng;
@@ -72,7 +72,7 @@ struct Cli {
 
     /// Sets a custom config file
     #[arg(short, long, default_value_t = 50)]
-    batchsize: usize,
+    chunksize: usize,
 
     #[arg(short, long, default_value_t = 100)]
     n_seeds: usize,
@@ -82,6 +82,9 @@ struct Cli {
 
     #[arg(short, long, default_value_t = false)]
     explanations: bool,
+
+    #[arg(short, long, default_value_t = true)]
+    baseline: bool,
 }
 
 fn write_metadata(
@@ -150,9 +153,15 @@ fn sample<R: Trs>(
                         } else {
                             None
                         };
+                        let baselines = if cli.baseline {
+                            Some(gen_baseline::<R>(&generated, &rules))
+                        } else {
+                            None
+                        };
                         EClassData {
                             id,
                             generated,
+                            baselines,
                             explanations,
                         }
                     })
@@ -164,7 +173,7 @@ fn sample<R: Trs>(
                     eclass_data,
                 });
 
-                if sample_list.len() == cli.batchsize {
+                if sample_list.len() == cli.chunksize {
                     let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
                     let mut f =
                         BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
@@ -202,21 +211,64 @@ fn gen_explanations<R: Trs>(
         .collect()
 }
 
-#[derive(Serialize, Clone, Eq, PartialEq)]
+fn gen_baseline<R: Trs>(
+    generated: &HashSet<RecExpr<R::Language>>,
+    rules: &[Rewrite<R::Language, R::Analysis>],
+) -> Vec<BaselineData> {
+    generated
+        .iter()
+        .enumerate()
+        .flat_map(|(lhs_idx, lhs)| {
+            generated
+                .iter()
+                .enumerate()
+                .flat_map(move |(rhs_idx, rhs)| {
+                    if lhs_idx == rhs_idx {
+                        return None;
+                    }
+                    Some((lhs_idx, lhs, rhs_idx, rhs))
+                })
+        })
+        .map(|(lhs_idx, lhs, rhs_idx, rhs)| {
+            let result = Eqsat::<R>::new(vec![lhs.clone(), rhs.clone()]).run(rules);
+            BaselineData {
+                from: lhs_idx,
+                to: rhs_idx,
+                goal_reached: matches!(result.report().stop_reason, StopReason::Other(_)),
+                total_time: result.report().total_time,
+                total_nodes: result.report().egraph_nodes,
+                total_iters: result.report().iterations,
+            }
+        })
+        .collect()
+}
+
+#[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
     seed_id: usize,
     seed_expr: RecExpr<L>,
     eclass_data: Vec<EClassData<L>>,
 }
 
-#[derive(Serialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Clone, Debug)]
 struct EClassData<L: Language + Display> {
     id: Id,
     generated: HashSet<RecExpr<L>>,
+    baselines: Option<Vec<BaselineData>>,
     explanations: Option<Vec<ExplanationData>>,
 }
 
-#[derive(Serialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Clone, Debug)]
+struct BaselineData {
+    from: usize,
+    to: usize,
+    goal_reached: bool,
+    total_time: f64,
+    total_nodes: usize,
+    total_iters: usize,
+}
+
+#[derive(Serialize, Clone, Eq, PartialEq, Debug)]
 struct ExplanationData {
     from: usize,
     to: usize,

@@ -4,6 +4,8 @@ use egg::{Analysis, Language, RecExpr, Runner};
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::HashSet;
+
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[allow(clippy::unsafe_derive_deserialize)]
 #[pyclass]
@@ -115,7 +117,11 @@ impl Default for EqsatConfBuilder {
 }
 
 #[must_use]
-pub(crate) fn build_runner<L, N>(conf: &EqsatConf, exprs: &[RecExpr<L>]) -> Runner<L, N>
+pub(crate) fn build_runner<L, N>(
+    conf: &EqsatConf,
+    root_check: bool,
+    exprs: &[RecExpr<L>],
+) -> Runner<L, N>
 where
     L: Language,
     N: Analysis<L> + Default,
@@ -134,6 +140,18 @@ where
     if conf.explanation {
         runner = runner.with_explanations_enabled();
     };
+
+    if root_check {
+        let hook = move |r: &mut Runner<L, N>| {
+            let mut uniq = HashSet::new();
+            if r.roots.iter().all(|x| uniq.insert(*x)) {
+                Ok(())
+            } else {
+                Err("Duplicate in roots".into())
+            }
+        };
+        runner = runner.with_hook(hook);
+    }
 
     for expr in exprs {
         runner = runner.with_expr(expr);

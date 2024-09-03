@@ -18,6 +18,7 @@ where
 {
     runner_args: EqsatConf,
     start_exprs: Vec<RecExpr<R::Language>>,
+    root_check: bool,
 }
 
 impl<R> Eqsat<R>
@@ -41,6 +42,7 @@ where
         Self {
             runner_args: EqsatConfBuilder::default().build(),
             start_exprs,
+            root_check: false,
         }
     }
 
@@ -48,6 +50,13 @@ where
     #[must_use]
     pub fn with_conf(mut self, runner_args: EqsatConf) -> Self {
         self.runner_args = runner_args;
+        self
+    }
+
+    /// With the runner parameters.
+    #[must_use]
+    pub fn with_root_check(mut self) -> Self {
+        self.root_check = true;
         self
     }
 
@@ -63,7 +72,8 @@ where
         // println!("====================================");
         // println!("Running with Expression:");
 
-        let runner = utils::build_runner(&self.runner_args, &self.start_exprs).run(rules.iter());
+        let runner = utils::build_runner(&self.runner_args, self.root_check, &self.start_exprs)
+            .run(rules.iter());
 
         let report = runner.report();
         info!("{}", &report);
