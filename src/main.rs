@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use chrono::Local;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use eggshell::io::structs::Expression;
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -36,11 +36,15 @@ fn main() {
     let cli = Cli::parse();
 
     let exprs = reader::read_exprs_json(&cli.file, &[]);
-    let sample_conf = SampleConfBuilder::new()
+    let sample_conf_builder = SampleConfBuilder::new()
         .rng_seed(cli.rng_seed)
-        .samples_per_eclass(cli.eclass_samples)
-        .samples_per_egraph(cli.egraph_samples)
-        .build();
+        .samples_per_eclass(cli.eclass_samples);
+    let sample_conf = match cli.sample_mode {
+        SampleMode::Full { egraph_samples } => sample_conf_builder
+            .samples_per_egraph(egraph_samples)
+            .build(),
+        SampleMode::JustRoot => sample_conf_builder.build(),
+    };
     let eqsat_conf = EqsatConfBuilder::new()
         .explanation(cli.explanations)
         .time_limit(Duration::from_secs_f64(0.5))
@@ -76,22 +80,18 @@ struct Cli {
     file: PathBuf,
 
     /// Sets a custom config file
-    #[arg(short, long, default_value_t = 50)]
+    #[arg(short = 'b', long, default_value_t = 50)]
     batchsize: usize,
 
     /// Number of terms from which to seed egraphs
-    #[arg(short = 't', long, default_value_t = 100)]
+    #[arg(short = 'n', long, default_value_t = 100)]
     n_terms: usize,
 
     /// RNG Seed
     #[arg(short = 'r', long, default_value_t = 2024)]
     rng_seed: u64,
 
-    /// Number of samples to take for each EGraph
-    #[arg(short = 'g', long, default_value_t = 16)]
-    egraph_samples: usize,
-
-    /// Number of samples to take for each EClass
+    /// Number of samples to take per EClass
     #[arg(short = 'c', long, default_value_t = 8)]
     eclass_samples: usize,
 
@@ -102,6 +102,19 @@ struct Cli {
     /// Calculate and save n baselines
     #[arg(short = 'l', long)]
     baseline: Option<usize>,
+
+    #[command(subcommand)]
+    sample_mode: SampleMode,
+}
+
+#[derive(Subcommand, Serialize, Deserialize, Debug)]
+enum SampleMode {
+    Full {
+        /// Number of samples to take for each EGraph
+        #[arg(short = 'g', long, default_value_t = 16)]
+        egraph_samples: usize,
+    },
+    JustRoot,
 }
 
 fn write_metadata(
@@ -160,7 +173,17 @@ fn sample<R: Trs>(
                     .with_conf(eqsat_conf.clone())
                     .run(&rules);
 
-                let generated = sampling::sample(eqsat.egraph(), &sample_conf, rng);
+                let generated = match cli.sample_mode {
+                    SampleMode::Full { egraph_samples: _ } => {
+                        sampling::sample(eqsat.egraph(), &sample_conf, rng)
+                    }
+                    SampleMode::JustRoot => {
+                        let root_id = *eqsat.roots().first().unwrap();
+                        let root_samples =
+                            sampling::sample_root(eqsat.egraph(), &sample_conf, root_id, rng);
+                        HashMap::from([(root_id, root_samples)])
+                    }
+                };
 
                 let eclass_data = generated
                     .into_iter()

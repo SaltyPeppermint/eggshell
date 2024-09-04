@@ -65,6 +65,30 @@ pub fn sample<L: Language, N: Analysis<L>>(
         .collect()
 }
 
+pub fn sample_root<L: Language, N: Analysis<L>>(
+    egraph: &EGraph<L, N>,
+    conf: &SampleConf,
+    root: Id,
+    rng: &mut StdRng,
+) -> HashSet<RecExpr<L>> {
+    let extractor = Extractor::new(egraph, AstSize2);
+
+    let mut raw_weights_memo = HashMap::new();
+
+    (0..conf.samples_per_eclass)
+        .map(|_| {
+            sample_term(
+                egraph,
+                &egraph[root],
+                &extractor,
+                conf.loop_limit,
+                rng,
+                &mut raw_weights_memo,
+            )
+        })
+        .collect()
+}
+
 #[allow(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
