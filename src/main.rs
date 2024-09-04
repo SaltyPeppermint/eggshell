@@ -73,7 +73,7 @@ fn main() {
     gen_data::<Halide>(exprs, &eqsat_conf, &sample_conf, &folder, &rules, &cli);
 }
 
-#[derive(Parser, Serialize, Deserialize, Debug)]
+#[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
@@ -107,7 +107,7 @@ struct Cli {
     sample_mode: SampleMode,
 }
 
-#[derive(Subcommand, Serialize, Deserialize, Debug)]
+#[derive(Subcommand, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 enum SampleMode {
     Full {
         /// Number of samples to take for each EGraph
@@ -129,21 +129,20 @@ fn write_metadata(
     let metadata = MetaData {
         id: uuid,
         folder: folder.to_owned(),
-        seed_file: cli.file.to_owned(),
-        n_seeds: cli.n_terms,
+        cli: cli.to_owned(),
         timestamp,
         sample_conf: sample_conf.clone(),
         eqsat_conf: eqsat_conf.clone(),
     };
     serde_json::to_writer(&mut metadata_f, &metadata).unwrap();
+    metadata_f.flush().unwrap();
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 struct MetaData {
     id: Uuid,
     folder: String,
-    seed_file: PathBuf,
-    n_seeds: usize,
+    cli: Cli,
     timestamp: i64,
     sample_conf: SampleConf,
     eqsat_conf: EqsatConf,
