@@ -70,7 +70,7 @@ fn main() {
     );
     let rules = Halide::rules(&halide::Ruleset::BugRules);
 
-    sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, rules, &cli);
+    gen_data::<Halide>(exprs, &eqsat_conf, &sample_conf, &folder, &rules, &cli);
 }
 
 #[derive(Parser, Serialize, Deserialize, Debug)]
@@ -149,12 +149,12 @@ struct MetaData {
     eqsat_conf: EqsatConf,
 }
 
-fn sample<R: Trs>(
+fn gen_data<R: Trs>(
     exprs: Vec<Expression>,
-    eqsat_conf: EqsatConf,
-    sample_conf: SampleConf,
+    eqsat_conf: &EqsatConf,
+    sample_conf: &SampleConf,
     folder: &str,
-    rules: Vec<Rewrite<R::Language, R::Analysis>>,
+    rules: &[Rewrite<R::Language, R::Analysis>],
     cli: &Cli,
 ) {
     let file_id_ctr = AtomicUsize::new(0);
@@ -169,50 +169,12 @@ fn sample<R: Trs>(
                 let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
                 println!("Working on expr: {}", seed_expr);
 
-                let mut eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
+                let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
                     .with_conf(eqsat_conf.clone())
-                    .run(&rules);
+                    .run(rules);
 
-                let generated = match cli.sample_mode {
-                    SampleMode::Full { egraph_samples: _ } => {
-                        let root_id = *eqsat.roots().first().unwrap();
-                        let root_samples =
-                            sampling::sample_root(eqsat.egraph(), &sample_conf, root_id, rng);
-                        let mut random_samples =
-                            sampling::sample(eqsat.egraph(), &sample_conf, rng);
-                        random_samples.insert(root_id, root_samples);
-                        random_samples
-                    }
-                    SampleMode::JustRoot => {
-                        let root_id = *eqsat.roots().first().unwrap();
-                        let root_samples =
-                            sampling::sample_root(eqsat.egraph(), &sample_conf, root_id, rng);
-                        HashMap::from([(root_id, root_samples)])
-                    }
-                }
-                .into_iter()
-                .map(|(k, v)| (k, Vec::from_iter(v)))
-                .collect::<HashMap<_, Vec<_>>>();
-
-                let eclass_data = generated
-                    .into_iter()
-                    .map(|(id, generated)| {
-                        let explanations = if cli.explanations {
-                            Some(gen_explanations::<R>(&generated, eqsat.egraph_mut()))
-                        } else {
-                            None
-                        };
-                        let baselines = cli
-                            .baseline
-                            .map(|n_samples| gen_baseline::<R>(&generated, &rules, n_samples, rng));
-                        EClassData {
-                            id,
-                            generated,
-                            baselines,
-                            explanations,
-                        }
-                    })
-                    .collect();
+                let samples = gen_samples(cli, &eqsat, sample_conf, rng);
+                let eclass_data = gen_associated_data(samples, cli, eqsat, rules, rng);
 
                 sample_list.push(DataEntry {
                     seed_id,
@@ -230,6 +192,61 @@ fn sample<R: Trs>(
                 }
             },
         );
+}
+
+fn gen_samples<R: Trs>(
+    cli: &Cli,
+    eqsat: &EqsatResult<R>,
+    sample_conf: &SampleConf,
+    rng: &mut StdRng,
+) -> HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>> {
+    let generated = match cli.sample_mode {
+        SampleMode::Full { egraph_samples: _ } => {
+            let root_id = *eqsat.roots().first().unwrap();
+            let root_samples = sampling::sample_root(eqsat.egraph(), sample_conf, root_id, rng);
+            let mut random_samples = sampling::sample(eqsat.egraph(), sample_conf, rng);
+            random_samples.insert(root_id, root_samples);
+            random_samples
+        }
+        SampleMode::JustRoot => {
+            let root_id = *eqsat.roots().first().unwrap();
+            let root_samples = sampling::sample_root(eqsat.egraph(), sample_conf, root_id, rng);
+            HashMap::from([(root_id, root_samples)])
+        }
+    }
+    .into_iter()
+    .map(|(k, v)| (k, Vec::from_iter(v)))
+    .collect::<HashMap<_, Vec<_>>>();
+    generated
+}
+
+fn gen_associated_data<R: Trs>(
+    generated: HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>>,
+    cli: &Cli,
+    mut eqsat: EqsatResult<R>,
+    rules: &[Rewrite<<R as Trs>::Language, <R as Trs>::Analysis>],
+    rng: &mut StdRng,
+) -> Vec<EClassData<<R as Trs>::Language>> {
+    let eclass_data = generated
+        .into_iter()
+        .map(|(id, generated)| {
+            let explanations = if cli.explanations {
+                Some(gen_explanations::<R>(&generated, eqsat.egraph_mut()))
+            } else {
+                None
+            };
+            let baselines = cli
+                .baseline
+                .map(|n_samples| gen_baseline::<R>(&generated, rules, n_samples, rng));
+            EClassData {
+                id,
+                generated,
+                baselines,
+                explanations,
+            }
+        })
+        .collect();
+    eclass_data
 }
 
 fn gen_explanations<R: Trs>(
