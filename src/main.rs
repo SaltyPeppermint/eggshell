@@ -303,7 +303,7 @@ fn gen_baseline<R: Trs>(
             BaselineData {
                 from: lhs_idx,
                 to: rhs_idx,
-                goal_reached: matches!(result.report().stop_reason, StopReason::Other(_)),
+                stop_reason: result.report().stop_reason.to_owned(),
                 total_time: result.report().total_time,
                 total_nodes: result.report().egraph_nodes,
                 total_iters: result.report().iterations,
@@ -331,7 +331,7 @@ struct EClassData<L: Language + Display> {
 struct BaselineData {
     from: usize,
     to: usize,
-    goal_reached: bool,
+    stop_reason: StopReason,
     total_time: f64,
     total_nodes: usize,
     total_iters: usize,
