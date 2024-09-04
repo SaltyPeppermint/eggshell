@@ -9,7 +9,7 @@ use chrono::Local;
 use clap::{Parser, Subcommand};
 use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use eggshell::io::structs::Expression;
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -19,8 +19,8 @@ use uuid::Uuid;
 
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
 use eggshell::io::reader;
-use eggshell::sampling::SampleConfBuilder;
-use eggshell::sampling::{self, SampleConf};
+use eggshell::sampling;
+use eggshell::sampling::{SampleConf, SampleConfBuilder};
 use eggshell::trs::{halide, Halide, Trs};
 
 // const CHUNKSIZE: usize = 3;
@@ -175,7 +175,13 @@ fn sample<R: Trs>(
 
                 let generated = match cli.sample_mode {
                     SampleMode::Full { egraph_samples: _ } => {
-                        sampling::sample(eqsat.egraph(), &sample_conf, rng)
+                        let root_id = *eqsat.roots().first().unwrap();
+                        let root_samples =
+                            sampling::sample_root(eqsat.egraph(), &sample_conf, root_id, rng);
+                        let mut random_samples =
+                            sampling::sample(eqsat.egraph(), &sample_conf, rng);
+                        random_samples.insert(root_id, root_samples);
+                        random_samples
                     }
                     SampleMode::JustRoot => {
                         let root_id = *eqsat.roots().first().unwrap();
@@ -183,7 +189,10 @@ fn sample<R: Trs>(
                             sampling::sample_root(eqsat.egraph(), &sample_conf, root_id, rng);
                         HashMap::from([(root_id, root_samples)])
                     }
-                };
+                }
+                .into_iter()
+                .map(|(k, v)| (k, Vec::from_iter(v)))
+                .collect::<HashMap<_, Vec<_>>>();
 
                 let eclass_data = generated
                     .into_iter()
@@ -224,7 +233,7 @@ fn sample<R: Trs>(
 }
 
 fn gen_explanations<R: Trs>(
-    generated: &HashSet<RecExpr<R::Language>>,
+    generated: &[RecExpr<R::Language>],
     egraph: &mut EGraph<R::Language, R::Analysis>,
 ) -> Vec<ExplanationData> {
     generated
@@ -250,7 +259,7 @@ fn gen_explanations<R: Trs>(
 }
 
 fn gen_baseline<R: Trs>(
-    generated: &HashSet<RecExpr<R::Language>>,
+    generated: &[RecExpr<R::Language>],
     rules: &[Rewrite<R::Language, R::Analysis>],
     n_samples: usize,
     rng: &mut StdRng,
@@ -295,7 +304,7 @@ struct DataEntry<L: Language + Display> {
 #[derive(Serialize, Clone, Debug)]
 struct EClassData<L: Language + Display> {
     id: Id,
-    generated: HashSet<RecExpr<L>>,
+    generated: Vec<RecExpr<L>>,
     baselines: Option<Vec<BaselineData>>,
     explanations: Option<Vec<ExplanationData>>,
 }
