@@ -11,6 +11,7 @@ use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use eggshell::io::structs::Expression;
 use hashbrown::HashSet;
 use rand::rngs::StdRng;
+use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -35,7 +36,11 @@ fn main() {
     let cli = Cli::parse();
 
     let exprs = reader::read_exprs_json(&cli.file, &[]);
-    let sample_conf = SampleConfBuilder::new().rng_seed(cli.rng_seed).build();
+    let sample_conf = SampleConfBuilder::new()
+        .rng_seed(cli.rng_seed)
+        .samples_per_eclass(cli.eclass_samples)
+        .samples_per_egraph(cli.egraph_samples)
+        .build();
     let eqsat_conf = EqsatConfBuilder::new()
         .explanation(cli.explanations)
         .time_limit(Duration::from_secs_f64(0.5))
@@ -64,7 +69,7 @@ fn main() {
     sample::<Halide>(exprs, eqsat_conf, sample_conf, &folder, rules, &cli);
 }
 
-#[derive(Parser)]
+#[derive(Parser, Serialize, Deserialize, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
     #[arg(short, long)]
@@ -72,19 +77,31 @@ struct Cli {
 
     /// Sets a custom config file
     #[arg(short, long, default_value_t = 50)]
-    chunksize: usize,
+    batchsize: usize,
 
-    #[arg(short, long, default_value_t = 100)]
-    n_seeds: usize,
+    /// Number of terms from which to seed egraphs
+    #[arg(short = 't', long, default_value_t = 100)]
+    n_terms: usize,
 
-    #[arg(short, long, default_value_t = 2024)]
+    /// RNG Seed
+    #[arg(short = 'r', long, default_value_t = 2024)]
     rng_seed: u64,
 
-    #[arg(short, long, default_value_t = false)]
+    /// Number of samples to take for each EGraph
+    #[arg(short = 'g', long, default_value_t = 16)]
+    egraph_samples: usize,
+
+    /// Number of samples to take for each EClass
+    #[arg(short = 'c', long, default_value_t = 8)]
+    eclass_samples: usize,
+
+    /// Calculate and save explanations
+    #[arg(short = 'x', long, default_value_t = false)]
     explanations: bool,
 
-    #[arg(short, long, default_value_t = true)]
-    baseline: bool,
+    /// Calculate and save n baselines
+    #[arg(short = 'l', long)]
+    baseline: Option<usize>,
 }
 
 fn write_metadata(
@@ -100,7 +117,7 @@ fn write_metadata(
         id: uuid,
         folder: folder.to_owned(),
         seed_file: cli.file.to_owned(),
-        n_seeds: cli.n_seeds,
+        n_seeds: cli.n_terms,
         timestamp,
         sample_conf: sample_conf.clone(),
         eqsat_conf: eqsat_conf.clone(),
@@ -131,7 +148,7 @@ fn sample<R: Trs>(
 
     exprs
         .into_par_iter()
-        .take(cli.n_seeds)
+        .take(cli.n_terms)
         .enumerate()
         .for_each_init(
             || (Vec::new(), StdRng::seed_from_u64(sample_conf.rng_seed)),
@@ -153,11 +170,9 @@ fn sample<R: Trs>(
                         } else {
                             None
                         };
-                        let baselines = if cli.baseline {
-                            Some(gen_baseline::<R>(&generated, &rules))
-                        } else {
-                            None
-                        };
+                        let baselines = cli
+                            .baseline
+                            .map(|n_samples| gen_baseline::<R>(&generated, &rules, n_samples, rng));
                         EClassData {
                             id,
                             generated,
@@ -173,7 +188,7 @@ fn sample<R: Trs>(
                     eclass_data,
                 });
 
-                if sample_list.len() == cli.chunksize {
+                if sample_list.len() == cli.batchsize {
                     let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
                     let mut f =
                         BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
@@ -214,6 +229,8 @@ fn gen_explanations<R: Trs>(
 fn gen_baseline<R: Trs>(
     generated: &HashSet<RecExpr<R::Language>>,
     rules: &[Rewrite<R::Language, R::Analysis>],
+    n_samples: usize,
+    rng: &mut StdRng,
 ) -> Vec<BaselineData> {
     generated
         .iter()
@@ -229,6 +246,8 @@ fn gen_baseline<R: Trs>(
                     Some((lhs_idx, lhs, rhs_idx, rhs))
                 })
         })
+        .choose_multiple(rng, n_samples)
+        .into_iter()
         .map(|(lhs_idx, lhs, rhs_idx, rhs)| {
             let result = Eqsat::<R>::new(vec![lhs.clone(), rhs.clone()]).run(rules);
             BaselineData {
