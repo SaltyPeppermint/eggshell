@@ -27,11 +27,13 @@ pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
                 .parse::<usize>()
                 .expect("Wrong index means csv is broken.");
             let expr_str = record.get(1).expect("No expression means csv is broken.");
+            let truth_value = record.get(2).expect("No truth value means csv is broken.");
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.
             Expression {
                 index,
-                term: (*expr_str).to_string(),
+                term: expr_str.to_owned(),
+                truth_value: truth_value.to_owned(),
             }
         })
         .collect()
@@ -66,6 +68,7 @@ pub fn read_exprs_json(file_path: &Path, excluded_expr_ends: &[&str]) -> Vec<Exp
                 Some(Expression {
                     index,
                     term: entry.expression.start,
+                    truth_value: entry.expression.end,
                 })
             }
         })

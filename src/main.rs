@@ -175,11 +175,17 @@ fn gen_data<R: Trs>(
 
                 let samples = gen_samples(cli, &eqsat, sample_conf, rng);
                 let eclass_data = gen_associated_data(samples, cli, eqsat, rules, rng);
+                let truth_value = match expr.truth_value.as_str() {
+                    "true" => true,
+                    "false" => false,
+                    _ => panic!("Wrong truth_value"),
+                };
 
                 sample_list.push(DataEntry {
                     seed_id,
                     seed_expr,
                     eclass_data,
+                    truth_value,
                 });
                 bar.inc(1);
 
@@ -316,6 +322,7 @@ fn gen_baseline<R: Trs>(
 struct DataEntry<L: Language + Display> {
     seed_id: usize,
     seed_expr: RecExpr<L>,
+    truth_value: bool,
     eclass_data: Vec<EClassData<L>>,
 }
 
