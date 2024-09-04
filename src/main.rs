@@ -10,6 +10,7 @@ use clap::{Parser, Subcommand};
 use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use eggshell::io::structs::Expression;
 use hashbrown::HashMap;
+use indicatif::ProgressBar;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -157,6 +158,7 @@ fn gen_data<R: Trs>(
     cli: &Cli,
 ) {
     let file_id_ctr = AtomicUsize::new(0);
+    let bar = ProgressBar::new(exprs.len() as u64);
 
     exprs
         .into_par_iter()
@@ -166,7 +168,6 @@ fn gen_data<R: Trs>(
             || (Vec::new(), StdRng::seed_from_u64(sample_conf.rng_seed)),
             |(sample_list, rng), (seed_id, expr)| {
                 let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-                println!("Working on expr: {}", seed_expr);
 
                 let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
                     .with_conf(eqsat_conf.clone())
@@ -180,6 +181,7 @@ fn gen_data<R: Trs>(
                     seed_expr,
                     eclass_data,
                 });
+                bar.inc(1);
 
                 if sample_list.len() == cli.batchsize {
                     let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
