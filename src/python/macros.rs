@@ -38,7 +38,6 @@ macro_rules! monomorphize {
                 }
             }
 
-            #[allow(clippy::missing_errors_doc)]
             pub fn run(&self, ruleset_name: String) -> pyo3::PyResult<EqsatResult> {
                 let ruleset = <$type as $crate::trs::Trs>::Rulesets::try_from(ruleset_name)?;
                 let rules = <$type as $crate::trs::Trs>::rules(&ruleset);
@@ -54,7 +53,6 @@ macro_rules! monomorphize {
 
         #[pyo3::pymethods]
         impl EqsatResult {
-            #[allow(clippy::missing_errors_doc)]
             #[pyo3(signature = (root, cost_fn="ast_size"))]
             fn classic_extract(
                 &mut self,

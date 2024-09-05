@@ -62,7 +62,6 @@ where
 
     /// Runs single cycle of to prove an expression to be equal to the goals
     /// (most often true or false) with the given ruleset
-    #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn run(
         &self,
@@ -104,7 +103,6 @@ where
     R: Trs,
 {
     // Extract
-    #[allow(clippy::missing_panics_doc)]
     pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<R::Language>)
     where
         CF: CostFunction<R::Language>,
@@ -114,7 +112,7 @@ where
     }
 
     //Extract
-    #[allow(clippy::missing_panics_doc)]
+    #[expect(clippy::missing_panics_doc)]
     pub fn sketch_extract<CF>(
         &self,
         root: Id,
@@ -128,8 +126,7 @@ where
         extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
-    //Extract
-    #[allow(clippy::missing_panics_doc)]
+    /// Extract
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<R::Language>) -> bool {
         let root = self.roots[root_index];
         extract::eclass_satisfies_sketch(sketch, &self.egraph, root)

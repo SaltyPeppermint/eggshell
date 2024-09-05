@@ -53,7 +53,6 @@ impl Trs for Simple {
     type Rulesets = Ruleset;
 
     /// takes an class of rules to use then returns the vector of their associated Rewrites
-    #[allow(clippy::similar_names)]
     #[must_use]
     fn rules(_ruleset_class: &Ruleset) -> Vec<Rewrite> {
         make_rules()

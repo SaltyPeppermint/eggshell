@@ -89,7 +89,7 @@ pub fn sample_root<L: Language, N: Analysis<L>>(
         .collect()
 }
 
-#[allow(
+#[expect(
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::cast_possible_wrap

@@ -11,7 +11,7 @@ use super::structs::Expression;
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.
 ///
 /// [`Expression`]: super::structs::Expression
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 #[must_use]
 pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
     // Declare the vector and the reader
@@ -51,7 +51,7 @@ struct JsonDatapoint {
     rules: Vec<String>,
 }
 
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 #[must_use]
 pub fn read_exprs_json(file_path: &Path, excluded_expr_ends: &[&str]) -> Vec<Expression> {
     // Declare the vector and the reader

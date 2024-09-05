@@ -128,7 +128,7 @@ where
         .map(|(best_cost, best_id)| (best_cost.clone(), exprs.extract(*best_id)))
 }
 
-#[allow(
+#[expect(
     clippy::type_complexity,
     clippy::too_many_lines,
     clippy::too_many_arguments

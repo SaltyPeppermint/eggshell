@@ -80,8 +80,14 @@ impl PySketch {
         Ok(py_sketch)
     }
 
+    #[pyo3(name = "__str__")]
     pub fn stringify(&self) -> String {
         self.to_string()
+    }
+
+    #[pyo3(name = "__repr__")]
+    pub fn debug(&self) -> String {
+        format!("{self:?}")
     }
 }
 

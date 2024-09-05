@@ -170,7 +170,7 @@ impl Analysis<HalideMath> for HalideConstFold {
 // }
 
 /// Checks if a constant is positive
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     // Get the constant
     let var = var_str.parse().unwrap();
@@ -193,7 +193,7 @@ pub fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Checks if a constant is negative
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
 
@@ -215,7 +215,7 @@ pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Checks if a constant is equals zero
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
     // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
@@ -230,7 +230,7 @@ pub fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 }
 
 /// Compares two constants c0 and c1
-#[allow(clippy::missing_panics_doc)]
+#[expect(clippy::missing_panics_doc)]
 pub fn compare_constants(
     // first constant
     var_str_1: &str,
@@ -276,7 +276,6 @@ pub fn compare_constants(
 }
 
 /// Enum for the Ruleset to use
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Arithmetic,
@@ -306,7 +305,7 @@ impl Trs for Halide {
     type Rulesets = Ruleset;
 
     /// takes an class of rules to use then returns the vector of their associated Rewrites
-    #[allow(clippy::similar_names)]
+    #[expect(clippy::similar_names)]
     #[must_use]
     fn rules(ruleset_class: &Ruleset) -> Vec<Rewrite> {
         let add_rules = self::rules::add::add();

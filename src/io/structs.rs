@@ -15,7 +15,7 @@ pub struct Expression {
 
 #[pymethods]
 impl Expression {
-    #[allow(clippy::cast_possible_wrap)]
+    #[expect(clippy::cast_possible_wrap)]
     #[must_use]
     #[getter]
     pub fn index(&self) -> i64 {

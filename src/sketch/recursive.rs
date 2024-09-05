@@ -46,7 +46,7 @@ where
     best_option.map(|(best_cost, best_id)| (best_cost, exprs.extract(best_id)))
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     clippy::type_complexity,
     clippy::too_many_lines
@@ -227,7 +227,7 @@ where
     best_option.map(|(best_cost, best_id)| (best_cost, exprs.extract(best_id)))
 }
 
-#[allow(
+#[expect(
     clippy::too_many_arguments,
     clippy::type_complexity,
     clippy::too_many_lines

@@ -101,7 +101,7 @@ where
         res
     }
 
-    #[allow(dead_code)]
+    #[expect(dead_code)]
     pub fn is_empty(&self) -> bool {
         let r = self.queue.is_empty();
         debug_assert_eq!(r, self.set.is_empty());

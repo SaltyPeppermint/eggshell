@@ -31,7 +31,8 @@
     clippy::unnecessary_safety_doc,
     clippy::unnecessary_self_imports,
     clippy::verbose_file_reads,
-    clippy::shadow_unrelated
+    clippy::shadow_unrelated,
+    clippy::allow_attributes
 )]
 
 // clippy::cfg_not_test,
@@ -54,7 +55,7 @@ type HashSet<T> = hashbrown::HashSet<T>;
 // type HashSet<K, V> = rustc_hash::crate::HashSet<K, V>;
 
 /// A Python module implemented in Rust.
-#[allow(clippy::missing_errors_doc, clippy::shadow_reuse)]
+#[expect(clippy::shadow_reuse)]
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // IO

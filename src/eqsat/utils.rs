@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::HashSet;
 
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
-#[allow(clippy::unsafe_derive_deserialize)]
+#[expect(clippy::unsafe_derive_deserialize)]
 #[pyclass]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq)]
 pub struct EqsatConf {
