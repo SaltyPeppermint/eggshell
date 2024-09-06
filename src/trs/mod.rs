@@ -1,9 +1,3 @@
-use std::fmt::Display;
-
-use egg::{Analysis, FromOp, Id, Language, RecExpr, Rewrite};
-use pyo3::{create_exception, exceptions::PyException, PyErr};
-use serde::Serialize;
-
 pub mod arithmetic;
 pub mod halide;
 pub mod simple;
@@ -12,6 +6,14 @@ pub use arithmetic::Arithmetic;
 pub use halide::Halide;
 pub use simple::Simple;
 use thiserror::Error;
+
+use std::fmt::Display;
+
+use egg::{Analysis, FromOp, Rewrite};
+use pyo3::{create_exception, exceptions::PyException, PyErr};
+use serde::Serialize;
+
+use crate::typing::Typeable;
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -26,64 +28,12 @@ pub trait Trs: Serialize {
     fn rules(ruleset_class: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
 
-pub trait Typeable: Language {
-    type Type: PartialOrd + Display;
-
-    /// Returns the type of a node
-    ///
-    /// # Errors
-    /// If a typing error ooccurs, it is propagated upwards meaning the
-    /// Expression is wrongly typed
-    fn type_node(&self, expr: &RecExpr<Self>) -> Result<Self::Type, TrsError>;
-
-    /// Checks if the child types are subtypes of the parents type
-    /// returns the subtype then
-    ///
-    /// # Errors
-    /// If the types are incompatible, that error is returned
-    fn infer_type(
-        parent_type: Self::Type,
-        children: &[Id],
-        expr: &RecExpr<Self>,
-    ) -> Result<Self::Type, TrsError> {
-        children
-            .iter()
-            .map(|id| &expr[*id])
-            .map(|c| c.type_node(expr))
-            .try_fold(parent_type, |acc, r| {
-                let t = r?;
-                let ordering = acc.partial_cmp(&t).ok_or(TrsError::TypingError(format!(
-                    "Incompatible types: {acc} {t}"
-                )))?;
-                Ok(match ordering {
-                    std::cmp::Ordering::Equal | std::cmp::Ordering::Less => acc,
-                    std::cmp::Ordering::Greater => t,
-                })
-            })
-    }
-
-    // /// Returns the inferred type of a node based on its childrens type
-    // ///
-    // /// # Errors
-    // /// If a typing error ooccurs in the children, it is propagated upwards
-    // fn infer_child_type(children: &[Id], expr: &RecExpr<Self>) -> Result<Self::Type, TrsError> {}
-
-    /// Checks if the expression is properly typed
-    fn typecheck(&self, expr: &RecExpr<Self>) -> bool {
-        self.type_node(expr).is_ok()
-    }
-}
-
-// /// [`EGraph`] parameterized by the Trs
-// pub(crate) type TrsEGraph<R> = EGraph<<R as Trs>::Language, <R as Trs>::Analysis>;
 #[derive(Debug, Error)]
 pub enum TrsError {
     #[error("Wrong number of children: {0}")]
     BadAnalysis(String),
     #[error("Bad ruleset name: {0}")]
     BadRulesetName(String),
-    #[error("Could not type: {0}")]
-    TypingError(String),
 }
 
 create_exception!(

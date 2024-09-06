@@ -3,7 +3,9 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, RecExpr, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsError, Typeable};
+use crate::typing::{Typeable, TypingError};
+
+use super::{Trs, TrsError};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -40,20 +42,21 @@ impl TryFrom<String> for Ruleset {
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
             "full" | "Full" | "FULL" => Ok(Self::Full),
-            _ => Err(TrsError::BadRulesetName(value)),
+            _ => Err(Self::Error::BadRulesetName(value)),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub enum SimpleType {
+    #[default]
     Integer,
 }
 
 impl Display for SimpleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SimpleType::Integer => write!(f, "Integer"),
+            Self::Integer => write!(f, "Integer"),
         }
     }
 }
@@ -61,8 +64,8 @@ impl Display for SimpleType {
 impl Typeable for SimpleLang {
     type Type = SimpleType;
 
-    fn type_node(&self, _: &RecExpr<SimpleLang>) -> Result<Self::Type, TrsError> {
-        Ok(SimpleType::Integer)
+    fn type_node(&self, _: &RecExpr<Self>) -> Result<Self::Type, TypingError> {
+        Ok(Self::Type::Integer)
     }
 }
 

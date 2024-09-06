@@ -3,10 +3,11 @@ mod rules;
 
 use std::{cmp::Ordering, fmt::Display};
 
-use egg::{define_language, Analysis, DidMerge, Id, RecExpr, Symbol};
+use egg::{define_language, Analysis, DidMerge, Id, LanguageChildren, RecExpr, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsError, Typeable};
+use super::{Trs, TrsError};
+use crate::typing::{Typeable, TypingError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -133,24 +134,25 @@ impl TryFrom<String> for Ruleset {
         match value.as_str() {
             "full" | "Full" | "FULL" => Ok(Self::Full),
             "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
-            _ => Err(TrsError::BadRulesetName(value)),
+            _ => Err(Self::Error::BadRulesetName(value)),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Default, Hash)]
 pub enum HalideType {
     Integer,
     Boolean,
+    #[default]
     Top,
 }
 
 impl Display for HalideType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            HalideType::Integer => write!(f, "Integer"),
-            HalideType::Boolean => write!(f, "Boolean"),
-            HalideType::Top => write!(f, "Top"),
+            Self::Integer => write!(f, "Integer"),
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Top => write!(f, "Top"),
         }
     }
 }
@@ -159,15 +161,14 @@ impl PartialOrd for HalideType {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match (self, other) {
             // Can't compare int and bool
-            (HalideType::Integer, HalideType::Boolean)
-            | (HalideType::Boolean, HalideType::Integer) => None,
+            (Self::Integer, Self::Boolean) | (Self::Boolean, Self::Integer) => None,
             // Compare to self
-            (HalideType::Boolean, HalideType::Boolean)
-            | (HalideType::Integer, HalideType::Integer)
-            | (HalideType::Top, HalideType::Top) => Some(Ordering::Equal),
+            (Self::Boolean, Self::Boolean)
+            | (Self::Integer, Self::Integer)
+            | (Self::Top, Self::Top) => Some(Ordering::Equal),
             // Top is greater than bool and int
-            (HalideType::Boolean | HalideType::Integer, HalideType::Top) => Some(Ordering::Less),
-            (HalideType::Top, HalideType::Integer | HalideType::Boolean) => Some(Ordering::Greater),
+            (Self::Boolean | Self::Integer, Self::Top) => Some(Ordering::Less),
+            (Self::Top, Self::Integer | Self::Boolean) => Some(Ordering::Greater),
         }
     }
 }
@@ -175,38 +176,43 @@ impl PartialOrd for HalideType {
 impl Typeable for HalideMath {
     type Type = HalideType;
 
-    fn type_node(&self, expr: &RecExpr<HalideMath>) -> Result<Self::Type, TrsError> {
+    fn type_node(&self, expr: &RecExpr<Self>) -> Result<Self::Type, TypingError> {
         match self {
             // Primitive types
-            HalideMath::Bool(_) => Ok(HalideType::Boolean),
-            HalideMath::Constant(_) => Ok(HalideType::Integer),
-            HalideMath::Symbol(_) => Ok(HalideType::Top),
+            Self::Bool(_) => Ok(Self::Type::Boolean),
+            Self::Constant(_) => Ok(Self::Type::Integer),
+            Self::Symbol(_) => Ok(Self::Type::Top),
 
             // Fns of type int
-            HalideMath::Add(children)
-            | HalideMath::Sub(children)
-            | HalideMath::Mul(children)
-            | HalideMath::Div(children)
-            | HalideMath::Mod(children)
-            | HalideMath::Max(children)
-            | HalideMath::Min(children) => {
-                Typeable::infer_type(HalideType::Integer, children, expr)
+            Self::Add(children)
+            | Self::Sub(children)
+            | Self::Mul(children)
+            | Self::Div(children)
+            | Self::Mod(children)
+            | Self::Max(children)
+            | Self::Min(children) => {
+                let child_type = Self::check_child_coherence(children, expr)?;
+                Self::check_type_constraints(Self::Type::Integer, child_type)
             }
 
             // Fns of type bool
-            HalideMath::Lt(children)
-            | HalideMath::Gt(children)
-            | HalideMath::Let(children)
-            | HalideMath::Get(children)
-            | HalideMath::Or(children)
-            | HalideMath::And(children) => {
-                Typeable::infer_type(HalideType::Boolean, children, expr)
+            Self::Lt(children)
+            | Self::Gt(children)
+            | Self::Let(children)
+            | Self::Get(children)
+            | Self::Or(children)
+            | Self::And(children) => {
+                let child_type = Self::check_child_coherence(children, expr)?;
+                Self::check_type_constraints(Self::Type::Boolean, child_type)
             }
-            HalideMath::Not(child) => Typeable::infer_type(HalideType::Boolean, &[*child], expr),
+            Self::Not(child) => {
+                let child_type = Self::check_child_coherence(child.as_slice(), expr)?;
+                Self::check_type_constraints(Self::Type::Boolean, child_type)
+            }
 
             // Fns of generic type
-            HalideMath::Eq(children) | HalideMath::IEq(children) => {
-                Typeable::infer_type(HalideType::Top, children, expr)
+            Self::Eq(children) | HalideMath::IEq(children) => {
+                Self::check_child_coherence(children, expr).map(|_| Self::Type::Boolean)
             }
         }
     }
@@ -285,13 +291,16 @@ impl Trs for Halide {
 
 #[cfg(test)]
 mod tests {
+    use egg::RecExpr;
+
     use crate::eqsat::{Eqsat, EqsatConfBuilder};
+    use crate::typing::typecheck_expr;
     use crate::utils::AstSize2;
 
     use super::*;
 
     #[test]
-    fn basic_eqsat_solved_true() {
+    fn eqsat_solved_true() {
         let false_expr = vec!["( == 0 0 )".parse().unwrap()];
         let rules = Halide::rules(&Ruleset::Full);
 
@@ -303,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_eqsat_solved_false() {
+    fn eqsat_solved_false() {
         let false_expr = vec!["( == 1 0 )".parse().unwrap()];
         let rules = Halide::rules(&Ruleset::Full);
 
@@ -315,8 +324,7 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    fn halide_false_expr() {
+    fn expl_1() {
         let expr = vec![
             "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
                 .parse()
@@ -330,8 +338,7 @@ mod tests {
     }
 
     #[test]
-    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    fn halide_false_expr2() {
+    fn expl_2() {
         let expr = vec!["( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
             .parse()
             .unwrap()];
@@ -344,12 +351,60 @@ mod tests {
 
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    fn halide_false_expr3() {
+    fn expl_3() {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
         let rules = Halide::rules(&Ruleset::BugRules);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
         let _ = eqsat.run(&rules);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn false_typing_1() {
+        let expr: RecExpr<HalideMath> = "( < ( * v0 35 ) false )".parse().unwrap();
+        let tc = typecheck_expr(&expr);
+        assert!(tc.is_err());
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn false_typing_2() {
+        let expr: RecExpr<HalideMath> = "( max ( == v0 v1 ) v2 )".parse().unwrap();
+        let tc = typecheck_expr(&expr);
+        assert!(tc.is_err());
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn correct_typing() {
+        let expr: RecExpr<HalideMath> = "( && ( == ( * v0 35 ) v1 ) true )".parse().unwrap();
+        let tc = typecheck_expr(&expr);
+        assert!(tc.is_ok());
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn bool_typing() {
+        let expr: RecExpr<HalideMath> = "( && ( == ( * v0 35 ) v1 ) v2 )".parse().unwrap();
+        let tc = typecheck_expr(&expr).unwrap();
+        assert_eq!(HalideType::Boolean, tc);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn int_typing() {
+        let expr: RecExpr<HalideMath> = "( - ( + ( * v0 35 ) v1 ) v2 )".parse().unwrap();
+        let tc = typecheck_expr(&expr).unwrap();
+        assert_eq!(HalideType::Integer, tc);
+    }
+
+    #[test]
+    // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
+    fn false_typing_inferred() {
+        let expr: RecExpr<HalideMath> = "( max ( + v0 v1 ) v2 )".parse().unwrap();
+        let tc = typecheck_expr(&expr).unwrap();
+        assert_eq!(HalideType::Integer, tc);
     }
 }

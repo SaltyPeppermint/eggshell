@@ -4,8 +4,7 @@ use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;
 use serde::Serialize;
 
-use crate::sketch::extract;
-use crate::sketch::Sketch;
+use crate::sketch::{extract, Sketch};
 use crate::trs::Trs;
 
 pub use utils::{EqsatConf, EqsatConfBuilder};

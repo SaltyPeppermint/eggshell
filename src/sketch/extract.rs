@@ -3,7 +3,8 @@ use std::mem::Discriminant;
 use crate::{HashMap, HashSet};
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 
-use super::analysis::{self, ExtractAnalysis, ExtractContainsAnalysis, SatisfiesContainsAnalysis};
+use super::analysis;
+use super::analysis::{ExtractAnalysis, ExtractContainsAnalysis, SatisfiesContainsAnalysis};
 use super::hashcons::ExprHashCons;
 use super::utils;
 use super::{Sketch, SketchNode};

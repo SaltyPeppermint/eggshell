@@ -10,7 +10,7 @@ use symbolic_expressions::{Sexp, SexpError};
 use thiserror::Error;
 
 use super::macros::pyboxable;
-use crate::sketch::{Sketch, SketchNode};
+use crate::sketch::{PartialSketch, PartialSketchNode, Sketch, SketchNode};
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -19,6 +19,14 @@ pub enum PySketch {
     ///
     /// Corresponds to the `?` syntax.
     Any {},
+    /// In case the sketch is unfinished, there are still open slots to be filled
+    ///
+    /// This is an inactive todo
+    Todo {},
+    /// In case the sketch is unfinished, there are still open slots to be filled
+    ///
+    /// This is an active todo being currently worked on
+    Active {},
     /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     ///
     /// Corresponds to the `(language_node s1 .. sn)` syntax.
@@ -48,10 +56,22 @@ impl PySketch {
     #[pyo3(signature = (node_type, children=vec![]))]
     fn new(node_type: &str, mut children: Vec<PySketch>) -> PyResult<Self> {
         match (node_type, children.len()) {
-            ("any" | "ANY" | "Any", 0) => Ok(PySketch::Any {}),
-            ("any" | "ANY" | "Any", n) => {
+            ("any" | "ANY" | "Any"| "?", 0) => Ok(PySketch::Any {}),
+            ("[todo]" | "[TODO]" | "[Todo]", 0) => Ok(PySketch::Todo {}),
+            ("[active]" | "[ACTIVE]" | "[Active]", 0) => Ok(PySketch::Active {}),
+            ("any" | "ANY" | "Any"| "?", n) => {
                 Err(PyErr::new::<PyValueError, _>(
                     format!("Any does not have any children. You supplied children: {n:?}"),
+                ))
+            }
+            ("[todo]" | "[TODO]" | "[Todo]", n) => {
+                Err(PyErr::new::<PyValueError, _>(
+                    format!("'[Todo]' does not have any children. You supplied children: {n:?}"),
+                ))
+            }
+            ("[active]" | "[ACTIVE]" | "[Active]", n) => {
+                Err(PyErr::new::<PyValueError, _>(
+                    format!("'[Active]' does not have any children. You supplied children: {n:?}"),
                 ))
             }
             ("or" | "OR" | "Or", n @ (0 | 1))  => Err(PyErr::new::<PyValueError, _>(
@@ -95,6 +115,8 @@ impl Display for PySketch {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             PySketch::Any {} => write!(f, "?"),
+            PySketch::Todo {} => write!(f, "[todo]"),
+            PySketch::Active {} => write!(f, "[active]"),
             PySketch::Contains { node } => write!(f, "(contains {node})"),
             PySketch::Or { children } => {
                 let inner = children
@@ -181,6 +203,8 @@ impl FromStr for PySketch {
                 Sexp::Empty => Err(PySketchParseError::EmptySexp),
                 Sexp::String(s) => match s.as_str() {
                     "?" | "any" | "ANY" | "Any" => Ok(PySketch::Any {}),
+                    "[todo]" | "[TODO]" | "[Todo]" => Ok(PySketch::Todo {}),
+                    "[active]" | "[ACTIVE]" | "[Active]" => Ok(PySketch::Active {}),
                     "or" | "OR" | "Or" => Err(PySketchParseError::BadTerminalOr(sexp.to_owned())),
                     "contains" | "CONTAINS" | "Contains" => {
                         Err(PySketchParseError::BadTerminalContains(sexp.to_owned()))
@@ -244,6 +268,40 @@ impl<L: Language + Display> From<&Sketch<L>> for PySketch {
                     node: rec(&sketch[*id], sketch).into(),
                 },
                 SketchNode::Or(ids) => PySketch::Or {
+                    children: ids.iter().map(|id| rec(&sketch[*id], sketch)).collect(),
+                },
+            }
+        }
+        // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
+        // "RecExprs must satisfy the invariant that enodes’ children must refer to elements that come before it in the list."
+        // Therefore, in a RecExpr that has only one root, the last element must be the root.
+        let root = sketch.as_ref().last().unwrap();
+        rec(root, sketch)
+    }
+}
+
+impl<L: Language + Display> From<&PartialSketch<L>> for PySketch {
+    fn from(sketch: &PartialSketch<L>) -> Self {
+        fn rec<L: Language + Display>(
+            node: &PartialSketchNode<L>,
+            sketch: &PartialSketch<L>,
+        ) -> PySketch {
+            match node {
+                PartialSketchNode::Any => PySketch::Any {},
+                PartialSketchNode::Todo => PySketch::Todo {},
+                PartialSketchNode::Active => PySketch::Active {},
+                PartialSketchNode::Node(lang_node) => PySketch::Node {
+                    lang_node: lang_node.to_string(),
+                    children: lang_node
+                        .children()
+                        .iter()
+                        .map(|child_id| rec(&sketch[*child_id], sketch))
+                        .collect(),
+                },
+                PartialSketchNode::Contains(id) => PySketch::Contains {
+                    node: rec(&sketch[*id], sketch).into(),
+                },
+                PartialSketchNode::Or(ids) => PySketch::Or {
                     children: ids.iter().map(|id| rec(&sketch[*id], sketch)).collect(),
                 },
             }

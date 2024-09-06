@@ -376,11 +376,9 @@ where
 mod tests {
     use egg::{AstSize, EGraph, RecExpr, SymbolLang};
 
+    use crate::sketch::extract::{self, eclass_extract};
+
     use super::*;
-    use crate::sketch::{
-        extract::{self, eclass_extract},
-        Sketch,
-    };
 
     #[test]
     fn analysis_vs_recursive() {

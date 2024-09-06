@@ -4,10 +4,8 @@ use std::fmt::Debug;
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 
 use super::hashcons::ExprHashCons;
-use crate::{
-    utils::{AstSize2, UniqueQueue},
-    HashMap,
-};
+use crate::utils::{AstSize2, UniqueQueue};
+use crate::HashMap;
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
     type Data: Debug;

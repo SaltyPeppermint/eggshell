@@ -2,16 +2,19 @@
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty) => {
-        // /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
-        // #[pyo3::pyclass]
-        // #[derive(Debug, Clone)]
-        // pub struct Eqsat($crate::eqsat::Eqsat<$type>);
+        /// Typecheck the current AST is parsable
+        #[pyo3::pyfunction]
+        pub fn typecheck(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+            let expr: egg::RecExpr<<$type as $crate::trs::Trs>::Language> =
+                term.try_into().map_err(|e| {
+                    $crate::python::EggError::FromOp::<
+                        <<$type as $crate::trs::Trs>::Language as egg::FromOp>::Error,
+                    >(e)
+                })?;
+            Ok($crate::typing::typecheck_expr(&expr).is_ok())
+        }
 
-        /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
-        #[pyo3::pyclass]
-        #[derive(Debug, Clone)]
-        pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
-
+        /// Run an eqsat on the expr
         #[pyo3::pyfunction]
         pub fn run_eqsat(
             start_terms: Vec<$crate::python::PyLang>,
@@ -21,7 +24,6 @@ macro_rules! monomorphize {
             let start_exprs = start_terms
                 .into_iter()
                 .map(|term| (&term).try_into())
-                // Vec<egg::RecExpr<<$type as $crate::trs::Trs>::Language>>
                 .collect::<Result<_, _>>()
                 .map_err(|e| {
                     $crate::python::EggError::FromOp::<
@@ -40,6 +42,11 @@ macro_rules! monomorphize {
             let result = eqsat.run(&rules);
             Ok(EqsatResult(result))
         }
+
+        /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
+        #[pyo3::pyclass]
+        #[derive(Debug, Clone)]
+        pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
 
         #[pyo3::pymethods]
         impl EqsatResult {
