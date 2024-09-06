@@ -1,6 +1,5 @@
 use egg::rewrite as rw;
 
-use crate::trs::halide;
 use crate::trs::halide::Rewrite;
 
 pub(crate) fn eq() -> Vec<Rewrite> {
@@ -14,10 +13,10 @@ pub(crate) fn eq() -> Vec<Rewrite> {
         rw!("eq-max-lt"     ; "( == (max ?x ?y) ?y)" => "(<= ?x ?y)"),
         rw!("Eq-min-lt"     ; "( == (min ?x ?y) ?y)" => "(<= ?y ?x)"),
         rw!("Eq-lt-min"     ; "(<= ?y ?x)"           => "( == (min ?x ?y) ?y)"),
-        rw!("Eq-a-b"        ; "(== (* ?a ?x) ?b)"    => "false" if halide::compare_constants("?b", "?a", "!%0")),
-        rw!("Eq-max-c-pos"  ; "(== (max ?x ?c) 0)"   => "false" if halide::is_const_pos("?c")),
-        rw!("Eq-max-c-neg"  ; "(== (max ?x ?c) 0)"   => "(== ?x 0)" if halide::is_const_neg("?c")),
-        rw!("Eq-min-c-pos"  ; "(== (min ?x ?c) 0)"   => "false" if halide::is_const_neg("?c")),
-        rw!("Eq-min-c-neg"  ; "(== (min ?x ?c) 0)"   => "(== ?x 0)" if halide::is_const_pos("?c")),
+        rw!("Eq-a-b"        ; "(== (* ?a ?x) ?b)"    => "false" if super::compare_constants("?b", "?a", "!%0")),
+        rw!("Eq-max-c-pos"  ; "(== (max ?x ?c) 0)"   => "false" if super::is_const_pos("?c")),
+        rw!("Eq-max-c-neg"  ; "(== (max ?x ?c) 0)"   => "(== ?x 0)" if super::is_const_neg("?c")),
+        rw!("Eq-min-c-pos"  ; "(== (min ?x ?c) 0)"   => "false" if super::is_const_neg("?c")),
+        rw!("Eq-min-c-neg"  ; "(== (min ?x ?c) 0)"   => "(== ?x 0)" if super::is_const_pos("?c")),
     ]
 }

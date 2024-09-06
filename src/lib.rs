@@ -69,19 +69,19 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Arithmatic specific generated eqsats
     let arithmatic_m = PyModule::new_bound(eqsat_m.py(), "arithmatic")?;
-    arithmatic_m.add_class::<python::arithmatic::Eqsat>()?;
+    arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::run_eqsat, m)?)?;
     arithmatic_m.add_class::<python::arithmatic::EqsatResult>()?;
     eqsat_m.add_submodule(&arithmatic_m)?;
 
     // Halide specific generated eqsats
     let halide_m = PyModule::new_bound(eqsat_m.py(), "halide")?;
-    halide_m.add_class::<python::halide::Eqsat>()?;
+    halide_m.add_function(wrap_pyfunction!(python::halide::run_eqsat, m)?)?;
     halide_m.add_class::<python::halide::EqsatResult>()?;
     eqsat_m.add_submodule(&halide_m)?;
 
     // SimpleLang specific generated eqsats
     let simple_m = PyModule::new_bound(eqsat_m.py(), "simple")?;
-    simple_m.add_class::<python::simple::Eqsat>()?;
+    simple_m.add_function(wrap_pyfunction!(python::simple::run_eqsat, m)?)?;
     simple_m.add_class::<python::simple::EqsatResult>()?;
     eqsat_m.add_submodule(&simple_m)?;
 

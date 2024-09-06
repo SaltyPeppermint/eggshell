@@ -1,10 +1,12 @@
 mod rules;
 
-use egg::{define_language, Analysis, DidMerge, Id, Language, PatternAst, Subst, Symbol};
+use std::fmt::Display;
+
+use egg::{define_language, Analysis, DidMerge, Id, PatternAst, RecExpr, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{Trs, TrsError};
+use super::{Trs, TrsError, Typeable};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -35,20 +37,20 @@ define_language! {
     }
 }
 
-pub struct MathCostFn;
-impl egg::CostFunction<Math> for MathCostFn {
-    type Cost = usize;
-    fn cost<C>(&mut self, enode: &Math, mut costs: C) -> Self::Cost
-    where
-        C: FnMut(Id) -> Self::Cost,
-    {
-        let op_cost = match enode {
-            Math::Diff(..) | Math::Integral(..) => 100,
-            _ => 1,
-        };
-        enode.fold(op_cost, |sum, i| sum + costs(i))
-    }
-}
+// pub struct MathCostFn;
+// impl egg::CostFunction<Math> for MathCostFn {
+//     type Cost = usize;
+//     fn cost<C>(&mut self, enode: &Math, mut costs: C) -> Self::Cost
+//     where
+//         C: FnMut(Id) -> Self::Cost,
+//     {
+//         let op_cost = match enode {
+//             Math::Diff(..) | Math::Integral(..) => 100,
+//             _ => 1,
+//         };
+//         enode.fold(op_cost, |sum, i| sum + costs(i))
+//     }
+// }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;
@@ -110,48 +112,6 @@ impl Analysis<Math> for ConstantFold {
     }
 }
 
-fn is_const_or_distinct_var(
-    var_str1: &str,
-    var_str2: &str,
-) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var1 = var_str1.parse().unwrap();
-    let var2 = var_str2.parse().unwrap();
-    move |egraph, _, subst| {
-        egraph.find(subst[var1]) != egraph.find(subst[var2])
-            && (egraph[subst[var1]].data.is_some()
-                || egraph[subst[var1]]
-                    .nodes
-                    .iter()
-                    .any(|n| matches!(n, Math::Symbol(..))))
-    }
-}
-
-fn is_const(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var_str.parse().unwrap();
-    move |egraph, _, subst| egraph[subst[var]].data.is_some()
-}
-
-fn is_sym(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var_str.parse().unwrap();
-    move |egraph, _, subst| {
-        egraph[subst[var]]
-            .nodes
-            .iter()
-            .any(|n| matches!(n, Math::Symbol(..)))
-    }
-}
-
-fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var_str.parse().unwrap();
-    move |egraph, _, subst| {
-        if let Some(n) = &egraph[subst[var]].data {
-            *(n.0) != 0.0
-        } else {
-            true
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, Serialize)]
 pub enum Ruleset {
     Full,
@@ -165,6 +125,33 @@ impl TryFrom<String> for Ruleset {
             "full" | "Full" | "FULL" => Ok(Self::Full),
             _ => Err(TrsError::BadRulesetName(value)),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd)]
+pub enum ArithmaticType {
+    Float,
+}
+
+impl Default for ArithmaticType {
+    fn default() -> Self {
+        Self::Float
+    }
+}
+
+impl Display for ArithmaticType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ArithmaticType::Float => write!(f, "Float"),
+        }
+    }
+}
+
+impl Typeable for Math {
+    type Type = ArithmaticType;
+
+    fn type_node(&self, _: &RecExpr<Math>) -> Result<Self::Type, TrsError> {
+        Ok(ArithmaticType::Float)
     }
 }
 

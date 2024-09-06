@@ -1,7 +1,9 @@
-use egg::{define_language, rewrite, Id, Symbol};
+use std::fmt::Display;
+
+use egg::{define_language, rewrite, Id, RecExpr, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsError};
+use super::{Trs, TrsError, Typeable};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -43,10 +45,37 @@ impl TryFrom<String> for Ruleset {
     }
 }
 
-/// Halide Trs implementation
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum SimpleType {
+    Integer,
+}
+
+impl Default for SimpleType {
+    fn default() -> Self {
+        Self::Integer
+    }
+}
+
+impl Display for SimpleType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SimpleType::Integer => write!(f, "Integer"),
+        }
+    }
+}
+
+impl Typeable for SimpleLang {
+    type Type = SimpleType;
+
+    fn type_node(&self, _: &RecExpr<SimpleLang>) -> Result<Self::Type, TrsError> {
+        Ok(SimpleType::Integer)
+    }
+}
+
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;
 
+/// Halide Trs implementation
 impl Trs for Simple {
     type Language = SimpleLang;
     type Analysis = ();

@@ -1,10 +1,12 @@
 mod data;
 mod rules;
 
-use egg::{define_language, Analysis, DidMerge, Id, Subst, Symbol, Var};
+use std::{cmp::Ordering, fmt::Display};
+
+use egg::{define_language, Analysis, DidMerge, Id, RecExpr, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsError};
+use super::{Trs, TrsError, Typeable};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -52,27 +54,6 @@ impl Analysis<HalideMath> for HalideConstFold {
             }
             (Some(_), None) => DidMerge(false, true),
             (Some(_), Some(_)) | (None, None) => DidMerge(false, false),
-            // (Some(a), Some(b)) => match (a, b) {
-            //     (HalideData::Int(i_a), HalideData::Int(i_b)) => {
-            //         let cmp = (*i_a).cmp(&i_b);
-            //         match cmp {
-            //             Ordering::Less => DidMerge(false, true),
-            //             Ordering::Equal => DidMerge(false, false),
-            //             Ordering::Greater => {
-            //                 *to = from;
-            //                 DidMerge(true, false)
-            //             }
-            //         }
-            //     }
-            //     (HalideData::Bool(b_a), HalideData::Bool(b_b)) => {
-            //         if *b_a == b_b {
-            //             DidMerge(false, false)
-            //         } else {
-            //             panic!("Tried to merge false with true!")
-            //         }
-            //     }
-            //     _ => panic!("Tried to merge truth value with constant!"),
-            // },
         }
     }
 
@@ -131,146 +112,8 @@ impl Analysis<HalideMath> for HalideConstFold {
 
             egraph[id].nodes.retain(egg::Language::is_leaf);
 
-            // assert!(
-            //     !egraph[id].nodes.is_empty(),
-            //     "empty eclass! {:#?}",
-            //     egraph[id]
-            // );
-            // if !check_leaves(&egraph[id]) {
-            //     println!(" ");
-            //     let rec_exprs = &egraph[id]
-            //         .leaves()
-            //         .map(|v| RecExpr::from(vec![v.to_owned()]))
-            //         .collect::<Vec<_>>();
-
-            //     let mut expl = egraph.explain_equivalence(&rec_exprs[0], &rec_exprs[1]);
-            //     expl.check_proof(&Halide::rules(&Ruleset::BugRules));
-            //     println!("PROOF CHECKS OUT");
-
-            //     println!("{}", &expl.get_flat_string());
-            // }
-
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
-        }
-    }
-}
-
-// fn check_leaves<L, D>(class: &EClass<L, D>) -> bool
-// where
-//     L: egg::Language,
-// {
-//     let mut leaves = class.leaves();
-//     if let Some(first) = leaves.next() {
-//         if leaves.all(|l| l == first) {
-//             return true;
-//         }
-//     }
-//     false
-// }
-
-/// Checks if a constant is positive
-#[expect(clippy::missing_panics_doc)]
-pub fn is_const_pos(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    // Get the constant
-    let var = var_str.parse().unwrap();
-
-    // Get the substitutions where the constant appears
-    move |egraph, _, subst| {
-        // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
-        // Check if any of the representations of ths constant (nodes inside its eclass) is positive
-        // egraph[subst[var]].data.iter().any(|n| match n {
-        //     HalideMath::Constant(c) => c > &0,
-        //     _ => false,
-        // })
-        // NEW CORRECT
-
-        match egraph[subst[var]].data {
-            Some(HalideData::Int(x)) => x > 0,
-            _ => false,
-        }
-    }
-}
-
-/// Checks if a constant is negative
-#[expect(clippy::missing_panics_doc)]
-pub fn is_const_neg(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var_str.parse().unwrap();
-
-    // Get the substitutions where the constant appears
-    move |egraph, _, subst| {
-        // Check if any of the representations of ths constant (nodes inside its eclass) is negative
-        // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
-        // egraph[subst[var]].nodes.iter().any(|n| match n {
-        //     HalideMath::Constant(c) => c < &0,
-        //     _ => false,
-        // })
-        // NEW CORRECT
-
-        match egraph[subst[var]].data {
-            Some(HalideData::Int(x)) => x < 0,
-            _ => false,
-        }
-    }
-}
-
-/// Checks if a constant is equals zero
-#[expect(clippy::missing_panics_doc)]
-pub fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    let var = var_str.parse().unwrap();
-    // // ACTUALLY FALSE! SEE https://github.com/egraphs-good/egg/issues/297
-    // let zero = HalideMath::Constant(0);
-    // // Check if any of the representations of the constant (nodes inside its eclass) is zero
-    // move |egraph, _, subst| !egraph[subst[var]].nodes.contains(&zero)
-    // NEW CORRECT
-    move |egraph, _, subst| match egraph[subst[var]].data {
-        Some(HalideData::Int(x)) => x != 0,
-        _ => false,
-    }
-}
-
-/// Compares two constants c0 and c1
-#[expect(clippy::missing_panics_doc)]
-pub fn compare_constants(
-    // first constant
-    var_str_1: &str,
-    // 2nd constant
-    var_str_2: &str,
-    // the comparison we're checking
-    comp: &'static str,
-) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
-    // Get constants
-    let var_1: Var = var_str_1.parse().unwrap();
-    let var_2: Var = var_str_2.parse().unwrap();
-
-    move |egraph, _, subst| {
-        // Get the eclass of the first constant then match the values of its enodes to check if one of them proves the coming conditions
-
-        let data_1 = egraph[subst[var_1]].data;
-        let data_2 = egraph[subst[var_2]].data;
-
-        match (data_1, data_2) {
-            (Some(HalideData::Int(c_1)), Some(HalideData::Int(c_2))) => match comp {
-                "<" => c_1 < c_2,
-                "<a" => c_1 < c_2.abs(),
-                "<=" => c_1 <= c_2,
-                "<=+1" => c_1 <= (c_2 + 1),
-                "<=a" => c_1 <= c_2.abs(),
-                "<=-a" => c_1 <= (-c_2.abs()),
-                "<=-a+1" => c_1 <= (1 - c_2.abs()),
-                ">" => c_1 > c_2,
-                ">a" => c_1 > c_2.abs(),
-                ">=" => c_1 >= c_2,
-                ">=a" => c_1 >= (c_2.abs()),
-                ">=a-1" => c_1 >= (c_2.abs() - 1),
-                "!=" => c_1 != c_2,
-                "%0" => (c_2 != 0) && (c_1 % c_2 == 0),
-                "!%0" => (c_2 != 0) && (c_1 % c_2 != 0),
-                "%0<" => (c_2 > 0) && (c_1 % c_2 == 0),
-                "%0>" => (c_2 < 0) && (c_1 % c_2 == 0),
-                _ => false,
-            },
-            _ => false,
         }
     }
 }
@@ -291,6 +134,84 @@ impl TryFrom<String> for Ruleset {
             "full" | "Full" | "FULL" => Ok(Self::Full),
             "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
             _ => Err(TrsError::BadRulesetName(value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub enum HalideType {
+    Integer,
+    Boolean,
+    Top,
+}
+
+impl Default for HalideType {
+    fn default() -> Self {
+        Self::Top
+    }
+}
+
+impl Display for HalideType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HalideType::Integer => write!(f, "Integer"),
+            HalideType::Boolean => write!(f, "Boolean"),
+            HalideType::Top => write!(f, "Top"),
+        }
+    }
+}
+
+impl PartialOrd for HalideType {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // Can't compare int and bool
+            (HalideType::Integer, HalideType::Boolean)
+            | (HalideType::Boolean, HalideType::Integer) => None,
+            // Compare to self
+            (HalideType::Boolean, HalideType::Boolean)
+            | (HalideType::Integer, HalideType::Integer)
+            | (HalideType::Top, HalideType::Top) => Some(Ordering::Equal),
+            // Top is greater than bool and int
+            (HalideType::Boolean | HalideType::Integer, HalideType::Top) => Some(Ordering::Less),
+            (HalideType::Top, HalideType::Integer | HalideType::Boolean) => Some(Ordering::Greater),
+        }
+    }
+}
+
+impl Typeable for HalideMath {
+    type Type = HalideType;
+
+    fn type_node(&self, expr: &RecExpr<HalideMath>) -> Result<Self::Type, TrsError> {
+        match self {
+            HalideMath::Add(children)
+            | HalideMath::Sub(children)
+            | HalideMath::Mul(children)
+            | HalideMath::Div(children)
+            | HalideMath::Mod(children)
+            | HalideMath::Max(children)
+            | HalideMath::Min(children) => {
+                Typeable::infer_node_type(HalideType::Integer, children, expr)
+            }
+            HalideMath::Constant(_) => Ok(HalideType::Integer),
+
+            HalideMath::Lt(children)
+            | HalideMath::Gt(children)
+            | HalideMath::Let(children)
+            | HalideMath::Get(children)
+            | HalideMath::Or(children)
+            | HalideMath::And(children) => {
+                Typeable::infer_node_type(HalideType::Boolean, children, expr)
+            }
+            HalideMath::Not(child) => {
+                Typeable::infer_node_type(HalideType::Boolean, &[*child], expr)
+            }
+            HalideMath::Bool(_) => Ok(HalideType::Boolean),
+
+            HalideMath::Symbol(_) => Ok(HalideType::Top),
+
+            HalideMath::Eq(children) | HalideMath::IEq(children) => {
+                Typeable::infer_child_type(children, expr)
+            }
         }
     }
 }
