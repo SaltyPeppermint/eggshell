@@ -133,12 +133,6 @@ pub enum ArithmaticType {
     Float,
 }
 
-impl Default for ArithmaticType {
-    fn default() -> Self {
-        Self::Float
-    }
-}
-
 impl Display for ArithmaticType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

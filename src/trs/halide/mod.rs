@@ -145,12 +145,6 @@ pub enum HalideType {
     Top,
 }
 
-impl Default for HalideType {
-    fn default() -> Self {
-        Self::Top
-    }
-}
-
 impl Display for HalideType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -183,6 +177,12 @@ impl Typeable for HalideMath {
 
     fn type_node(&self, expr: &RecExpr<HalideMath>) -> Result<Self::Type, TrsError> {
         match self {
+            // Primitive types
+            HalideMath::Bool(_) => Ok(HalideType::Boolean),
+            HalideMath::Constant(_) => Ok(HalideType::Integer),
+            HalideMath::Symbol(_) => Ok(HalideType::Top),
+
+            // Fns of type int
             HalideMath::Add(children)
             | HalideMath::Sub(children)
             | HalideMath::Mul(children)
@@ -190,27 +190,23 @@ impl Typeable for HalideMath {
             | HalideMath::Mod(children)
             | HalideMath::Max(children)
             | HalideMath::Min(children) => {
-                Typeable::infer_node_type(HalideType::Integer, children, expr)
+                Typeable::infer_type(HalideType::Integer, children, expr)
             }
-            HalideMath::Constant(_) => Ok(HalideType::Integer),
 
+            // Fns of type bool
             HalideMath::Lt(children)
             | HalideMath::Gt(children)
             | HalideMath::Let(children)
             | HalideMath::Get(children)
             | HalideMath::Or(children)
             | HalideMath::And(children) => {
-                Typeable::infer_node_type(HalideType::Boolean, children, expr)
+                Typeable::infer_type(HalideType::Boolean, children, expr)
             }
-            HalideMath::Not(child) => {
-                Typeable::infer_node_type(HalideType::Boolean, &[*child], expr)
-            }
-            HalideMath::Bool(_) => Ok(HalideType::Boolean),
+            HalideMath::Not(child) => Typeable::infer_type(HalideType::Boolean, &[*child], expr),
 
-            HalideMath::Symbol(_) => Ok(HalideType::Top),
-
+            // Fns of generic type
             HalideMath::Eq(children) | HalideMath::IEq(children) => {
-                Typeable::infer_child_type(children, expr)
+                Typeable::infer_type(HalideType::Top, children, expr)
             }
         }
     }

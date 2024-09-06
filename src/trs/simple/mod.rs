@@ -50,12 +50,6 @@ pub enum SimpleType {
     Integer,
 }
 
-impl Default for SimpleType {
-    fn default() -> Self {
-        Self::Integer
-    }
-}
-
 impl Display for SimpleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -27,7 +27,7 @@ pub trait Trs: Serialize {
 }
 
 pub trait Typeable: Language {
-    type Type: PartialOrd + Default + Display;
+    type Type: PartialOrd + Display;
 
     /// Returns the type of a node
     ///
@@ -41,37 +41,19 @@ pub trait Typeable: Language {
     ///
     /// # Errors
     /// If the types are incompatible, that error is returned
-    fn infer_node_type(
+    fn infer_type(
         parent_type: Self::Type,
         children: &[Id],
         expr: &RecExpr<Self>,
     ) -> Result<Self::Type, TrsError> {
-        let child_type = Typeable::infer_child_type(children, expr)?;
-        if let Some(ord) = child_type.partial_cmp(&parent_type) {
-            match ord {
-                std::cmp::Ordering::Equal | std::cmp::Ordering::Less => Ok(child_type),
-                std::cmp::Ordering::Greater => Ok(parent_type),
-            }
-        } else {
-            Err(TrsError::TypingError(format!(
-                "Children have type incompatible to parent: {child_type} {parent_type}"
-            )))
-        }
-    }
-
-    /// Returns the inferred type of a node based on its childrens type
-    ///
-    /// # Errors
-    /// If a typing error ooccurs in the children, it is propagated upwards
-    fn infer_child_type(children: &[Id], expr: &RecExpr<Self>) -> Result<Self::Type, TrsError> {
         children
             .iter()
             .map(|id| &expr[*id])
             .map(|c| c.type_node(expr))
-            .try_fold(Self::Type::default(), |acc, r| {
+            .try_fold(parent_type, |acc, r| {
                 let t = r?;
                 let ordering = acc.partial_cmp(&t).ok_or(TrsError::TypingError(format!(
-                    "Incompatible child types: {acc} {t}"
+                    "Incompatible types: {acc} {t}"
                 )))?;
                 Ok(match ordering {
                     std::cmp::Ordering::Equal | std::cmp::Ordering::Less => acc,
@@ -79,6 +61,12 @@ pub trait Typeable: Language {
                 })
             })
     }
+
+    // /// Returns the inferred type of a node based on its childrens type
+    // ///
+    // /// # Errors
+    // /// If a typing error ooccurs in the children, it is propagated upwards
+    // fn infer_child_type(children: &[Id], expr: &RecExpr<Self>) -> Result<Self::Type, TrsError> {}
 
     /// Checks if the expression is properly typed
     fn typecheck(&self, expr: &RecExpr<Self>) -> bool {
