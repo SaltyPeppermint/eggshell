@@ -15,6 +15,7 @@ pub trait SketchTypable<L: Language>: Language {
     /// Expression is wrongly typed
     fn type_lang_node(&self, expr: &RecExpr<Self>) -> Result<Self::Type, TypingError>;
 
+    #[expect(clippy::missing_errors_doc)]
     fn type_sketch_node(&self, expr: &RecExpr<Self>) -> Result<Self::Type, TypingError>;
 
     /// Checks if the child types are subtypes of the parents type constraint
@@ -44,7 +45,6 @@ pub trait SketchTypable<L: Language>: Language {
     /// # Errors
     /// If the types are not ordered and no lowest subtype can be inferred an
     ///  error is returned
-    #[expect(clippy::redundant_closure)]
     fn check_child_coherence(
         children: &[Id],
         expr: &RecExpr<Self>,

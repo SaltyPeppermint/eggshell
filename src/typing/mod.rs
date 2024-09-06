@@ -1,11 +1,11 @@
-pub mod base;
+pub mod lang;
 pub mod sketch;
 
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 
 use thiserror::Error;
 
-pub use base::Typeable;
+pub use lang::Typeable;
 
 #[derive(Debug, Error)]
 pub enum TypingError {

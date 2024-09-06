@@ -294,7 +294,7 @@ mod tests {
     use egg::RecExpr;
 
     use crate::eqsat::{Eqsat, EqsatConfBuilder};
-    use crate::typing::typecheck_expr;
+    use crate::typing::lang::typecheck_expr;
     use crate::utils::AstSize2;
 
     use super::*;

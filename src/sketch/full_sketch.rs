@@ -119,12 +119,12 @@ where
             // The recursions does terminate with either `PySketch::Any` or a childless
             // `PySketch::Node` since a sketch contains no back edges and is finite
             match pysketch {
-                // No recursion here
+                // Error if a partial node is encountered
+                PySketch::Todo {} | PySketch::Active {} => Err(SketchParseError::PartialSketch),
                 PySketch::Any {} => {
                     let id = sketch.add(SketchNode::Any);
                     Ok(id)
                 }
-                PySketch::Todo {} | PySketch::Active {} => Err(SketchParseError::PartialSketch),
                 PySketch::Node {
                     lang_node: s,
                     children,

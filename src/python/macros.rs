@@ -11,7 +11,7 @@ macro_rules! monomorphize {
                         <<$type as $crate::trs::Trs>::Language as egg::FromOp>::Error,
                     >(e)
                 })?;
-            Ok($crate::typing::typecheck_expr(&expr).is_ok())
+            Ok($crate::typing::lang::typecheck_expr(&expr).is_ok())
         }
 
         /// Run an eqsat on the expr

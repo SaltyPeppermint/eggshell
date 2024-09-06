@@ -287,22 +287,22 @@ impl<L: Language + Display> From<&PartialSketch<L>> for PySketch {
             sketch: &PartialSketch<L>,
         ) -> PySketch {
             match node {
-                PartialSketchNode::Any => PySketch::Any {},
                 PartialSketchNode::Todo => PySketch::Todo {},
                 PartialSketchNode::Active => PySketch::Active {},
-                PartialSketchNode::Node(lang_node) => PySketch::Node {
+                PartialSketchNode::Finished(SketchNode::Any) => PySketch::Any {},
+                PartialSketchNode::Finished(SketchNode::Contains(id)) => PySketch::Contains {
+                    node: rec(&sketch[*id], sketch).into(),
+                },
+                PartialSketchNode::Finished(SketchNode::Or(ids)) => PySketch::Or {
+                    children: ids.iter().map(|id| rec(&sketch[*id], sketch)).collect(),
+                },
+                PartialSketchNode::Finished(SketchNode::Node(lang_node)) => PySketch::Node {
                     lang_node: lang_node.to_string(),
                     children: lang_node
                         .children()
                         .iter()
                         .map(|child_id| rec(&sketch[*child_id], sketch))
                         .collect(),
-                },
-                PartialSketchNode::Contains(id) => PySketch::Contains {
-                    node: rec(&sketch[*id], sketch).into(),
-                },
-                PartialSketchNode::Or(ids) => PySketch::Or {
-                    children: ids.iter().map(|id| rec(&sketch[*id], sketch)).collect(),
                 },
             }
         }
@@ -311,12 +311,6 @@ impl<L: Language + Display> From<&PartialSketch<L>> for PySketch {
         // Therefore, in a RecExpr that has only one root, the last element must be the root.
         let root = sketch.as_ref().last().unwrap();
         rec(root, sketch)
-    }
-}
-
-impl<L: Language + Display> From<Sketch<L>> for PySketch {
-    fn from(sketch: Sketch<L>) -> Self {
-        (&sketch).into()
     }
 }
 
