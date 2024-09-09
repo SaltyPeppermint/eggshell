@@ -1,9 +1,9 @@
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
-use egg::{define_language, rewrite, Id, RecExpr, Symbol};
+use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
-use crate::typing::{Typeable, TypingError};
+use crate::typing::{Type, Typeable, TypingInfo};
 
 use super::{Trs, TrsError};
 
@@ -47,25 +47,47 @@ impl TryFrom<String> for Ruleset {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 pub enum SimpleType {
-    #[default]
-    Integer,
+    Top,
+    Bottom,
 }
 
 impl Display for SimpleType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Integer => write!(f, "Integer"),
+            Self::Top => write!(f, "Top (Integer)"),
+            Self::Bottom => write!(f, "Bottom"),
         }
+    }
+}
+
+impl PartialOrd for SimpleType {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // Bottom type is less than everything else
+            (Self::Top, Self::Bottom) => Some(Ordering::Greater),
+            (Self::Bottom, Self::Top) => Some(Ordering::Less),
+            (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Type for SimpleType {
+    fn top() -> Self {
+        Self::Top
+    }
+
+    fn bottom() -> Self {
+        Self::Bottom
     }
 }
 
 impl Typeable for SimpleLang {
     type Type = SimpleType;
 
-    fn type_node(&self, _: &RecExpr<Self>) -> Result<Self::Type, TypingError> {
-        Ok(Self::Type::Integer)
+    fn type_info(&self) -> TypingInfo<Self::Type> {
+        TypingInfo::new(Self::Type::Top, Self::Type::Top)
     }
 }
 

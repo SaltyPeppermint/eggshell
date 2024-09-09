@@ -5,7 +5,10 @@ use serde::Serialize;
 use smallvec::SmallVec;
 
 use super::SketchParseError;
-use crate::python::PySketch;
+use crate::{
+    python::PySketch,
+    typing::{Type, Typeable, TypingInfo},
+};
 
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchNode<L>>;
@@ -50,6 +53,21 @@ impl<L: Language> Language for SketchNode<L> {
             Self::Node(n) => n.children_mut(),
             Self::Contains(s) => std::slice::from_mut(s),
             Self::Or(ss) => ss.as_mut_slice(),
+        }
+    }
+}
+
+impl<L: Typeable> Typeable for SketchNode<L> {
+    type Type = L::Type;
+
+    fn type_info(&self) -> crate::typing::TypingInfo<Self::Type> {
+        match self {
+            Self::Any => TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type(),
+            Self::Node(t) => t.type_info(),
+            Self::Contains(_) => TypingInfo::new(Self::Type::top(), Self::Type::top()),
+            Self::Or(_) => {
+                TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type()
+            }
         }
     }
 }

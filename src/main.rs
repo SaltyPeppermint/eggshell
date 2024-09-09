@@ -8,7 +8,6 @@ use std::time::Duration;
 use chrono::Local;
 use clap::{Parser, Subcommand};
 use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
-use eggshell::io::structs::Expression;
 use hashbrown::HashMap;
 use indicatif::ProgressBar;
 use rand::rngs::StdRng;
@@ -20,6 +19,7 @@ use uuid::Uuid;
 
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
 use eggshell::io::reader;
+use eggshell::io::structs::Expression;
 use eggshell::sampling;
 use eggshell::sampling::{SampleConf, SampleConfBuilder};
 use eggshell::trs::{halide, Halide, Trs};

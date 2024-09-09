@@ -117,7 +117,10 @@ where
         let eclass_id = egraph.find(next_open_id);
         let eclass = &egraph[eclass_id];
         let pick = if loop_limit > loop_count {
-            eclass.nodes.choose(rng).unwrap()
+            eclass
+                .nodes
+                .choose(rng)
+                .expect("Each class contains at least one enode.")
         } else {
             let raw_weights = raw_weights_memo
                 .entry(eclass.id)

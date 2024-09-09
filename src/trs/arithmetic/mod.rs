@@ -1,12 +1,12 @@
 mod rules;
 
-use std::fmt::Display;
+use std::{cmp::Ordering, fmt::Display};
 
-use egg::{define_language, Analysis, DidMerge, Id, PatternAst, RecExpr, Subst, Symbol};
+use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use crate::typing::{Typeable, TypingError};
+use crate::typing::{Type, Typeable, TypingInfo};
 
 use super::{Trs, TrsError};
 
@@ -130,16 +130,28 @@ impl TryFrom<String> for Ruleset {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Default, Hash)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 pub enum ArithmaticType {
-    #[default]
-    Float,
+    Top,
+    Bottom,
 }
 
 impl Display for ArithmaticType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Float => write!(f, "Float"),
+            Self::Top => write!(f, "Top (Float)"),
+            Self::Bottom => write!(f, "Bottom"),
+        }
+    }
+}
+
+impl PartialOrd for ArithmaticType {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // Bottom Type is smaller than everything else
+            (Self::Top, Self::Bottom) => Some(Ordering::Greater),
+            (Self::Bottom, Self::Top) => Some(Ordering::Less),
+            (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
         }
     }
 }
@@ -147,8 +159,18 @@ impl Display for ArithmaticType {
 impl Typeable for Math {
     type Type = ArithmaticType;
 
-    fn type_node(&self, _: &RecExpr<Self>) -> Result<Self::Type, TypingError> {
-        Ok(Self::Type::Float)
+    fn type_info(&self) -> TypingInfo<Self::Type> {
+        TypingInfo::new(Self::Type::Top, Self::Type::Top)
+    }
+}
+
+impl Type for ArithmaticType {
+    fn top() -> Self {
+        Self::Top
+    }
+
+    fn bottom() -> Self {
+        Self::Bottom
     }
 }
 

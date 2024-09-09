@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use super::{SketchNode, SketchParseError};
 use crate::python::PySketch;
+use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
 pub type PartialSketch<L> = RecExpr<PartialSketchNode<L>>;
@@ -38,6 +39,19 @@ impl<L: Language> Language for PartialSketchNode<L> {
         match self {
             Self::Todo | Self::Active => &mut [],
             Self::Finished(n) => n.children_mut(),
+        }
+    }
+}
+
+impl<L: Typeable> Typeable for PartialSketchNode<L> {
+    type Type = L::Type;
+
+    fn type_info(&self) -> crate::typing::TypingInfo<Self::Type> {
+        match self {
+            Self::Todo | Self::Active => {
+                TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type()
+            }
+            Self::Finished(t) => t.type_info(),
         }
     }
 }
@@ -184,14 +198,44 @@ where
 #[cfg(test)]
 mod tests {
     use crate::trs::halide::HalideMath;
+    use crate::typing::typecheck_expr;
 
     use super::*;
 
     #[test]
     fn parse_and_print() {
-        let string = "(contains (max (min (1 [active]) ?)))";
-        let sketch = string.parse::<PartialSketch<HalideMath>>().unwrap();
+        let term = "(contains (max (min 1 [active]) ?))";
+        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
 
-        assert_eq!(sketch.to_string(), "asdf".to_owned());
+        assert_eq!(&sketch.to_string(), "(contains (max (min 1 [active]) ?))");
+    }
+
+    #[test]
+    fn typecheck_partial_sketch1() {
+        let term = "(or (max (min 1 [active]) ?) (== 2 ?))";
+        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+
+        assert!(typecheck_expr(&sketch).is_err());
+    }
+
+    #[test]
+    fn typecheck_partial_sketch2() {
+        let term = "(or (< (min 1 [active]) ?) (== 2 ?))";
+        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+
+        // let type_map = collect_expr_types(&sketch).unwrap();
+        // let graph = dot_typed_ast(Id::from(sketch.as_ref().len() - 1), &sketch, &type_map);
+        // let dot = Dot::with_config(&graph, &[Config::EdgeNoLabel]);
+        // println!("{dot:?}");
+
+        assert!(typecheck_expr(&sketch).is_ok());
+    }
+
+    #[test]
+    fn typecheck_partial_sketch3() {
+        let term = "(or (or (> 1 [active]) ?) (or 2 ?))";
+        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+
+        assert!(typecheck_expr(&sketch).is_err());
     }
 }

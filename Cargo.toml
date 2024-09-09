@@ -24,6 +24,7 @@ hashbrown = { version = "0.14.5", features = ["rayon", "serde"] }
 indicatif = "0.17.8"
 log = "0.4.21"
 ordered-float = { version = "4.2.1", features = ["serde"] }
+petgraph = "0.6.5"
 pyo3 = { version = "0.21.2", features = ["hashbrown"] }
 rand = "0.8.5"
 rayon = "1.10.0"
