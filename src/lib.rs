@@ -62,6 +62,8 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Pylang works for all langs that implement Display
     m.add_class::<python::PyLang>()?;
     m.add_class::<python::PySketch>()?;
+    m.add_class::<python::FlatAst>()?;
+    m.add_class::<python::FlatNode>()?;
     m.add_function(wrap_pyfunction!(python::sketch_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(python::todo_symbol, m)?)?;
     m.add_function(wrap_pyfunction!(python::active_symbol, m)?)?;

@@ -10,6 +10,7 @@ use symbolic_expressions::{Sexp, SexpError};
 use thiserror::Error;
 
 use super::macros::pyboxable;
+use super::FlatAst;
 use crate::sketch::{PartialSketch, PartialSketchNode, Sketch, SketchNode};
 
 #[pyclass]
@@ -149,6 +150,10 @@ impl PySketch {
         rec_replace(&mut new, &mut Some(new_child));
         rec_active(&mut new);
         new
+    }
+
+    pub fn flat(&self) -> FlatAst {
+        self.into()
     }
 }
 

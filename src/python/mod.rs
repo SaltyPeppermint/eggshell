@@ -1,4 +1,5 @@
 // pub mod halide;
+mod flat;
 pub(crate) mod macros;
 mod pylang;
 mod pysketch;
@@ -10,6 +11,8 @@ use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
 use thiserror::Error;
 
+pub use flat::FlatAst;
+pub use flat::FlatNode;
 pub use pylang::PyLang;
 pub use pysketch::PySketch;
 pub use pytrs::*;

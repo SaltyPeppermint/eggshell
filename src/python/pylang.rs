@@ -11,10 +11,14 @@ use thiserror::Error;
 
 use crate::{HashMap, HashSet};
 
+use super::FlatAst;
+
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct PyLang {
+    #[pyo3(get)]
     node: String,
+    #[pyo3(get)]
     children: Vec<PyLang>,
 }
 
@@ -78,6 +82,16 @@ impl PyLang {
         let mut children = HashMap::new();
         rec(self, &mut children);
         children
+    }
+
+    pub fn flat(&self) -> FlatAst {
+        self.into()
+    }
+}
+
+impl PyLang {
+    pub fn children(&self) -> &[Self] {
+        self.children.as_slice()
     }
 }
 
