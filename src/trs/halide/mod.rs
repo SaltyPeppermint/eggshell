@@ -6,7 +6,7 @@ use std::{cmp::Ordering, fmt::Display};
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsError};
+use super::{SymbolIter, Trs, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -37,6 +37,117 @@ define_language! {
         Bool(bool),
         Constant(i64),
         Symbol(Symbol),
+    }
+}
+
+impl SymbolIter for HalideMath {
+    fn raw_symbols() -> &'static [(&'static str, usize)] {
+        &[
+            ("+", 2),
+            ("-", 2),
+            ("*", 2),
+            ("/", 2),
+            ("%", 2),
+            ("max", 2),
+            ("min", 2),
+            ("<", 2),
+            (">", 2),
+            ("!", 1),
+            ("<=", 2),
+            (">=", 2),
+            ("==", 2),
+            ("!=", 2),
+            ("||", 2),
+            ("&&", 2),
+            ("true", 2),
+            ("false", 2),
+        ]
+    }
+}
+
+impl Typeable for HalideMath {
+    type Type = HalideType;
+
+    fn type_info(&self) -> TypingInfo<Self::Type> {
+        match self {
+            // Primitive types
+            Self::Bool(_) => TypingInfo::new(Self::Type::Boolean, Self::Type::Top),
+            Self::Constant(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Top),
+            Self::Symbol(_) => TypingInfo::new(Self::Type::Top, Self::Type::Top),
+
+            // Fns of type int
+            Self::Add(_)
+            | Self::Sub(_)
+            | Self::Mul(_)
+            | Self::Div(_)
+            | Self::Mod(_)
+            | Self::Max(_)
+            | Self::Min(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Integer),
+
+            // Fns of type bool
+            Self::Lt(_) | Self::Gt(_) | Self::Let(_) | Self::Get(_) => {
+                TypingInfo::new(Self::Type::Boolean, Self::Type::Integer)
+            }
+            Self::Or(_) | Self::And(_) | Self::Not(_) => {
+                TypingInfo::new(Self::Type::Boolean, Self::Type::Boolean)
+            }
+
+            // Fns of generic type
+            Self::Eq(_) | HalideMath::IEq(_) => {
+                TypingInfo::new(Self::Type::Boolean, Self::Type::Top)
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+pub enum HalideType {
+    Integer,
+    Boolean,
+    Top,
+    Bottom,
+}
+
+impl Display for HalideType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer => write!(f, "Integer"),
+            Self::Boolean => write!(f, "Boolean"),
+            Self::Top => write!(f, "Top"),
+            Self::Bottom => write!(f, "Bottom"),
+        }
+    }
+}
+
+impl PartialOrd for HalideType {
+    #[expect(clippy::match_same_arms)]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // Can't compare int and bool
+            (Self::Integer, Self::Boolean) | (Self::Boolean, Self::Integer) => None,
+            // Compare to self
+            (Self::Boolean, Self::Boolean)
+            | (Self::Integer, Self::Integer)
+            | (Self::Top, Self::Top)
+            | (Self::Bottom, Self::Bottom) => Some(Ordering::Equal),
+            // Top is greater than bool and int
+            (Self::Boolean | Self::Integer, Self::Top) => Some(Ordering::Less),
+            (Self::Top, Self::Integer | Self::Boolean) => Some(Ordering::Greater),
+
+            // Bottom Type is smaller than everything else
+            (Self::Integer | Self::Boolean | Self::Top, Self::Bottom) => Some(Ordering::Greater),
+            (Self::Bottom, Self::Integer | Self::Boolean | Self::Top) => Some(Ordering::Less),
+        }
+    }
+}
+
+impl Type for HalideType {
+    fn top() -> Self {
+        Self::Top
+    }
+
+    fn bottom() -> Self {
+        Self::Bottom
     }
 }
 
@@ -135,133 +246,6 @@ impl TryFrom<String> for Ruleset {
             "full" | "Full" | "FULL" => Ok(Self::Full),
             "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
             _ => Err(Self::Error::BadRulesetName(value)),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-pub enum HalideType {
-    Integer,
-    Boolean,
-    Top,
-    Bottom,
-}
-
-impl Display for HalideType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Integer => write!(f, "Integer"),
-            Self::Boolean => write!(f, "Boolean"),
-            Self::Top => write!(f, "Top"),
-            Self::Bottom => write!(f, "Bottom"),
-        }
-    }
-}
-
-impl PartialOrd for HalideType {
-    #[expect(clippy::match_same_arms)]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            // Can't compare int and bool
-            (Self::Integer, Self::Boolean) | (Self::Boolean, Self::Integer) => None,
-            // Compare to self
-            (Self::Boolean, Self::Boolean)
-            | (Self::Integer, Self::Integer)
-            | (Self::Top, Self::Top)
-            | (Self::Bottom, Self::Bottom) => Some(Ordering::Equal),
-            // Top is greater than bool and int
-            (Self::Boolean | Self::Integer, Self::Top) => Some(Ordering::Less),
-            (Self::Top, Self::Integer | Self::Boolean) => Some(Ordering::Greater),
-
-            // Bottom Type is smaller than everything else
-            (Self::Integer | Self::Boolean | Self::Top, Self::Bottom) => Some(Ordering::Greater),
-            (Self::Bottom, Self::Integer | Self::Boolean | Self::Top) => Some(Ordering::Less),
-        }
-    }
-}
-
-impl Type for HalideType {
-    fn top() -> Self {
-        Self::Top
-    }
-
-    fn bottom() -> Self {
-        Self::Bottom
-    }
-}
-
-impl Typeable for HalideMath {
-    type Type = HalideType;
-
-    // fn type_node(&self, expr: &RecExpr<Self>) -> Result<Self::Type, TypingError> {
-    //     match self {
-    //         // Primitive types
-    //         Self::Bool(_) => Ok(Self::Type::Boolean),
-    //         Self::Constant(_) => Ok(Self::Type::Integer),
-    //         Self::Symbol(_) => Ok(Self::Type::Top),
-
-    //         // Fns of type int
-    //         Self::Add(children)
-    //         | Self::Sub(children)
-    //         | Self::Mul(children)
-    //         | Self::Div(children)
-    //         | Self::Mod(children)
-    //         | Self::Max(children)
-    //         | Self::Min(children) => {
-    //             let child_type = Self::check_child_coherence(children, expr)?;
-    //             Self::check_type_constraints(Self::Type::Integer, child_type)
-    //         }
-
-    //         // Fns of type bool
-    //         Self::Lt(children)
-    //         | Self::Gt(children)
-    //         | Self::Let(children)
-    //         | Self::Get(children)
-    //         | Self::Or(children)
-    //         | Self::And(children) => {
-    //             let child_type = Self::check_child_coherence(children, expr)?;
-    //             Self::check_type_constraints(Self::Type::Boolean, child_type)
-    //         }
-    //         Self::Not(child) => {
-    //             let child_type = Self::check_child_coherence(child.as_slice(), expr)?;
-    //             Self::check_type_constraints(Self::Type::Boolean, child_type)
-    //         }
-
-    //         // Fns of generic type
-    //         Self::Eq(children) | HalideMath::IEq(children) => {
-    //             Self::check_child_coherence(children, expr).map(|_| Self::Type::Boolean)
-    //         }
-    //     }
-    // }
-
-    fn type_info(&self) -> TypingInfo<Self::Type> {
-        match self {
-            // Primitive types
-            Self::Bool(_) => TypingInfo::new(Self::Type::Boolean, Self::Type::Top),
-            Self::Constant(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Top),
-            Self::Symbol(_) => TypingInfo::new(Self::Type::Top, Self::Type::Top),
-
-            // Fns of type int
-            Self::Add(_)
-            | Self::Sub(_)
-            | Self::Mul(_)
-            | Self::Div(_)
-            | Self::Mod(_)
-            | Self::Max(_)
-            | Self::Min(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Integer),
-
-            // Fns of type bool
-            Self::Lt(_) | Self::Gt(_) | Self::Let(_) | Self::Get(_) => {
-                TypingInfo::new(Self::Type::Boolean, Self::Type::Integer)
-            }
-            Self::Or(_) | Self::And(_) | Self::Not(_) => {
-                TypingInfo::new(Self::Type::Boolean, Self::Type::Boolean)
-            }
-
-            // Fns of generic type
-            Self::Eq(_) | HalideMath::IEq(_) => {
-                TypingInfo::new(Self::Type::Boolean, Self::Type::Top)
-            }
         }
     }
 }

@@ -6,9 +6,8 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
+use super::{SymbolIter, Trs, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
-
-use super::{Trs, TrsError};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -39,6 +38,32 @@ define_language! {
     }
 }
 
+impl SymbolIter for Math {
+    fn raw_symbols() -> &'static [(&'static str, usize)] {
+        &[
+            ("d", 2),
+            ("i", 2),
+            ("+", 2),
+            ("-", 2),
+            ("*", 2),
+            ("/", 2),
+            ("pow", 2),
+            ("ln", 1),
+            ("sqrt", 1),
+            ("sin", 1),
+            ("cos", 1),
+        ]
+    }
+}
+
+impl Typeable for Math {
+    type Type = ArithmaticType;
+
+    fn type_info(&self) -> TypingInfo<Self::Type> {
+        TypingInfo::new(Self::Type::Top, Self::Type::Top)
+    }
+}
+
 // pub struct MathCostFn;
 // impl egg::CostFunction<Math> for MathCostFn {
 //     type Cost = usize;
@@ -53,6 +78,42 @@ define_language! {
 //         enode.fold(op_cost, |sum, i| sum + costs(i))
 //     }
 // }
+
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+pub enum ArithmaticType {
+    Top,
+    Bottom,
+}
+
+impl Display for ArithmaticType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Top => write!(f, "Top (Float)"),
+            Self::Bottom => write!(f, "Bottom"),
+        }
+    }
+}
+
+impl PartialOrd for ArithmaticType {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            // Bottom Type is smaller than everything else
+            (Self::Top, Self::Bottom) => Some(Ordering::Greater),
+            (Self::Bottom, Self::Top) => Some(Ordering::Less),
+            (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
+        }
+    }
+}
+
+impl Type for ArithmaticType {
+    fn top() -> Self {
+        Self::Top
+    }
+
+    fn bottom() -> Self {
+        Self::Bottom
+    }
+}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;
@@ -127,50 +188,6 @@ impl TryFrom<String> for Ruleset {
             "full" | "Full" | "FULL" => Ok(Self::Full),
             _ => Err(Self::Error::BadRulesetName(value)),
         }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-pub enum ArithmaticType {
-    Top,
-    Bottom,
-}
-
-impl Display for ArithmaticType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Top => write!(f, "Top (Float)"),
-            Self::Bottom => write!(f, "Bottom"),
-        }
-    }
-}
-
-impl PartialOrd for ArithmaticType {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            // Bottom Type is smaller than everything else
-            (Self::Top, Self::Bottom) => Some(Ordering::Greater),
-            (Self::Bottom, Self::Top) => Some(Ordering::Less),
-            (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
-        }
-    }
-}
-
-impl Typeable for Math {
-    type Type = ArithmaticType;
-
-    fn type_info(&self) -> TypingInfo<Self::Type> {
-        TypingInfo::new(Self::Type::Top, Self::Type::Top)
-    }
-}
-
-impl Type for ArithmaticType {
-    fn top() -> Self {
-        Self::Top
-    }
-
-    fn bottom() -> Self {
-        Self::Bottom
     }
 }
 

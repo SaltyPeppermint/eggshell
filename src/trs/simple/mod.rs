@@ -1,11 +1,11 @@
-use std::{cmp::Ordering, fmt::Display};
+use std::cmp::Ordering;
+use std::fmt::Display;
 
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
+use super::{SymbolIter, Trs, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
-
-use super::{Trs, TrsError};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -21,29 +21,17 @@ define_language! {
     }
 }
 
-fn make_rules() -> Vec<Rewrite> {
-    vec![
-        rewrite!("commute-add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
-        rewrite!("commute-mul"; "(* ?a ?b)" => "(* ?b ?a)"),
-        rewrite!("add-0"; "(+ ?a 0)" => "?a"),
-        rewrite!("mul-0"; "(* ?a 0)" => "0"),
-        rewrite!("mul-1"; "(* ?a 1)" => "?a"),
-    ]
+impl SymbolIter for SimpleLang {
+    fn raw_symbols() -> &'static [(&'static str, usize)] {
+        &[("+", 2), ("*", 2)]
+    }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub enum Ruleset {
-    Full,
-}
+impl Typeable for SimpleLang {
+    type Type = SimpleType;
 
-impl TryFrom<String> for Ruleset {
-    type Error = TrsError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "full" | "Full" | "FULL" => Ok(Self::Full),
-            _ => Err(Self::Error::BadRulesetName(value)),
-        }
+    fn type_info(&self) -> TypingInfo<Self::Type> {
+        TypingInfo::new(Self::Type::Top, Self::Type::Top)
     }
 }
 
@@ -83,11 +71,29 @@ impl Type for SimpleType {
     }
 }
 
-impl Typeable for SimpleLang {
-    type Type = SimpleType;
+fn make_rules() -> Vec<Rewrite> {
+    vec![
+        rewrite!("commute-add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
+        rewrite!("commute-mul"; "(* ?a ?b)" => "(* ?b ?a)"),
+        rewrite!("add-0"; "(+ ?a 0)" => "?a"),
+        rewrite!("mul-0"; "(* ?a 0)" => "0"),
+        rewrite!("mul-1"; "(* ?a 1)" => "?a"),
+    ]
+}
 
-    fn type_info(&self) -> TypingInfo<Self::Type> {
-        TypingInfo::new(Self::Type::Top, Self::Type::Top)
+#[derive(Debug, Clone, Copy, Serialize)]
+pub enum Ruleset {
+    Full,
+}
+
+impl TryFrom<String> for Ruleset {
+    type Error = TrsError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "full" | "Full" | "FULL" => Ok(Self::Full),
+            _ => Err(Self::Error::BadRulesetName(value)),
+        }
     }
 }
 

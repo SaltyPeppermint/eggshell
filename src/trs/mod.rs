@@ -9,11 +9,11 @@ use thiserror::Error;
 
 use std::fmt::Display;
 
-use egg::{Analysis, FromOp, Rewrite};
+use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
-use crate::typing::Typeable;
+use crate::typing::{Type, Typeable};
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -21,11 +21,24 @@ use crate::typing::Typeable;
 /// The [`Trs::rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
 pub trait Trs: Serialize {
-    type Language: Display + Serialize + FromOp + Typeable<Type: PartialOrd + Eq>;
+    type Language: Display + Serialize + FromOp + Typeable<Type: Type> + SymbolIter;
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone> + Clone + Serialize + Default;
     type Rulesets: TryFrom<String>;
 
-    fn rules(ruleset_class: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
+    fn rules(ruleset: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
+}
+
+pub trait SymbolIter: Language {
+    fn raw_symbols() -> &'static [(&'static str, usize)];
+
+    #[must_use]
+    fn symbols(variables: usize, constants: usize) -> impl Iterator<Item = (String, usize)> {
+        Self::raw_symbols()
+            .iter()
+            .map(|(s, a)| ((*s).to_owned(), *a))
+            .chain((0..variables).map(|n| (format!("v{n}"), 0)))
+            .chain((0..constants).map(|n| (n.to_string(), 0)))
+    }
 }
 
 #[derive(Debug, Error)]

@@ -2,7 +2,6 @@ use std::fmt::{self, Display, Formatter};
 
 use egg::{Id, Language, RecExpr};
 use serde::Serialize;
-use smallvec::SmallVec;
 
 use super::SketchParseError;
 use crate::{
@@ -29,8 +28,11 @@ pub enum SketchNode<L: Language> {
     Contains(Id),
     /// Programs that satisfy any of these sketches.
     ///
+    /// Important change from the guided equality saturation: Or can only contain a pair.
+    /// This doesnt hamper the expressivity (or or or chains are possible)
+    /// but makes life much easier
     /// Corresponds to the `(or s1 .. sn)` syntax.
-    Or(SmallVec<[Id; 4]>),
+    Or([Id; 2]),
 }
 
 impl<L: Language> Language for SketchNode<L> {
@@ -110,7 +112,15 @@ where
                     )))
                 }
             }
-            "or" | "OR" | "Or" => Ok(Self::Or(children.into())),
+            "or" | "OR" | "Or" => {
+                if children.len() == 2 {
+                    Ok(Self::Or([children[0], children[1]]))
+                } else {
+                    Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                        op, children,
+                    )))
+                }
+            }
             _ => L::from_op(op, children)
                 .map(Self::Node)
                 .map_err(SketchParseError::BadOp),
@@ -170,8 +180,14 @@ where
                     let child_ids = children
                         .iter()
                         .map(|child| rec(sketch, child))
-                        .collect::<Result<_, _>>()?;
-                    let id = sketch.add(SketchNode::Or(child_ids));
+                        .collect::<Result<Vec<_>, _>>()?;
+                    // Or may only have two children
+                    if child_ids.len() != 2 {
+                        return Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                            "or", child_ids,
+                        )));
+                    }
+                    let id = sketch.add(SketchNode::Or([child_ids[0], child_ids[1]]));
                     Ok(id)
                 }
             }

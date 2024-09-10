@@ -158,8 +158,17 @@ where
                     let child_ids = children
                         .iter()
                         .map(|child| rec(sketch, child))
-                        .collect::<Result<_, _>>()?;
-                    let id = sketch.add(PartialSketchNode::Finished(SketchNode::Or(child_ids)));
+                        .collect::<Result<Vec<_>, _>>()?;
+                    // Or may only have two children
+                    if child_ids.len() != 2 {
+                        return Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                            "or", child_ids,
+                        )));
+                    }
+                    let id = sketch.add(PartialSketchNode::Finished(SketchNode::Or([
+                        child_ids[0],
+                        child_ids[1],
+                    ])));
                     Ok(id)
                 }
             }

@@ -2,16 +2,61 @@
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty) => {
-        /// Typecheck the current AST is parsable
+        pub(crate) fn add_mod(
+            m: &pyo3::Bound<'_, pyo3::prelude::PyModule>,
+            module_name: &str,
+        ) -> pyo3::PyResult<()> {
+            use pyo3::prelude::PyModuleMethods;
+
+            let bound = pyo3::prelude::PyModule::new_bound(m.py(), module_name)?;
+            bound.add_function(pyo3::wrap_pyfunction!(symbols, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(run_eqsat, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_term, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(typecheck_term, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_sketch, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(typecheck_sketch, m)?)?;
+            bound.add_class::<EqsatResult>()?;
+            m.add_submodule(&bound)?;
+            Ok(())
+        }
+
+        type Lang = <$type as $crate::trs::Trs>::Language;
+
+        /// Gets the symbols inherent to the language
         #[pyo3::pyfunction]
-        pub fn typecheck(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
-            let expr: egg::RecExpr<<$type as $crate::trs::Trs>::Language> =
-                term.try_into().map_err(|e| {
-                    $crate::python::EggError::FromOp::<
-                        <<$type as $crate::trs::Trs>::Language as egg::FromOp>::Error,
-                    >(e)
-                })?;
+        pub fn symbols(variables: usize, constants: usize) -> Vec<(String, usize)> {
+            <Lang as $crate::trs::SymbolIter>::symbols(variables, constants).collect()
+        }
+
+        /// Check if a term has the correct syntax
+        #[pyo3::pyfunction]
+        pub fn syntaxcheck_term(term: &$crate::python::PyLang) -> bool {
+            let expr: Result<egg::RecExpr<Lang>, _> = term.try_into();
+            expr.is_ok()
+        }
+
+        /// Check if a term typechecks
+        #[pyo3::pyfunction]
+        pub fn typecheck_term(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+            let expr: egg::RecExpr<Lang> = term
+                .try_into()
+                .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
             Ok($crate::typing::typecheck_expr(&expr).is_ok())
+        }
+
+        /// Check if a partial sketch typechecks
+        #[pyo3::pyfunction]
+        pub fn typecheck_sketch(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+            let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> = term.try_into()?;
+            Ok($crate::typing::typecheck_expr(&sketch).is_ok())
+        }
+
+        /// Check if a partial sketch has the correct syntax
+        #[pyo3::pyfunction]
+        pub fn syntaxcheck_sketch(term: &$crate::python::PyLang) -> bool {
+            let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
+                term.try_into();
+            sketch.is_ok()
         }
 
         /// Run an eqsat on the expr
@@ -25,11 +70,7 @@ macro_rules! monomorphize {
                 .into_iter()
                 .map(|term| (&term).try_into())
                 .collect::<Result<_, _>>()
-                .map_err(|e| {
-                    $crate::python::EggError::FromOp::<
-                        <<$type as $crate::trs::Trs>::Language as egg::FromOp>::Error,
-                    >(e)
-                })?;
+                .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
 
             let eqsat = if let Some(c) = conf {
                 $crate::eqsat::Eqsat::new(start_exprs).with_conf(c)
