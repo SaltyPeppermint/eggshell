@@ -8,7 +8,7 @@ use crate::HashSet;
 
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[expect(clippy::unsafe_derive_deserialize)]
-#[pyclass]
+#[pyclass(frozen)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq)]
 pub struct EqsatConf {
     pub iter_limit: Option<usize>,

@@ -70,37 +70,5 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     python::arithmatic::add_mod(m, "arithmatic")?;
     python::halide::add_mod(m, "halide")?;
 
-    // let arithmatic_m = PyModule::new_bound(m.py(), "arithmatic")?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::symbols, m)?)?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::run_eqsat, m)?)?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::syntaxcheck_term, m)?)?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::typecheck_term, m)?)?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::syntaxcheck_sketch, m)?)?;
-    // arithmatic_m.add_function(wrap_pyfunction!(python::arithmatic::typecheck_sketch, m)?)?;
-    // arithmatic_m.add_class::<python::arithmatic::EqsatResult>()?;
-    // m.add_submodule(&arithmatic_m)?;
-
-    // // Halide specific generated eqsats
-    // let halide_m = PyModule::new_bound(m.py(), "halide")?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::symbols, m)?)?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::run_eqsat, m)?)?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::syntaxcheck_term, m)?)?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::typecheck_term, m)?)?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::syntaxcheck_sketch, m)?)?;
-    // halide_m.add_function(wrap_pyfunction!(python::halide::typecheck_sketch, m)?)?;
-    // halide_m.add_class::<python::halide::EqsatResult>()?;
-    // m.add_submodule(&halide_m)?;
-
-    // // SimpleLang specific generated eqsats
-    // let simple_m = PyModule::new_bound(m.py(), "simple")?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::symbols, m)?)?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::run_eqsat, m)?)?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::syntaxcheck_term, m)?)?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::typecheck_term, m)?)?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::syntaxcheck_sketch, m)?)?;
-    // simple_m.add_function(wrap_pyfunction!(python::simple::typecheck_sketch, m)?)?;
-    // simple_m.add_class::<python::simple::EqsatResult>()?;
-    // m.add_submodule(&simple_m)?;
-
     Ok(())
 }

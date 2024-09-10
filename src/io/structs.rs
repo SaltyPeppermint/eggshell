@@ -3,7 +3,7 @@ use serde::Serialize;
 
 /// Used to represent an expression
 #[derive(Serialize, Debug, Clone, PartialEq)]
-#[pyclass]
+#[pyclass(frozen)]
 pub struct Expression {
     /// Index of the expression
     pub index: usize,

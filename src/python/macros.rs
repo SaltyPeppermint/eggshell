@@ -61,6 +61,7 @@ macro_rules! monomorphize {
 
         /// Run an eqsat on the expr
         #[pyo3::pyfunction]
+        #[pyo3(signature = (start_terms, ruleset_name, conf=None))]
         pub fn run_eqsat(
             start_terms: Vec<$crate::python::PyLang>,
             ruleset_name: String,
@@ -85,7 +86,7 @@ macro_rules! monomorphize {
         }
 
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
-        #[pyo3::pyclass]
+        #[pyo3::pyclass(frozen)]
         #[derive(Debug, Clone)]
         pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
 
@@ -93,7 +94,7 @@ macro_rules! monomorphize {
         impl EqsatResult {
             #[pyo3(signature = (root, cost_fn="ast_size"))]
             fn classic_extract(
-                &mut self,
+                &self,
                 root: usize,
                 cost_fn: &str,
             ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
@@ -115,7 +116,7 @@ macro_rules! monomorphize {
 
             #[pyo3(signature = (root, sketch,cost_fn="ast_size"))]
             fn sketch_extract(
-                &mut self,
+                &self,
                 root: usize,
                 sketch: $crate::python::PySketch,
                 cost_fn: &str,
@@ -156,8 +157,8 @@ macro_rules! monomorphize {
 /// self-referential types using boxes
 macro_rules! pyboxable {
     ($type: ty) => {
-        impl<'source> pyo3::FromPyObject<'source> for std::boxed::Box<$type> {
-            fn extract(ob: &'source pyo3::PyAny) -> pyo3::PyResult<Self> {
+        impl pyo3::FromPyObject<'_> for std::boxed::Box<$type> {
+            fn extract_bound(ob: &Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
                 ob.extract::<$type>().map(Box::new)
             }
         }

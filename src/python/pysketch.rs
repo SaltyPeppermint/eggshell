@@ -12,7 +12,7 @@ use thiserror::Error;
 use super::macros::pyboxable;
 use crate::sketch::{PartialSketch, PartialSketchNode, Sketch, SketchNode};
 
-#[pyclass(frozen)]
+#[pyclass]
 #[derive(Debug, Clone, PartialEq)]
 pub enum PySketch {
     /// Any program of the underlying [`Language`].
@@ -81,7 +81,7 @@ impl PySketch {
             )),
             ("or" | "OR" | "Or", _) => Ok(PySketch::Or { children }),
             ("contains" | "CONTAINS" | "Contains", 1) => Ok(PySketch::Contains {
-                node: Box::new(children.swap_remove(0))
+                node: Box::new(children.pop().expect("Safe cause len = 1"))
             }),
             ("contains" | "CONTAINS" | "Contains", n) => Err(PyErr::new::<PyValueError, _>(
                         format!(
@@ -108,6 +108,47 @@ impl PySketch {
     #[pyo3(name = "__repr__")]
     pub fn debug(&self) -> String {
         format!("{self:?}")
+    }
+
+    pub fn replace_child(&self, new_child: PySketch) -> PySketch {
+        fn rec_replace(n: &mut PySketch, new_pick: &mut Option<PySketch>) -> bool {
+            match n {
+                PySketch::Any {} | PySketch::Todo {} => false,
+                PySketch::Active {} => {
+                    *n = new_pick.take().expect("Only one Active in any ast");
+                    true
+                }
+                PySketch::Node {
+                    lang_node: _,
+                    children,
+                }
+                | PySketch::Or { children } => {
+                    children.iter_mut().any(|c| rec_replace(c, new_pick))
+                }
+                PySketch::Contains { node } => rec_replace(node, new_pick),
+            }
+        }
+
+        fn rec_active(n: &mut PySketch) -> bool {
+            match n {
+                PySketch::Any {} | PySketch::Active {} => false,
+                PySketch::Todo {} => {
+                    *n = PySketch::Active {};
+                    true
+                }
+                PySketch::Node {
+                    lang_node: _,
+                    children,
+                }
+                | PySketch::Or { children } => children.iter_mut().any(rec_active),
+                PySketch::Contains { node } => rec_active(node),
+            }
+        }
+
+        let mut new = self.clone();
+        rec_replace(&mut new, &mut Some(new_child));
+        rec_active(&mut new);
+        new
     }
 }
 
