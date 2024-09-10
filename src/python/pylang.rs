@@ -45,45 +45,6 @@ impl PyLang {
         format!("{self:?}")
     }
 
-    /// Returns Hashmap of all the symbols present in it with their possible children
-    pub fn symbols(&self) -> HashMap<String, HashSet<String>> {
-        fn rec(pylang: &PyLang, children: &mut HashMap<String, HashSet<String>>) {
-            if let Some(s) = children.get_mut(&pylang.node) {
-                s.extend(pylang.children.iter().map(|c| c.node.clone()));
-            } else {
-                children.insert(
-                    pylang.node.clone(),
-                    pylang.children.iter().map(|c| c.node.clone()).collect(),
-                );
-            }
-            for child in &pylang.children {
-                rec(child, children);
-            }
-        }
-        let mut children = HashMap::new();
-        rec(self, &mut children);
-        children
-    }
-
-    /// Returns Hashmap of all the symbols present in it with their possible children
-    pub fn arity(&self) -> HashMap<String, HashSet<usize>> {
-        fn rec(pylang: &PyLang, children: &mut HashMap<String, HashSet<usize>>) {
-            if let Some(s) = children.get_mut(&pylang.node) {
-                s.insert(pylang.children.len());
-            } else {
-                let mut s = HashSet::new();
-                s.insert(pylang.children.len());
-                children.insert(pylang.node.clone(), s);
-            }
-            for child in &pylang.children {
-                rec(child, children);
-            }
-        }
-        let mut children = HashMap::new();
-        rec(self, &mut children);
-        children
-    }
-
     pub fn flat(&self) -> FlatAst {
         self.into()
     }
