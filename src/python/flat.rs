@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 
-use super::{PyLang, PySketch};
+use super::{RawLang, RawSketch};
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -11,12 +11,12 @@ pub struct FlatAst {
     pub edges: Vec<(usize, usize)>,
 }
 
-impl From<&PySketch> for FlatAst {
-    fn from(value: &PySketch) -> Self {
+impl From<&RawSketch> for FlatAst {
+    fn from(value: &RawSketch) -> Self {
         fn rec(
             parent_idx: usize,
             root_distance: usize,
-            ast: &PySketch,
+            ast: &RawSketch,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
         ) {
@@ -27,17 +27,20 @@ impl From<&PySketch> for FlatAst {
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
             match ast {
-                PySketch::Active {} | PySketch::Todo {} | PySketch::Any {} => (),
-                PySketch::Node {
+                RawSketch::Active {} | RawSketch::Todo {} | RawSketch::Any {} => (),
+                RawSketch::Node {
                     lang_node: _,
                     children,
-                }
-                | PySketch::Or { children } => {
+                } => {
                     for c in children {
                         rec(current_idx, root_distance + 1, c, nodes, edges);
                     }
                 }
-                PySketch::Contains { node } => {
+                RawSketch::Or(children) => {
+                    rec(current_idx, root_distance + 1, &children[0], nodes, edges);
+                    rec(current_idx, root_distance + 1, &children[1], nodes, edges);
+                }
+                RawSketch::Contains(node) => {
                     rec(current_idx, root_distance + 1, node, nodes, edges);
                 }
             }
@@ -55,12 +58,12 @@ impl From<&PySketch> for FlatAst {
     }
 }
 
-impl From<&PyLang> for FlatAst {
-    fn from(value: &PyLang) -> Self {
+impl From<&RawLang> for FlatAst {
+    fn from(value: &RawLang) -> Self {
         fn rec(
             parent_idx: usize,
             root_distance: usize,
-            ast: &PyLang,
+            ast: &RawLang,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
         ) {

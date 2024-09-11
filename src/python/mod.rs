@@ -4,6 +4,8 @@ pub(crate) mod macros;
 mod pylang;
 mod pysketch;
 mod pytrs;
+mod raw_lang;
+mod raw_sketch;
 
 use std::fmt::Display;
 
@@ -16,6 +18,9 @@ pub use flat::FlatNode;
 pub use pylang::PyLang;
 pub use pysketch::PySketch;
 pub use pytrs::*;
+
+pub(crate) use raw_lang::RawLang;
+pub(crate) use raw_sketch::RawSketch;
 
 /// A wrapper around the `RecParseError` so we can circumvent the orphan rule
 #[derive(Debug, Error)]

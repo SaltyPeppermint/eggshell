@@ -31,14 +31,14 @@ macro_rules! monomorphize {
         /// Check if a term has the correct syntax
         #[pyo3::pyfunction]
         pub fn syntaxcheck_term(term: &$crate::python::PyLang) -> bool {
-            let expr: Result<egg::RecExpr<Lang>, _> = term.try_into();
+            let expr: Result<egg::RecExpr<Lang>, _> = (&term.0).try_into();
             expr.is_ok()
         }
 
         /// Check if a term typechecks
         #[pyo3::pyfunction]
         pub fn typecheck_term(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
-            let expr: egg::RecExpr<Lang> = term
+            let expr: egg::RecExpr<Lang> = (&term.0)
                 .try_into()
                 .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
             Ok($crate::typing::typecheck_expr(&expr).is_ok())
@@ -47,7 +47,8 @@ macro_rules! monomorphize {
         /// Check if a partial sketch typechecks
         #[pyo3::pyfunction]
         pub fn typecheck_sketch(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
-            let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> = term.try_into()?;
+            let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> =
+                (&term.0).try_into()?;
             Ok($crate::typing::typecheck_expr(&sketch).is_ok())
         }
 
@@ -55,7 +56,7 @@ macro_rules! monomorphize {
         #[pyo3::pyfunction]
         pub fn syntaxcheck_sketch(term: &$crate::python::PyLang) -> bool {
             let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
-                term.try_into();
+                (&term.0).try_into();
             sketch.is_ok()
         }
 
@@ -69,7 +70,7 @@ macro_rules! monomorphize {
         ) -> pyo3::PyResult<EqsatResult> {
             let start_exprs = start_terms
                 .into_iter()
-                .map(|term| (&term).try_into())
+                .map(|term| (&term.0).try_into())
                 .collect::<Result<_, _>>()
                 .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
 
@@ -125,12 +126,12 @@ macro_rules! monomorphize {
                     "ast_size" => self.0.sketch_extract(
                         root.into(),
                         $crate::utils::AstSize2,
-                        &sketch.try_into()?,
+                        &sketch.0.try_into()?,
                     ),
                     "ast_depth" => self.0.sketch_extract(
                         root.into(),
                         $crate::utils::AstDepth2,
-                        &sketch.try_into()?,
+                        &sketch.0.try_into()?,
                     ),
                     _ => {
                         return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
@@ -155,20 +156,19 @@ macro_rules! monomorphize {
 
 /// Macro to generate the necessary implementations so pyo3 doesnt freak out about
 /// self-referential types using boxes
-macro_rules! pyboxable {
-    ($type: ty) => {
-        impl pyo3::FromPyObject<'_> for std::boxed::Box<$type> {
-            fn extract_bound(ob: &Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
-                ob.extract::<$type>().map(Box::new)
-            }
-        }
-        impl pyo3::IntoPy<pyo3::PyObject> for std::boxed::Box<$type> {
-            fn into_py(self, py: pyo3::Python<'_>) -> pyo3::PyObject {
-                (*self).into_py(py)
-            }
-        }
-    };
-}
-
+// macro_rules! pyboxable {
+//     ($type: ty) => {
+//         impl pyo3::FromPyObject<'_> for std::boxed::Box<$type> {
+//             fn extract_bound(ob: &Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
+//                 ob.extract::<$type>().map(Box::new)
+//             }
+//         }
+//         impl pyo3::IntoPy<pyo3::PyObject> for std::boxed::Box<$type> {
+//             fn into_py(self, py: pyo3::Python<'_>) -> pyo3::PyObject {
+//                 (*self).into_py(py)
+//             }
+//         }
+//     };
+// }
 pub(crate) use monomorphize;
-pub(crate) use pyboxable;
+// pub(crate) use pyboxable;
