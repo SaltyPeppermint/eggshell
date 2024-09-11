@@ -5,8 +5,9 @@ use egg::{Language, RecExpr};
 use pyo3::exceptions::PyException;
 use pyo3::{create_exception, prelude::*};
 
-use super::raw_lang::RawLangParseError;
-use super::{FlatAst, RawLang};
+use super::raw_lang::{RawLang, RawLangParseError};
+use super::FlatAst;
+use crate::utils::Tree;
 
 #[pyclass]
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +39,10 @@ impl PyLang {
 
     pub fn flat(&self) -> FlatAst {
         (&self.0).into()
+    }
+
+    pub fn size(&self) -> usize {
+        self.0.size()
     }
 }
 

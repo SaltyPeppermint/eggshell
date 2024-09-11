@@ -4,8 +4,9 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::{create_exception, PyErr};
 
-use super::raw_sketch::{RawSketchError, RawSketchParseError};
-use super::{FlatAst, RawSketch};
+use super::raw_sketch::{RawSketch, RawSketchError, RawSketchParseError};
+use super::FlatAst;
+use crate::utils::Tree;
 
 #[pyclass]
 #[derive(Debug, Clone, PartialEq)]
@@ -43,6 +44,10 @@ impl PySketch {
 
     pub fn flat(&self) -> FlatAst {
         (&self.0).into()
+    }
+
+    pub fn size(&self) -> usize {
+        self.0.size()
     }
 }
 

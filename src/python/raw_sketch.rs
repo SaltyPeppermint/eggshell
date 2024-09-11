@@ -7,6 +7,7 @@ use thiserror::Error;
 
 use super::PySketch;
 use crate::sketch::{PartialSketch, PartialSketchNode, Sketch, SketchNode};
+use crate::utils::Tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum RawSketch {
@@ -115,6 +116,32 @@ impl RawSketch {
 
         rec_replace(self, &mut Some(new_child));
         rec_active(self);
+    }
+}
+
+impl Tree for RawSketch {
+    fn children(&self) -> &[Self] {
+        match self {
+            RawSketch::Any | RawSketch::Todo | RawSketch::Active => &[],
+            RawSketch::Node {
+                lang_node: _,
+                children,
+            } => children.as_slice(),
+            RawSketch::Contains(child) => std::slice::from_ref(child),
+            RawSketch::Or(children) => children.as_slice(),
+        }
+    }
+
+    fn children_mut(&mut self) -> &mut [Self] {
+        match self {
+            RawSketch::Any | RawSketch::Todo | RawSketch::Active => &mut [],
+            RawSketch::Node {
+                lang_node: _,
+                children,
+            } => children.as_mut_slice(),
+            RawSketch::Contains(child) => std::slice::from_mut(child),
+            RawSketch::Or(children) => children.as_mut_slice(),
+        }
     }
 }
 

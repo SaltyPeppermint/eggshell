@@ -5,6 +5,8 @@ use egg::{FromOp, Id, Language, RecExpr};
 use symbolic_expressions::{Sexp, SexpError};
 use thiserror::Error;
 
+use crate::utils::Tree;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RawLang {
     node: String,
@@ -15,9 +17,15 @@ impl RawLang {
     pub fn new(node: String, children: Vec<RawLang>) -> Self {
         RawLang { node, children }
     }
+}
 
-    pub fn children(&self) -> &[Self] {
+impl Tree for RawLang {
+    fn children(&self) -> &[Self] {
         self.children.as_slice()
+    }
+
+    fn children_mut(&mut self) -> &mut [Self] {
+        self.children.as_mut_slice()
     }
 }
 

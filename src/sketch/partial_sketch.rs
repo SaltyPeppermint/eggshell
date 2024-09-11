@@ -118,15 +118,15 @@ where
             // `PySketch::Node` since a sketch contains no back edges and is finite
             match raw_sketch {
                 // No recursion here
-                RawSketch::Any {} => {
+                RawSketch::Any => {
                     let id = sketch.add(PartialSketchNode::Finished(SketchNode::Any));
                     Ok(id)
                 }
-                RawSketch::Todo {} => {
+                RawSketch::Todo => {
                     let id = sketch.add(PartialSketchNode::Todo);
                     Ok(id)
                 }
-                RawSketch::Active {} => {
+                RawSketch::Active => {
                     let id = sketch.add(PartialSketchNode::Active);
                     Ok(id)
                 }

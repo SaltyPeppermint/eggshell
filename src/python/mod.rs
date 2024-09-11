@@ -4,8 +4,8 @@ pub(crate) mod macros;
 mod pylang;
 mod pysketch;
 mod pytrs;
-mod raw_lang;
-mod raw_sketch;
+pub(crate) mod raw_lang;
+pub(crate) mod raw_sketch;
 
 use std::fmt::Display;
 
