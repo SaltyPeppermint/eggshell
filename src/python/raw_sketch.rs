@@ -28,7 +28,7 @@ pub(crate) enum RawSketch {
     /// Corresponds to the `(language_node s1 .. sn)` syntax.
     Node {
         lang_node: String,
-        children: Vec<RawSketch>,
+        children: Box<[RawSketch]>,
     },
     // /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     // ///
@@ -76,7 +76,7 @@ impl RawSketch {
 
             (s, _) => Ok(RawSketch::Node {
                 lang_node: s.to_owned(),
-                children,
+                children: children.into_boxed_slice(),
             }),
         }
     }
@@ -144,6 +144,23 @@ impl RawSketch {
             RawSketch::Or(_) => "or",
         }
     }
+
+    pub fn sketch_symbols(&self) -> usize {
+        match self {
+            RawSketch::Open | RawSketch::Active => 0,
+            RawSketch::Node {
+                lang_node: _,
+                children,
+            } => children.iter().map(|c| c.sketch_symbols()).sum::<usize>(),
+            RawSketch::Any | RawSketch::Contains(_) | RawSketch::Or(_) => {
+                1 + self
+                    .children()
+                    .iter()
+                    .map(|c| c.sketch_symbols())
+                    .sum::<usize>()
+            }
+        }
+    }
 }
 
 impl Tree for RawSketch {
@@ -153,7 +170,7 @@ impl Tree for RawSketch {
             RawSketch::Node {
                 lang_node: _,
                 children,
-            } => children.as_slice(),
+            } => children,
             RawSketch::Contains(child) => std::slice::from_ref(child),
             RawSketch::Or(children) => children.as_slice(),
         }
@@ -165,7 +182,7 @@ impl Tree for RawSketch {
             RawSketch::Node {
                 lang_node: _,
                 children,
-            } => children.as_mut_slice(),
+            } => children,
             RawSketch::Contains(child) => std::slice::from_mut(child),
             RawSketch::Or(children) => children.as_mut_slice(),
         }
@@ -245,7 +262,7 @@ impl FromStr for RawSketch {
                     }
                     _ => Ok(RawSketch::Node {
                         lang_node: s.to_string(),
-                        children: vec![],
+                        children: Box::new([]),
                     }),
                 },
                 Sexp::List(list) if list.is_empty() => Err(RawSketchParseError::EmptySexp),

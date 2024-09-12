@@ -70,6 +70,11 @@ impl PySketch {
     pub fn finished(&self) -> bool {
         self.0.finished()
     }
+
+    /// Checks if sketch has open [active]
+    pub fn sketch_symbols(&self) -> usize {
+        self.0.sketch_symbols()
+    }
 }
 
 impl From<RawSketch> for PySketch {

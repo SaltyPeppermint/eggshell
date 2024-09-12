@@ -10,12 +10,15 @@ use crate::utils::Tree;
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RawLang {
     node: String,
-    children: Vec<RawLang>,
+    children: Box<[RawLang]>,
 }
 
 impl RawLang {
     pub fn new(node: String, children: Vec<RawLang>) -> Self {
-        RawLang { node, children }
+        RawLang {
+            node,
+            children: children.into_boxed_slice(),
+        }
     }
 
     pub fn name(&self) -> &str {
@@ -25,11 +28,11 @@ impl RawLang {
 
 impl Tree for RawLang {
     fn children(&self) -> &[Self] {
-        self.children.as_slice()
+        &self.children
     }
 
     fn children_mut(&mut self) -> &mut [Self] {
-        self.children.as_mut_slice()
+        &mut self.children
     }
 }
 
@@ -58,7 +61,7 @@ impl FromStr for RawLang {
                 Sexp::Empty => Err(RawLangParseError::EmptySexp),
                 Sexp::String(s) => Ok(RawLang {
                     node: s.to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 }),
                 Sexp::List(list) if list.is_empty() => Err(RawLangParseError::EmptySexp),
                 Sexp::List(list) => match &list[0] {
@@ -67,8 +70,7 @@ impl FromStr for RawLang {
                         Err(RawLangParseError::HeadList(empty_list.to_owned()))
                     }
                     Sexp::String(s) => {
-                        let children: Vec<RawLang> =
-                            list[1..].iter().map(rec).collect::<Result<_, _>>()?;
+                        let children = list[1..].iter().map(rec).collect::<Result<_, _>>()?;
                         Ok(RawLang {
                             node: s.to_owned(),
                             children,
@@ -175,16 +177,16 @@ mod tests {
     fn parse_basic() {
         let lhs = RawLang {
             node: "==".to_owned(),
-            children: vec![
+            children: Box::new([
                 RawLang {
                     node: "0".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
                 RawLang {
                     node: "0".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
-            ],
+            ]),
         };
         let rhs: RecExpr<HalideMath> = "(== 0 0)".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
@@ -194,16 +196,16 @@ mod tests {
     fn print_basic() {
         let lhs = RawLang {
             node: "==".to_owned(),
-            children: vec![
+            children: Box::new([
                 RawLang {
                     node: "0".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
                 RawLang {
                     node: "0".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
-            ],
+            ]),
         }
         .to_string();
         let rhs = "(== 0 0)";
@@ -215,25 +217,25 @@ mod tests {
         let lhs = RawLang {
             node: "==".to_owned(),
 
-            children: vec![
+            children: Box::new([
                 RawLang {
                     node: "+".to_owned(),
-                    children: vec![
+                    children: Box::new([
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
-                    ],
+                    ]),
                 },
                 RawLang {
                     node: "2".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
-            ],
+            ]),
         };
         let rhs: RecExpr<HalideMath> = "(== (+ 1 1) 2)".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
@@ -244,25 +246,25 @@ mod tests {
         let lhs = RawLang {
             node: "==".to_owned(),
 
-            children: vec![
+            children: Box::new([
                 RawLang {
                     node: "+".to_owned(),
-                    children: vec![
+                    children: Box::new([
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
-                    ],
+                    ]),
                 },
                 RawLang {
                     node: "2".to_owned(),
-                    children: vec![],
+                    children: Box::new([]),
                 },
-            ],
+            ]),
         }
         .to_string();
         let rhs = "(== (+ 1 1) 2)";
@@ -273,43 +275,43 @@ mod tests {
     fn parse_complex() {
         let lhs = RawLang {
             node: "==".to_owned(),
-            children: vec![
+            children: Box::new([
                 RawLang {
                     node: "+".to_owned(),
-                    children: vec![
+                    children: Box::new([
                         RawLang {
                             node: "+".to_owned(),
-                            children: vec![
+                            children: Box::new([
                                 RawLang {
                                     node: "1".to_owned(),
-                                    children: vec![],
+                                    children: Box::new([]),
                                 },
                                 RawLang {
                                     node: "0".to_owned(),
-                                    children: vec![],
+                                    children: Box::new([]),
                                 },
-                            ],
+                            ]),
                         },
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
-                    ],
+                    ]),
                 },
                 RawLang {
                     node: "+".to_owned(),
-                    children: vec![
+                    children: Box::new([
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
                         RawLang {
                             node: "1".to_owned(),
-                            children: vec![],
+                            children: Box::new([]),
                         },
-                    ],
+                    ]),
                 },
-            ],
+            ]),
         };
         let rhs: RecExpr<HalideMath> = "(== (+ (+ 1 0) 1) (+ 1 1))".parse().unwrap();
         assert_eq!(lhs, (&rhs).into());
