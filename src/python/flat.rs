@@ -13,22 +13,29 @@ pub struct FlatAst {
     pub edges: Vec<(usize, usize)>,
 }
 
+#[pymethods]
+impl FlatAst {
+    pub fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
 impl From<&RawSketch> for FlatAst {
-    fn from(value: &RawSketch) -> Self {
+    fn from(root: &RawSketch) -> Self {
         fn rec(
             parent_idx: usize,
             root_distance: usize,
-            ast: &RawSketch,
+            sketch_node: &RawSketch,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
         ) {
             nodes.push(FlatNode {
-                name: ast.to_string(),
+                name: sketch_node.name().to_owned(),
                 root_distance,
             });
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
-            match ast {
+            match sketch_node {
                 RawSketch::Active | RawSketch::Open | RawSketch::Any => (),
                 RawSketch::Node {
                     lang_node: _,
@@ -50,44 +57,36 @@ impl From<&RawSketch> for FlatAst {
 
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
-        nodes.push(FlatNode {
-            name: value.to_string(),
-            root_distance: 0,
-        });
 
-        rec(0, 1, value, &mut nodes, &mut edges);
+        rec(0, 0, root, &mut nodes, &mut edges);
         FlatAst { nodes, edges }
     }
 }
 
 impl From<&RawLang> for FlatAst {
-    fn from(value: &RawLang) -> Self {
+    fn from(root: &RawLang) -> Self {
         fn rec(
             parent_idx: usize,
             root_distance: usize,
-            ast: &RawLang,
+            lang_node: &RawLang,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
         ) {
             nodes.push(FlatNode {
-                name: ast.to_string(),
+                name: lang_node.name().to_owned(),
                 root_distance,
             });
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
-            for c in ast.children() {
+            for c in lang_node.children() {
                 rec(current_idx, root_distance + 1, c, nodes, edges);
             }
         }
 
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
-        nodes.push(FlatNode {
-            name: value.to_string(),
-            root_distance: 0,
-        });
 
-        rec(0, 1, value, &mut nodes, &mut edges);
+        rec(0, 0, root, &mut nodes, &mut edges);
         FlatAst { nodes, edges }
     }
 }
@@ -99,4 +98,11 @@ pub struct FlatNode {
     name: String,
     #[pyo3(get)]
     root_distance: usize,
+}
+
+#[pymethods]
+impl FlatNode {
+    pub fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
 }

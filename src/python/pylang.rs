@@ -47,6 +47,11 @@ impl PyLang {
     pub fn size(&self) -> usize {
         self.0.size()
     }
+
+    /// Returns the maximum AST depth in the sketch
+    pub fn depth(&self) -> usize {
+        self.0.depth()
+    }
 }
 
 impl From<RawLang> for PyLang {

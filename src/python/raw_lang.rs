@@ -17,6 +17,10 @@ impl RawLang {
     pub fn new(node: String, children: Vec<RawLang>) -> Self {
         RawLang { node, children }
     }
+
+    pub fn name(&self) -> &str {
+        &self.node
+    }
 }
 
 impl Tree for RawLang {
@@ -156,20 +160,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::Borrow;
-
     use super::*;
     use crate::trs::halide::HalideMath;
 
     #[test]
     fn convert_pylang() {
         let term = "(== (+ (+ 1 0) 1) (+ 1 1))";
-        let lhs: RecExpr<HalideMath> = term
-            .parse::<RawLang>()
-            .unwrap()
-            .borrow()
-            .try_into()
-            .unwrap();
+        let lhs: RecExpr<HalideMath> = (&term.parse::<RawLang>().unwrap()).try_into().unwrap();
         let rhs: RecExpr<HalideMath> = term.parse().unwrap();
         assert_eq!(lhs, rhs);
     }

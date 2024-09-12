@@ -117,4 +117,8 @@ pub(crate) trait Tree: Sized {
     fn size(&self) -> usize {
         1 + self.children().iter().map(|c| c.size()).sum::<usize>()
     }
+
+    fn depth(&self) -> usize {
+        1 + self.children().iter().map(|c| c.depth()).max().unwrap_or(0)
+    }
 }

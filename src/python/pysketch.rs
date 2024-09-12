@@ -18,17 +18,15 @@ impl PySketch {
     /// This always generates a new node that has [open] as its children
     #[new]
     fn new(node: &str, arity: usize) -> PyResult<Self> {
-        let new_children = (0..arity)
-            .map(|_| RawSketch::new("[open]", vec![]).expect("[open] has 0 children"))
-            .collect();
+        let new_children = vec![RawSketch::Open; arity];
         let raw_sketch = RawSketch::new(node, new_children)?;
         Ok(PySketch(raw_sketch))
     }
 
     /// Generate a new root with an [active] node
     #[staticmethod]
-    pub fn new_root() -> PyResult<Self> {
-        Self::new("[active]", 0)
+    pub fn new_root() -> Self {
+        PySketch(RawSketch::Active)
     }
 
     /// Parse from string
@@ -61,6 +59,11 @@ impl PySketch {
     /// Returns the number of nodes in the sketch
     pub fn size(&self) -> usize {
         self.0.size()
+    }
+
+    /// Returns the maximum AST depth in the sketch
+    pub fn depth(&self) -> usize {
+        self.0.depth()
     }
 
     /// Checks if sketch has open [active]

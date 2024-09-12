@@ -130,6 +130,20 @@ impl RawSketch {
             _ => self.children().iter().any(|c| c.unfinished()),
         }
     }
+
+    pub fn name(&self) -> &str {
+        match self {
+            RawSketch::Any => "?",
+            RawSketch::Open => "[open]",
+            RawSketch::Active => "[active]",
+            RawSketch::Node {
+                lang_node,
+                children: _,
+            } => lang_node,
+            RawSketch::Contains(_) => "contains",
+            RawSketch::Or(_) => "or",
+        }
+    }
 }
 
 impl Tree for RawSketch {

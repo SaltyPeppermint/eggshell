@@ -4,17 +4,21 @@ use super::macros::monomorphize;
 
 #[pyfunction]
 pub fn sketch_symbols() -> Vec<(String, usize)> {
-    vec![("?".into(), 0), ("contains".into(), 1), ("or".into(), 2)]
+    vec![
+        ("?".to_owned(), 0),
+        ("contains".to_owned(), 1),
+        ("or".to_owned(), 2),
+    ]
 }
 
 #[pyfunction]
 pub fn open_symbol() -> (String, usize) {
-    ("[open]".into(), 0)
+    ("[open]".to_owned(), 0)
 }
 
 #[pyfunction]
 pub fn active_symbol() -> (String, usize) {
-    ("[active]".into(), 0)
+    ("[active]".to_owned(), 0)
 }
 
 pub mod arithmatic {
