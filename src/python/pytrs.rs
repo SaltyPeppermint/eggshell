@@ -8,8 +8,8 @@ pub fn sketch_symbols() -> Vec<(String, usize)> {
 }
 
 #[pyfunction]
-pub fn todo_symbol() -> (String, usize) {
-    ("[todo]".into(), 0)
+pub fn open_symbol() -> (String, usize) {
+    ("[open]".into(), 0)
 }
 
 #[pyfunction]

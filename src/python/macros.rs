@@ -46,7 +46,7 @@ macro_rules! monomorphize {
 
         /// Check if a partial sketch typechecks
         #[pyo3::pyfunction]
-        pub fn typecheck_sketch(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+        pub fn typecheck_sketch(term: &$crate::python::PySketch) -> pyo3::PyResult<bool> {
             let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> =
                 (&term.0).try_into()?;
             Ok($crate::typing::typecheck_expr(&sketch).is_ok())
@@ -54,7 +54,7 @@ macro_rules! monomorphize {
 
         /// Check if a partial sketch has the correct syntax
         #[pyo3::pyfunction]
-        pub fn syntaxcheck_sketch(term: &$crate::python::PyLang) -> bool {
+        pub fn syntaxcheck_sketch(term: &$crate::python::PySketch) -> bool {
             let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
                 (&term.0).try_into();
             sketch.is_ok()

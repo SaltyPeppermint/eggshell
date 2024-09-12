@@ -29,7 +29,7 @@ impl From<&RawSketch> for FlatAst {
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
             match ast {
-                RawSketch::Active | RawSketch::Todo | RawSketch::Any => (),
+                RawSketch::Active | RawSketch::Open | RawSketch::Any => (),
                 RawSketch::Node {
                     lang_node: _,
                     children,

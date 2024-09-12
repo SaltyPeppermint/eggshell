@@ -16,7 +16,7 @@ pub type PartialSketch<L> = RecExpr<PartialSketchNode<L>>;
 #[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize)]
 pub enum PartialSketchNode<L: Language> {
     /// Inactive open placeholder that needs to be filled
-    Todo,
+    Open,
     /// Open placeholder that is currently being worked on
     Active,
     /// Finshed parts represented by [`SketchNode`]
@@ -30,14 +30,14 @@ impl<L: Language> Language for PartialSketchNode<L> {
 
     fn children(&self) -> &[Id] {
         match self {
-            Self::Todo | Self::Active => &[],
+            Self::Open | Self::Active => &[],
             Self::Finished(n) => n.children(),
         }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
-            Self::Todo | Self::Active => &mut [],
+            Self::Open | Self::Active => &mut [],
             Self::Finished(n) => n.children_mut(),
         }
     }
@@ -48,7 +48,7 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
 
     fn type_info(&self) -> crate::typing::TypingInfo<Self::Type> {
         match self {
-            Self::Todo | Self::Active => {
+            Self::Open | Self::Active => {
                 TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type()
             }
             Self::Finished(t) => t.type_info(),
@@ -59,7 +59,7 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
 impl<L: Language + Display> Display for PartialSketchNode<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Todo => write!(f, "[todo]"),
+            Self::Open => write!(f, "[open]"),
             Self::Active => write!(f, "[active]"),
             Self::Finished(node) => write!(f, "{node}"),
         }
@@ -75,9 +75,9 @@ where
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
-            "[todo]" | "[TODO]" | "[Todo]" => {
+            "[open]" | "[OPEN]" | "[Open]" => {
                 if children.is_empty() {
-                    Ok(Self::Todo)
+                    Ok(Self::Open)
                 } else {
                     Err(SketchParseError::BadChildren(egg::FromOpError::new(
                         op, children,
@@ -122,8 +122,8 @@ where
                     let id = sketch.add(PartialSketchNode::Finished(SketchNode::Any));
                     Ok(id)
                 }
-                RawSketch::Todo => {
-                    let id = sketch.add(PartialSketchNode::Todo);
+                RawSketch::Open => {
+                    let id = sketch.add(PartialSketchNode::Open);
                     Ok(id)
                 }
                 RawSketch::Active => {

@@ -15,15 +15,23 @@ pub struct PySketch(pub(crate) RawSketch);
 
 #[pymethods]
 impl PySketch {
+    /// This always generates a new node that has [open] as its children
     #[new]
-    #[pyo3(signature = (node_type, children=vec![]))]
-    fn new(node_type: &str, children: Vec<PySketch>) -> PyResult<Self> {
-        let raw_children = children.into_iter().map(|c| c.0).collect();
-        let raw_sketch = RawSketch::new(node_type, raw_children)?;
+    fn new(node: &str, arity: usize) -> PyResult<Self> {
+        let new_children = (0..arity)
+            .map(|_| RawSketch::new("[open]", vec![]).expect("[open] has 0 children"))
+            .collect();
+        let raw_sketch = RawSketch::new(node, new_children)?;
         Ok(PySketch(raw_sketch))
     }
 
-    /// You will probably want to use this
+    /// Generate a new root with an [active] node
+    #[staticmethod]
+    pub fn new_root() -> PyResult<Self> {
+        Self::new("[active]", 0)
+    }
+
+    /// Parse from string
     #[staticmethod]
     pub fn from_str(s_expr_str: &str) -> PyResult<Self> {
         let raw_sketch = s_expr_str.parse().map_err(RawSketchError::BadSexp)?;
@@ -38,16 +46,26 @@ impl PySketch {
         format!("{self:?}")
     }
 
-    pub fn replace_child(&mut self, new_child: Self) {
-        self.0.replace_child(new_child.0);
+    /// Appends at the current [active] node and turns an open [open]
+    /// into a new [active]
+    /// Returns if the sketch is finished
+    pub fn append(&mut self, new_child: Self) -> bool {
+        self.0.append(new_child.0)
     }
 
+    /// Returns a flat representation of itself
     pub fn flat(&self) -> FlatAst {
         (&self.0).into()
     }
 
+    /// Returns the number of nodes in the sketch
     pub fn size(&self) -> usize {
         self.0.size()
+    }
+
+    /// Checks if sketch has open [active]
+    pub fn finished(&self) -> bool {
+        self.0.finished()
     }
 }
 

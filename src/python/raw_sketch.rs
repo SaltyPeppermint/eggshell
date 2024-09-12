@@ -17,11 +17,11 @@ pub(crate) enum RawSketch {
     Any,
     /// In case the sketch is unfinished, there are still open slots to be filled
     ///
-    /// This is an inactive todo
-    Todo,
+    /// This is an inactive open
+    Open,
     /// In case the sketch is unfinished, there are still open slots to be filled
     ///
-    /// This is an active todo being currently worked on
+    /// This is an active open being currently worked on
     Active,
     /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     ///
@@ -50,9 +50,9 @@ impl RawSketch {
             ("any" | "ANY" | "Any" | "?", 0) => Ok(RawSketch::Any),
             ("any" | "ANY" | "Any" | "?", n) => Err(RawSketchError::BadNewChildren("?".into(), n)),
 
-            ("[todo]" | "[TODO]" | "[Todo]", 0) => Ok(RawSketch::Todo),
-            ("[todo]" | "[TODO]" | "[Todo]", n) => {
-                Err(RawSketchError::BadNewChildren("[todo]".into(), n))
+            ("[open]" | "[OPEN]" | "[Open]", 0) => Ok(RawSketch::Open),
+            ("[open]" | "[OPEN]" | "[Open]", n) => {
+                Err(RawSketchError::BadNewChildren("[open]".into(), n))
             }
 
             ("[active]" | "[ACTIVE]" | "[Active]", 0) => Ok(RawSketch::Active),
@@ -81,48 +81,61 @@ impl RawSketch {
         }
     }
 
-    pub fn replace_child(&mut self, new_child: Self) {
-        fn rec_replace(n: &mut RawSketch, new_pick: &mut Option<RawSketch>) -> bool {
-            match n {
-                RawSketch::Any | RawSketch::Todo => false,
-                RawSketch::Active => {
-                    *n = new_pick.take().expect("Only one Active in any ast");
-                    true
-                }
-                RawSketch::Node {
-                    lang_node: _,
-                    children,
-                } => children.iter_mut().any(|c| rec_replace(c, new_pick)),
-                RawSketch::Or(children) => children.iter_mut().any(|c| rec_replace(c, new_pick)),
-                RawSketch::Contains(node) => rec_replace(node, new_pick),
+    /// Replace active with new node
+    /// Returns true if successfull
+    fn replace_active(&mut self, new_pick: &mut Option<RawSketch>) -> bool {
+        match self {
+            // Replace active with new node
+            RawSketch::Active => {
+                *self = new_pick.take().expect("Only one Active in any ast");
+                true
             }
+            // Any over empty iterators defaults to false
+            _ => self
+                .children_mut()
+                .iter_mut()
+                .any(|c| c.replace_active(new_pick)),
         }
+    }
 
-        fn rec_active(n: &mut RawSketch) -> bool {
-            match n {
-                RawSketch::Any | RawSketch::Active => false,
-                RawSketch::Todo => {
-                    *n = RawSketch::Active;
-                    true
-                }
-                RawSketch::Node {
-                    lang_node: _,
-                    children,
-                } => children.iter_mut().any(rec_active),
-                RawSketch::Or(children) => children.iter_mut().any(rec_active),
-                RawSketch::Contains(node) => rec_active(node),
+    /// Turns a [open] into a new [active]
+    /// Returns true if successful, meaning there were open [open]s
+    fn new_active(&mut self) -> bool {
+        match self {
+            RawSketch::Open => {
+                *self = RawSketch::Active;
+                // Return true if a new active could be found
+                true
             }
+            // Any over empty iterators defaults to false
+            _ => self.children_mut().iter_mut().any(|c| c.new_active()),
         }
+    }
 
-        rec_replace(self, &mut Some(new_child));
-        rec_active(self);
+    /// Appends at the current [active] node and turns an open [open]
+    /// into a new [active]
+    /// Returns if the sketch is finished.
+    pub fn append(&mut self, new_child: Self) -> bool {
+        self.replace_active(&mut Some(new_child));
+        self.new_active()
+    }
+
+    pub fn finished(&self) -> bool {
+        !self.unfinished()
+    }
+
+    fn unfinished(&self) -> bool {
+        match self {
+            RawSketch::Active => true,
+            _ => self.children().iter().any(|c| c.unfinished()),
+        }
     }
 }
 
 impl Tree for RawSketch {
     fn children(&self) -> &[Self] {
         match self {
-            RawSketch::Any | RawSketch::Todo | RawSketch::Active => &[],
+            RawSketch::Any | RawSketch::Open | RawSketch::Active => &[],
             RawSketch::Node {
                 lang_node: _,
                 children,
@@ -134,7 +147,7 @@ impl Tree for RawSketch {
 
     fn children_mut(&mut self) -> &mut [Self] {
         match self {
-            RawSketch::Any | RawSketch::Todo | RawSketch::Active => &mut [],
+            RawSketch::Any | RawSketch::Open | RawSketch::Active => &mut [],
             RawSketch::Node {
                 lang_node: _,
                 children,
@@ -162,7 +175,7 @@ impl Display for RawSketch {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             RawSketch::Any => write!(f, "?"),
-            RawSketch::Todo => write!(f, "[todo]"),
+            RawSketch::Open => write!(f, "[open]"),
             RawSketch::Active => write!(f, "[active]"),
             RawSketch::Contains(node) => write!(f, "(contains {node})"),
             RawSketch::Or(children) => {
@@ -210,7 +223,7 @@ impl FromStr for RawSketch {
                 Sexp::Empty => Err(RawSketchParseError::EmptySexp),
                 Sexp::String(s) => match s.as_str() {
                     "?" | "any" | "ANY" | "Any" => Ok(RawSketch::Any),
-                    "[todo]" | "[TODO]" | "[Todo]" => Ok(RawSketch::Todo),
+                    "[open]" | "[OPEN]" | "[Open]" => Ok(RawSketch::Open),
                     "[active]" | "[ACTIVE]" | "[Active]" => Ok(RawSketch::Active),
                     "or" | "OR" | "Or" => Err(RawSketchParseError::BadTerminalOr(sexp.to_owned())),
                     "contains" | "CONTAINS" | "Contains" => {
@@ -331,7 +344,7 @@ impl<L: Language + Display> From<&PartialSketch<L>> for RawSketch {
             sketch: &PartialSketch<L>,
         ) -> RawSketch {
             match node {
-                PartialSketchNode::Todo => RawSketch::Todo,
+                PartialSketchNode::Open => RawSketch::Open,
                 PartialSketchNode::Active => RawSketch::Active,
                 PartialSketchNode::Finished(SketchNode::Any) => RawSketch::Any,
                 PartialSketchNode::Finished(SketchNode::Contains(id)) => {

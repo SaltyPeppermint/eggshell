@@ -148,7 +148,7 @@ where
             // `PySketch::Node` since a sketch contains no back edges and is finite
             match pysketch {
                 // Error if a partial node is encountered
-                RawSketch::Todo | RawSketch::Active => Err(SketchParseError::PartialSketch),
+                RawSketch::Open | RawSketch::Active => Err(SketchParseError::PartialSketch),
                 RawSketch::Any => {
                     let id = sketch.add(SketchNode::Any);
                     Ok(id)

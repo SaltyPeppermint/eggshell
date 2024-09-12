@@ -23,6 +23,7 @@ impl PyLang {
         PyLang(raw_lang)
     }
 
+    /// Parse from string
     #[staticmethod]
     pub fn from_str(s_expr_str: &str) -> PyResult<Self> {
         let raw_lang = s_expr_str.parse()?;
@@ -37,10 +38,12 @@ impl PyLang {
         format!("{self:?}")
     }
 
+    /// Returns a flat representation of itself
     pub fn flat(&self) -> FlatAst {
         (&self.0).into()
     }
 
+    /// Returns the number of nodes in the sketch
     pub fn size(&self) -> usize {
         self.0.size()
     }
