@@ -59,8 +59,8 @@ impl SymbolIter for HalideMath {
             ("!=", 2),
             ("||", 2),
             ("&&", 2),
-            ("true", 2),
-            ("false", 2),
+            ("true", 0),
+            ("false", 0),
         ]
     }
 }
