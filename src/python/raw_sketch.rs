@@ -117,7 +117,8 @@ impl RawSketch {
     /// Returns if the sketch is finished.
     pub fn append(&mut self, new_child: Self) -> bool {
         self.replace_active(&mut Some(new_child));
-        self.new_active()
+        // Need to invert since this returns True if there are open spots
+        !self.new_active()
     }
 
     pub fn finished(&self) -> bool {
