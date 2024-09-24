@@ -7,7 +7,7 @@ pub use halide::Halide;
 pub use simple::Simple;
 use thiserror::Error;
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
@@ -22,7 +22,10 @@ use crate::typing::{Type, Typeable};
 /// by your ruleset class.
 pub trait Trs: Serialize {
     type Language: Display + Serialize + FromOp + Typeable<Type: Type> + SymbolIter;
-    type Analysis: Analysis<Self::Language, Data: Serialize + Clone> + Clone + Serialize + Default;
+    type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug>
+        + Clone
+        + Serialize
+        + Default;
     type Rulesets: TryFrom<String>;
 
     fn rules(ruleset: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;

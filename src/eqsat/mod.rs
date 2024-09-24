@@ -1,11 +1,17 @@
+mod class_cost;
 pub mod utils;
 
+use std::fmt::Debug;
+
+use class_cost::{ClassExtractor, LutCost};
 use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
 use log::info;
 use serde::Serialize;
 
+use crate::python::flat::FlatEGraph;
 use crate::sketch::{extract, Sketch};
 use crate::trs::Trs;
+use crate::HashMap;
 
 pub use utils::{EqsatConf, EqsatConfBuilder};
 
@@ -101,7 +107,7 @@ impl<R> EqsatResult<R>
 where
     R: Trs,
 {
-    // Extract
+    // Extract via a classic cost function
     pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<R::Language>)
     where
         CF: CostFunction<R::Language>,
@@ -110,7 +116,18 @@ where
         extractor.find_best(root)
     }
 
-    //Extract
+    /// Extract with a table of costs
+    pub fn table_extract(
+        &self,
+        root: Id,
+        cost_table: HashMap<(Id, usize), f64>,
+    ) -> (f64, RecExpr<R::Language>) {
+        let cost_function = LutCost::new(cost_table, &self.egraph);
+        let extractor = ClassExtractor::new(&self.egraph, cost_function);
+        extractor.find_best(root)
+    }
+
+    /// Extract with a sketch
     #[expect(clippy::missing_panics_doc)]
     pub fn sketch_extract<CF>(
         &self,
@@ -129,6 +146,15 @@ where
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<R::Language>) -> bool {
         let root = self.roots[root_index];
         extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
+    }
+
+    /// Get a flat representation of the egraph for GNN
+    ///
+    /// # Panics
+    ///
+    /// Panics if more or less than one root
+    pub fn flat_egraph(&self) -> FlatEGraph {
+        (self.egraph(), self.roots()).into()
     }
 
     pub fn roots(&self) -> &[Id] {

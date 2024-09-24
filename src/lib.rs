@@ -41,7 +41,7 @@
 
 pub mod eqsat;
 pub mod io;
-mod python;
+pub(crate) mod python;
 pub mod sampling;
 pub mod sketch;
 pub mod trs;
@@ -64,6 +64,8 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<python::PySketch>()?;
     m.add_class::<python::FlatAst>()?;
     m.add_class::<python::FlatNode>()?;
+    m.add_class::<python::FlatEGraph>()?;
+    m.add_class::<python::FlatVertex>()?;
     m.add_function(wrap_pyfunction!(python::sketch_symbols, m)?)?;
     m.add_function(wrap_pyfunction!(python::open_symbol, m)?)?;
     m.add_function(wrap_pyfunction!(python::active_symbol, m)?)?;

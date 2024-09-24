@@ -142,11 +142,16 @@ macro_rules! monomorphize {
                 Ok((cost, (&term).into()))
             }
 
+            fn flat_egraph(&self) -> $crate::python::flat::FlatEGraph {
+                self.0.flat_egraph()
+            }
+
             #[getter]
             pub fn roots(&self) -> Vec<usize> {
                 self.0.roots().iter().map(|id| (*id).into()).collect()
             }
 
+            #[getter]
             pub fn report(&self) -> String {
                 self.0.report().to_string()
             }
