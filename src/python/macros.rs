@@ -66,7 +66,7 @@ macro_rules! monomorphize {
         pub fn run_eqsat(
             start_terms: Vec<$crate::python::PyLang>,
             ruleset_name: String,
-            conf: Option<$crate::eqsat::utils::EqsatConf>,
+            conf: Option<$crate::eqsat::conf::EqsatConf>,
         ) -> pyo3::PyResult<EqsatResult> {
             let start_exprs = start_terms
                 .into_iter()
@@ -140,6 +140,19 @@ macro_rules! monomorphize {
                     }
                 };
                 Ok((cost, (&term).into()))
+            }
+
+            fn table_extract(
+                &self,
+                root: usize,
+                table: $crate::HashMap<(usize, usize), f64>,
+            ) -> (f64, $crate::python::PyLang) {
+                let t = table
+                    .into_iter()
+                    .map(|(k, v)| ((k.0.into(), k.1), v))
+                    .collect();
+                let (cost, term) = self.0.table_extract(root.into(), t);
+                (cost, (&term).into())
             }
 
             fn flat_egraph(&self) -> $crate::python::flat::FlatEGraph {

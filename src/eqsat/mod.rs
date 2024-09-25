@@ -1,5 +1,5 @@
 mod class_cost;
-pub mod utils;
+pub mod conf;
 
 use std::fmt::Debug;
 
@@ -13,7 +13,7 @@ use crate::sketch::{extract, Sketch};
 use crate::trs::Trs;
 use crate::HashMap;
 
-pub use utils::{EqsatConf, EqsatConfBuilder};
+pub use conf::{EqsatConf, EqsatConfBuilder};
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug, Serialize)]
@@ -76,7 +76,7 @@ where
         // println!("====================================");
         // println!("Running with Expression:");
 
-        let runner = utils::build_runner(&self.runner_args, self.root_check, &self.start_exprs)
+        let runner = conf::build_runner(&self.runner_args, self.root_check, &self.start_exprs)
             .run(rules.iter());
 
         let report = runner.report();
