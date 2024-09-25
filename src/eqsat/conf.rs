@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use egg::{Analysis, Language, RecExpr, Runner};
+use hashbrown::HashSet;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
-
-use crate::HashSet;
 
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[expect(clippy::unsafe_derive_deserialize)]

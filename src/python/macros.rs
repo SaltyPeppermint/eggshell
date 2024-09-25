@@ -145,7 +145,7 @@ macro_rules! monomorphize {
             fn table_extract(
                 &self,
                 root: usize,
-                table: $crate::HashMap<(usize, usize), f64>,
+                table: hashbrown::HashMap<(usize, usize), f64>,
             ) -> (f64, $crate::python::PyLang) {
                 let t = table
                     .into_iter()

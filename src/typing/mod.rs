@@ -1,12 +1,11 @@
 use std::fmt::Display;
 
 use egg::{Id, Language, RecExpr};
+use hashbrown::HashMap;
 use petgraph::{graph::NodeIndex, Graph};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 use thiserror::Error;
-
-use crate::HashMap;
 
 #[derive(Debug, Error)]
 pub enum TypingError {

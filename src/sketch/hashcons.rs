@@ -1,6 +1,5 @@
 use egg::{Id, Language, RecExpr};
-
-use crate::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions

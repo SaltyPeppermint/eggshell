@@ -2,10 +2,10 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
+use hashbrown::HashMap;
 
 use super::hashcons::ExprHashCons;
 use crate::utils::{AstSize2, UniqueQueue};
-use crate::HashMap;
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
     type Data: Debug;
@@ -179,7 +179,7 @@ where
         let mut candidates = Vec::new();
 
         for (matching_child, matching) in &children_matching {
-            let mut to_selected = HashMap::default();
+            let mut to_selected = HashMap::new();
 
             for (child, any) in &children_any {
                 let selected = if child == matching_child {

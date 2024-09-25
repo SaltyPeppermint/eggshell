@@ -7,6 +7,7 @@ use std::iter::Sum;
 use std::ops::AddAssign;
 
 use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language, RecExpr};
+use hashbrown::{HashMap, HashSet};
 use rand::distributions::uniform::{SampleBorrow, SampleUniform};
 use rand::prelude::*;
 use serde::Serialize;
@@ -14,7 +15,6 @@ use thiserror::Error;
 
 use crate::eqsat::EqsatConf;
 use crate::utils::AstSize2;
-use crate::{HashMap, HashSet};
 use choices::ChoiceList;
 
 pub use utils::{SampleConf, SampleConfBuilder};

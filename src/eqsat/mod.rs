@@ -5,13 +5,13 @@ use std::fmt::Debug;
 
 use class_cost::{ClassExtractor, LutCost};
 use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
+use hashbrown::HashMap;
 use log::info;
 use serde::Serialize;
 
 use crate::python::flat::FlatEGraph;
 use crate::sketch::{extract, Sketch};
 use crate::trs::Trs;
-use crate::HashMap;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 

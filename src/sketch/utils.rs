@@ -1,8 +1,7 @@
 use std::mem::Discriminant;
 
 use egg::{Analysis, EClass, EGraph, Id, Language};
-
-use crate::{HashMap, HashSet};
+use hashbrown::{HashMap, HashSet};
 
 /// Apply a function for each node in a eclass
 /// Copied from <https://github.com/egraphs-good/egg/blob/347326d2e8ebbacca12d8e1398b86eff6dcfb2c5/src/machine.rs#L37>

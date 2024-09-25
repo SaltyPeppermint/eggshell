@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Debug;
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
-
-use crate::HashMap;
+use hashbrown::HashMap;
 
 pub struct LutCost<'a, L: Language, N: Analysis<L>> {
     table: HashMap<(Id, usize), f64>,

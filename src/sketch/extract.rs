@@ -1,7 +1,7 @@
 use std::mem::Discriminant;
 
-use crate::{HashMap, HashSet};
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
+use hashbrown::{HashMap, HashSet};
 
 use super::analysis;
 use super::analysis::{ExtractAnalysis, ExtractContainsAnalysis, SatisfiesContainsAnalysis};
@@ -269,7 +269,7 @@ where
                         )
                     })
                     .collect::<Vec<_>>();
-                let mut matching_ids = HashSet::default();
+                let mut matching_ids = HashSet::new();
                 for m in &matches {
                     matching_ids.extend(m.keys());
                 }

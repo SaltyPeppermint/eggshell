@@ -1,9 +1,10 @@
 use std::fmt::{Debug, Display};
 
 use egg::{Analysis, EGraph, Id, Language};
+use hashbrown::HashMap;
 use pyo3::prelude::*;
 
-use crate::{utils::Tree, HashMap};
+use crate::utils::Tree;
 
 use super::{RawLang, RawSketch};
 

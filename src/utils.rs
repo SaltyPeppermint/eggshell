@@ -1,8 +1,7 @@
 use std::{fmt::Debug, hash::Hash};
 
 use egg::{AstDepth, AstSize, CostFunction, Language};
-
-use crate::HashSet;
+use hashbrown::HashSet;
 
 #[derive(Clone, Copy, Debug)]
 pub struct AstSize2;

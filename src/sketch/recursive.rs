@@ -1,6 +1,5 @@
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
-
-use crate::HashMap;
+use hashbrown::HashMap;
 
 use super::analysis::ExtractAnalysis;
 use super::hashcons::ExprHashCons;
@@ -147,7 +146,7 @@ where
                     .collect::<Vec<_>>();
 
                 for (matching_child, matching) in &children_matching {
-                    let mut to_selected = HashMap::default();
+                    let mut to_selected = HashMap::new();
 
                     for (child, any) in &children_any {
                         let selected = if child == matching_child {
@@ -331,7 +330,7 @@ where
                     .collect::<Vec<_>>();
 
                 for (matching_child, matching) in &children_matching {
-                    let mut to_selected = HashMap::default();
+                    let mut to_selected = HashMap::new();
 
                     for (child, any) in &children_any {
                         let selected = if child == matching_child {
