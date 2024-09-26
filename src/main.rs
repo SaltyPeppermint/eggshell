@@ -1,5 +1,6 @@
 use std::fmt::Display;
-use std::fs::{self, File};
+use std::fs;
+use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};

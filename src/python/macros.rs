@@ -10,6 +10,7 @@ macro_rules! monomorphize {
 
             let bound = pyo3::prelude::PyModule::new_bound(m.py(), module_name)?;
             bound.add_function(pyo3::wrap_pyfunction!(symbols, m)?)?;
+            bound.add_function(pyo3::wrap_pyfunction!(symbol_table, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(run_eqsat, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_term, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(typecheck_term, m)?)?;
@@ -26,6 +27,16 @@ macro_rules! monomorphize {
         #[pyo3::pyfunction]
         pub fn symbols(variables: usize, constants: usize) -> Vec<(String, usize)> {
             <Lang as $crate::trs::SymbolIter>::symbols(variables, constants).collect()
+        }
+
+        /// Gets the symbols inherent to the language
+        #[pyo3::pyfunction]
+        pub fn symbol_table(
+            variables: usize,
+            constants: usize,
+        ) -> $crate::trs::symbols::SymbolTable {
+            let lut = <Lang as $crate::trs::SymbolIter>::symbol_lut(variables, constants);
+            $crate::trs::symbols::SymbolTable::new(lut)
         }
 
         /// Check if a term has the correct syntax

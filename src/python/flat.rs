@@ -2,9 +2,10 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, EGraph, Id, Language};
 use hashbrown::HashMap;
+use numpy::{IntoPyArray, Ix1, Ix2, PyArray, PyArray2};
 use pyo3::prelude::*;
 
-use crate::utils::Tree;
+use crate::{trs::symbols::SymbolTable, utils::Tree};
 
 use super::{RawLang, RawSketch};
 
@@ -115,7 +116,7 @@ impl FlatNode {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlatEGraph {
     #[pyo3(get)]
-    nodes: Vec<FlatVertex>,
+    vertices: Vec<FlatVertex>,
     #[pyo3(get)]
     pub edges: Vec<(usize, usize)>,
     #[pyo3(get)]
@@ -127,6 +128,24 @@ impl FlatEGraph {
     pub fn __repr__(&self) -> String {
         format!("{self:?}")
     }
+
+    pub fn nodes_to_numpy<'py>(
+        &self,
+        py: Python<'py>,
+        additional_features: usize,
+        int_bounds: (f32, f32),
+        lut: &SymbolTable,
+    ) -> PyResult<Bound<'py, PyArray<f32, Ix2>>> {
+        // symbol_table: &HashMap<String, Symbol>
+
+        let v_iter = self
+            .vertices
+            .iter()
+            .map(|v| v.to_feature_vec(lut, additional_features, int_bounds))
+            .collect::<Result<Vec<Vec<f32>>, PyErr>>()?;
+
+        Ok(PyArray2::from_vec2_bound(py, &v_iter)?)
+    }
 }
 
 #[pyclass(frozen)]
@@ -136,8 +155,45 @@ pub enum FlatVertex {
     ENode { symbol: String, position: usize },
 }
 
+impl FlatVertex {
+    pub fn to_feature_vec(
+        &self,
+        lut: &SymbolTable,
+        additional_features: usize,
+        int_bounds: (f32, f32),
+    ) -> Result<Vec<f32>, PyErr> {
+        // Int encoding (included in len) + EClass hot-one-encoding + visited marker
+        let n_symbols = lut.len();
+        let f_vec_len = n_symbols + 1 + additional_features;
+        match self {
+            FlatVertex::EClass { id: _, analysis: _ } => {
+                let mut v = vec![0.0; f_vec_len];
+                v[n_symbols + 1] = 1.0;
+                Ok(v)
+            }
+            FlatVertex::ENode {
+                symbol,
+                position: _,
+            } => lut
+                .get_symbol(symbol.as_str())
+                .map(|s| s.to_feature_vec(f_vec_len, n_symbols, int_bounds)),
+        }
+    }
+}
+
 #[pymethods]
 impl FlatVertex {
+    pub fn to_feature_np<'py>(
+        &self,
+        py: Python<'py>,
+        lut: &SymbolTable,
+        additional_features: usize,
+        bounds: (f32, f32),
+    ) -> PyResult<Bound<'py, PyArray<f32, Ix1>>> {
+        self.to_feature_vec(lut, additional_features, bounds)
+            .map(|v| v.into_pyarray_bound(py))
+    }
+
     pub fn __repr__(&self) -> String {
         format!("{self:?}")
     }
@@ -154,7 +210,7 @@ where
             parent_idx: usize,
             id: Id,
             egraph: &EGraph<L, N>,
-            nodes: &mut Vec<FlatVertex>,
+            vertices: &mut Vec<FlatVertex>,
             edges: &mut Vec<(usize, usize)>,
             visited_classes: &mut HashMap<Id, usize>,
         ) where
@@ -162,23 +218,24 @@ where
             N: Analysis<L>,
             N::Data: Debug,
         {
-            let eclass_idx = insert_eclass(nodes, id, egraph, edges, parent_idx, visited_classes);
+            let eclass_idx =
+                insert_eclass(vertices, id, egraph, edges, parent_idx, visited_classes);
 
             for (position, node) in egraph[id].nodes.iter().enumerate() {
-                let node_idx = insert_enode(nodes, node, position, edges, eclass_idx);
+                let node_idx = insert_enode(vertices, node, position, edges, eclass_idx);
 
                 for child_id in node.children() {
                     if let Some(child_eclass_idx) = visited_classes.get(child_id) {
                         edges.push((node_idx, *child_eclass_idx));
                     } else {
-                        rec(parent_idx, id, egraph, nodes, edges, visited_classes);
+                        rec(parent_idx, id, egraph, vertices, edges, visited_classes);
                     }
                 }
             }
         }
 
         fn insert_eclass<L, N>(
-            nodes: &mut Vec<FlatVertex>,
+            vertices: &mut Vec<FlatVertex>,
             id: Id,
             egraph: &EGraph<L, N>,
             edges: &mut Vec<(usize, usize)>,
@@ -190,57 +247,57 @@ where
             N: Analysis<L>,
             N::Data: Debug,
         {
-            nodes.push(FlatVertex::EClass {
+            vertices.push(FlatVertex::EClass {
                 id: id.into(),
                 analysis: format!("{:?}", egraph[id].data),
             });
-            let eclass_idx = nodes.len() - 1;
+            let eclass_idx = vertices.len() - 1;
             edges.push((parent_idx, eclass_idx));
             visited_classes.insert(id, eclass_idx);
             eclass_idx
         }
 
         fn insert_enode<L: Language + Display>(
-            nodes: &mut Vec<FlatVertex>,
+            vertices: &mut Vec<FlatVertex>,
             node: &L,
             position: usize,
             edges: &mut Vec<(usize, usize)>,
             eclass_idx: usize,
         ) -> usize {
-            nodes.push(FlatVertex::ENode {
+            vertices.push(FlatVertex::ENode {
                 symbol: node.to_string(),
                 position,
             });
-            let node_idx = nodes.len() - 1;
+            let node_idx = vertices.len() - 1;
             edges.push((eclass_idx, node_idx));
             node_idx
         }
 
-        let mut nodes = Vec::new();
+        let mut vertices = Vec::new();
         let mut edges = Vec::new();
         let mut roots = Vec::new();
 
         let mut visited_classes = HashMap::new();
         for root_id in value.1 {
             let root = *root_id;
-            nodes.push(FlatVertex::EClass {
+            vertices.push(FlatVertex::EClass {
                 id: root.into(),
                 analysis: format!("{:?}", value.0[root].data),
             });
-            let root_idx = nodes.len() - 1;
+            let root_idx = vertices.len() - 1;
             roots.push(root_idx);
             rec(
                 root_idx,
                 root,
                 value.0,
-                &mut nodes,
+                &mut vertices,
                 &mut edges,
                 &mut visited_classes,
             );
         }
 
         FlatEGraph {
-            nodes,
+            vertices,
             edges,
             roots,
         }

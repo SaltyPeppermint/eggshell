@@ -1,10 +1,13 @@
 pub mod arithmetic;
 pub mod halide;
 pub mod simple;
+pub mod symbols;
 
 pub use arithmetic::Arithmetic;
 pub use halide::Halide;
+use indexmap::IndexMap;
 pub use simple::Simple;
+use symbols::SymbolMetaData;
 use thiserror::Error;
 
 use std::fmt::{Debug, Display};
@@ -41,6 +44,13 @@ pub trait SymbolIter: Language {
             .map(|(s, a)| ((*s).to_owned(), *a))
             .chain((0..variables).map(|n| (format!("v{n}"), 0)))
             .chain((0..constants).map(|n| (n.to_string(), 0)))
+    }
+
+    #[must_use]
+    fn symbol_lut(variables: usize, constants: usize) -> IndexMap<String, SymbolMetaData> {
+        Self::symbols(variables, constants)
+            .map(|(name, arity)| (name, SymbolMetaData::Lang { arity }))
+            .collect()
     }
 }
 
