@@ -1,11 +1,11 @@
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
-use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
+use egg::{Analysis, AstSize, CostFunction, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
 use super::hashcons::ExprHashCons;
-use crate::utils::{AstSize2, UniqueQueue};
+use crate::utils::UniqueQueue;
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>> {
     type Data: Debug;
@@ -88,7 +88,7 @@ fn resolve_pending_analysis<L: Language, N: Analysis<L>, B: SemiLatticeAnalysis<
     }
 }
 
-impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for AstSize2 {
+impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for AstSize {
     type Data = usize;
 
     fn make<'a>(
@@ -310,7 +310,7 @@ mod tests {
         egraph.rebuild();
 
         let mut data = HashMap::default();
-        one_shot_analysis(&egraph, &mut AstSize2, &mut data);
+        one_shot_analysis(&egraph, &mut AstSize, &mut data);
 
         assert_eq!(data[&egraph.find(apz)], 1);
     }

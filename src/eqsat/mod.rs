@@ -1,5 +1,5 @@
 mod class_cost;
-pub mod conf;
+mod conf;
 
 use std::fmt::Debug;
 
@@ -9,7 +9,6 @@ use hashbrown::HashMap;
 use log::info;
 use serde::Serialize;
 
-use crate::python::flat::FlatEGraph;
 use crate::sketch::{extract, Sketch};
 use crate::trs::Trs;
 
@@ -146,15 +145,6 @@ where
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<R::Language>) -> bool {
         let root = self.roots[root_index];
         extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
-    }
-
-    /// Get a flat representation of the egraph for GNN
-    ///
-    /// # Panics
-    ///
-    /// Panics if more or less than one root
-    pub fn flat_egraph(&self) -> FlatEGraph {
-        (self.egraph(), self.roots()).into()
     }
 
     pub fn roots(&self) -> &[Id] {

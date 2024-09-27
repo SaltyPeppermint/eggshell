@@ -6,7 +6,7 @@ use std::iter::IntoIterator;
 use std::iter::Sum;
 use std::ops::AddAssign;
 
-use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language, RecExpr};
+use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Extractor, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 use rand::distributions::uniform::{SampleBorrow, SampleUniform};
 use rand::prelude::*;
@@ -14,7 +14,6 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::eqsat::EqsatConf;
-use crate::utils::AstSize2;
 use choices::ChoiceList;
 
 pub use utils::{SampleConf, SampleConfBuilder};
@@ -40,7 +39,7 @@ pub fn sample<L: Language, N: Analysis<L>>(
     conf: &SampleConf,
     rng: &mut StdRng,
 ) -> HashMap<Id, HashSet<RecExpr<L>>> {
-    let extractor = Extractor::new(egraph, AstSize2);
+    let extractor = Extractor::new(egraph, AstSize);
 
     let mut raw_weights_memo = HashMap::new();
     egraph
@@ -71,7 +70,7 @@ pub fn sample_root<L: Language, N: Analysis<L>>(
     root: Id,
     rng: &mut StdRng,
 ) -> HashSet<RecExpr<L>> {
-    let extractor = Extractor::new(egraph, AstSize2);
+    let extractor = Extractor::new(egraph, AstSize);
 
     let mut raw_weights_memo = HashMap::new();
 
@@ -189,7 +188,7 @@ mod tests {
 
     use crate::eqsat::EqsatConfBuilder;
     use crate::eqsat::{Eqsat, EqsatResult};
-    use crate::trs::{halide, simple, Halide, Simple, Trs};
+    use crate::trs::{Halide, Ruleset, Simple, Trs};
 
     use super::*;
 
@@ -200,7 +199,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&simple::Ruleset::Full);
+        let rules = <Simple as Trs>::Rules::Full.rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -219,7 +218,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&simple::Ruleset::Full);
+        let rules = <Simple as Trs>::Rules::Full.rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -248,7 +247,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = Simple::rules(&simple::Ruleset::Full);
+        let rules = <Simple as Trs>::Rules::Full.rules();
         let eqsat: EqsatResult<Simple> =
             Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
 
@@ -269,7 +268,7 @@ mod tests {
             .time_limit(Duration::from_secs_f64(0.2))
             .build();
 
-        let rules = Halide::rules(&halide::Ruleset::Full);
+        let rules = <Halide as Trs>::Rules::Full.rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);

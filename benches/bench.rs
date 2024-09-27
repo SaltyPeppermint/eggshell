@@ -2,6 +2,7 @@ use criterion::black_box as bb;
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 
+use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
 
 use eggshell::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
@@ -9,11 +10,9 @@ use eggshell::sampling;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
-use eggshell::trs::simple;
-use eggshell::trs::simple::SimpleLang;
+use eggshell::trs::Ruleset;
 use eggshell::trs::Simple;
 use eggshell::trs::Trs;
-use eggshell::utils::AstSize2;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
@@ -29,25 +28,22 @@ fn extraction(c: &mut Criterion) {
     egraph.rebuild();
 
     c.bench_function("default extract", |b| {
-        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a)))
+        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
     c.bench_function("recursive for_each extract", |b| {
-        b.iter(|| {
-            recursive::for_each_eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a))
-        })
+        b.iter(|| recursive::for_each_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
     c.bench_function("recursive map extract", |b| {
-        b.iter(|| recursive::map_eclass_extract(bb(&sketch), AstSize2, bb(&egraph), bb(root_a)))
+        b.iter(|| recursive::map_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
 }
 
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
-    let seed: RecExpr<SimpleLang> = term.parse().unwrap();
+    let seed: RecExpr<<Simple as Trs>::Language> = term.parse().unwrap();
     let sample_conf = SampleConfBuilder::new().build();
     let eqsat_conf = EqsatConfBuilder::new().build();
-
-    let rules = Simple::rules(&simple::Ruleset::Full);
+    let rules = <Simple as Trs>::Rules::Full.rules();
     let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
         .with_conf(eqsat_conf.clone())
         .run(&rules);

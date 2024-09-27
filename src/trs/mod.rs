@@ -1,22 +1,22 @@
-pub mod arithmetic;
-pub mod halide;
-pub mod simple;
-pub mod symbols;
-
-pub use arithmetic::Arithmetic;
-pub use halide::Halide;
-use indexmap::IndexMap;
-pub use simple::Simple;
-use symbols::SymbolMetaData;
-use thiserror::Error;
+mod arithmetic;
+mod halide;
+mod simple;
 
 use std::fmt::{Debug, Display};
+
+use indexmap::IndexMap;
+use thiserror::Error;
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
+use crate::python::SymbolMetaData;
 use crate::typing::{Type, Typeable};
+
+pub use arithmetic::Arithmetic;
+pub use halide::Halide;
+pub use simple::Simple;
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -29,9 +29,13 @@ pub trait Trs: Serialize {
         + Clone
         + Serialize
         + Default;
-    type Rulesets: TryFrom<String>;
+    type Rules: TryFrom<String> + Ruleset<Language = Self::Language, Analysis = Self::Analysis>;
+}
 
-    fn rules(ruleset: &Self::Rulesets) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
+pub trait Ruleset {
+    type Language: Language;
+    type Analysis: Analysis<Self::Language>;
+    fn rules(&self) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
 
 pub trait SymbolIter: Language {

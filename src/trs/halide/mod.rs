@@ -6,7 +6,7 @@ use std::{cmp::Ordering, fmt::Display};
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::Serialize;
 
-use super::{SymbolIter, Trs, TrsError};
+use super::{Ruleset, SymbolIter, Trs, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -232,37 +232,20 @@ impl Analysis<HalideMath> for HalideConstFold {
 
 /// Enum for the Ruleset to use
 #[derive(Debug, Clone, Copy, Serialize)]
-pub enum Ruleset {
+pub enum HalideRuleset {
     Arithmetic,
     BugRules,
     Full,
 }
 
-impl TryFrom<String> for Ruleset {
-    type Error = TrsError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "full" | "Full" | "FULL" => Ok(Self::Full),
-            "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
-            _ => Err(Self::Error::BadRulesetName(value)),
-        }
-    }
-}
-
-/// Halide Trs implementation
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Halide;
-
-impl Trs for Halide {
+impl Ruleset for HalideRuleset {
     type Language = HalideMath;
     type Analysis = HalideConstFold;
-    type Rulesets = Ruleset;
 
     /// takes an class of rules to use then returns the vector of their associated Rewrites
     #[expect(clippy::similar_names)]
     #[must_use]
-    fn rules(ruleset_class: &Ruleset) -> Vec<Rewrite> {
+    fn rules(&self) -> Vec<Rewrite> {
         let add_rules = self::rules::add::add();
         let and_rules = self::rules::and::and();
         let andor_rules = self::rules::andor::andor();
@@ -278,9 +261,9 @@ impl Trs for Halide {
         let or_rules = self::rules::or::or();
         let sub_rules = self::rules::sub::sub();
 
-        match ruleset_class {
+        match self {
             // Class that only contains arithmetic operations' rules
-            Ruleset::Arithmetic => [
+            HalideRuleset::Arithmetic => [
                 (&*add_rules),
                 (&*div_rules),
                 (&*modulo_rules),
@@ -288,7 +271,7 @@ impl Trs for Halide {
                 (&*sub_rules),
             ]
             .concat(),
-            Ruleset::BugRules => [
+            HalideRuleset::BugRules => [
                 (&*add_rules),
                 // (&*div_rules),
                 // (&*modulo_rules),
@@ -300,7 +283,7 @@ impl Trs for Halide {
             ]
             .concat(),
             // All the rules
-            Ruleset::Full => [
+            HalideRuleset::Full => [
                 (&*add_rules),
                 (&*and_rules),
                 (&*andor_rules),
@@ -321,37 +304,58 @@ impl Trs for Halide {
     }
 }
 
+impl TryFrom<String> for HalideRuleset {
+    type Error = TrsError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "full" | "Full" | "FULL" => Ok(Self::Full),
+            "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
+            _ => Err(Self::Error::BadRulesetName(value)),
+        }
+    }
+}
+
+/// Halide Trs implementation
+#[derive(Default, Debug, Clone, Copy, Serialize)]
+pub struct Halide;
+
+impl Trs for Halide {
+    type Language = HalideMath;
+    type Analysis = HalideConstFold;
+    type Rules = HalideRuleset;
+}
+
 #[cfg(test)]
 mod tests {
-    use egg::RecExpr;
+    use egg::{AstSize, RecExpr};
 
     use crate::eqsat::{Eqsat, EqsatConfBuilder};
     use crate::typing::typecheck_expr;
-    use crate::utils::AstSize2;
 
     use super::*;
 
     #[test]
     fn eqsat_solved_true() {
         let false_expr = vec!["( == 0 0 )".parse().unwrap()];
-        let rules = Halide::rules(&Ruleset::Full);
+        let rules = HalideRuleset::rules(&HalideRuleset::Full);
 
         let eqsat = Eqsat::<Halide>::new(false_expr);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
+        let (_, term) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideMath::Bool(true), term[0.into()]);
     }
 
     #[test]
     fn eqsat_solved_false() {
         let false_expr = vec!["( == 1 0 )".parse().unwrap()];
-        let rules = Halide::rules(&Ruleset::Full);
+        let rules = HalideRuleset::rules(&HalideRuleset::Full);
 
         let eqsat = Eqsat::<Halide>::new(false_expr);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
+        let (_, term) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideMath::Bool(false), term[0.into()]);
     }
 
@@ -362,7 +366,7 @@ mod tests {
                 .parse()
                 .unwrap(),
         ];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = HalideRuleset::rules(&HalideRuleset::BugRules);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
@@ -374,7 +378,7 @@ mod tests {
         let expr = vec!["( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
             .parse()
             .unwrap()];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = HalideRuleset::rules(&HalideRuleset::BugRules);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
@@ -385,7 +389,7 @@ mod tests {
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn expl_3() {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
-        let rules = Halide::rules(&Ruleset::BugRules);
+        let rules = HalideRuleset::rules(&HalideRuleset::BugRules);
 
         let eqsat =
             Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());

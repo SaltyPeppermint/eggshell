@@ -204,18 +204,6 @@ where
     }
 }
 
-impl<L> TryFrom<RawSketch> for Sketch<L>
-where
-    L::Error: Display,
-    L: Language + egg::FromOp,
-{
-    type Error = SketchParseError<L::Error>;
-
-    fn try_from(pysketch: RawSketch) -> Result<Self, Self::Error> {
-        (&pysketch).try_into()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,9 +1,11 @@
 #[cfg(test)]
 mod tests {
+    use egg::AstSize;
+
     use eggshell::eqsat::Eqsat;
-    use eggshell::trs::halide::{Halide, HalideMath, Ruleset};
+    use eggshell::trs::Halide;
+    use eggshell::trs::Ruleset;
     use eggshell::trs::Trs;
-    use eggshell::utils::AstSize2;
 
     #[test]
     fn simple_eqsat_solved_true() {
@@ -11,13 +13,12 @@ mod tests {
         vec!["( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )"
             .parse()
             .unwrap()];
-        let rules = Halide::rules(&Ruleset::Full);
-
+        let rules = <Halide as Trs>::Rules::Full.rules();
         let eqsat = Eqsat::<Halide>::new(true_stmt);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!(HalideMath::Bool(true), term[0.into()]);
+        let (_, term) = result.classic_extract(*root, AstSize);
+        assert_eq!(<Halide as Trs>::Language::Bool(true), term[0.into()]);
     }
 
     #[test]
@@ -25,12 +26,11 @@ mod tests {
         let false_stmt = vec!["( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
             .parse()
             .unwrap()];
-        let rules = Halide::rules(&Ruleset::Full);
-
+        let rules = <Halide as Trs>::Rules::Full.rules();
         let eqsat = Eqsat::<Halide>::new(false_stmt);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
-        let (_, term) = result.classic_extract(*root, AstSize2);
-        assert_eq!(HalideMath::Bool(false), term[0.into()]);
+        let (_, term) = result.classic_extract(*root, AstSize);
+        assert_eq!(<Halide as Trs>::Language::Bool(false), term[0.into()]);
     }
 }

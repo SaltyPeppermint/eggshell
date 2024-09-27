@@ -1,13 +1,14 @@
 use std::fmt::{Debug, Display};
 
-use egg::{Analysis, EGraph, Id, Language};
+use egg::{Analysis, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use numpy::{IntoPyArray, Ix1, Ix2, PyArray, PyArray2};
 use pyo3::prelude::*;
 
-use crate::{trs::symbols::SymbolTable, utils::Tree};
-
-use super::{RawLang, RawSketch};
+use super::{RawLang, RawSketch, SymbolTable};
+use crate::eqsat::EqsatResult;
+use crate::trs::Trs;
+use crate::utils::Tree;
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -96,6 +97,42 @@ impl From<&RawLang> for FlatAst {
     }
 }
 
+impl<L: Language + Display> From<&RecExpr<L>> for FlatAst {
+    fn from(rec_expr: &RecExpr<L>) -> Self {
+        fn rec<IL: Language + Display>(
+            node_id: Id,
+            rec_expr: &RecExpr<IL>,
+            parent_idx: usize,
+            root_distance: usize,
+            nodes: &mut Vec<FlatNode>,
+            edges: &mut Vec<(usize, usize)>,
+        ) {
+            nodes.push(FlatNode {
+                name: rec_expr[node_id].to_string(),
+                root_distance,
+            });
+            let current_idx = nodes.len() - 1;
+            edges.push((parent_idx, current_idx));
+            for c_id in rec_expr[node_id].children() {
+                rec(
+                    *c_id,
+                    rec_expr,
+                    current_idx,
+                    root_distance + 1,
+                    nodes,
+                    edges,
+                );
+            }
+        }
+
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        let root = (rec_expr.as_ref().len() - 1).into();
+        rec(root, rec_expr, 0, 0, &mut nodes, &mut edges);
+        FlatAst { nodes, edges }
+    }
+}
+
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct FlatNode {
@@ -145,6 +182,12 @@ impl FlatEGraph {
             .collect::<Result<Vec<Vec<f32>>, PyErr>>()?;
 
         Ok(PyArray2::from_vec2_bound(py, &v_iter)?)
+    }
+}
+
+impl<R: Trs> From<&EqsatResult<R>> for FlatEGraph {
+    fn from(eqsat_result: &EqsatResult<R>) -> Self {
+        (eqsat_result.egraph(), eqsat_result.roots()).into()
     }
 }
 

@@ -1,46 +1,28 @@
-use std::{fmt::Debug, hash::Hash};
+use std::hash::Hash;
 
-use egg::{AstDepth, AstSize, CostFunction, Language};
 use hashbrown::HashSet;
 
-#[derive(Clone, Copy, Debug)]
-pub struct AstSize2;
+// #[derive(Clone, Copy, Debug)]
+// pub struct AstSize2;
 
-impl<L: Language> CostFunction<L> for AstSize2 {
-    type Cost = usize;
+// impl<L: Language> CostFunction<L> for AstSize2 {
+//     type Cost = usize;
 
-    #[inline]
-    fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
-    where
-        C: FnMut(egg::Id) -> Self::Cost,
-    {
-        let mut inner = AstSize;
-        inner.cost(enode, costs)
-    }
-}
+//     #[inline]
+//     fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
+//     where
+//         C: FnMut(egg::Id) -> Self::Cost,
+//     {
+//         let mut inner = AstSize;
+//         inner.cost(enode, costs)
+//     }
+// }
 
-#[derive(Clone, Copy, Debug)]
-pub struct AstDepth2;
-
-impl<L: Language> CostFunction<L> for AstDepth2 {
-    type Cost = usize;
-
-    #[inline]
-    fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
-    where
-        C: FnMut(egg::Id) -> Self::Cost,
-    {
-        let mut inner = AstDepth;
-        inner.cost(enode, costs)
-    }
-}
-
-/** A data structure to maintain a queue of unique elements.
-
-Notably, insert/pop operations have O(1) expected amortized runtime complexity.
-
-Thanks @Bastacyclop for the implementation!
-*/
+/// A data structure to maintain a queue of unique elements.
+///
+/// Notably, insert/pop operations have O(1) expected amortized runtime complexity.
+///
+/// Thanks @Bastacyclop for the implementation!
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) struct UniqueQueue<T>
 where

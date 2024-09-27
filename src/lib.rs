@@ -41,12 +41,12 @@
 
 pub mod eqsat;
 pub mod io;
-pub(crate) mod python;
+mod python;
 pub mod sampling;
 pub mod sketch;
 pub mod trs;
 pub mod typing;
-pub mod utils;
+mod utils;
 
 use pyo3::prelude::*;
 

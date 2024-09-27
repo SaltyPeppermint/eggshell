@@ -34,9 +34,9 @@ macro_rules! monomorphize {
         pub fn symbol_table(
             variables: usize,
             constants: usize,
-        ) -> $crate::trs::symbols::SymbolTable {
+        ) -> $crate::python::symbols::SymbolTable {
             let lut = <Lang as $crate::trs::SymbolIter>::symbol_lut(variables, constants);
-            $crate::trs::symbols::SymbolTable::new(lut)
+            $crate::python::symbols::SymbolTable::new(lut)
         }
 
         /// Check if a term has the correct syntax
@@ -77,7 +77,7 @@ macro_rules! monomorphize {
         pub fn run_eqsat(
             start_terms: Vec<$crate::python::PyLang>,
             ruleset_name: String,
-            conf: Option<$crate::eqsat::conf::EqsatConf>,
+            conf: Option<$crate::eqsat::EqsatConf>,
         ) -> pyo3::PyResult<EqsatResult> {
             let start_exprs = start_terms
                 .into_iter()
@@ -91,8 +91,8 @@ macro_rules! monomorphize {
                 $crate::eqsat::Eqsat::new(start_exprs)
             };
 
-            let ruleset = <$type as $crate::trs::Trs>::Rulesets::try_from(ruleset_name)?;
-            let rules = <$type as $crate::trs::Trs>::rules(&ruleset);
+            let ruleset = <$type as $crate::trs::Trs>::Rules::try_from(ruleset_name)?;
+            let rules = $crate::trs::Ruleset::rules(&ruleset);
             let result = eqsat.run(&rules);
             Ok(EqsatResult(result))
         }
@@ -112,10 +112,8 @@ macro_rules! monomorphize {
             ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
                 let (cost, term) = {
                     match cost_fn {
-                        "ast_size" => self.0.classic_extract(root.into(), $crate::utils::AstSize2),
-                        "ast_depth" => self
-                            .0
-                            .classic_extract(root.into(), $crate::utils::AstDepth2),
+                        "ast_size" => self.0.classic_extract(root.into(), egg::AstSize),
+                        "ast_depth" => self.0.classic_extract(root.into(), egg::AstDepth),
                         _ => {
                             return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
                                 format!("{cost_fn} is not a valid cost function"),
@@ -133,17 +131,10 @@ macro_rules! monomorphize {
                 sketch: $crate::python::PySketch,
                 cost_fn: &str,
             ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
+                let sketch = &(&sketch.0).try_into()?;
                 let (cost, term) = match cost_fn {
-                    "ast_size" => self.0.sketch_extract(
-                        root.into(),
-                        $crate::utils::AstSize2,
-                        &sketch.0.try_into()?,
-                    ),
-                    "ast_depth" => self.0.sketch_extract(
-                        root.into(),
-                        $crate::utils::AstDepth2,
-                        &sketch.0.try_into()?,
-                    ),
+                    "ast_size" => self.0.sketch_extract(root.into(), egg::AstSize, sketch),
+                    "ast_depth" => self.0.sketch_extract(root.into(), egg::AstDepth, sketch),
                     _ => {
                         return Err(pyo3::PyErr::new::<pyo3::exceptions::PyValueError, _>(
                             format!("{cost_fn} is not a valid cost function"),
@@ -167,7 +158,7 @@ macro_rules! monomorphize {
             }
 
             fn flat_egraph(&self) -> $crate::python::flat::FlatEGraph {
-                self.0.flat_egraph()
+                (&self.0).into()
             }
 
             #[getter]

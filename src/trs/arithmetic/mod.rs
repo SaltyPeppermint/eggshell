@@ -6,7 +6,7 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{SymbolIter, Trs, TrsError};
+use super::{Ruleset, SymbolIter, Trs, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -176,11 +176,21 @@ impl Analysis<Math> for ConstantFold {
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
-pub enum Ruleset {
+pub enum ArithmaticRules {
     Full,
 }
 
-impl TryFrom<String> for Ruleset {
+impl Ruleset for ArithmaticRules {
+    type Language = Math;
+    type Analysis = ConstantFold;
+    /// takes an class of rules to use then returns the vector of their associated Rewrites
+    #[must_use]
+    fn rules(&self) -> Vec<Rewrite> {
+        self::rules::rules()
+    }
+}
+
+impl TryFrom<String> for ArithmaticRules {
     type Error = TrsError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
@@ -198,11 +208,5 @@ pub struct Arithmetic;
 impl Trs for Arithmetic {
     type Language = Math;
     type Analysis = ConstantFold;
-    type Rulesets = Ruleset;
-
-    /// takes an class of rules to use then returns the vector of their associated Rewrites
-    #[must_use]
-    fn rules(_ruleset_class: &Ruleset) -> Vec<Rewrite> {
-        self::rules::rules()
-    }
+    type Rules = ArithmaticRules;
 }

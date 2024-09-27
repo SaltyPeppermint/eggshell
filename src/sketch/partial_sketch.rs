@@ -184,21 +184,9 @@ where
     }
 }
 
-impl<L> TryFrom<RawSketch> for PartialSketch<L>
-where
-    L::Error: Display,
-    L: Language + egg::FromOp,
-{
-    type Error = SketchParseError<L::Error>;
-
-    fn try_from(pysketch: RawSketch) -> Result<Self, Self::Error> {
-        (&pysketch).try_into()
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::trs::halide::HalideMath;
+    use crate::trs::{Halide, Trs};
     use crate::typing::typecheck_expr;
 
     use super::*;
@@ -206,7 +194,9 @@ mod tests {
     #[test]
     fn parse_and_print() {
         let term = "(contains (max (min 1 [active]) ?))";
-        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+        let sketch = term
+            .parse::<PartialSketch<<Halide as Trs>::Language>>()
+            .unwrap();
 
         assert_eq!(&sketch.to_string(), "(contains (max (min 1 [active]) ?))");
     }
@@ -214,7 +204,9 @@ mod tests {
     #[test]
     fn typecheck_partial_sketch1() {
         let term = "(or (max (min 1 [active]) ?) (== 2 ?))";
-        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+        let sketch = term
+            .parse::<PartialSketch<<Halide as Trs>::Language>>()
+            .unwrap();
 
         assert!(typecheck_expr(&sketch).is_err());
     }
@@ -222,7 +214,9 @@ mod tests {
     #[test]
     fn typecheck_partial_sketch2() {
         let term = "(or (< (min 1 [active]) ?) (== 2 ?))";
-        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+        let sketch = term
+            .parse::<PartialSketch<<Halide as Trs>::Language>>()
+            .unwrap();
 
         // let type_map = collect_expr_types(&sketch).unwrap();
         // let graph = dot_typed_ast(Id::from(sketch.as_ref().len() - 1), &sketch, &type_map);
@@ -235,7 +229,9 @@ mod tests {
     #[test]
     fn typecheck_partial_sketch3() {
         let term = "(or (or (> 1 [active]) ?) (or 2 ?))";
-        let sketch = term.parse::<PartialSketch<HalideMath>>().unwrap();
+        let sketch = term
+            .parse::<PartialSketch<<Halide as Trs>::Language>>()
+            .unwrap();
 
         assert!(typecheck_expr(&sketch).is_err());
     }

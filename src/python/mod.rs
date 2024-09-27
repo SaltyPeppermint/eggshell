@@ -1,11 +1,10 @@
 // pub mod halide;
-pub(crate) mod flat;
-pub(crate) mod macros;
+mod flat;
+mod macros;
 mod pylang;
 mod pysketch;
 mod pytrs;
-pub(crate) mod raw_lang;
-pub(crate) mod raw_sketch;
+mod symbols;
 
 use std::fmt::Display;
 
@@ -13,16 +12,14 @@ use pyo3::exceptions::PyException;
 use pyo3::{create_exception, PyErr};
 use thiserror::Error;
 
-pub use flat::FlatAst;
-pub use flat::FlatEGraph;
-pub use flat::FlatNode;
-pub use flat::FlatVertex;
+pub use flat::{FlatAst, FlatEGraph, FlatNode, FlatVertex};
 pub use pylang::PyLang;
 pub use pysketch::PySketch;
 pub use pytrs::*;
 
-pub(crate) use raw_lang::RawLang;
-pub(crate) use raw_sketch::RawSketch;
+pub(crate) use pylang::RawLang;
+pub(crate) use pysketch::RawSketch;
+pub(crate) use symbols::{SymbolMetaData, SymbolTable};
 
 /// A wrapper around the `RecParseError` so we can circumvent the orphan rule
 #[derive(Debug, Error)]
