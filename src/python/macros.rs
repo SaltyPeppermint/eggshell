@@ -73,10 +73,9 @@ macro_rules! monomorphize {
 
         /// Run an eqsat on the expr
         #[pyo3::pyfunction]
-        #[pyo3(signature = (start_terms, ruleset_name, conf=None))]
+        #[pyo3(signature = (start_terms, conf=None))]
         pub fn run_eqsat(
             start_terms: Vec<$crate::python::PyLang>,
-            ruleset_name: String,
             conf: Option<$crate::eqsat::EqsatConf>,
         ) -> pyo3::PyResult<EqsatResult> {
             let start_exprs = start_terms
@@ -91,8 +90,7 @@ macro_rules! monomorphize {
                 $crate::eqsat::Eqsat::new(start_exprs)
             };
 
-            let ruleset = <$type as $crate::trs::Trs>::Rules::try_from(ruleset_name)?;
-            let rules = $crate::trs::Ruleset::rules(&ruleset);
+            let rules = <$type as $crate::trs::Trs>::full_rules();
             let result = eqsat.run(&rules);
             Ok(EqsatResult(result))
         }

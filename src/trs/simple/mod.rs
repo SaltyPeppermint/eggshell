@@ -4,7 +4,7 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
-use super::{Ruleset, SymbolIter, Trs, TrsError};
+use super::{SymbolIter, Trs};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
@@ -81,38 +81,14 @@ fn make_rules() -> Vec<Rewrite> {
     ]
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub enum SimpleRulesets {
-    Full,
-}
-
-impl Ruleset for SimpleRulesets {
-    type Language = SimpleLang;
-    type Analysis = ();
-    /// takes an class of rules to use then returns the vector of their associated Rewrites
-    #[must_use]
-    fn rules(&self) -> Vec<Rewrite> {
-        make_rules()
-    }
-}
-
-impl TryFrom<String> for SimpleRulesets {
-    type Error = TrsError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "full" | "Full" | "FULL" => Ok(Self::Full),
-            _ => Err(Self::Error::BadRulesetName(value)),
-        }
-    }
-}
-
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;
 
-/// Halide Trs implementation
 impl Trs for Simple {
     type Language = SimpleLang;
     type Analysis = ();
-    type Rules = SimpleRulesets;
+
+    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
+        make_rules()
+    }
 }

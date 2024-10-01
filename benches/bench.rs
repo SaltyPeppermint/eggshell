@@ -10,7 +10,6 @@ use eggshell::sampling;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::Sketch;
 use eggshell::sketch::{extract, recursive};
-use eggshell::trs::Ruleset;
 use eggshell::trs::Simple;
 use eggshell::trs::Trs;
 use rand::rngs::StdRng;
@@ -43,7 +42,7 @@ fn sampling(c: &mut Criterion) {
     let seed: RecExpr<<Simple as Trs>::Language> = term.parse().unwrap();
     let sample_conf = SampleConfBuilder::new().build();
     let eqsat_conf = EqsatConfBuilder::new().build();
-    let rules = <Simple as Trs>::Rules::Full.rules();
+    let rules = Simple::full_rules();
     let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
         .with_conf(eqsat_conf.clone())
         .run(&rules);

@@ -6,7 +6,7 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{Ruleset, SymbolIter, Trs, TrsError};
+use super::{SymbolIter, Trs};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -63,21 +63,6 @@ impl Typeable for Math {
         TypingInfo::new(Self::Type::Top, Self::Type::Top)
     }
 }
-
-// pub struct MathCostFn;
-// impl egg::CostFunction<Math> for MathCostFn {
-//     type Cost = usize;
-//     fn cost<C>(&mut self, enode: &Math, mut costs: C) -> Self::Cost
-//     where
-//         C: FnMut(Id) -> Self::Cost,
-//     {
-//         let op_cost = match enode {
-//             Math::Diff(..) | Math::Integral(..) => 100,
-//             _ => 1,
-//         };
-//         enode.fold(op_cost, |sum, i| sum + costs(i))
-//     }
-// }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
 pub enum ArithmaticType {
@@ -175,32 +160,6 @@ impl Analysis<Math> for ConstantFold {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-pub enum ArithmaticRules {
-    Full,
-}
-
-impl Ruleset for ArithmaticRules {
-    type Language = Math;
-    type Analysis = ConstantFold;
-    /// takes an class of rules to use then returns the vector of their associated Rewrites
-    #[must_use]
-    fn rules(&self) -> Vec<Rewrite> {
-        self::rules::rules()
-    }
-}
-
-impl TryFrom<String> for ArithmaticRules {
-    type Error = TrsError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "full" | "Full" | "FULL" => Ok(Self::Full),
-            _ => Err(Self::Error::BadRulesetName(value)),
-        }
-    }
-}
-
 /// Halide Trs implementation
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;
@@ -208,5 +167,8 @@ pub struct Arithmetic;
 impl Trs for Arithmetic {
     type Language = Math;
     type Analysis = ConstantFold;
-    type Rules = ArithmaticRules;
+
+    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
+        self::rules::rules()
+    }
 }

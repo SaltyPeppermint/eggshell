@@ -29,14 +29,15 @@ pub trait Trs: Serialize {
         + Clone
         + Serialize
         + Default;
-    type Rules: TryFrom<String> + Ruleset<Language = Self::Language, Analysis = Self::Analysis>;
+
+    fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
 
-pub trait Ruleset {
-    type Language: Language;
-    type Analysis: Analysis<Self::Language>;
-    fn rules(&self) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
-}
+// pub trait Ruleset {
+//     type Language: Language;
+//     type Analysis: Analysis<Self::Language>;
+//     fn rules(&self) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
+// }
 
 pub trait SymbolIter: Language {
     fn raw_symbols() -> &'static [(&'static str, usize)];

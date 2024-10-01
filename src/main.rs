@@ -23,7 +23,7 @@ use eggshell::io::reader;
 use eggshell::io::structs::Expression;
 use eggshell::sampling;
 use eggshell::sampling::{SampleConf, SampleConfBuilder};
-use eggshell::trs::{Halide, Ruleset, Trs};
+use eggshell::trs::{Halide, Trs};
 
 // const CHUNKSIZE: usize = 3;
 // const N_SEEDS: usize = 20;
@@ -70,7 +70,7 @@ fn main() {
         &eqsat_conf,
         &cli,
     );
-    let rules = <Halide as Trs>::Rules::Full.rules();
+    let rules = Halide::full_rules();
     gen_data::<Halide>(exprs, &eqsat_conf, &sample_conf, &folder, &rules, &cli);
 }
 

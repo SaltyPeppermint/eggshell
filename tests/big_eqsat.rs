@@ -4,7 +4,6 @@ mod tests {
 
     use eggshell::eqsat::Eqsat;
     use eggshell::trs::Halide;
-    use eggshell::trs::Ruleset;
     use eggshell::trs::Trs;
 
     #[test]
@@ -13,7 +12,7 @@ mod tests {
         vec!["( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )"
             .parse()
             .unwrap()];
-        let rules = <Halide as Trs>::Rules::Full.rules();
+        let rules = Halide::full_rules();
         let eqsat = Eqsat::<Halide>::new(true_stmt);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
@@ -26,7 +25,7 @@ mod tests {
         let false_stmt = vec!["( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
             .parse()
             .unwrap()];
-        let rules = <Halide as Trs>::Rules::Full.rules();
+        let rules = Halide::full_rules();
         let eqsat = Eqsat::<Halide>::new(false_stmt);
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();

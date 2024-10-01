@@ -188,7 +188,7 @@ mod tests {
 
     use crate::eqsat::EqsatConfBuilder;
     use crate::eqsat::{Eqsat, EqsatResult};
-    use crate::trs::{Halide, Ruleset, Simple, Trs};
+    use crate::trs::{Halide, Simple, Trs};
 
     use super::*;
 
@@ -199,7 +199,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = <Simple as Trs>::Rules::Full.rules();
+        let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -218,7 +218,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = <Simple as Trs>::Rules::Full.rules();
+        let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
@@ -247,7 +247,7 @@ mod tests {
         let sample_conf = SampleConfBuilder::new().build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
-        let rules = <Simple as Trs>::Rules::Full.rules();
+        let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> =
             Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
 
@@ -268,7 +268,7 @@ mod tests {
             .time_limit(Duration::from_secs_f64(0.2))
             .build();
 
-        let rules = <Halide as Trs>::Rules::Full.rules();
+        let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(&rules);
