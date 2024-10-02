@@ -51,7 +51,7 @@ where
     clippy::too_many_lines
 )]
 fn extract_rec<L, N, CF>(
-    id: Id,
+    egraph_id: Id,
     sketch: &Sketch<L>,
     sketch_id: Id,
     cost_fn: &mut CF,
@@ -66,14 +66,14 @@ where
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    if let Some(value) = memo.get(&(id, sketch_id)) {
+    if let Some(value) = memo.get(&(egraph_id, sketch_id)) {
         return value.clone();
     };
 
     let result = match &sketch[sketch_id] {
-        SketchNode::Any => extracted.get(&id).cloned(),
+        SketchNode::Any => extracted.get(&egraph_id).cloned(),
         SketchNode::Node(node) => {
-            let eclass = &egraph[id];
+            let eclass = &egraph[egraph_id];
 
             let mut candidates = Vec::new();
             let mnode = &node.clone().map_children(|_| Id::from(0));
@@ -113,12 +113,12 @@ where
             candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
         }
         SketchNode::Contains(inner_sketch_id) => {
-            memo.insert((id, sketch_id), None); // avoid cycles
+            memo.insert((egraph_id, sketch_id), None); // avoid cycles
 
-            let eclass = &egraph[id];
+            let eclass = &egraph[egraph_id];
             let mut candidates = Vec::new();
             candidates.extend(extract_rec(
-                id,
+                egraph_id,
                 sketch,
                 *inner_sketch_id,
                 cost_fn,
@@ -136,7 +136,7 @@ where
                         extract_rec(
                             child_id, sketch, sketch_id, cost_fn, egraph, exprs, extracted, memo,
                         )
-                        .map(move |x| (child_id, x))
+                        .map(|x| (child_id, x))
                     })
                     .collect::<Vec<_>>();
                 let children_any = enode
@@ -170,7 +170,7 @@ where
             .iter()
             .filter_map(|inner_sketch_id| {
                 extract_rec(
-                    id,
+                    egraph_id,
                     sketch,
                     *inner_sketch_id,
                     cost_fn,
@@ -183,7 +183,7 @@ where
             .min_by(|x, y| x.0.cmp(&y.0)),
     };
 
-    memo.insert((id, sketch_id), result.clone());
+    memo.insert((egraph_id, sketch_id), result.clone());
     result
 }
 
@@ -232,7 +232,7 @@ where
     clippy::too_many_lines
 )]
 fn map_extract_rec<L, N, CF>(
-    id: Id,
+    egraph_id: Id,
     sketch: &Sketch<L>,
     sketch_id: Id,
     cost_fn: &mut CF,
@@ -247,19 +247,31 @@ where
     CF: CostFunction<L>,
     CF::Cost: Ord,
 {
-    if let Some(value) = memo.get(&(id, sketch_id)) {
+    if let Some(value) = memo.get(&(egraph_id, sketch_id)) {
         return value.clone();
     };
 
     let result = match &sketch[sketch_id] {
-        SketchNode::Any => extracted.get(&id).cloned(),
+        // If the sketch says any, all the nodes in the eclass fulfill the sketch and
+        // are valide solutions.
+        SketchNode::Any => extracted.get(&egraph_id).cloned(),
+        // if we have a specific node in the sketch, we need to check if there is such
+        // a node in the current eclass under investigation and then check the children.
         SketchNode::Node(node) => {
-            let eclass = &egraph[id];
+            // Get the eclass we are currently checking
+            let eclass = &egraph[egraph_id];
 
             // let mut candidates = Vec::new();
             let mnode = &node.clone().map_children(|_| Id::from(0));
+            // We have a sketch (node) for this eclass and now we try to find
+            // all the nodes in the eclass that fullfill that sketch.
+            // We do this by checking the sketch for the current node (via the cloned mnode)
+            // and then recursively checking if the children of the matching node holds
+            // for the "sub-sketches" that are the children of the sketch_node
             let candidates = utils::flat_map_matching_node(eclass, mnode, |matched| {
                 let mut matches = Vec::new();
+                // Check if for each child of the sketch_node (themselves sketches),
+                // the matched nodes children also hold for these child-sketches
                 for (child_sketch_id, child_id) in node.children().iter().zip(matched.children()) {
                     if let Some(m) = map_extract_rec(
                         *child_id,
@@ -276,10 +288,12 @@ where
                         break;
                     }
                 }
-
+                // Only if for every child the sketch holds it makes sense to continue
                 if matches.len() == matched.len() {
+                    // If all children match the sketch, they can be costed.
                     let to_match: HashMap<_, _> =
                         matched.children().iter().zip(matches.iter()).collect();
+                    // Returns the valid subtree and its cost
                     Some((
                         cost_fn.cost(matched, |c| to_match[&c].0.clone()),
                         exprs.add(
@@ -289,18 +303,30 @@ where
                         ),
                     ))
                 } else {
+                    // Not all children hold, so this node does not fulfill the sketch
+                    // Return None
                     None
                 }
             });
 
+            // We want to return the cheapest of the candidates valid
             candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
         }
         SketchNode::Contains(inner_sketch_id) => {
-            memo.insert((id, sketch_id), None); // avoid cycles
+            // avoid cycles
+            // If we have visited the contains once, we do not need to
+            // visit it again as the cost in our setup only goes up
+            memo.insert((egraph_id, sketch_id), None);
 
-            let eclass = &egraph[id];
+            // Get the current EClass
+            let eclass = &egraph[egraph_id];
+            // Check recursively if the inner sketch in the contains()
+            // is fulfilled by the current nodes in the eclass.
+            // This gives us a vector of maximum length eclass.nodes.len().
+            // Some may match, some dont but we can't stop here because the children
+            // of those who do or dont could match the inner sketch!
             let mut candidates = map_extract_rec(
-                id,
+                egraph_id,
                 sketch,
                 *inner_sketch_id,
                 cost_fn,
@@ -312,33 +338,42 @@ where
             .into_iter()
             .collect::<Vec<_>>();
 
+            // As previously stated we need to recursively iterate over the children in this eclass,
+            // since they could fulfill the inner_sketch, thereby making their parent_nodes
+            // fullfill the sketch, regardless if these parents directly fulfill the sketch.
             for enode in &eclass.nodes {
-                let children_matching = enode
+                // For each enode in the eclass, check if the children fullfil the contains
+                // sketch. Notice how we are passing the sketch_id, not the inner_sketch_id!
+                let matching_children = enode
                     .children()
                     .iter()
                     .filter_map(|&child_id| {
                         map_extract_rec(
                             child_id, sketch, sketch_id, cost_fn, egraph, exprs, extracted, memo,
                         )
-                        .map(move |x| (child_id, x))
+                        // Cost the successful children
+                        .map(|x| (child_id, x))
                     })
                     .collect::<Vec<_>>();
+                // Collecting all the children, regardless if they fulfill the sketch
+                // with their cost
                 let children_any = enode
                     .children()
                     .iter()
                     .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
                     .collect::<Vec<_>>();
 
-                for (matching_child, matching) in &children_matching {
+                // Iterating over all the matching children (that make their parents matching)
+                for (matching_child_id, matching) in &matching_children {
                     let mut to_selected = HashMap::new();
 
-                    for (child, any) in &children_any {
-                        let selected = if child == matching_child {
+                    for (child_id, any) in &children_any {
+                        let selected = if child_id == matching_child_id {
                             matching
                         } else {
                             any
                         };
-                        to_selected.insert(child, selected);
+                        to_selected.insert(child_id, selected);
                     }
 
                     candidates.push((
@@ -350,11 +385,13 @@ where
 
             candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
         }
+        // Rather simple: We check if either the fst or snd of the or pair fulfills
+        // the sketch and we take the cheaper one
         SketchNode::Or(inner_sketch_ids) => inner_sketch_ids
             .iter()
             .filter_map(|inner_sketch_id| {
                 map_extract_rec(
-                    id,
+                    egraph_id,
                     sketch,
                     *inner_sketch_id,
                     cost_fn,
@@ -367,7 +404,8 @@ where
             .min_by(|x, y| x.0.cmp(&y.0)),
     };
 
-    memo.insert((id, sketch_id), result.clone());
+    // cache the result
+    memo.insert((egraph_id, sketch_id), result.clone());
     result
 }
 

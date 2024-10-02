@@ -12,5 +12,8 @@
         "**/.DS_Store": true,
         "**/Thumbs.db": true,
         "**/.git/": true
+    },
+    "files.watcherExclude": {
+        "**/target": true
     }
 }
