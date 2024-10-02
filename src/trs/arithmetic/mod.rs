@@ -160,7 +160,6 @@ impl Analysis<Math> for ConstantFold {
     }
 }
 
-/// Halide Trs implementation
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;
 

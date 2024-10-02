@@ -12,10 +12,10 @@ macro_rules! monomorphize {
             bound.add_function(pyo3::wrap_pyfunction!(symbols, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(symbol_table, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(run_eqsat, m)?)?;
-            bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_term, m)?)?;
-            bound.add_function(pyo3::wrap_pyfunction!(typecheck_term, m)?)?;
-            bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_sketch, m)?)?;
-            bound.add_function(pyo3::wrap_pyfunction!(typecheck_sketch, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_term, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(typecheck_term, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_sketch, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(typecheck_sketch, m)?)?;
             bound.add_class::<EqsatResult>()?;
             m.add_submodule(&bound)?;
             Ok(())
@@ -39,37 +39,37 @@ macro_rules! monomorphize {
             $crate::python::symbols::SymbolTable::new(lut)
         }
 
-        /// Check if a term has the correct syntax
-        #[pyo3::pyfunction]
-        pub fn syntaxcheck_term(term: &$crate::python::PyLang) -> bool {
-            let expr: Result<egg::RecExpr<Lang>, _> = (&term.0).try_into();
-            expr.is_ok()
-        }
+        // /// Check if a term has the correct syntax
+        // #[pyo3::pyfunction]
+        // pub fn syntaxcheck_term(term: &$crate::python::PyLang) -> bool {
+        //     let expr: Result<egg::RecExpr<Lang>, _> = (&term.0).try_into();
+        //     expr.is_ok()
+        // }
 
-        /// Check if a term typechecks
-        #[pyo3::pyfunction]
-        pub fn typecheck_term(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
-            let expr: egg::RecExpr<Lang> = (&term.0)
-                .try_into()
-                .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
-            Ok($crate::typing::typecheck_expr(&expr).is_ok())
-        }
+        // /// Check if a term typechecks
+        // #[pyo3::pyfunction]
+        // pub fn typecheck_term(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+        //     let expr: egg::RecExpr<Lang> = (&term.0)
+        //         .try_into()
+        //         .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
+        //     Ok($crate::typing::typecheck_expr(&expr).is_ok())
+        // }
 
-        /// Check if a partial sketch typechecks
-        #[pyo3::pyfunction]
-        pub fn typecheck_sketch(term: &$crate::python::PySketch) -> pyo3::PyResult<bool> {
-            let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> =
-                (&term.0).try_into()?;
-            Ok($crate::typing::typecheck_expr(&sketch).is_ok())
-        }
+        // /// Check if a partial sketch has the correct syntax
+        // #[pyo3::pyfunction]
+        // pub fn syntaxcheck_sketch(term: &$crate::python::PySketch) -> bool {
+        //     let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
+        //         (&term.0).try_into();
+        //     sketch.is_ok()
+        // }
 
-        /// Check if a partial sketch has the correct syntax
-        #[pyo3::pyfunction]
-        pub fn syntaxcheck_sketch(term: &$crate::python::PySketch) -> bool {
-            let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
-                (&term.0).try_into();
-            sketch.is_ok()
-        }
+        // /// Check if a partial sketch typechecks
+        // #[pyo3::pyfunction]
+        // pub fn typecheck_sketch(term: &$crate::python::PySketch) -> pyo3::PyResult<bool> {
+        //     let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> =
+        //         (&term.0).try_into()?;
+        //     Ok($crate::typing::typecheck_expr(&sketch).is_ok())
+        // }
 
         /// Run an eqsat on the expr
         #[pyo3::pyfunction]

@@ -1,5 +1,6 @@
 mod arithmetic;
 mod halide;
+mod rise;
 mod simple;
 
 use std::fmt::{Debug, Display};
@@ -12,10 +13,11 @@ use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
 use crate::python::SymbolMetaData;
-use crate::typing::{Type, Typeable};
+// use crate::typing::{Type, Typeable};
 
 pub use arithmetic::Arithmetic;
-pub use halide::Halide;
+pub use halide::{Halide, HalideRuleset};
+pub use rise::Rise;
 pub use simple::Simple;
 
 /// Trait that must be implemented by all Trs consumable by the system
@@ -24,7 +26,7 @@ pub use simple::Simple;
 /// The [`Trs::rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
 pub trait Trs: Serialize {
-    type Language: Display + Serialize + FromOp + Typeable<Type: Type> + SymbolIter;
+    type Language: Display + Serialize + FromOp + SymbolIter; //Typeable<Type: Type> +
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug>
         + Clone
         + Serialize
@@ -32,12 +34,6 @@ pub trait Trs: Serialize {
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
-
-// pub trait Ruleset {
-//     type Language: Language;
-//     type Analysis: Analysis<Self::Language>;
-//     fn rules(&self) -> Vec<Rewrite<Self::Language, Self::Analysis>>;
-// }
 
 pub trait SymbolIter: Language {
     fn raw_symbols() -> &'static [(&'static str, usize)];
