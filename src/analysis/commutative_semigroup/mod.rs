@@ -40,11 +40,14 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
                 let canonical_id = egraph.find(id);
                 debug_assert!(canonical_id == id);
                 let eclass = &egraph[canonical_id];
+
+                // Check if we can calculate the analysis for any enode
                 let available_data = eclass
                     .nodes
                     .iter()
                     .filter_map(|n| {
                         let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
+                        // If all the childs eclass_children have data, we can calculate it!
                         if u_node.all(|child_id| data.contains_key(&child_id)) {
                             Some(analysis.make(egraph, &u_node, &|child_id| &data[&child_id]))
                         } else {
@@ -53,15 +56,17 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
                     })
                     .collect::<Vec<_>>();
 
+                // If we have some info, we add that info to our storage.
+                // Otherwise, if we have absolutely now info about the nodes, we can only put them back onto the queue.
+                // and hope for a better time later.
                 if let Some(computed_data) = available_data.into_iter().reduce(|mut a, b| {
                     analysis.merge(&mut a, b);
                     a
                 }) {
-                    if data
-                        .get(&eclass.id)
-                        .is_some_and(|existing_data| existing_data == &computed_data)
-                    {
-                    } else {
+                    // If we have gained new information, put the parents onto the queue.
+                    // They need to be re-evaluated.
+                    // Only once we have reached a fixpoint we can stop updating the parents.
+                    if !(data.get(&eclass.id) == Some(&computed_data)) {
                         analysis_pending.extend(eclass.parents().map(|p| egraph.find(p.1)));
                         data.insert(eclass.id, computed_data);
                     }
@@ -75,9 +80,8 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
         assert!(egraph.clean);
 
         let mut analysis_pending = UniqueQueue::<Id>::default();
-        // works with queue but IndexSet is stack
-        // IndexSet::<(L, Id)>::default();
 
+        // We start at the leaves, since they have no children and can be directly evaluated.
         for eclass in egraph.classes() {
             for enode in &eclass.nodes {
                 if enode.is_leaf() {

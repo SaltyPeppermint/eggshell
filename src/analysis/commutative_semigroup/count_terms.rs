@@ -39,10 +39,16 @@ where
             counts: &mut HashMap<usize, usize>,
             limit: usize,
         ) {
+            // If we have reached the term size limit, stop the recursion
             if size > limit {
                 return;
             }
 
+            // If we have not reached the bottom of the recursion, call rec for all the children
+            // with increased size (since a child adds a node) and multiplied count to account for all
+            // the possible new combinations.
+            // If we have reached the bottom, we add (or init) the count to entry corresponding to the current
+            // the recursion depth (which is the size)
             if let Some((head, rest)) = remaining.split_first() {
                 for (s, c) in *head {
                     rec(rest, size + s, count * c, counts, limit);
@@ -56,6 +62,9 @@ where
                     .or_insert(count);
             }
         }
+        // We start with the initial analysis of all the children since we need to know those
+        // so we can simply add their sizes / multiply their counts for this node.
+        // Thankfully this is cached via `analysis_of`
         let children_counts = enode
             .children()
             .iter()

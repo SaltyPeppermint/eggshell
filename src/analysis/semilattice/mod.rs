@@ -70,8 +70,6 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
         assert!(egraph.clean);
 
         let mut analysis_pending = UniqueQueue::<(&L, Id)>::default();
-        // works with queue but IndexSet is stack
-        // IndexSet::<(L, Id)>::default();
 
         for eclass in egraph.classes() {
             for enode in &eclass.nodes {
