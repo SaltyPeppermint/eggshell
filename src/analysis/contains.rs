@@ -3,9 +3,10 @@ use std::cmp::Ordering;
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
-use super::{ExprHashCons, SemiLatticeAnalysis};
+use super::SemiLatticeAnalysis;
+use crate::utils::ExprHashCons;
 
-pub(crate) struct ExtractContainsAnalysis<'a, L, CF>
+pub struct ExtractContainsAnalysis<'a, L, CF>
 where
     L: Language,
     CF: CostFunction<L>,
@@ -109,7 +110,7 @@ where
     }
 }
 
-pub(crate) struct SatisfiesContainsAnalysis;
+pub struct SatisfiesContainsAnalysis;
 
 impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for SatisfiesContainsAnalysis {
     type Data = bool;

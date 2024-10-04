@@ -1,8 +1,9 @@
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 
-use super::{ExprHashCons, SemiLatticeAnalysis};
+use super::SemiLatticeAnalysis;
+use crate::utils::ExprHashCons;
 
-pub(crate) struct ExtractAnalysis<'a, L, CF> {
+pub struct ExtractAnalysis<'a, L, CF> {
     pub(crate) exprs: &'a mut ExprHashCons<L>,
     pub(crate) cost_fn: &'a mut CF,
 }

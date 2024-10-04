@@ -1,5 +1,6 @@
 mod ast_size;
 mod contains;
+mod count_terms;
 mod extract;
 
 use std::fmt::Debug;
@@ -7,11 +8,12 @@ use std::fmt::Debug;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
-use crate::utils::{ExprHashCons, UniqueQueue};
+use crate::utils::UniqueQueue;
 
-pub(crate) use contains::ExtractContainsAnalysis;
-pub(crate) use contains::SatisfiesContainsAnalysis;
-pub(crate) use extract::ExtractAnalysis;
+pub use contains::ExtractContainsAnalysis;
+pub use contains::SatisfiesContainsAnalysis;
+pub use count_terms::TermsUpToSize;
+pub use extract::ExtractAnalysis;
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized {
     type Data: Debug;
