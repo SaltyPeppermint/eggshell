@@ -6,7 +6,6 @@ pub mod extract;
 mod full_sketch;
 mod hashcons;
 mod partial_sketch;
-pub mod recursive;
 mod utils;
 
 use std::fmt::Display;

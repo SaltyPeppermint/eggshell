@@ -8,8 +8,8 @@ use egg::{EGraph, RecExpr, SymbolLang};
 use eggshell::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
 use eggshell::sampling;
 use eggshell::sampling::SampleConfBuilder;
+use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
-use eggshell::sketch::{extract, recursive};
 use eggshell::trs::Simple;
 use eggshell::trs::Trs;
 use rand::rngs::StdRng;
@@ -27,13 +27,20 @@ fn extraction(c: &mut Criterion) {
     egraph.rebuild();
 
     c.bench_function("default extract", |b| {
-        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| extract::mutable::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
-    c.bench_function("recursive for_each extract", |b| {
-        b.iter(|| recursive::for_each_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
-    });
+    // c.bench_function("recursive for_each extract", |b| {
+    //     b.iter(|| {
+    //         extract::recursive::for_each_eclass_extract(
+    //             bb(&sketch),
+    //             AstSize,
+    //             bb(&egraph),
+    //             bb(root_a),
+    //         )
+    //     })
+    // });
     c.bench_function("recursive map extract", |b| {
-        b.iter(|| recursive::map_eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| extract::recursive::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
 }
 

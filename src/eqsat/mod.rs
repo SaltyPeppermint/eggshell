@@ -138,7 +138,7 @@ where
         CF: CostFunction<R::Language>,
         CF::Cost: Ord,
     {
-        extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
+        extract::recursive::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
     /// Extract
