@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::mem::Discriminant;
 
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
@@ -5,7 +6,7 @@ use hashbrown::{HashMap, HashSet};
 
 use super::utils;
 use super::{Sketch, SketchNode};
-use crate::analysis::{ExtractAnalysis, ExtractContainsAnalysis, SemiLatticeAnalysis};
+use crate::analysis::semilattice::{ExtractAnalysis, ExtractContainsAnalysis, SemiLatticeAnalysis};
 use crate::utils::ExprHashCons;
 
 /// Returns the best program satisfying `s` according to `cost_fn` that is represented in the `id` e-class of `egraph`, if it exists.
@@ -18,7 +19,7 @@ pub fn eclass_extract<L, A, CF>(
 where
     L: Language,
     A: Analysis<L>,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
     CF::Cost: Ord,
 {
     let (exprs, eclass_to_best) = extract_sketch(sketch, cost_fn, egraph);
@@ -40,7 +41,7 @@ fn extract_sketch<L, A, CF>(
 where
     L: Language,
     A: Analysis<L>,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
     CF::Cost: Ord,
 {
     fn rec<L, A, CF>(
@@ -56,7 +57,7 @@ where
     where
         L: Language,
         A: Analysis<L>,
-        CF: CostFunction<L>,
+        CF: CostFunction<L> + Debug,
         CF::Cost: Ord,
     {
         if let Some(value) = memo.get(&sketch_id) {

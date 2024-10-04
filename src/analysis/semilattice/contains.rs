@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::fmt::Debug;
 
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
@@ -6,10 +7,12 @@ use hashbrown::HashMap;
 use super::SemiLatticeAnalysis;
 use crate::utils::ExprHashCons;
 
+#[derive(Debug)]
 pub struct ExtractContainsAnalysis<'a, L, CF>
 where
     L: Language,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Debug,
 {
     exprs: &'a mut ExprHashCons<L>,
     cost_fn: &'a mut CF,
@@ -19,7 +22,8 @@ where
 impl<'a, L, CF> ExtractContainsAnalysis<'a, L, CF>
 where
     L: Language,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Debug,
 {
     pub fn new(
         exprs: &'a mut ExprHashCons<L>,
@@ -38,8 +42,8 @@ impl<'a, L, N, CF> SemiLatticeAnalysis<L, N> for ExtractContainsAnalysis<'a, L, 
 where
     L: Language,
     N: Analysis<L>,
-    CF: CostFunction<L>,
-    CF::Cost: Ord,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Ord + Debug,
 {
     type Data = Option<(CF::Cost, Id)>;
 
@@ -110,6 +114,7 @@ where
     }
 }
 
+#[derive(Debug)]
 pub struct SatisfiesContainsAnalysis;
 
 impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for SatisfiesContainsAnalysis {

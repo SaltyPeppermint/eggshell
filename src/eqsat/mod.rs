@@ -135,8 +135,8 @@ where
         sketch: &Sketch<R::Language>,
     ) -> (CF::Cost, RecExpr<R::Language>)
     where
-        CF: CostFunction<R::Language>,
-        CF::Cost: Ord,
+        CF: CostFunction<R::Language> + Debug,
+        CF::Cost: Ord + Debug,
     {
         extract::recursive::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }

@@ -1,14 +1,27 @@
+use std::fmt::Debug;
+
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
 
 use super::SemiLatticeAnalysis;
 use crate::utils::ExprHashCons;
 
-pub struct ExtractAnalysis<'a, L, CF> {
+#[derive(Debug)]
+pub struct ExtractAnalysis<'a, L, CF>
+where
+    L: Language,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Debug,
+{
     pub(crate) exprs: &'a mut ExprHashCons<L>,
     pub(crate) cost_fn: &'a mut CF,
 }
 
-impl<'a, L, CF> ExtractAnalysis<'a, L, CF> {
+impl<'a, L, CF> ExtractAnalysis<'a, L, CF>
+where
+    L: Language,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Debug,
+{
     pub(crate) fn new(exprs: &'a mut ExprHashCons<L>, cost_fn: &'a mut CF) -> Self {
         Self { exprs, cost_fn }
     }
@@ -18,7 +31,7 @@ impl<'a, L, N, CF> SemiLatticeAnalysis<L, N> for ExtractAnalysis<'a, L, CF>
 where
     L: Language,
     N: Analysis<L>,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
     CF::Cost: 'a,
 {
     type Data = (CF::Cost, Id);

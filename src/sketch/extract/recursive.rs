@@ -1,9 +1,11 @@
+use std::fmt::Debug;
+
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 
 use super::utils;
 use super::{Sketch, SketchNode};
-use crate::analysis::{ExtractAnalysis, SemiLatticeAnalysis};
+use crate::analysis::semilattice::{ExtractAnalysis, SemiLatticeAnalysis};
 use crate::utils::ExprHashCons;
 
 /// More recursive, immutable version of `super::mutable::eclass_extract`.
@@ -22,7 +24,7 @@ pub fn eclass_extract<L, N, CF>(
 where
     L: Language,
     N: Analysis<L>,
-    CF: CostFunction<L>,
+    CF: CostFunction<L> + Debug,
     CF::Cost: Ord,
 {
     assert!(egraph.clean);

@@ -6,7 +6,7 @@ use std::mem::Discriminant;
 use egg::{Analysis, EGraph, Id, Language};
 use hashbrown::{HashMap, HashSet};
 
-use crate::analysis::{SatisfiesContainsAnalysis, SemiLatticeAnalysis};
+use crate::analysis::semilattice::{SatisfiesContainsAnalysis, SemiLatticeAnalysis};
 
 use super::utils;
 use super::{Sketch, SketchNode};

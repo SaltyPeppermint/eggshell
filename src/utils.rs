@@ -8,7 +8,7 @@ use hashbrown::{HashMap, HashSet};
 /// Notably, insert/pop operations have O(1) expected amortized runtime complexity.
 ///
 /// Thanks @Bastacyclop for the implementation!
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct UniqueQueue<T>
 where
     T: Eq + Hash + Clone,
@@ -91,6 +91,7 @@ pub(crate) trait Tree: Sized {
 
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
+#[derive(Debug)]
 pub(crate) struct ExprHashCons<L> {
     expr: RecExpr<L>,
     memo: HashMap<L, Id>,
