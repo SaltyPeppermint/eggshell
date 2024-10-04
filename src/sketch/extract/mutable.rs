@@ -3,11 +3,10 @@ use std::mem::Discriminant;
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 
-use super::analysis;
-use super::analysis::{ExtractAnalysis, ExtractContainsAnalysis};
 use super::utils;
 use super::{Sketch, SketchNode};
-use crate::sketch::hashcons::ExprHashCons;
+use crate::analysis::{ExtractAnalysis, ExtractContainsAnalysis, SemiLatticeAnalysis};
+use crate::utils::ExprHashCons;
 
 /// Returns the best program satisfying `s` according to `cost_fn` that is represented in the `id` e-class of `egraph`, if it exists.
 pub fn eclass_extract<L, A, CF>(
@@ -146,7 +145,7 @@ where
 
                 let mut analysis = ExtractContainsAnalysis::new(exprs, cost_fn, extracted);
 
-                analysis::one_shot_analysis(egraph, &mut analysis, &mut data);
+                analysis.one_shot_analysis(egraph, &mut data);
 
                 data.into_iter()
                     .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
@@ -204,7 +203,7 @@ where
         cost_fn: &mut cost_fn,
     };
     let classes_by_op = utils::new_classes_by_op(egraph);
-    analysis::one_shot_analysis(egraph, &mut analysis, &mut extracted);
+    analysis.one_shot_analysis(egraph, &mut extracted);
 
     let res = rec(
         sketch,

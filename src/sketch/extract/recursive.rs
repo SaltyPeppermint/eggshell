@@ -1,10 +1,10 @@
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 
-use super::analysis::ExtractAnalysis;
-use super::{analysis, utils};
+use super::utils;
 use super::{Sketch, SketchNode};
-use crate::sketch::hashcons::ExprHashCons;
+use crate::analysis::{ExtractAnalysis, SemiLatticeAnalysis};
+use crate::utils::ExprHashCons;
 
 /// More recursive, immutable version of `super::mutable::eclass_extract`.
 /// Also surprisingly faster.
@@ -32,7 +32,7 @@ where
 
     let mut extracted = HashMap::default();
     let mut analysis = ExtractAnalysis::new(&mut exprs, &mut cost_fn);
-    analysis::one_shot_analysis(egraph, &mut analysis, &mut extracted);
+    analysis.one_shot_analysis(egraph, &mut extracted);
 
     let best_option = map_extract_rec(
         id,

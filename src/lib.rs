@@ -39,7 +39,9 @@
 // clippy::use_debug
 // clippy::ref_patterns,
 
+mod analysis;
 pub mod eqsat;
+mod hashcons;
 pub mod io;
 mod python;
 pub mod sampling;

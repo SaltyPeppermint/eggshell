@@ -1,22 +1,7 @@
 use std::hash::Hash;
 
-use hashbrown::HashSet;
-
-// #[derive(Clone, Copy, Debug)]
-// pub struct AstSize2;
-
-// impl<L: Language> CostFunction<L> for AstSize2 {
-//     type Cost = usize;
-
-//     #[inline]
-//     fn cost<C>(&mut self, enode: &L, costs: C) -> Self::Cost
-//     where
-//         C: FnMut(egg::Id) -> Self::Cost,
-//     {
-//         let mut inner = AstSize;
-//         inner.cost(enode, costs)
-//     }
-// }
+use egg::{Id, Language, RecExpr};
+use hashbrown::{HashMap, HashSet};
 
 /// A data structure to maintain a queue of unique elements.
 ///
@@ -101,5 +86,55 @@ pub(crate) trait Tree: Sized {
 
     fn depth(&self) -> usize {
         1 + self.children().iter().map(|c| c.depth()).max().unwrap_or(0)
+    }
+}
+
+/// hash consed storage for expressions,
+/// cheap replacement for garbage collected expressions
+pub(crate) struct ExprHashCons<L> {
+    expr: RecExpr<L>,
+    memo: HashMap<L, Id>,
+}
+
+impl<L: Language> ExprHashCons<L> {
+    pub(crate) fn new() -> Self {
+        ExprHashCons {
+            expr: RecExpr::default(),
+            memo: HashMap::default(),
+        }
+    }
+
+    pub(crate) fn add(&mut self, node: L) -> Id {
+        if let Some(id) = self.memo.get(&node) {
+            *id
+        } else {
+            self.expr.add(node)
+        }
+    }
+
+    pub(crate) fn extract(&self, id: Id) -> RecExpr<L> {
+        let all = self.expr.as_ref();
+
+        let mut used = HashSet::new();
+        used.insert(id);
+        for (i, node) in all.iter().enumerate().rev() {
+            if used.contains(&Id::from(i)) {
+                for c in node.children() {
+                    used.insert(*c);
+                }
+            }
+        }
+
+        let mut fresh = RecExpr::default();
+        let mut map = HashMap::<Id, Id>::default();
+        for (i, node) in all.iter().enumerate() {
+            if used.contains(&Id::from(i)) {
+                let fresh_node = node.clone().map_children(|c| map[&c]);
+                let fresh_id = fresh.add(fresh_node);
+                map.insert(Id::from(i), fresh_id);
+            }
+        }
+
+        fresh
     }
 }

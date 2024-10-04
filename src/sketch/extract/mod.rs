@@ -6,8 +6,8 @@ use std::mem::Discriminant;
 use egg::{Analysis, EGraph, Id, Language};
 use hashbrown::{HashMap, HashSet};
 
-use super::analysis;
-use super::analysis::SatisfiesContainsAnalysis;
+use crate::analysis::{SatisfiesContainsAnalysis, SemiLatticeAnalysis};
+
 use super::utils;
 use super::{Sketch, SketchNode};
 
@@ -84,7 +84,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
                     .collect::<HashMap<_, bool>>();
 
-                analysis::one_shot_analysis(egraph, &mut SatisfiesContainsAnalysis, &mut data);
+                SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
 
                 data.iter()
                     .filter_map(|(&id, &is_match)| if is_match { Some(id) } else { None })

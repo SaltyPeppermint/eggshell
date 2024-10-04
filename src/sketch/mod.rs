@@ -1,10 +1,8 @@
 // The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
 // Thank you very much for that!
 
-mod analysis;
 pub mod extract;
 mod full_sketch;
-mod hashcons;
 mod partial_sketch;
 mod utils;
 
