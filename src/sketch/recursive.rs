@@ -356,25 +356,31 @@ where
                     })
                     .collect::<Vec<_>>();
                 // Collecting all the children, regardless if they fulfill the sketch
-                // with their cost
+                // with their cost.
+                // Remember, only one child has to fulfill sketch
                 let children_any = enode
                     .children()
                     .iter()
                     .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
                     .collect::<Vec<_>>();
 
-                // Iterating over all the matching children (that make their parents matching)
+                // Iterating over all the matching children.
+                // If any of them do, we can safely add the other children to the solution
+                // since the loop wont run at all if there are zero matching children.
+                // Put another way, if the outer loop ever runs the child_id==matching_id
+                // has to be true for at least one
                 for (matching_child_id, matching) in &matching_children {
-                    let mut to_selected = HashMap::new();
-
-                    for (child_id, any) in &children_any {
-                        let selected = if child_id == matching_child_id {
-                            matching
-                        } else {
-                            any
-                        };
-                        to_selected.insert(child_id, selected);
-                    }
+                    let to_selected = children_any
+                        .iter()
+                        .map(|(child_id, any)| {
+                            let selected = if child_id == matching_child_id {
+                                matching
+                            } else {
+                                any
+                            };
+                            (*child_id, selected)
+                        })
+                        .collect::<HashMap<_, _>>();
 
                     candidates.push((
                         cost_fn.cost(enode, |c| to_selected[&c].0.clone()),
