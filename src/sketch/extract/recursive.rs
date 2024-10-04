@@ -6,9 +6,11 @@ use super::{analysis, utils};
 use super::{Sketch, SketchNode};
 use crate::sketch::hashcons::ExprHashCons;
 
-/// More recursive, immutable version of `super::mutable::eclass_extract`
-/// Also surprisingly faster
+/// More recursive, immutable version of `super::mutable::eclass_extract`.
+/// Also surprisingly faster.
+///
 /// # Panics
+///
 /// Panics if the egraph isn't clean.
 /// Only give it clean egraphs!
 pub fn eclass_extract<L, N, CF>(
@@ -46,6 +48,7 @@ where
     best_option.map(|(best_cost, best_id)| (best_cost, exprs.extract(best_id)))
 }
 
+/// Recursion for `eclass_extract`
 #[expect(
     clippy::too_many_arguments,
     clippy::type_complexity,
@@ -193,12 +196,12 @@ where
                     let to_selected = children_any
                         .iter()
                         .map(|(child_id, any)| {
-                            let selected = if child_id == matching_child_id {
-                                matching
+                            // True at least once otherwise the outer loop would have never run
+                            if child_id == matching_child_id {
+                                (*child_id, matching)
                             } else {
-                                any
-                            };
-                            (*child_id, selected)
+                                (*child_id, any)
+                            }
                         })
                         .collect::<HashMap<_, _>>();
 
