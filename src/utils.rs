@@ -92,13 +92,13 @@ pub(crate) trait Tree: Sized {
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
 #[derive(Debug)]
-pub(crate) struct ExprHashCons<L> {
+pub struct ExprHashCons<L> {
     expr: RecExpr<L>,
     memo: HashMap<L, Id>,
 }
 
 impl<L: Language> ExprHashCons<L> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         ExprHashCons {
             expr: RecExpr::default(),
             memo: HashMap::default(),
@@ -137,5 +137,11 @@ impl<L: Language> ExprHashCons<L> {
         }
 
         fresh
+    }
+}
+
+impl<L: Language> Default for ExprHashCons<L> {
+    fn default() -> Self {
+        Self::new()
     }
 }

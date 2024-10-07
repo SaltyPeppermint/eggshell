@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use chrono::Local;
 use clap::{Parser, Subcommand};
-use egg::{EGraph, Id, Language, RecExpr, Rewrite, StopReason};
+use egg::{AstSize, EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashMap;
 use indicatif::ProgressBar;
 use rand::rngs::StdRng;
@@ -21,7 +21,8 @@ use uuid::Uuid;
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
 use eggshell::io::reader;
 use eggshell::io::structs::Expression;
-use eggshell::sampling;
+use eggshell::sampling::strategy;
+use eggshell::sampling::strategy::Strategy;
 use eggshell::sampling::{SampleConf, SampleConfBuilder};
 use eggshell::trs::{Halide, Trs};
 
@@ -173,7 +174,9 @@ fn gen_data<R: Trs>(
                     .with_conf(eqsat_conf.clone())
                     .run(rules);
 
-                let samples = gen_samples(cli, &eqsat, sample_conf, rng);
+                let strategy =
+                    strategy::Uniform::new(rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+                let samples = gen_samples(cli, &eqsat, sample_conf, strategy);
                 let eclass_data = gen_associated_data(samples, cli, eqsat, rules, rng);
                 let truth_value = match expr.truth_value.as_str() {
                     "true" => true,
@@ -201,23 +204,29 @@ fn gen_data<R: Trs>(
         );
 }
 
-fn gen_samples<R: Trs>(
+fn gen_samples<'a, R, S>(
     cli: &Cli,
     eqsat: &EqsatResult<R>,
     sample_conf: &SampleConf,
-    rng: &mut StdRng,
-) -> HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>> {
+    mut strategy: S,
+) -> HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>>
+where
+    R: Trs,
+    R::Language: 'a,
+    R::Analysis: 'a,
+    S: Strategy<'a, R::Language, R::Analysis>,
+{
     let generated = match cli.sample_mode {
         SampleMode::Full { egraph_samples: _ } => {
             let root_id = *eqsat.roots().first().unwrap();
-            let root_samples = sampling::sample_root(eqsat.egraph(), sample_conf, root_id, rng);
-            let mut random_samples = sampling::sample(eqsat.egraph(), sample_conf, rng);
+            let root_samples = strategy.sample_root(sample_conf, root_id);
+            let mut random_samples = strategy.sample(sample_conf);
             random_samples.insert(root_id, root_samples);
             random_samples
         }
         SampleMode::JustRoot => {
             let root_id = *eqsat.roots().first().unwrap();
-            let root_samples = sampling::sample_root(eqsat.egraph(), sample_conf, root_id, rng);
+            let root_samples = strategy.sample_root(sample_conf, root_id);
             HashMap::from([(root_id, root_samples)])
         }
     }

@@ -1,20 +1,15 @@
 mod choices;
+pub mod strategy;
 mod utils;
 
 use std::fmt::{Debug, Display};
-use std::iter::IntoIterator;
-use std::iter::Sum;
-use std::ops::AddAssign;
 
-use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Extractor, Id, Language, RecExpr};
+use egg::{Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
-use rand::distributions::uniform::{SampleBorrow, SampleUniform};
-use rand::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
 use crate::eqsat::EqsatConf;
-use choices::ChoiceList;
 
 pub use utils::{SampleConf, SampleConfBuilder};
 
@@ -34,161 +29,17 @@ pub struct Sample<L: Language + Display> {
     eqsat_conf: EqsatConf,
 }
 
-pub fn sample<L: Language, N: Analysis<L>>(
-    egraph: &EGraph<L, N>,
-    conf: &SampleConf,
-    rng: &mut StdRng,
-) -> HashMap<Id, HashSet<RecExpr<L>>> {
-    let extractor = Extractor::new(egraph, AstSize);
-
-    let mut raw_weights_memo = HashMap::new();
-    egraph
-        .classes()
-        .choose_multiple(rng, conf.samples_per_egraph)
-        .into_iter()
-        .map(|eclass| {
-            let exprs = (0..conf.samples_per_eclass)
-                .map(|_| {
-                    sample_term(
-                        egraph,
-                        eclass,
-                        &extractor,
-                        conf.loop_limit,
-                        rng,
-                        &mut raw_weights_memo,
-                    )
-                })
-                .collect();
-            (eclass.id, exprs)
-        })
-        .collect()
-}
-
-pub fn sample_root<L: Language, N: Analysis<L>>(
-    egraph: &EGraph<L, N>,
-    conf: &SampleConf,
-    root: Id,
-    rng: &mut StdRng,
-) -> HashSet<RecExpr<L>> {
-    let extractor = Extractor::new(egraph, AstSize);
-
-    let mut raw_weights_memo = HashMap::new();
-
-    (0..conf.samples_per_eclass)
-        .map(|_| {
-            sample_term(
-                egraph,
-                &egraph[root],
-                &extractor,
-                conf.loop_limit,
-                rng,
-                &mut raw_weights_memo,
-            )
-        })
-        .collect()
-}
-
-#[expect(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap
-)]
-fn sample_term<'a, L, N, CF, X>(
-    egraph: &'a EGraph<L, N>,
-    root_eclass: &EClass<L, N::Data>,
-    extractor: &'a Extractor<CF, L, N>,
-    loop_limit: usize,
-    rng: &mut StdRng,
-    raw_weights_memo: &mut HashMap<Id, HashMap<&'a L, usize>>,
-) -> RecExpr<L>
-where
-    L: Language,
-    N: Analysis<L>,
-    CF: CostFunction<L>,
-    CF::Cost: Sum + SampleBorrow<X> + Into<usize>,
-    X: SampleUniform + for<'x> AddAssign<&'x X> + PartialOrd<X> + Clone + Default,
-{
-    let mut choices: ChoiceList<L> = ChoiceList::from(root_eclass.id);
-    // let mut visited = HashSet::from([root_eclass.id]);
-    let mut loop_count = 0;
-
-    while let Some(next_open_id) = choices.next_open() {
-        let eclass_id = egraph.find(next_open_id);
-        let eclass = &egraph[eclass_id];
-        let pick = if loop_limit > loop_count {
-            eclass
-                .nodes
-                .choose(rng)
-                .expect("Each class contains at least one enode.")
-        } else {
-            let raw_weights = raw_weights_memo
-                .entry(eclass.id)
-                .or_insert_with(|| calc_weights(eclass, extractor));
-
-            let urgency = (loop_count - loop_limit) as i32;
-            // println!("Urgency: {urgency}");
-            // println!("{raw_weights:?}");
-            let pick = if urgency < 32 {
-                eclass
-                    .nodes
-                    .choose_weighted(rng, |node| (raw_weights[node] as f64).powi(urgency))
-                    .expect("Infallible weight calculation.")
-            } else {
-                eclass
-                    .nodes
-                    .iter()
-                    .max_by_key(|node| raw_weights[node])
-                    .unwrap()
-            };
-            pick
-        };
-
-        // visited.insert(eclass_id);
-
-        // if pick
-        //     .children()
-        //     .iter()
-        //     .any(|child_id| visited.contains(child_id))
-        // {
-        //     loop_count += 1;
-        // }
-        loop_count += 1;
-        choices.fill_next(pick);
-    }
-    choices.try_into().expect("No open choices should be left")
-}
-
-fn calc_weights<'a, L, N, CF>(
-    eclass: &'a EClass<L, N::Data>,
-    extractor: &'a Extractor<CF, L, N>,
-) -> HashMap<&'a L, usize>
-where
-    L: Language,
-    N: Analysis<L>,
-    CF: CostFunction<L>,
-    CF::Cost: Into<usize>,
-{
-    let costs = eclass.nodes.iter().map(|node| {
-        node.children()
-            .iter()
-            .map(|c| extractor.find_best_cost(*c).into())
-            .sum()
-    });
-    let max = costs.clone().max().unwrap_or(0);
-
-    costs
-        .zip(&eclass.nodes)
-        .map(move |(cost, node)| (node, max - cost + 1))
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use crate::eqsat::EqsatConfBuilder;
-    use crate::eqsat::{Eqsat, EqsatResult};
+    use egg::AstSize;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    use crate::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
     use crate::trs::{Halide, Simple, Trs};
+    use strategy::Strategy;
 
     use super::*;
 
@@ -205,7 +56,9 @@ mod tests {
             .run(&rules);
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
+        let mut strategy =
+            strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let samples = strategy.sample(&sample_conf);
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(12usize, n_samples);
@@ -224,7 +77,9 @@ mod tests {
             .run(&rules);
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
+        let mut strategy =
+            strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let samples = strategy.sample(&sample_conf);
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
@@ -252,7 +107,9 @@ mod tests {
             Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
+        let mut strategy =
+            strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let samples = strategy.sample(&sample_conf);
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
@@ -274,7 +131,9 @@ mod tests {
             .run(&rules);
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let samples = sample(eqsat.egraph(), &sample_conf, &mut rng);
+        let mut strategy =
+            strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let samples = strategy.sample(&sample_conf);
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 

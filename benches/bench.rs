@@ -6,7 +6,8 @@ use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
 
 use eggshell::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
-use eggshell::sampling;
+use eggshell::sampling::strategy;
+use eggshell::sampling::strategy::Strategy;
 use eggshell::sampling::SampleConfBuilder;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
@@ -55,9 +56,11 @@ fn sampling(c: &mut Criterion) {
         .run(&rules);
 
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
+    let mut strategy =
+        strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
 
     c.bench_function("sample simple", |b| {
-        b.iter(|| sampling::sample(bb(eqsat.egraph()), &sample_conf, &mut rng))
+        b.iter(|| strategy.sample(&sample_conf))
     });
 }
 

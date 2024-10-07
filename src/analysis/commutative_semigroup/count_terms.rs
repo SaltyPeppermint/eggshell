@@ -9,6 +9,7 @@ pub struct TermsUpToSize {
 }
 
 impl TermsUpToSize {
+    #[must_use]
     pub fn new(limit: usize) -> Self {
         Self { limit }
     }
