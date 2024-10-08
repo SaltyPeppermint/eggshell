@@ -1,5 +1,7 @@
-mod term_weighted;
-mod uniform;
+mod cost;
+mod term_count;
+
+use std::fmt::Debug;
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
@@ -7,12 +9,15 @@ use rand::{rngs::StdRng, seq::IteratorRandom};
 
 use super::{choices::ChoiceList, SampleConf};
 
-pub use uniform::Uniform;
+pub use cost::CostWeighted;
+pub use term_count::TermCountLutWeighted;
+pub use term_count::TermCountWeighted;
 
-pub trait Strategy<'a, L, N>
+pub trait Strategy<'a, L, N>: Debug
 where
-    L: Language + 'a,
-    N: Analysis<L> + 'a,
+    L: Language + Debug + 'a,
+    N: Analysis<L> + Debug + 'a,
+    N::Data: Debug,
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>) -> &'c L;
 

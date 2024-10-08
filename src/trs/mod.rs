@@ -25,11 +25,12 @@ pub use simple::Simple;
 /// a [`Analysis`] (can be a simplie as `()`) and one or more `Rulesets` to choose from.
 /// The [`Trs::rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
-pub trait Trs: Serialize {
-    type Language: Display + Serialize + FromOp + SymbolIter; //Typeable<Type: Type> +
+pub trait Trs: Serialize + Debug {
+    type Language: Display + Serialize + FromOp + SymbolIter + Debug; //Typeable<Type: Type> +
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug>
         + Clone
         + Serialize
+        + Debug
         + Default;
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;

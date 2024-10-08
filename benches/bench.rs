@@ -57,7 +57,7 @@ fn sampling(c: &mut Criterion) {
 
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
     let mut strategy =
-        strategy::Uniform::new(&mut rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        strategy::CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
 
     c.bench_function("sample simple", |b| {
         b.iter(|| strategy.sample(&sample_conf))

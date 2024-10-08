@@ -174,8 +174,12 @@ fn gen_data<R: Trs>(
                     .with_conf(eqsat_conf.clone())
                     .run(rules);
 
-                let strategy =
-                    strategy::Uniform::new(rng, eqsat.egraph(), AstSize, sample_conf.loop_limit);
+                let strategy = strategy::CostWeighted::new(
+                    eqsat.egraph(),
+                    AstSize,
+                    rng,
+                    sample_conf.loop_limit,
+                );
                 let samples = gen_samples(cli, &eqsat, sample_conf, strategy);
                 let eclass_data = gen_associated_data(samples, cli, eqsat, rules, rng);
                 let truth_value = match expr.truth_value.as_str() {
