@@ -5,6 +5,8 @@ use hashbrown::HashMap;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
+use crate::sampling::SampleError;
+
 use super::Strategy;
 
 #[derive(Debug)]
@@ -96,6 +98,10 @@ where
         pick
     }
 
+    fn extractable(&self, _id: Id) -> Result<(), SampleError> {
+        Ok(())
+    }
+
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
@@ -161,7 +167,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(12usize, n_samples);
@@ -182,7 +188,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample(&sample_conf).unwrap();
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
@@ -213,7 +219,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
@@ -235,7 +241,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 

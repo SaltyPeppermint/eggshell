@@ -55,9 +55,9 @@ where
             // the possible new combinations.
             // If we have reached the bottom, we add (or init) the count to entry corresponding to the current
             // the recursion depth (which is the size)
-            if let Some((head, rest)) = remaining.split_first() {
+            if let Some((head, tail)) = remaining.split_first() {
                 for (s, c) in *head {
-                    rec(rest, size + s, count * c, counts, limit);
+                    rec(tail, size + s, count * c, counts, limit);
                 }
             } else {
                 counts
@@ -77,6 +77,7 @@ where
             .map(|c_id| analysis_of(*c_id))
             .collect::<Vec<_>>();
         let mut counts = HashMap::new();
+
         rec(&children_counts, 1, 1, &mut counts, self.limit);
         counts
     }

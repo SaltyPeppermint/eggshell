@@ -3,11 +3,12 @@ use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 use chrono::Local;
-use clap::{Parser, Subcommand};
+use clap::error::ErrorKind;
+use clap::{Error, Parser, Subcommand};
 use egg::{AstSize, EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashMap;
 use indicatif::ProgressBar;
@@ -21,8 +22,7 @@ use uuid::Uuid;
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
 use eggshell::io::reader;
 use eggshell::io::structs::Expression;
-use eggshell::sampling::strategy;
-use eggshell::sampling::strategy::Strategy;
+use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
 use eggshell::sampling::{SampleConf, SampleConfBuilder};
 use eggshell::trs::{Halide, Trs};
 
@@ -50,7 +50,7 @@ fn main() {
     };
     let eqsat_conf = EqsatConfBuilder::new()
         .explanation(cli.explanations)
-        .time_limit(Duration::from_secs_f64(0.5))
+        .iter_limit(5)
         .build();
 
     let now = Local::now();
@@ -67,6 +67,7 @@ fn main() {
         uuid,
         &folder,
         now.timestamp(),
+        cli.strategy,
         &sample_conf,
         &eqsat_conf,
         &cli,
@@ -76,6 +77,7 @@ fn main() {
         exprs,
         &eqsat_conf,
         &sample_conf,
+        &cli.strategy,
         &folder,
         rules.as_slice(),
         &cli,
@@ -104,6 +106,10 @@ struct Cli {
     #[arg(short = 'c', long, default_value_t = 8)]
     eclass_samples: usize,
 
+    /// Sampling strategy
+    #[arg(short = 's', long, default_value_t = SampleStrategy::TermSizeCount)]
+    strategy: SampleStrategy,
+
     /// Calculate and save explanations
     #[arg(short = 'x', long, default_value_t = false)]
     explanations: bool,
@@ -116,7 +122,34 @@ struct Cli {
     sample_mode: SampleMode,
 }
 
-#[derive(Subcommand, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+enum SampleStrategy {
+    TermSizeCount,
+    CostWeighted,
+}
+
+impl Display for SampleStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SampleStrategy::TermSizeCount => write!(f, "TermSizeCount"),
+            SampleStrategy::CostWeighted => write!(f, "CostWeighted"),
+        }
+    }
+}
+
+impl FromStr for SampleStrategy {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().replace("_", "").as_str() {
+            "termsizecount" => Ok(Self::TermSizeCount),
+            "costweighted" => Ok(Self::CostWeighted),
+            _ => Err(Error::new(ErrorKind::InvalidValue)),
+        }
+    }
+}
+
+#[derive(Subcommand, Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
 enum SampleMode {
     Full {
         /// Number of samples to take for each EGraph
@@ -130,6 +163,7 @@ fn write_metadata(
     uuid: Uuid,
     folder: &str,
     timestamp: i64,
+    strategy: SampleStrategy,
     sample_conf: &SampleConf,
     eqsat_conf: &EqsatConf,
     cli: &Cli,
@@ -140,6 +174,7 @@ fn write_metadata(
         folder: folder.to_owned(),
         cli: cli.to_owned(),
         timestamp,
+        strategy,
         sample_conf: sample_conf.clone(),
         eqsat_conf: eqsat_conf.clone(),
     };
@@ -153,6 +188,7 @@ struct MetaData {
     folder: String,
     cli: Cli,
     timestamp: i64,
+    strategy: SampleStrategy,
     sample_conf: SampleConf,
     eqsat_conf: EqsatConf,
 }
@@ -161,6 +197,7 @@ fn gen_data<R: Trs>(
     exprs: Vec<Expression>,
     eqsat_conf: &EqsatConf,
     sample_conf: &SampleConf,
+    strategy: &SampleStrategy,
     folder: &str,
     rules: &[Rewrite<R::Language, R::Analysis>],
     cli: &Cli,
@@ -180,15 +217,24 @@ fn gen_data<R: Trs>(
                 let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
                     .with_conf(eqsat_conf.clone())
                     .run(rules);
+                let egraph = eqsat.egraph();
+                assert!(egraph.clean);
 
-                let strategy = strategy::CostWeighted::new(
-                    eqsat.egraph(),
-                    AstSize,
-                    rng,
-                    sample_conf.loop_limit,
-                );
-                let samples = gen_samples(cli, &eqsat, sample_conf, strategy);
-                let eclass_data = gen_associated_data(samples, cli, eqsat, rules, rng);
+                let eclass_data = match strategy {
+                    SampleStrategy::TermSizeCount => {
+                        let min_size = seed_expr.as_ref().len();
+                        println!("{min_size}");
+                        let strategy = TermCountWeighted::new(egraph, rng, min_size + 3);
+                        let samples = gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
+                        gen_associated_data(samples, cli, eqsat, rules, rng)
+                    }
+                    SampleStrategy::CostWeighted => {
+                        let strategy =
+                            CostWeighted::new(egraph, AstSize, rng, sample_conf.loop_limit);
+                        let samples = gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
+                        gen_associated_data(samples, cli, eqsat, rules, rng)
+                    }
+                };
                 let truth_value = match expr.truth_value.as_str() {
                     "true" => true,
                     "false" => false,
@@ -216,7 +262,7 @@ fn gen_data<R: Trs>(
 }
 
 fn gen_samples<'a, R, S>(
-    cli: &Cli,
+    sample_mode: SampleMode,
     eqsat: &EqsatResult<R>,
     sample_conf: &SampleConf,
     mut strategy: S,
@@ -227,17 +273,17 @@ where
     R::Analysis: 'a,
     S: Strategy<'a, R::Language, R::Analysis>,
 {
-    let generated = match cli.sample_mode {
+    let generated = match sample_mode {
         SampleMode::Full { egraph_samples: _ } => {
             let root_id = *eqsat.roots().first().unwrap();
-            let root_samples = strategy.sample_root(sample_conf, root_id);
-            let mut random_samples = strategy.sample(sample_conf);
+            let root_samples = strategy.sample_eclass(sample_conf, root_id).unwrap();
+            let mut random_samples = strategy.sample(sample_conf).unwrap();
             random_samples.insert(root_id, root_samples);
             random_samples
         }
         SampleMode::JustRoot => {
             let root_id = *eqsat.roots().first().unwrap();
-            let root_samples = strategy.sample_root(sample_conf, root_id);
+            let root_samples = strategy.sample_eclass(sample_conf, root_id).unwrap();
             HashMap::from([(root_id, root_samples)])
         }
     }

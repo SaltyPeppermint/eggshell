@@ -7,6 +7,7 @@ use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 use rand::{rngs::StdRng, seq::IteratorRandom};
 
+use super::SampleError;
 use super::{choices::ChoiceList, SampleConf};
 
 pub use cost::CostWeighted;
@@ -27,9 +28,28 @@ where
 
     fn rng_mut(&mut self) -> &mut StdRng;
 
-    fn sample_term(&mut self, root_eclass: &EClass<L, N::Data>) -> RecExpr<L> {
+    /// .
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if .
+    fn extractable(&self, id: Id) -> Result<(), SampleError>;
+
+    /// .
+    ///
+    /// # Panics
+    ///
+    /// Panics if .
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if .
+    fn sample_term(&mut self, root_eclass: &EClass<L, N::Data>) -> Result<RecExpr<L>, SampleError> {
         let egraph = self.egraph();
+
         let canonical_root_id = egraph.find(root_eclass.id);
+        self.extractable(canonical_root_id)?;
+
         let choice_list = ChoiceList::from(canonical_root_id);
         let mut choices: ChoiceList<L> = choice_list;
         // let mut visited = HashSet::from([root_eclass.id]);
@@ -41,17 +61,44 @@ where
             choices.fill_next(pick);
         }
         self.start_new();
-        choices.try_into().expect("No open choices should be left")
+        let expr = choices.try_into().expect("No open choices should be left");
+        Ok(expr)
     }
 
-    fn sample_root(&mut self, conf: &SampleConf, root: Id) -> HashSet<RecExpr<L>> {
+    /// .
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the precondition for a successful sampling of the eclass are not fullfilled.
+    fn sample_eclass(
+        &mut self,
+        conf: &SampleConf,
+        root: Id,
+    ) -> Result<HashSet<RecExpr<L>>, SampleError> {
         let root_eclass = &self.egraph()[root];
         (0..conf.samples_per_eclass)
             .map(|_| self.sample_term(root_eclass))
             .collect()
     }
 
-    fn sample(&mut self, conf: &SampleConf) -> HashMap<Id, HashSet<RecExpr<L>>> {
+    /// .
+    ///
+    /// # Panics
+    ///
+    /// Panics if .
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if .
+    fn sample(
+        &mut self,
+        conf: &SampleConf,
+    ) -> Result<HashMap<Id, HashSet<RecExpr<L>>>, SampleError> {
+        // if v.is_empty() {
+        //     println!("{:?}", &egraph[k]);
+        //     println!("\n{k:?}: {v:?}");
+        //     panic!("Limit too small! Some eclasses contain only larger terms.")
+        // }
         self.egraph()
             .classes()
             .choose_multiple(self.rng_mut(), conf.samples_per_egraph)
@@ -59,8 +106,9 @@ where
             .map(|eclass| {
                 let exprs = (0..conf.samples_per_eclass)
                     .map(|_| self.sample_term(eclass))
-                    .collect();
-                (eclass.id, exprs)
+                    .collect::<Result<_, _>>()?;
+
+                Ok((eclass.id, exprs))
             })
             .collect()
     }

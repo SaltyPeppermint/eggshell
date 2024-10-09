@@ -6,6 +6,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, TermsUpToSize};
+use crate::sampling::SampleError;
 
 use super::Strategy;
 
@@ -18,6 +19,7 @@ where
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
     flattened_data: HashMap<Id, usize>,
+    limit: usize,
 }
 
 impl<'a, 'b, L, N> TermCountWeighted<'a, 'b, L, N>
@@ -43,20 +45,14 @@ where
 
         let flattened_data = data
             .into_iter()
-            .map(|(k, v)| {
-                let v_new = v.into_values().sum::<usize>();
-                assert_ne!(
-                    v_new, 0,
-                    "Limit too small! Some eclasses contain only larger terms."
-                );
-                (k, v_new)
-            })
+            .map(|(k, v)| (k, v.values().sum::<usize>()))
             .collect();
 
         TermCountWeighted {
             egraph,
             rng,
             flattened_data,
+            limit,
         }
     }
 
@@ -83,6 +79,14 @@ where
                     .sum::<usize>()
             })
             .unwrap()
+    }
+
+    fn extractable(&self, id: Id) -> Result<(), SampleError> {
+        if self.flattened_data[&id] == 0 {
+            Err(SampleError::LimitError(self.limit))
+        } else {
+            Ok(())
+        }
     }
 
     fn start_new(&mut self) {}
@@ -138,10 +142,6 @@ where
         TermsUpToSize::new(*max_term_size).one_shot_analysis(egraph, &mut data);
         // Filter out data with uninteresting term sizes
         for class_data in data.values_mut() {
-            assert!(
-                !class_data.is_empty(),
-                "For some eclasses, the analysis gave no terms due to too low of a limit!"
-            );
             class_data.retain(|k, _| interesting_sizes.contains_key(k));
         }
 
@@ -184,6 +184,16 @@ where
     }
 
     fn start_new(&mut self) {}
+
+    fn extractable(&self, id: Id) -> Result<(), SampleError> {
+        if self.data[&id].is_empty() {
+            Err(SampleError::LimitError(
+                *self.interesting_sizes.keys().max().unwrap_or(&0),
+            ))
+        } else {
+            Ok(())
+        }
+    }
 
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
@@ -232,7 +242,7 @@ mod tests {
     fn simple_sample_lut() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
+        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
         let rules = Simple::full_rules();
@@ -244,93 +254,98 @@ mod tests {
         let mut strategy = TermCountLutWeighted::new(
             eqsat.egraph(),
             &mut rng,
-            HashMap::from([(15, 1), (16, 2), (17, 1)]),
+            HashMap::from([(1, 1), (2, 2), (17, 1)]),
         );
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(19usize, n_samples);
+        assert_eq!(13usize, n_samples);
     }
 
     #[test]
     fn simple_sample() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
+        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConfBuilder::new().build();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 5);
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(16usize, n_samples);
+        assert_eq!(8usize, samples.len());
     }
 
     #[test]
     fn halide_sample() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
+        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 32);
 
-        let samples = strategy.sample(&sample_conf);
+        let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-
-        assert_eq!(155usize, n_samples);
+        assert_eq!(10usize, samples.len());
     }
 
     #[test]
-    #[should_panic(expected = "Limit too small! Some eclasses contain only larger terms.")]
     fn halide_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
         let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(2).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let _ = TermCountWeighted::new(eqsat.egraph(), &mut rng, 2);
+        let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 2);
+        assert_eq!(
+            Err(SampleError::LimitError(2)),
+            strategy.sample_eclass(&sample_conf, root_id)
+        );
     }
 
     #[test]
-    #[should_panic(
-        expected = "For some eclasses, the analysis gave no terms due to too low of a limit!"
-    )]
     fn halide_lut_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
         let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(2).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let _ = TermCountLutWeighted::new(
+        let mut strategy = TermCountLutWeighted::new(
             eqsat.egraph(),
             &mut rng,
             HashMap::from([(1, 1), (2, 2), (3, 1)]),
+        );
+        assert_eq!(
+            Err(SampleError::LimitError(3)),
+            strategy.sample_eclass(&sample_conf, root_id)
         );
     }
 }

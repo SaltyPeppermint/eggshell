@@ -1,4 +1,4 @@
-mod count_terms;
+mod term_count;
 
 use std::fmt::Debug;
 
@@ -7,7 +7,7 @@ use hashbrown::HashMap;
 
 use crate::utils::UniqueQueue;
 
-pub use count_terms::TermsUpToSize;
+pub use term_count::TermsUpToSize;
 
 pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
     type Data: PartialEq + Debug;
@@ -71,9 +71,7 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
                         data.insert(eclass.id, computed_data);
                     }
                 } else {
-                    // assert!(eclass.nodes.is_empty());
-                    // FIXME
-                    // OK WHY DO I NEED TO COMMENT OUT THE EMPTY CHECK
+                    assert!(!eclass.nodes.is_empty());
                     analysis_pending.insert(canonical_id);
                 }
             }

@@ -13,12 +13,14 @@ use crate::eqsat::EqsatConf;
 
 pub use utils::{SampleConf, SampleConfBuilder};
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum SampleError {
     #[error("Batchsize impossible: {0}")]
     BatchSizeError(usize),
     #[error("Can't convert a non-finished list of choices")]
     ChoiceError,
+    #[error("Extraction not possible for this eclasses as the analysis gave no terms due to too low limit of {0}!")]
+    LimitError(usize),
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]

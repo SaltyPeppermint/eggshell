@@ -15,5 +15,8 @@
     },
     "files.watcherExclude": {
         "**/target": true
+    },
+    "rust-analyzer.runnables.extraEnv": {
+        "PYO3_PYTHON": "python3.12"
     }
 }
