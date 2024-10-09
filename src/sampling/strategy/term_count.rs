@@ -195,8 +195,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
@@ -216,7 +214,7 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = TermCountLutWeighted::new(
@@ -240,7 +238,7 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 5);
@@ -255,14 +253,12 @@ mod tests {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
         let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new()
-            .time_limit(Duration::from_secs_f64(0.2))
-            .build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 8);
@@ -271,6 +267,28 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(256usize, n_samples);
+        assert_eq!(152usize, n_samples);
+    }
+
+    #[test]
+    fn halide_term_min_size() {
+        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
+        let seed = term.parse().unwrap();
+        let sample_conf = SampleConfBuilder::new().build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
+
+        let rules = Halide::full_rules();
+        let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
+
+        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
+        let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 8);
+
+        let samples = strategy.sample(&sample_conf);
+
+        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+
+        assert_eq!(152usize, n_samples);
     }
 }

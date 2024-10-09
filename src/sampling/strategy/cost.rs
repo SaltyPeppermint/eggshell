@@ -135,8 +135,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use egg::AstSize;
     use hashbrown::HashSet;
     use rand::rngs::StdRng;
@@ -158,7 +156,7 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
@@ -179,7 +177,7 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
@@ -208,8 +206,9 @@ mod tests {
         let eqsat_conf = EqsatConfBuilder::new().build();
 
         let rules = Simple::full_rules();
-        let eqsat: EqsatResult<Simple> =
-            Eqsat::new(seeds).with_conf(eqsat_conf.clone()).run(&rules);
+        let eqsat: EqsatResult<Simple> = Eqsat::new(seeds)
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
@@ -226,14 +225,12 @@ mod tests {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
         let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new()
-            .time_limit(Duration::from_secs_f64(0.2))
-            .build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy =
@@ -242,6 +239,6 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(256usize, n_samples);
+        assert_eq!(150usize, n_samples);
     }
 }

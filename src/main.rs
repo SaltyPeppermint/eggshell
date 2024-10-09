@@ -72,7 +72,14 @@ fn main() {
         &cli,
     );
     let rules = Halide::full_rules();
-    gen_data::<Halide>(exprs, &eqsat_conf, &sample_conf, &folder, &rules, &cli);
+    gen_data::<Halide>(
+        exprs,
+        &eqsat_conf,
+        &sample_conf,
+        &folder,
+        rules.as_slice(),
+        &cli,
+    );
 }
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]

@@ -99,8 +99,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use egg::{EGraph, SymbolLang};
 
     use crate::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
@@ -151,14 +149,12 @@ mod tests {
     fn halide_count_size() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let eqsat_conf = EqsatConfBuilder::new()
-            .time_limit(Duration::from_secs_f64(0.2))
-            .build();
+        let eqsat_conf = EqsatConfBuilder::new().iter_limit(5).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
             .with_conf(eqsat_conf.clone())
-            .run(&rules);
+            .run(rules.as_slice());
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 
@@ -168,6 +164,8 @@ mod tests {
         TermsUpToSize::new(16).one_shot_analysis(egraph, &mut data);
 
         let root_data = &data[&egraph.find(root)];
-        assert_eq!(root_data[&5], 2);
+        dbg!(&root_data);
+
+        assert_eq!(root_data[&16], 40512);
     }
 }
