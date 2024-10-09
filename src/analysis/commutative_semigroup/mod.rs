@@ -87,6 +87,7 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
         for eclass in egraph.classes() {
             for enode in &eclass.nodes {
                 if enode.is_leaf() {
+                    debug_assert!(eclass.id == egraph.find(eclass.id));
                     analysis_pending.insert(eclass.id);
                 }
             }

@@ -367,8 +367,12 @@ mod tests {
         ];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat =
-            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
+            EqsatConfBuilder::new()
+                .iter_limit(3)
+                .explanation(true)
+                .build(),
+        );
         let _ = eqsat.run(&rules);
     }
 
@@ -379,8 +383,12 @@ mod tests {
             .unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat =
-            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
+            EqsatConfBuilder::new()
+                .iter_limit(3)
+                .explanation(true)
+                .build(),
+        );
         let _ = eqsat.run(&rules);
     }
 
@@ -390,8 +398,12 @@ mod tests {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat =
-            Eqsat::<Halide>::new(expr).with_conf(EqsatConfBuilder::new().explanation(true).build());
+        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
+            EqsatConfBuilder::new()
+                .iter_limit(3)
+                .explanation(true)
+                .build(),
+        );
         let _ = eqsat.run(&rules);
     }
 

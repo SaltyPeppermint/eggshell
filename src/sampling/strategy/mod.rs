@@ -29,7 +29,8 @@ where
 
     fn sample_term(&mut self, root_eclass: &EClass<L, N::Data>) -> RecExpr<L> {
         let egraph = self.egraph();
-        let choice_list = ChoiceList::from(root_eclass.id);
+        let canonical_root_id = egraph.find(root_eclass.id);
+        let choice_list = ChoiceList::from(canonical_root_id);
         let mut choices: ChoiceList<L> = choice_list;
         // let mut visited = HashSet::from([root_eclass.id]);
 

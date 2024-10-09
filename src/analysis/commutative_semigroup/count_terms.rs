@@ -164,7 +164,6 @@ mod tests {
         TermsUpToSize::new(16).one_shot_analysis(egraph, &mut data);
 
         let root_data = &data[&egraph.find(root)];
-        dbg!(&root_data);
 
         assert_eq!(root_data[&16], 40512);
     }

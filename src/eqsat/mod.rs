@@ -79,6 +79,7 @@ where
             .run(rules.iter());
 
         let report = runner.report();
+
         info!("{}", &report);
         EqsatResult {
             runner_args: self.runner_args.clone(),
@@ -147,6 +148,9 @@ where
         extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
     }
 
+    /// Returns the root `egg::Id`
+    ///
+    /// Warning: Those are not necessarily canonical!
     pub fn roots(&self) -> &[Id] {
         &self.roots
     }
