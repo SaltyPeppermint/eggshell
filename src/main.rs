@@ -223,7 +223,6 @@ fn gen_data<R: Trs>(
                 let eclass_data = match strategy {
                     SampleStrategy::TermSizeCount => {
                         let min_size = seed_expr.as_ref().len();
-                        println!("{min_size}");
                         let strategy = TermCountWeighted::new(egraph, rng, min_size + 3);
                         let samples = gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
                         gen_associated_data(samples, cli, eqsat, rules, rng)

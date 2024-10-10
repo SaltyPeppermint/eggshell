@@ -94,11 +94,6 @@ where
         &mut self,
         conf: &SampleConf,
     ) -> Result<HashMap<Id, HashSet<RecExpr<L>>>, SampleError> {
-        // if v.is_empty() {
-        //     println!("{:?}", &egraph[k]);
-        //     println!("\n{k:?}: {v:?}");
-        //     panic!("Limit too small! Some eclasses contain only larger terms.")
-        // }
         self.egraph()
             .classes()
             .choose_multiple(self.rng_mut(), conf.samples_per_egraph)

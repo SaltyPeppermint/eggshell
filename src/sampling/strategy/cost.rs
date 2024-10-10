@@ -76,8 +76,7 @@ where
                 .or_insert_with(|| calc_weights(eclass, &self.extractor));
 
             let urgency = (self.loop_count - self.loop_limit) as i32;
-            // println!("Urgency: {urgency}");
-            // println!("{raw_weights:?}");
+
             let pick = if urgency < 32 {
                 eclass
                     .nodes
@@ -194,7 +193,6 @@ mod tests {
         let mut stringified = HashSet::new();
         for (_, exprs) in &samples {
             for expr in exprs {
-                // println!("{}: {eclass_id}: {expr}", &sample.seed_exprs);
                 n_samples += 1;
                 stringified.insert(format!("{expr}"));
             }
