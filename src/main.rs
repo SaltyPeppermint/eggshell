@@ -52,7 +52,7 @@ fn main() {
         iter_limit: None,
         node_limit: cli.node_limit,
         time_limit: None,
-        explanation: cli.explanations,
+        explanation: cli.with_explanations,
     };
     if let Some(p) = cli.processes {
         ThreadPoolBuilder::new()
@@ -102,6 +102,10 @@ struct Cli {
     #[arg(long, default_value_t = 100)]
     n_terms: usize,
 
+    /// Number of terms from which to seed egraphs
+    #[arg(long, default_value_t = 50)]
+    saving_batchsize: usize,
+
     /// RNG Seed
     #[arg(long, default_value_t = 2024)]
     rng_seed: u64,
@@ -116,7 +120,7 @@ struct Cli {
 
     /// Calculate and save explanations
     #[arg(long, default_value_t = false)]
-    explanations: bool,
+    with_explanations: bool,
 
     /// Number of processes to run in parallel
     #[arg(long)]
@@ -128,7 +132,7 @@ struct Cli {
 
     /// Calculate and save n baselines
     #[arg(long)]
-    baseline: Option<usize>,
+    baselines: Option<usize>,
 
     #[command(subcommand)]
     sample_mode: SampleMode,
@@ -260,7 +264,7 @@ fn gen_data<R: Trs>(
                 });
                 bar.inc(1);
 
-                if sample_list.len() == 50 {
+                if sample_list.len() == cli.saving_batchsize {
                     let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
                     let mut f =
                         BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
@@ -314,13 +318,13 @@ fn gen_associated_data<R: Trs>(
     let eclass_data = generated
         .into_iter()
         .map(|(id, generated)| {
-            let explanations = if cli.explanations {
+            let explanations = if cli.with_explanations {
                 Some(gen_explanations::<R>(&generated, eqsat.egraph_mut()))
             } else {
                 None
             };
             let baselines = cli
-                .baseline
+                .baselines
                 .map(|n_samples| gen_baseline::<R>(&generated, rules, n_samples, rng));
             EClassData {
                 id,
