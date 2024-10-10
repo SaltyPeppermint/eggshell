@@ -15,11 +15,11 @@ use indicatif::ProgressBar;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use rayon::prelude::*;
+use rayon::{prelude::*, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use eggshell::eqsat::{Eqsat, EqsatConf, EqsatConfBuilder, EqsatResult};
+use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult};
 use eggshell::io::reader;
 use eggshell::io::structs::Expression;
 use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
@@ -48,10 +48,18 @@ fn main() {
             .build(),
         SampleMode::JustRoot => sample_conf_builder.build(),
     };
-    let eqsat_conf = EqsatConfBuilder::new()
-        .explanation(cli.explanations)
-        .iter_limit(5)
-        .build();
+    let eqsat_conf = EqsatConf {
+        iter_limit: None,
+        node_limit: cli.node_limit,
+        time_limit: None,
+        explanation: cli.explanations,
+    };
+    if let Some(p) = cli.processes {
+        ThreadPoolBuilder::new()
+            .num_threads(p)
+            .build_global()
+            .unwrap();
+    }
 
     let now = Local::now();
     let uuid = Uuid::new_v4();
@@ -87,35 +95,39 @@ fn main() {
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    #[arg(short, long)]
+    #[arg(long)]
     file: PathBuf,
 
-    /// Sets a custom config file
-    #[arg(short = 'b', long, default_value_t = 50)]
-    batchsize: usize,
-
     /// Number of terms from which to seed egraphs
-    #[arg(short = 'n', long, default_value_t = 100)]
+    #[arg(long, default_value_t = 100)]
     n_terms: usize,
 
     /// RNG Seed
-    #[arg(short = 'r', long, default_value_t = 2024)]
+    #[arg(long, default_value_t = 2024)]
     rng_seed: u64,
 
     /// Number of samples to take per EClass
-    #[arg(short = 'c', long, default_value_t = 8)]
+    #[arg(long, default_value_t = 8)]
     eclass_samples: usize,
 
     /// Sampling strategy
-    #[arg(short = 's', long, default_value_t = SampleStrategy::TermSizeCount)]
+    #[arg(long, default_value_t = SampleStrategy::TermSizeCount)]
     strategy: SampleStrategy,
 
     /// Calculate and save explanations
-    #[arg(short = 'x', long, default_value_t = false)]
+    #[arg(long, default_value_t = false)]
     explanations: bool,
 
+    /// Number of processes to run in parallel
+    #[arg(long)]
+    processes: Option<usize>,
+
+    /// Node limit for egraph
+    #[arg(long)]
+    node_limit: Option<usize>,
+
     /// Calculate and save n baselines
-    #[arg(short = 'l', long)]
+    #[arg(long)]
     baseline: Option<usize>,
 
     #[command(subcommand)]
@@ -248,7 +260,7 @@ fn gen_data<R: Trs>(
                 });
                 bar.inc(1);
 
-                if sample_list.len() == cli.batchsize {
+                if sample_list.len() == 50 {
                     let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
                     let mut f =
                         BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
