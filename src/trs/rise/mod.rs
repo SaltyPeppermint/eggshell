@@ -64,7 +64,7 @@ impl Analysis<RiseLang> for RiseAnalysis {
         DidMerge(did_change, true) // TODO: more precise second bool
     }
 
-    fn make(egraph: &EGraph, enode: &RiseLang) -> Data {
+    fn make(egraph: &mut EGraph, enode: &RiseLang) -> Data {
         let extend = |free: &mut HashSet<Id>, i: &Id| {
             free.extend(&egraph[*i].data.free);
         };

@@ -24,9 +24,10 @@ where
 
 impl<'a, 'b, L, N> TermCountWeighted<'a, 'b, L, N>
 where
-    L: Language + Debug + Send + Sync,
-    N: Analysis<L> + Debug + Send + Sync,
-    N::Data: Send + Sync,
+    L: Language + Debug + Sync,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -115,9 +116,10 @@ where
 
 impl<'a, 'b, L, N> TermCountLutWeighted<'a, 'b, L, N>
 where
-    L: Language + Send + Sync,
-    N: Analysis<L> + Send + Sync,
-    N::Data: Send + Sync,
+    L: Language + Debug + Sync,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Debug + Sync,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -234,8 +236,8 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
-    use crate::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
-    use crate::sampling::SampleConfBuilder;
+    use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
+    use crate::sampling::SampleConf;
     use crate::trs::{Halide, Simple, Trs};
 
     use super::*;
@@ -244,8 +246,8 @@ mod tests {
     fn simple_sample_lut() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConfBuilder::new().build();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
@@ -268,8 +270,8 @@ mod tests {
     fn simple_sample() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConfBuilder::new().build();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
@@ -288,8 +290,8 @@ mod tests {
     fn halide_sample() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
@@ -309,8 +311,8 @@ mod tests {
     fn halide_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(2).build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
@@ -330,8 +332,8 @@ mod tests {
     fn halide_lut_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(2).build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])

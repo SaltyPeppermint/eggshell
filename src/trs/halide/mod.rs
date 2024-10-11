@@ -169,7 +169,7 @@ impl Analysis<HalideExpr> for ConstantFold {
         }
     }
 
-    fn make(egraph: &EGraph, enode: &HalideExpr) -> Self::Data {
+    fn make(egraph: &mut EGraph, enode: &HalideExpr) -> Self::Data {
         let xi = |i: &Id| egraph[*i].data.map(|d| i64::try_from(d).unwrap());
         let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
         // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());
@@ -329,7 +329,7 @@ impl Trs for Halide {
 mod tests {
     use egg::{AstSize, RecExpr};
 
-    use crate::eqsat::{Eqsat, EqsatConfBuilder};
+    use crate::eqsat::{Eqsat, EqsatConf};
     use crate::typing::typecheck_expr;
 
     use super::*;
@@ -367,12 +367,8 @@ mod tests {
         ];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
-            EqsatConfBuilder::new()
-                .iter_limit(3)
-                .with_explanation()
-                .build(),
-        );
+        let eqsat = Eqsat::<Halide>::new(expr)
+            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
         let _ = eqsat.run(&rules);
     }
 
@@ -383,12 +379,8 @@ mod tests {
             .unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
-            EqsatConfBuilder::new()
-                .iter_limit(3)
-                .with_explanation()
-                .build(),
-        );
+        let eqsat = Eqsat::<Halide>::new(expr)
+            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
         let _ = eqsat.run(&rules);
     }
 
@@ -398,12 +390,8 @@ mod tests {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
 
-        let eqsat = Eqsat::<Halide>::new(expr).with_conf(
-            EqsatConfBuilder::new()
-                .iter_limit(3)
-                .with_explanation()
-                .build(),
-        );
+        let eqsat = Eqsat::<Halide>::new(expr)
+            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
         let _ = eqsat.run(&rules);
     }
 

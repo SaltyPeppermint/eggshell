@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use bon::Builder;
 use egg::{Analysis, Language, RecExpr, Runner, SimpleScheduler};
 use hashbrown::HashSet;
 use log::{info, warn};
@@ -9,13 +10,16 @@ use serde::{Deserialize, Serialize};
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[expect(clippy::unsafe_derive_deserialize)]
 #[pyclass(frozen)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq, Builder, Default)]
 pub struct EqsatConf {
     pub iter_limit: Option<usize>,
     pub node_limit: Option<usize>,
     pub time_limit: Option<Duration>,
+    #[builder(default = false)]
     pub explanation: bool,
+    #[builder(default = false)]
     pub root_check: bool,
+    #[builder(default = false)]
     pub memory_log: bool,
 }
 
@@ -40,90 +44,6 @@ impl EqsatConf {
             root_check,
             memory_log,
         }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct EqsatConfBuilder {
-    pub iter_limit: Option<usize>,
-    pub node_limit: Option<usize>,
-    pub time_limit: Option<Duration>,
-    pub explanation: bool,
-    pub root_check: bool,
-    pub memory_log: bool,
-}
-
-impl EqsatConfBuilder {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            iter_limit: None,
-            node_limit: None,
-            time_limit: None,
-            explanation: false,
-            root_check: false,
-            memory_log: false,
-        }
-    }
-
-    #[must_use]
-    pub fn iter_limit(mut self, iter: usize) -> Self {
-        self.iter_limit = Some(iter);
-        self
-    }
-
-    #[must_use]
-    pub fn node_limit(mut self, nodes: usize) -> Self {
-        self.node_limit = Some(nodes);
-        self
-    }
-
-    #[must_use]
-    pub fn time_limit(mut self, time: Duration) -> Self {
-        self.time_limit = Some(time);
-        self
-    }
-
-    #[must_use]
-    pub fn without_time_limit(mut self) -> Self {
-        self.time_limit = None;
-        self
-    }
-
-    #[must_use]
-    pub fn with_explanation(mut self) -> Self {
-        self.explanation = true;
-        self
-    }
-
-    #[must_use]
-    pub fn with_root_check(mut self) -> Self {
-        self.root_check = true;
-        self
-    }
-
-    #[must_use]
-    pub fn with_memory_log(mut self) -> Self {
-        self.root_check = true;
-        self
-    }
-
-    #[must_use]
-    pub fn build(self) -> EqsatConf {
-        EqsatConf {
-            iter_limit: self.iter_limit,
-            node_limit: self.node_limit,
-            time_limit: self.time_limit,
-            explanation: self.explanation,
-            root_check: self.root_check,
-            memory_log: self.memory_log,
-        }
-    }
-}
-
-impl Default for EqsatConfBuilder {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

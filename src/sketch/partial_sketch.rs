@@ -2,6 +2,7 @@
 // Thank you very much for that!
 
 use std::fmt::{self, Display, Formatter};
+use std::mem::Discriminant;
 
 use egg::{Id, Language, RecExpr};
 use serde::Serialize;
@@ -24,6 +25,19 @@ pub enum PartialSketchNode<L: Language> {
 }
 
 impl<L: Language> Language for PartialSketchNode<L> {
+    type Discriminant = (Discriminant<Self>, Option<Discriminant<SketchNode<L>>>);
+
+    fn discriminant(&self) -> Self::Discriminant {
+        if let Self::Finished(l) = self {
+            (
+                std::mem::discriminant(self),
+                Some(std::mem::discriminant(l)),
+            )
+        } else {
+            (std::mem::discriminant(self), None)
+        }
+    }
+
     fn matches(&self, _other: &Self) -> bool {
         panic!("Comparing sketches to each other does not make sense!")
     }

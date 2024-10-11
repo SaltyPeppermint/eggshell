@@ -26,7 +26,14 @@ pub use simple::Simple;
 /// The [`Trs::rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
 pub trait Trs: Serialize + Debug {
-    type Language: Display + Serialize + FromOp + SymbolIter + Debug + Send + Sync; //Typeable<Type: Type> +
+    type Language: Language<Discriminant: Debug + Send + Sync>
+        + Display
+        + Serialize
+        + FromOp
+        + SymbolIter
+        + Debug
+        + Send
+        + Sync; //Typeable<Type: Type> +
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug + Send + Sync>
         + Clone
         + Serialize

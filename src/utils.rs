@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use egg::{Id, Language, RecExpr};
+use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 
 /// A data structure to maintain a queue of unique elements.
@@ -144,4 +144,22 @@ impl<L: Language> Default for ExprHashCons<L> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+pub(crate) fn old_parents_iter<'a, L, N>(
+    eclass: &'a EClass<L, N::Data>,
+    egraph: &'a EGraph<L, N>,
+) -> impl Iterator<Item = (&'a L, Id)>
+where
+    L: Language,
+    N: Analysis<L>,
+{
+    let parents_tuples = eclass.parents().flat_map(move |id| {
+        egraph[id]
+            .nodes
+            .iter()
+            .filter(move |n| n.children().contains(&id))
+            .map(move |n| (n, id))
+    });
+    parents_tuples
 }
