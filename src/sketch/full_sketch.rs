@@ -39,17 +39,10 @@ pub enum SketchNode<L: Language> {
 }
 
 impl<L: Language> Language for SketchNode<L> {
-    type Discriminant = (Discriminant<Self>, Option<Discriminant<L>>);
+    type Discriminant = Discriminant<Self>;
 
     fn discriminant(&self) -> Self::Discriminant {
-        if let Self::Node(l) = self {
-            (
-                std::mem::discriminant(self),
-                Some(std::mem::discriminant(l)),
-            )
-        } else {
-            (std::mem::discriminant(self), None)
-        }
+        panic!("Comparing sketches to each other does not make sense!")
     }
 
     fn matches(&self, _other: &Self) -> bool {
