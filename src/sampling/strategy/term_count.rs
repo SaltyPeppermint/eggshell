@@ -24,8 +24,9 @@ where
 
 impl<'a, 'b, L, N> TermCountWeighted<'a, 'b, L, N>
 where
-    L: Language + Debug,
-    N: Analysis<L> + Debug,
+    L: Language + Debug + Send + Sync,
+    N: Analysis<L> + Debug + Send + Sync,
+    N::Data: Send + Sync,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -114,8 +115,9 @@ where
 
 impl<'a, 'b, L, N> TermCountLutWeighted<'a, 'b, L, N>
 where
-    L: Language,
-    N: Analysis<L>,
+    L: Language + Send + Sync,
+    N: Analysis<L> + Send + Sync,
+    N::Data: Send + Sync,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///

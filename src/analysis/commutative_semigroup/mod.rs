@@ -4,16 +4,19 @@ use std::fmt::Debug;
 
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
+use rayon::prelude::*;
 
 use crate::utils::UniqueQueue;
 
 pub use term_count::TermsUpToSize;
 
-pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
-    type Data: PartialEq + Debug;
+pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>:
+    Sized + Debug + Sync + Send
+{
+    type Data: PartialEq + Debug + Sync + Send;
 
     fn make<'a>(
-        &mut self,
+        &self,
         egraph: &EGraph<L, N>,
         enode: &L,
         analysis_of: &impl Fn(Id) -> &'a Self::Data,
@@ -22,18 +25,24 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
         Self::Data: 'a,
         Self: 'a;
 
-    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
+    fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
-    fn one_shot_analysis(&mut self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>) {
+    fn one_shot_analysis(&self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>)
+    where
+        L: Language + Send + Sync,
+        N: Analysis<L> + Sync,
+        N::Data: Sync,
+    {
         fn resolve_pending_analysis<L, N, B>(
             egraph: &EGraph<L, N>,
-            analysis: &mut B,
+            analysis: &B,
             data: &mut HashMap<Id, B::Data>,
             analysis_pending: &mut UniqueQueue<Id>,
         ) where
-            L: Language,
-            N: Analysis<L>,
-            B: CommutativeSemigroupAnalysis<L, N>,
+            L: Language + Sync,
+            N: Analysis<L> + Sync,
+            N::Data: Sync,
+            B: CommutativeSemigroupAnalysis<L, N> + Sync,
             B::Data: PartialEq + Debug,
         {
             while let Some(id) = analysis_pending.pop() {
@@ -44,7 +53,8 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>: Sized + Deb
                 // Check if we can calculate the analysis for any enode
                 let available_data = eclass
                     .nodes
-                    .iter()
+                    .as_slice()
+                    .par_iter()
                     .filter_map(|n| {
                         let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
                         // If all the childs eclass_children have data, we can calculate it!

@@ -29,7 +29,7 @@ where
     type Data = HashMap<usize, usize>;
 
     fn make<'a>(
-        &mut self,
+        &self,
         _egraph: &EGraph<L, N>,
         enode: &L,
         analysis_of: &impl Fn(egg::Id) -> &'a Self::Data,
@@ -82,7 +82,7 @@ where
         counts
     }
 
-    fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
+    fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
         if b.is_empty() {
             return DidMerge(false, false);
         }

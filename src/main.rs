@@ -4,14 +4,14 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser, Subcommand};
 use egg::{AstSize, EGraph, Id, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashMap;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
+use log::info;
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -36,6 +36,8 @@ use eggshell::trs::{Halide, Trs};
 // const SEED_FILE: &str = "data/prefix/5k_dataset.csv";
 
 fn main() {
+    env_logger::init();
+
     let cli = Cli::parse();
 
     let exprs = reader::read_exprs_json(&cli.file, &[]);
@@ -53,13 +55,9 @@ fn main() {
         node_limit: cli.node_limit,
         time_limit: None,
         explanation: cli.with_explanations,
+        root_check: false,
+        memory_log: false,
     };
-    if let Some(p) = cli.processes {
-        ThreadPoolBuilder::new()
-            .num_threads(p)
-            .build_global()
-            .unwrap();
-    }
 
     let now = Local::now();
     let uuid = Uuid::new_v4();
@@ -123,8 +121,12 @@ struct Cli {
     with_explanations: bool,
 
     /// Number of processes to run in parallel
-    #[arg(long)]
-    processes: Option<usize>,
+    #[arg(long, default_value_t = 1)]
+    eqsat_processes: usize,
+
+    /// Number of processes to run in parallel
+    #[arg(long, default_value_t = 4)]
+    sample_processes: usize,
 
     /// Node limit for egraph
     #[arg(long)]
@@ -218,62 +220,104 @@ fn gen_data<R: Trs>(
     rules: &[Rewrite<R::Language, R::Analysis>],
     cli: &Cli,
 ) {
-    let file_id_ctr = AtomicUsize::new(0);
-    let bar = ProgressBar::new(exprs.len() as u64);
+    let bar = ProgressBar::with_draw_target(Some(exprs.len() as u64), ProgressDrawTarget::stdout());
 
-    exprs
-        .into_par_iter()
-        .take(cli.n_terms)
-        .enumerate()
-        .for_each_init(
-            || (Vec::new(), StdRng::seed_from_u64(sample_conf.rng_seed)),
-            |(sample_list, rng), (seed_id, expr)| {
+    let eqsat_pool = ThreadPoolBuilder::new()
+        .num_threads(cli.eqsat_processes)
+        .build()
+        .unwrap();
+
+    let sample_pool = ThreadPoolBuilder::new()
+        .num_threads(cli.sample_processes)
+        .build()
+        .unwrap();
+
+    eqsat_pool.install(|| {
+        for (file_id, chunk) in exprs
+            .into_iter()
+            .take(cli.n_terms)
+            .enumerate()
+            .collect::<Box<[_]>>()
+            .chunks(cli.saving_batchsize)
+            .enumerate()
+        {
+            let eqsat_buf = chunk.into_par_iter().map(|(seed_id, expr)| {
+                info!(
+                    "Running Eqsat {seed_id} with {} threads...",
+                    eqsat_pool.current_num_threads()
+                );
+
                 let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-
                 let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
                     .with_conf(eqsat_conf.clone())
                     .run(rules);
-                let egraph = eqsat.egraph();
-                assert!(egraph.clean);
+                assert!(eqsat.egraph().clean);
 
-                let eclass_data = match strategy {
-                    SampleStrategy::TermSizeCount => {
-                        let min_size = seed_expr.as_ref().len();
-                        let strategy = TermCountWeighted::new(egraph, rng, min_size + 3);
-                        let samples = gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
-                        gen_associated_data(samples, cli, eqsat, rules, rng)
-                    }
-                    SampleStrategy::CostWeighted => {
-                        let strategy =
-                            CostWeighted::new(egraph, AstSize, rng, sample_conf.loop_limit);
-                        let samples = gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
-                        gen_associated_data(samples, cli, eqsat, rules, rng)
-                    }
-                };
-                let truth_value = match expr.truth_value.as_str() {
-                    "true" => true,
-                    "false" => false,
-                    _ => panic!("Wrong truth_value"),
-                };
+                info!("Finished Eqsat {seed_id}!");
+                (eqsat, seed_id, seed_expr, expr)
+            });
+            let data_buf = sample_pool.install(|| {
+                eqsat_buf
+                    .into_par_iter()
+                    .map_init(
+                        || StdRng::seed_from_u64(sample_conf.rng_seed),
+                        |rng, (eqsat, seed_id, seed_expr, expr)| {
+                            info!(
+                                "Running Sampling {seed_id} with {} threads...",
+                                sample_pool.current_num_threads()
+                            );
 
-                sample_list.push(DataEntry {
-                    seed_id,
-                    seed_expr,
-                    eclass_data,
-                    truth_value,
-                });
-                bar.inc(1);
+                            let egraph = eqsat.egraph();
+                            let eclass_data = match strategy {
+                                SampleStrategy::TermSizeCount => {
+                                    let min_size = seed_expr.as_ref().len();
+                                    // let pool = ThreadPoolBuilder::new()
+                                    //     .num_threads(16)
+                                    //     .build()
+                                    //     .expect("Failed to init threadpool");
 
-                if sample_list.len() == cli.saving_batchsize {
-                    let file_id = file_id_ctr.fetch_add(1, Ordering::SeqCst);
-                    let mut f =
-                        BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
-                    serde_json::to_writer(&mut f, &sample_list).unwrap();
-                    f.flush().unwrap();
-                    sample_list.clear();
-                }
-            },
-        );
+                                    let strategy =
+                                        TermCountWeighted::new(egraph, rng, min_size + 3);
+                                    let samples =
+                                        gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
+                                    gen_associated_data(samples, cli, eqsat, rules, rng)
+                                }
+                                SampleStrategy::CostWeighted => {
+                                    let strategy = CostWeighted::new(
+                                        egraph,
+                                        AstSize,
+                                        rng,
+                                        sample_conf.loop_limit,
+                                    );
+                                    let samples =
+                                        gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
+                                    gen_associated_data(samples, cli, eqsat, rules, rng)
+                                }
+                            };
+                            let truth_value = match expr.truth_value.as_str() {
+                                "true" => true,
+                                "false" => false,
+                                _ => panic!("Wrong truth_value"),
+                            };
+
+                            bar.inc(1);
+                            info!("Finished Sampling {seed_id}!");
+
+                            DataEntry {
+                                seed_id: *seed_id,
+                                seed_expr,
+                                eclass_data,
+                                truth_value,
+                            }
+                        },
+                    )
+                    .collect::<Vec<_>>()
+            });
+            let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
+            serde_json::to_writer(&mut f, &data_buf).unwrap();
+            f.flush().unwrap();
+        }
+    });
 }
 
 fn gen_samples<'a, R, S>(

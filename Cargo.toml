@@ -20,10 +20,12 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
 egg = { version = "0.9", features = ["serde-1"] }
+env_logger = "0.11.5"
 hashbrown = { version = "0.14", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.17"
 log = "0.4"
+memory-stats = "1.2.0"
 numpy = "0.21"
 ordered-float = { version = "4", features = ["serde"] }
 petgraph = "0.6"

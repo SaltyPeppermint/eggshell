@@ -370,7 +370,7 @@ mod tests {
         let eqsat = Eqsat::<Halide>::new(expr).with_conf(
             EqsatConfBuilder::new()
                 .iter_limit(3)
-                .explanation(true)
+                .with_explanation()
                 .build(),
         );
         let _ = eqsat.run(&rules);
@@ -386,7 +386,7 @@ mod tests {
         let eqsat = Eqsat::<Halide>::new(expr).with_conf(
             EqsatConfBuilder::new()
                 .iter_limit(3)
-                .explanation(true)
+                .with_explanation()
                 .build(),
         );
         let _ = eqsat.run(&rules);
@@ -401,7 +401,7 @@ mod tests {
         let eqsat = Eqsat::<Halide>::new(expr).with_conf(
             EqsatConfBuilder::new()
                 .iter_limit(3)
-                .explanation(true)
+                .with_explanation()
                 .build(),
         );
         let _ = eqsat.run(&rules);

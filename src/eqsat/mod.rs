@@ -72,11 +72,9 @@ where
         // start_exprs: &[RecExpr<R::Language>],
         rules: &[Rewrite<R::Language, R::Analysis>],
     ) -> EqsatResult<R> {
-        // println!("====================================");
-        // println!("Running with Expression:");
+        info!("Running Eqsat with Expression: {:?}", self.start_exprs);
 
-        let runner = conf::build_runner(&self.runner_args, self.root_check, &self.start_exprs)
-            .run(rules.iter());
+        let runner = conf::build_runner(&self.runner_args, &self.start_exprs).run(rules.iter());
 
         let report = runner.report();
 
