@@ -25,17 +25,10 @@ pub enum PartialSketchNode<L: Language> {
 }
 
 impl<L: Language> Language for PartialSketchNode<L> {
-    type Discriminant = (Discriminant<Self>, Option<Discriminant<SketchNode<L>>>);
+    type Discriminant = Discriminant<Self>;
 
     fn discriminant(&self) -> Self::Discriminant {
-        if let Self::Finished(l) = self {
-            (
-                std::mem::discriminant(self),
-                Some(std::mem::discriminant(l)),
-            )
-        } else {
-            (std::mem::discriminant(self), None)
-        }
+        panic!("Comparing sketches to each other does not make sense!")
     }
 
     fn matches(&self, _other: &Self) -> bool {

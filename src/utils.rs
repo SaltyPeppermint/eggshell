@@ -154,12 +154,16 @@ where
     L: Language,
     N: Analysis<L>,
 {
-    let parents_tuples = eclass.parents().flat_map(move |id| {
+    let eclass_id = egraph.find(eclass.id);
+    eclass.parents().flat_map(move |id| {
         egraph[id]
             .nodes
             .iter()
-            .filter(move |n| n.children().contains(&id))
-            .map(move |n| (n, id))
-    });
-    parents_tuples
+            .filter(move |n| {
+                n.children()
+                    .iter()
+                    .any(|c_id| egraph.find(*c_id) == eclass_id)
+            })
+            .map(move |n| (n, egraph.find(id)))
+    })
 }

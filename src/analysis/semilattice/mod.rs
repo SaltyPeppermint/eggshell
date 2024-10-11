@@ -47,21 +47,15 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
                     let canonical_id = egraph.find(current_id);
                     let eclass = &egraph[canonical_id];
                     let node_data = analysis.make(egraph, &u_node, &|id| &data[&id]);
-                    let new_data = match data.remove(&canonical_id) {
-                        None => {
+                    if let Some(existing) = data.get_mut(&canonical_id) {
+                        let DidMerge(may_not_be_existing, _) = analysis.merge(existing, node_data);
+                        if may_not_be_existing {
                             analysis_pending.extend(old_parents_iter(eclass, egraph));
-                            node_data
                         }
-                        Some(mut existing) => {
-                            let DidMerge(may_not_be_existing, _) =
-                                analysis.merge(&mut existing, node_data);
-                            if may_not_be_existing {
-                                analysis_pending.extend(old_parents_iter(eclass, egraph));
-                            }
-                            existing
-                        }
+                    } else {
+                        analysis_pending.extend(old_parents_iter(eclass, egraph));
+                        data.insert(canonical_id, node_data);
                     };
-                    data.insert(canonical_id, new_data);
                 } else {
                     analysis_pending.insert((node, current_id));
                 }
@@ -69,6 +63,8 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
         }
 
         assert!(egraph.clean);
+
+        dbg!(&data);
 
         let mut analysis_pending = UniqueQueue::<(&L, Id)>::default();
 
@@ -80,15 +76,21 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
             }
         }
 
+        dbg!(&analysis_pending);
+
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
 
-        dbg!(&data);
         let class_ids = egraph.classes().map(|eclass| eclass.id).collect::<Vec<_>>();
         dbg!(&class_ids);
         for id in &class_ids {
+            dbg!(egraph.find(*id));
             dbg!(id);
+            assert!(*id == egraph.find(*id));
+
             assert!(data.contains_key(id));
         }
+        dbg!(&data);
+
         debug_assert!(egraph.classes().all(|eclass| data.contains_key(&eclass.id)));
     }
 }
