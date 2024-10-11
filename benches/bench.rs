@@ -5,10 +5,11 @@ use criterion::{criterion_group, criterion_main};
 use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
 
-use eggshell::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
+use eggshell::eqsat::EqsatConf;
+use eggshell::eqsat::{Eqsat, EqsatResult};
 use eggshell::sampling::strategy;
 use eggshell::sampling::strategy::Strategy;
-use eggshell::sampling::SampleConfBuilder;
+use eggshell::sampling::SampleConf;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
 use eggshell::trs::Simple;
@@ -27,9 +28,9 @@ fn extraction(c: &mut Criterion) {
     egraph.union(root_a, root_b);
     egraph.rebuild();
 
-    c.bench_function("default extract", |b| {
-        b.iter(|| extract::mutable::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
-    });
+    // c.bench_function("default extract", |b| {
+    //     b.iter(|| extract::mutable::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+    // });
     // c.bench_function("recursive for_each extract", |b| {
     //     b.iter(|| {
     //         extract::recursive::for_each_eclass_extract(
@@ -41,15 +42,15 @@ fn extraction(c: &mut Criterion) {
     //     })
     // });
     c.bench_function("recursive map extract", |b| {
-        b.iter(|| extract::recursive::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| extract::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
 }
 
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
     let seed: RecExpr<<Simple as Trs>::Language> = term.parse().unwrap();
-    let sample_conf = SampleConfBuilder::new().build();
-    let eqsat_conf = EqsatConfBuilder::new().build();
+    let sample_conf = SampleConf::builder().build();
+    let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
     let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
         .with_conf(eqsat_conf.clone())

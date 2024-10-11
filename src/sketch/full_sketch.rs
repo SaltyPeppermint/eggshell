@@ -1,4 +1,7 @@
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    mem::Discriminant,
+};
 
 use egg::{Id, Language, RecExpr};
 use serde::Serialize;
@@ -36,6 +39,19 @@ pub enum SketchNode<L: Language> {
 }
 
 impl<L: Language> Language for SketchNode<L> {
+    type Discriminant = (Discriminant<Self>, Option<Discriminant<L>>);
+
+    fn discriminant(&self) -> Self::Discriminant {
+        if let Self::Node(l) = self {
+            (
+                std::mem::discriminant(self),
+                Some(std::mem::discriminant(l)),
+            )
+        } else {
+            (std::mem::discriminant(self), None)
+        }
+    }
+
     fn matches(&self, _other: &Self) -> bool {
         panic!("Comparing sketches to each other does not make sense!")
     }

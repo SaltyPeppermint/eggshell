@@ -44,7 +44,7 @@ where
     #[must_use]
     pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
         Self {
-            runner_args: EqsatConfBuilder::default().build(),
+            runner_args: EqsatConf::default(),
             start_exprs,
             root_check: false,
         }
@@ -137,7 +137,7 @@ where
         CF: CostFunction<R::Language> + Debug,
         CF::Cost: Ord + Debug,
     {
-        extract::recursive::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
+        extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
     /// Extract

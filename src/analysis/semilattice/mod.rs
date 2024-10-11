@@ -7,9 +7,10 @@ use std::fmt::Debug;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
+use crate::utils::old_parents_iter;
 use crate::utils::UniqueQueue;
 
-pub use contains::{ExtractContainsAnalysis, SatisfiesContainsAnalysis};
+pub(crate) use contains::SatisfiesContainsAnalysis;
 pub use extract::ExtractAnalysis;
 
 pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
@@ -40,22 +41,22 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
             analysis_pending: &mut UniqueQueue<(&'a L, Id)>,
         ) {
             while let Some((node, current_id)) = analysis_pending.pop() {
-                let u_node = node.clone().map_children(|child_id| egraph.find(child_id)); // find_mut?
+                let u_node = node.clone().map_children(|child_id| egraph.find(child_id));
 
                 if u_node.all(|id| data.contains_key(&id)) {
-                    let canonical_id = egraph.find(current_id); // find_mut?
+                    let canonical_id = egraph.find(current_id);
                     let eclass = &egraph[canonical_id];
                     let node_data = analysis.make(egraph, &u_node, &|id| &data[&id]);
                     let new_data = match data.remove(&canonical_id) {
                         None => {
-                            analysis_pending.extend(eclass.parents());
+                            analysis_pending.extend(old_parents_iter(eclass, egraph));
                             node_data
                         }
                         Some(mut existing) => {
                             let DidMerge(may_not_be_existing, _) =
                                 analysis.merge(&mut existing, node_data);
                             if may_not_be_existing {
-                                analysis_pending.extend(eclass.parents());
+                                analysis_pending.extend(old_parents_iter(eclass, egraph));
                             }
                             existing
                         }
@@ -81,6 +82,13 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
 
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
 
+        dbg!(&data);
+        let class_ids = egraph.classes().map(|eclass| eclass.id).collect::<Vec<_>>();
+        dbg!(&class_ids);
+        for id in &class_ids {
+            dbg!(id);
+            assert!(data.contains_key(id));
+        }
         debug_assert!(egraph.classes().all(|eclass| data.contains_key(&eclass.id)));
     }
 }

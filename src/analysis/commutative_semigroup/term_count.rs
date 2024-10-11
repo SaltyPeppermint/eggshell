@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
 
@@ -22,8 +24,10 @@ impl TermsUpToSize {
 
 impl<L, N> CommutativeSemigroupAnalysis<L, N> for TermsUpToSize
 where
-    L: Language,
-    N: Analysis<L>,
+    L: Language + Debug + Sync,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Debug + Sync,
 {
     // Size and number of programs of that size
     type Data = HashMap<usize, usize>;
@@ -102,7 +106,7 @@ where
 mod tests {
     use egg::{EGraph, SymbolLang};
 
-    use crate::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
+    use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
     use crate::trs::{Halide, Trs};
 
     use super::*;
@@ -150,7 +154,7 @@ mod tests {
     fn halide_count_size() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(5).build();
+        let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])

@@ -1,0 +1,424 @@
+use std::fmt::Debug;
+use std::mem::Discriminant;
+
+use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
+use hashbrown::{HashMap, HashSet};
+
+use super::utils;
+use super::{Sketch, SketchNode};
+use crate::analysis::semilattice::{
+    ExtractAnalysis, SatisfiesContainsAnalysis, SemiLatticeAnalysis,
+};
+use crate::utils::ExprHashCons;
+
+/// Is the `id` e-class of `egraph` representing at least one program satisfying `s`?
+pub fn eclass_satisfies_sketch<L: Language, A: Analysis<L>>(
+    sketch: &Sketch<L>,
+    egraph: &EGraph<L, A>,
+    id: Id,
+) -> bool {
+    satisfies_sketch(sketch, egraph).contains(&id)
+}
+
+/// Returns the set of e-classes of `egraph` that represent at least one program satisfying `s`.
+/// # Panics
+/// Panics if the egraph isn't clean.
+/// Only give it clean egraphs!
+pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
+    sketch: &Sketch<L>,
+    egraph: &EGraph<L, A>,
+) -> HashSet<Id> {
+    fn rec<L: Language, A: Analysis<L>>(
+        sketch: &Sketch<L>,
+        sketch_id: Id,
+        egraph: &EGraph<L, A>,
+        classes_by_op: &HashMap<L::Discriminant, HashSet<Id>>,
+        memo: &mut HashMap<Id, HashSet<Id>>,
+    ) -> HashSet<Id> {
+        if let Some(value) = memo.get(&sketch_id) {
+            return value.clone();
+        };
+
+        let result = match &sketch[sketch_id] {
+            SketchNode::Any => egraph.classes().map(|eclass| eclass.id).collect(),
+            SketchNode::Node(node) => {
+                let children_matches = node
+                    .children()
+                    .iter()
+                    .map(|child_sketch_id| {
+                        rec(sketch, *child_sketch_id, egraph, classes_by_op, memo)
+                    })
+                    .collect::<Vec<_>>();
+
+                if let Some(potential_ids) = utils::classes_matching_op(node, classes_by_op) {
+                    potential_ids
+                        .iter()
+                        .copied()
+                        .filter(|&id| {
+                            let eclass = &egraph[id];
+
+                            let mnode = &node.clone().map_children(|_| Id::from(0));
+                            utils::for_each_matching_node(eclass, mnode, |matched| {
+                                let children_match = children_matches
+                                    .iter()
+                                    .zip(matched.children())
+                                    .all(|(matches, child_id)| matches.contains(child_id));
+                                if children_match {
+                                    Err(())
+                                } else {
+                                    Ok(())
+                                }
+                            })
+                            .is_err()
+                        })
+                        .collect()
+                } else {
+                    HashSet::default()
+                }
+            }
+            SketchNode::Contains(inner_sketch_id) => {
+                let contained_matched = rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo);
+
+                let mut data = egraph
+                    .classes()
+                    .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
+                    .collect::<HashMap<_, bool>>();
+
+                SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
+
+                data.iter()
+                    .filter_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
+                    .collect()
+            }
+            SketchNode::Or(inner_sketch_ids) => {
+                let matches = inner_sketch_ids.iter().map(|inner_sketch_id| {
+                    rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo)
+                });
+                matches
+                    .reduce(|a, b| a.union(&b).copied().collect())
+                    .expect("empty or sketch")
+            }
+        };
+
+        memo.insert(sketch_id, result.clone());
+        result
+    }
+
+    assert!(egraph.clean);
+    let mut memo = HashMap::<Id, HashSet<Id>>::default();
+    // let sketch_nodes = s.as_ref();
+    let sketch_root = Id::from(sketch.as_ref().len() - 1);
+    let classes_by_op = utils::new_classes_by_op(egraph);
+    rec(sketch, sketch_root, egraph, &classes_by_op, &mut memo)
+}
+
+/// More recursive, immutable version of `super::mutable::eclass_extract`.
+/// Also surprisingly faster.
+///
+/// # Panics
+///
+/// Panics if the egraph isn't clean.
+/// Only give it clean egraphs!
+#[expect(clippy::too_many_lines)]
+pub fn eclass_extract<L, N, CF>(
+    sketch: &Sketch<L>,
+    mut cost_fn: CF,
+    egraph: &EGraph<L, N>,
+    id: Id,
+) -> Option<(CF::Cost, RecExpr<L>)>
+where
+    L: Language,
+    N: Analysis<L>,
+    CF: CostFunction<L> + Debug,
+    CF::Cost: Ord,
+{
+    /// Recursion for `eclass_extract`
+    #[expect(
+        clippy::too_many_arguments,
+        clippy::type_complexity,
+        clippy::too_many_lines
+    )]
+    fn rec<L, N, CF>(
+        egraph_id: Id,
+        sketch: &Sketch<L>,
+        sketch_id: Id,
+        cost_fn: &mut CF,
+        egraph: &EGraph<L, N>,
+        exprs: &mut ExprHashCons<L>,
+        extracted: &HashMap<Id, (CF::Cost, Id)>,
+        memo: &mut HashMap<(Id, Id), Option<(CF::Cost, Id)>>,
+    ) -> Option<(CF::Cost, Id)>
+    where
+        L: Language,
+        N: Analysis<L>,
+        CF: CostFunction<L>,
+        CF::Cost: Ord,
+    {
+        if let Some(value) = memo.get(&(egraph_id, sketch_id)) {
+            return value.clone();
+        };
+
+        let result = match &sketch[sketch_id] {
+            // If the sketch says any, all the nodes in the eclass fulfill the sketch and
+            // are valide solutions.
+            SketchNode::Any => extracted.get(&egraph_id).cloned(),
+            // if we have a specific node in the sketch, we need to check if there is such
+            // a node in the current eclass under investigation and then check the children.
+            SketchNode::Node(node) => {
+                // Get the eclass we are currently checking
+                let eclass = &egraph[egraph_id];
+
+                // let mut candidates = Vec::new();
+                let mnode = &node.clone().map_children(|_| Id::from(0));
+                // We have a sketch (node) for this eclass and now we try to find
+                // all the nodes in the eclass that fullfill that sketch.
+                // We do this by checking the sketch for the current node (via the cloned mnode)
+                // and then recursively checking if the children of the matching node holds
+                // for the "sub-sketches" that are the children of the sketch_node
+                let candidates = utils::flat_map_matching_node(eclass, mnode, |matched| {
+                    let mut matches = Vec::new();
+                    // Check if for each child of the sketch_node (themselves sketches),
+                    // the matched nodes children also hold for these child-sketches
+                    for (child_sketch_id, child_id) in
+                        node.children().iter().zip(matched.children())
+                    {
+                        if let Some(m) = rec(
+                            *child_id,
+                            sketch,
+                            *child_sketch_id,
+                            cost_fn,
+                            egraph,
+                            exprs,
+                            extracted,
+                            memo,
+                        ) {
+                            matches.push(m);
+                        } else {
+                            break;
+                        }
+                    }
+                    // Only if for every child the sketch holds it makes sense to continue
+                    if matches.len() == matched.len() {
+                        // If all children match the sketch, they can be costed.
+                        let to_match: HashMap<_, _> =
+                            matched.children().iter().zip(matches.iter()).collect();
+                        // Returns the valid subtree and its cost
+                        Some((
+                            cost_fn.cost(matched, |c| to_match[&c].0.clone()),
+                            exprs.add(
+                                matched
+                                    .clone()
+                                    .map_children(|child_id| to_match[&child_id].1),
+                            ),
+                        ))
+                    } else {
+                        // Not all children hold, so this node does not fulfill the sketch
+                        // Return None
+                        None
+                    }
+                });
+
+                // We want to return the cheapest of the candidates valid
+                candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
+            }
+            SketchNode::Contains(inner_sketch_id) => {
+                // avoid cycles
+                // If we have visited the contains once, we do not need to
+                // visit it again as the cost in our setup only goes up
+                memo.insert((egraph_id, sketch_id), None);
+
+                // Get the current EClass
+                let eclass = &egraph[egraph_id];
+                // Check recursively if the inner sketch in the contains()
+                // is fulfilled by the current nodes in the eclass.
+                // This gives us a vector of maximum length eclass.nodes.len().
+                // Some may match, some dont but we can't stop here because the children
+                // of those who do or dont could match the inner sketch!
+                let mut candidates = rec(
+                    egraph_id,
+                    sketch,
+                    *inner_sketch_id,
+                    cost_fn,
+                    egraph,
+                    exprs,
+                    extracted,
+                    memo,
+                )
+                .into_iter()
+                .collect::<Vec<_>>();
+
+                // As previously stated we need to recursively iterate over the children in this eclass,
+                // since they could fulfill the inner_sketch, thereby making their parent_nodes
+                // fullfill the sketch, regardless if these parents directly fulfill the sketch.
+                for enode in &eclass.nodes {
+                    // For each enode in the eclass, check if the children fullfil the contains
+                    // sketch. Notice how we are passing the sketch_id, not the inner_sketch_id!
+                    let matching_children = enode
+                        .children()
+                        .iter()
+                        .filter_map(|&child_id| {
+                            rec(
+                                child_id, sketch, sketch_id, cost_fn, egraph, exprs, extracted,
+                                memo,
+                            )
+                            // Cost the successful children
+                            .map(|x| (child_id, x))
+                        })
+                        .collect::<Vec<_>>();
+                    // Collecting all the children, regardless if they fulfill the sketch
+                    // with their cost.
+                    // Remember, only one child has to fulfill sketch
+                    let children_any = enode
+                        .children()
+                        .iter()
+                        .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
+                        .collect::<Vec<_>>();
+
+                    // Iterating over all the matching children.
+                    // If any of them do, we can safely add the other children to the solution
+                    // since the loop wont run at all if there are zero matching children.
+                    // Put another way, if the outer loop ever runs the child_id==matching_id
+                    // has to be true for at least one
+                    for (matching_child_id, matching) in &matching_children {
+                        let to_selected = children_any
+                            .iter()
+                            .map(|(child_id, any)| {
+                                // True at least once otherwise the outer loop would have never run
+                                if child_id == matching_child_id {
+                                    (*child_id, matching)
+                                } else {
+                                    (*child_id, any)
+                                }
+                            })
+                            .collect::<HashMap<_, _>>();
+
+                        candidates.push((
+                            cost_fn.cost(enode, |c| to_selected[&c].0.clone()),
+                            exprs.add(enode.clone().map_children(|c| to_selected[&c].1)),
+                        ));
+                    }
+                }
+
+                candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
+            }
+            // Rather simple: We check if either the fst or snd of the or pair fulfills
+            // the sketch and we take the cheaper one
+            SketchNode::Or(inner_sketch_ids) => inner_sketch_ids
+                .iter()
+                .filter_map(|inner_sketch_id| {
+                    rec(
+                        egraph_id,
+                        sketch,
+                        *inner_sketch_id,
+                        cost_fn,
+                        egraph,
+                        exprs,
+                        extracted,
+                        memo,
+                    )
+                })
+                .min_by(|x, y| x.0.cmp(&y.0)),
+        };
+
+        // cache the result
+        memo.insert((egraph_id, sketch_id), result.clone());
+        result
+    }
+
+    assert!(egraph.clean);
+    let mut memo = HashMap::<(Id, Id), Option<(CF::Cost, Id)>>::default();
+    let sketch_root = Id::from(sketch.as_ref().len() - 1);
+    let mut exprs = ExprHashCons::new();
+
+    let mut extracted = HashMap::default();
+    let mut analysis = ExtractAnalysis::new(&mut exprs, &mut cost_fn);
+    analysis.one_shot_analysis(egraph, &mut extracted);
+
+    let best_option = rec(
+        id,
+        sketch,
+        sketch_root,
+        &mut cost_fn,
+        egraph,
+        &mut exprs,
+        &extracted,
+        &mut memo,
+    );
+
+    best_option.map(|(best_cost, best_id)| (best_cost, exprs.extract(best_id)))
+}
+
+#[cfg(test)]
+mod tests {
+    use egg::{AstSize, RecExpr, SymbolLang};
+
+    use super::*;
+
+    #[test]
+    fn simple_contains() {
+        let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
+
+        let a_expr = "(g (f (v x)))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let b_expr = "(h (g (f (u x))))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let c_expr = "(h (g x))".parse::<RecExpr<SymbolLang>>().unwrap();
+
+        let mut egraph = EGraph::<SymbolLang, ()>::default();
+        let a = egraph.add_expr(&a_expr);
+        let b = egraph.add_expr(&b_expr);
+        let c = egraph.add_expr(&c_expr);
+
+        egraph.rebuild();
+        dbg!(&egraph.classes().map(|c| c.id).collect::<Vec<_>>());
+
+        let sat = satisfies_sketch(&sketch, &egraph);
+        assert_eq!(sat.len(), 5);
+        assert!(sat.contains(&a));
+        assert!(sat.contains(&b));
+        assert!(!sat.contains(&c));
+    }
+
+    #[test]
+    fn simple_extract() {
+        let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
+
+        let a_expr = "(g (f (v x)))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let b_expr = "(h (g (f (u x))))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let c_expr = "(h (g x))".parse::<RecExpr<SymbolLang>>().unwrap();
+
+        let mut egraph = EGraph::<SymbolLang, ()>::default();
+        let a = egraph.add_expr(&a_expr);
+        let b = egraph.add_expr(&b_expr);
+        let c = egraph.add_expr(&c_expr);
+
+        egraph.rebuild();
+        egraph.union(a, b);
+        egraph.rebuild();
+
+        let sat = satisfies_sketch(&sketch, &egraph);
+        assert_eq!(sat.len(), 4);
+        assert!(sat.contains(&a));
+        assert!(sat.contains(&egraph.find(b)));
+        assert!(!sat.contains(&c));
+    }
+
+    #[test]
+    fn simple_rec_extract_cost() {
+        let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
+
+        let a_expr = "(g (f (v x)))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let b_expr = "(h (g (f (u x))))".parse::<RecExpr<SymbolLang>>().unwrap();
+
+        let mut egraph = EGraph::<SymbolLang, ()>::default();
+        let root_a = egraph.add_expr(&a_expr);
+        let root_b = egraph.add_expr(&b_expr);
+
+        egraph.rebuild();
+        egraph.union(root_a, root_b);
+        egraph.rebuild();
+
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root_a).unwrap();
+        dbg!(&best_expr);
+        assert_eq!(best_cost, 4);
+        assert_eq!(best_expr, a_expr);
+    }
+}

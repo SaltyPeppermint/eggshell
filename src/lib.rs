@@ -32,7 +32,7 @@
     clippy::unnecessary_self_imports,
     clippy::verbose_file_reads,
     clippy::shadow_unrelated,
-    clippy::allow_attributes
+    // clippy::allow_attributes
 )]
 
 // clippy::cfg_not_test,

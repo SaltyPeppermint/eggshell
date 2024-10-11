@@ -145,8 +145,8 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
-    use crate::eqsat::{Eqsat, EqsatConfBuilder, EqsatResult};
-    use crate::sampling::SampleConfBuilder;
+    use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
+    use crate::sampling::SampleConf;
     use crate::trs::{Halide, Simple, Trs};
 
     use super::*;
@@ -155,8 +155,8 @@ mod tests {
     fn simple_sample() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
@@ -176,8 +176,8 @@ mod tests {
     fn stringified_sample_len() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
@@ -206,8 +206,8 @@ mod tests {
         let term = "(* (+ a b) 1)";
         let term2 = "(+ (+ x 0) (* y 1))";
         let seeds = vec![term.parse().unwrap(), term2.parse().unwrap()];
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat: EqsatResult<Simple> = Eqsat::new(seeds)
@@ -228,8 +228,8 @@ mod tests {
     fn halide_sample() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConfBuilder::new().build();
-        let eqsat_conf = EqsatConfBuilder::new().iter_limit(3).build();
+        let sample_conf = SampleConf::builder().build();
+        let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
         let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])

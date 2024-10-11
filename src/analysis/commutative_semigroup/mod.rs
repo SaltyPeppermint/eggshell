@@ -10,8 +10,12 @@ use crate::utils::UniqueQueue;
 
 pub use term_count::TermsUpToSize;
 
-pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>:
-    Sized + Debug + Sync + Send
+pub trait CommutativeSemigroupAnalysis<L, N>: Sized + Debug + Sync + Send
+where
+    L: Language + Debug + Sync,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Debug + Sync,
 {
     type Data: PartialEq + Debug + Sync + Send;
 
@@ -27,21 +31,17 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>:
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
-    fn one_shot_analysis(&self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>)
-    where
-        L: Language + Send + Sync,
-        N: Analysis<L> + Sync,
-        N::Data: Sync,
-    {
+    fn one_shot_analysis(&self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>) {
         fn resolve_pending_analysis<L, N, B>(
             egraph: &EGraph<L, N>,
             analysis: &B,
             data: &mut HashMap<Id, B::Data>,
             analysis_pending: &mut UniqueQueue<Id>,
         ) where
-            L: Language + Sync,
-            N: Analysis<L> + Sync,
-            N::Data: Sync,
+            L: Language + Debug + Sync,
+            L::Discriminant: Debug + Sync,
+            N: Analysis<L> + Debug + Sync,
+            N::Data: Debug + Sync,
             B: CommutativeSemigroupAnalysis<L, N> + Sync,
             B::Data: PartialEq + Debug,
         {
@@ -77,7 +77,7 @@ pub trait CommutativeSemigroupAnalysis<L: Language, N: Analysis<L>>:
                     // They need to be re-evaluated.
                     // Only once we have reached a fixpoint we can stop updating the parents.
                     if !(data.get(&eclass.id) == Some(&computed_data)) {
-                        analysis_pending.extend(eclass.parents().map(|p| egraph.find(p.1)));
+                        analysis_pending.extend(eclass.parents().map(|p| egraph.find(p)));
                         data.insert(eclass.id, computed_data);
                     }
                 } else {
