@@ -39,11 +39,18 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
         };
 
         let result = match &sketch[sketch_id] {
-            SketchNode::Any => egraph.classes().map(|eclass| eclass.id).collect(),
-            SketchNode::Node(node) => {
-                let mnode = &node.clone().map_children(|_| Id::from(0));
-
-                let children_matches = node
+            // All nodes in the egraph fulfill the Any sketch
+            SketchNode::Any => egraph
+                .classes()
+                .map(|eclass| {
+                    debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                    eclass.id
+                })
+                .collect(),
+            SketchNode::Node(sketch_node) => {
+                // Get all nodes fullfilling the children of the current sketch_node
+                // (Themselves sketches)
+                let children_matches = sketch_node
                     .children()
                     .iter()
                     .map(|child_sketch_id| {
@@ -51,26 +58,33 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     })
                     .collect::<Vec<_>>();
 
-                if let Some(potential_ids) = utils::classes_matching_op(node, classes_by_op) {
+                // Get all eclasses that contain the note required by the sketch and iterate over these classes.
+                if let Some(potential_ids) = classes_by_op.get(&sketch_node.discriminant()) {
                     potential_ids
                         .iter()
                         .copied()
                         .filter(|&id| {
+                            // Get the eclass corresponding to the id
                             let eclass = &egraph[id];
+                            // Iterate over the nodes
                             eclass
                                 .nodes
                                 .iter()
-                                .filter(|n| mnode.matches(n))
+                                // We are only interested in the nodes that is the ones matching the sketch
+                                .filter(|n| sketch_node.matches(n))
+                                // We check if all the children of these nodes also are in the set of nodes fulfilling
+                                // the child sketches.
                                 .all(|matched| {
-                                    children_matches
-                                        .iter()
-                                        .zip(matched.children())
-                                        .all(|(matches, child_id)| matches.contains(child_id))
+                                    matched.children().iter().zip(children_matches.iter()).all(
+                                        |(child_id, child_matches)| {
+                                            child_matches.contains(child_id)
+                                        },
+                                    )
                                 })
                         })
                         .collect()
                 } else {
-                    HashSet::default()
+                    HashSet::new()
                 }
             }
             SketchNode::Contains(inner_sketch_id) => {
@@ -78,7 +92,10 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
 
                 let mut data = egraph
                     .classes()
-                    .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
+                    .map(|eclass| {
+                        debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                        (eclass.id, contained_matched.contains(&eclass.id))
+                    })
                     .collect::<HashMap<_, bool>>();
 
                 SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
@@ -105,7 +122,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
     let mut memo = HashMap::<Id, HashSet<Id>>::default();
     // let sketch_nodes = s.as_ref();
     let sketch_root = Id::from(sketch.as_ref().len() - 1);
-    let classes_by_op = utils::new_classes_by_op(egraph);
+    let classes_by_op = utils::classes_by_op(egraph);
     rec(sketch, sketch_root, egraph, &classes_by_op, &mut memo)
 }
 
@@ -264,7 +281,10 @@ where
                     let children_any = enode
                         .children()
                         .iter()
-                        .map(|&child_id| (child_id, extracted[&egraph.find(child_id)].clone()))
+                        .map(|&child_id| {
+                            assert_eq!(egraph.find(child_id), child_id);
+                            (child_id, extracted[&child_id].clone())
+                        })
                         .collect::<Vec<_>>();
 
                     // Iterating over all the matching children.
@@ -360,24 +380,16 @@ mod tests {
         let a = egraph.add_expr(&a_expr);
         let b = egraph.add_expr(&b_expr);
         let c = egraph.add_expr(&c_expr);
-
-        // let d = egraph.add_expr(&d_expr);
+        let d = egraph.add_expr(&d_expr);
 
         egraph.rebuild();
 
         let sat = satisfies_sketch(&sketch, &egraph);
 
-        dbg!(&egraph
-            .classes()
-            .map(|c| egraph.find(c.id))
-            .collect::<Vec<_>>());
-        dbg!(b);
-
-        // assert_eq!(sat.len(), 5);
         assert!(sat.contains(&a));
         assert!(sat.contains(&b));
         assert!(sat.contains(&c));
-        // assert!(!sat.contains(&d));
+        assert!(!sat.contains(&d));
     }
 
     #[test]
@@ -396,7 +408,6 @@ mod tests {
         egraph.rebuild();
 
         let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root_a).unwrap();
-        dbg!(&best_expr);
         assert_eq!(best_cost, 4);
         assert_eq!(best_expr, a_expr);
     }

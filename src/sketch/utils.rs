@@ -98,30 +98,34 @@ use hashbrown::{HashMap, HashSet};
 
 /// Workaround since an identical data struct `classes_by_op` is private in the egraph struct
 /// Using just the discriminant is ok since it is again checked in the `for_each_matching_node` function
-pub fn new_classes_by_op<L, N>(egraph: &EGraph<L, N>) -> HashMap<L::Discriminant, HashSet<Id>>
+pub fn classes_by_op<L, N>(egraph: &EGraph<L, N>) -> HashMap<L::Discriminant, HashSet<Id>>
 where
     L: Language,
     N: Analysis<L>,
 {
     let mut classes_by_op: HashMap<L::Discriminant, HashSet<Id>> = HashMap::default();
-    for class in egraph.classes() {
-        for node in &class.nodes {
+    for eclass in egraph.classes() {
+        for node in &eclass.nodes {
             let key = node.discriminant();
             classes_by_op
                 .entry(key)
                 .and_modify(|ids| {
-                    ids.insert(class.id);
+                    debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                    ids.insert(eclass.id);
                 })
-                .or_default();
+                .or_insert_with(|| {
+                    debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                    [eclass.id].into()
+                });
         }
     }
     classes_by_op
 }
 
-pub fn classes_matching_op<'a, L: Language>(
-    enode: &L,
-    classes_by_op: &'a HashMap<L::Discriminant, HashSet<Id>>,
-) -> Option<&'a HashSet<Id>> {
-    let key = enode.discriminant();
-    classes_by_op.get(&key)
-}
+// pub fn classes_matching_op<'a, L: Language>(
+//     enode: &L,
+//     classes_by_op: &'a HashMap<L::Discriminant, HashSet<Id>>,
+// ) -> Option<&'a HashSet<Id>> {
+//     let key = enode.discriminant();
+//     classes_by_op.get(&key)
+// }

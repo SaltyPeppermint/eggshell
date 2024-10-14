@@ -25,7 +25,7 @@ pub enum PartialSketchNode<L: Language> {
 }
 
 impl<L: Language> Language for PartialSketchNode<L> {
-    type Discriminant = Discriminant<Self>;
+    type Discriminant = (Discriminant<Self>, Discriminant<SketchNode<L>>);
 
     fn discriminant(&self) -> Self::Discriminant {
         panic!("Comparing sketches to each other does not make sense!")

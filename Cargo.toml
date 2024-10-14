@@ -27,10 +27,10 @@ indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.17"
 log = "0.4"
 memory-stats = "1.2.0"
-numpy = "0.21"
+numpy = "0.22"
 ordered-float = { version = "4", features = ["serde"] }
 petgraph = "0.6"
-pyo3 = { version = "0.21", features = ["hashbrown"] }
+pyo3 = { version = "0.22", features = ["hashbrown"] }
 rand = "0.8"
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
