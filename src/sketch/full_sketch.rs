@@ -39,10 +39,10 @@ pub enum SketchNode<L: Language> {
 }
 
 impl<L: Language> Language for SketchNode<L> {
-    type Discriminant = Discriminant<Self>;
+    type Discriminant = (Discriminant<Self>, Discriminant<L>);
 
     fn discriminant(&self) -> Self::Discriminant {
-        panic!("Comparing sketches to each other does not make sense!")
+        panic!("Comparing partial sketches to each other does not make sense!")
     }
 
     fn matches(&self, _other: &Self) -> bool {

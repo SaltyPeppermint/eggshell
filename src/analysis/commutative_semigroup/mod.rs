@@ -47,7 +47,7 @@ where
         {
             while let Some(id) = analysis_pending.pop() {
                 let canonical_id = egraph.find(id);
-                debug_assert!(canonical_id == id);
+                debug_assert_eq!(canonical_id, id);
                 let eclass = &egraph[canonical_id];
 
                 // Check if we can calculate the analysis for any enode

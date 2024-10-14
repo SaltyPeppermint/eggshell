@@ -64,8 +64,6 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
 
         assert!(egraph.clean);
 
-        dbg!(&data);
-
         let mut analysis_pending = UniqueQueue::<(&L, Id)>::default();
 
         for eclass in egraph.classes() {
@@ -76,20 +74,7 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
             }
         }
 
-        dbg!(&analysis_pending);
-
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
-
-        let class_ids = egraph.classes().map(|eclass| eclass.id).collect::<Vec<_>>();
-        dbg!(&class_ids);
-        for id in &class_ids {
-            dbg!(egraph.find(*id));
-            dbg!(id);
-            assert!(*id == egraph.find(*id));
-
-            assert!(data.contains_key(id));
-        }
-        dbg!(&data);
 
         debug_assert!(egraph.classes().all(|eclass| data.contains_key(&eclass.id)));
     }
