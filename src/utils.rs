@@ -146,6 +146,7 @@ impl<L: Language> Default for ExprHashCons<L> {
     }
 }
 
+/// Return an iterator over a pairs of the parents node and their canonical `Id`
 pub(crate) fn old_parents_iter<'a, L, N>(
     eclass: &'a EClass<L, N::Data>,
     egraph: &'a EGraph<L, N>,

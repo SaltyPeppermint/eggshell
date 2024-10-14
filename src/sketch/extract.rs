@@ -43,13 +43,14 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
             SketchNode::Any => egraph
                 .classes()
                 .map(|eclass| {
-                    debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                    // No egraph.find since we are taking the id directly from the eclass
                     eclass.id
                 })
                 .collect(),
             SketchNode::Node(sketch_node) => {
                 // Get all nodes fullfilling the children of the current sketch_node
                 // (Themselves sketches)
+                // No egraph.find since we are only ever returning canonical ids
                 let children_matches = sketch_node
                     .children()
                     .iter()
@@ -59,6 +60,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     .collect::<Vec<_>>();
 
                 // Get all eclasses that contain the note required by the sketch and iterate over these classes.
+                // No egraph.find since classes_by_op only contain hashsets of canonical ids
                 if let Some(potential_ids) = classes_by_op.get(&sketch_node.discriminant()) {
                     potential_ids
                         .iter()
@@ -75,6 +77,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                                 // We check if all the children of these nodes also are in the set of nodes fulfilling
                                 // the child sketches.
                                 .all(|matched| {
+                                    // Again, no find necessary since the class_by_op does that for us
                                     matched.children().iter().zip(children_matches.iter()).all(
                                         |(child_id, child_matches)| {
                                             child_matches.contains(child_id)
@@ -90,10 +93,11 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
             SketchNode::Contains(inner_sketch_id) => {
                 let contained_matched = rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo);
 
+                // No egraph.find since we are only ever returning canonical ids
                 let mut data = egraph
                     .classes()
                     .map(|eclass| {
-                        debug_assert_eq!(egraph.find(eclass.id), eclass.id);
+                        // No egraph.find since we are taking the id directly from the eclass
                         (eclass.id, contained_matched.contains(&eclass.id))
                     })
                     .collect::<HashMap<_, bool>>();
@@ -105,6 +109,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     .collect()
             }
             SketchNode::Or(inner_sketch_ids) => {
+                // No egraph.find since we are only ever returning canonical ids
                 let matches = inner_sketch_ids.iter().map(|inner_sketch_id| {
                     rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo)
                 });
@@ -197,12 +202,15 @@ where
                         let to_matches = matched
                             .children()
                             .iter()
+                            // We need this since children of matched can be non-canonical
+                            .map(|child_id| egraph.find(*child_id))
+                            // Sketches are only recexpr and therefore only have canonical ids
                             .zip(sketch_node.children())
                             .map(|(child_id, child_sketch_id)| {
                                 Some((
                                     child_id,
                                     rec(
-                                        *child_id,
+                                        child_id,
                                         sketch,
                                         *child_sketch_id,
                                         cost_fn,
@@ -219,12 +227,13 @@ where
                             .collect::<Option<HashMap<_, _>>>()?;
 
                         // Returns the valid subtree and its cost
+                        // We again need the find here since the child_ids can be non-canonical
                         Some((
-                            cost_fn.cost(matched, |c| to_matches[&c].0.clone()),
+                            cost_fn.cost(matched, |c| to_matches[&egraph.find(c)].0.clone()),
                             exprs.add(
                                 matched
                                     .clone()
-                                    .map_children(|child_id| to_matches[&child_id].1),
+                                    .map_children(|child_id| to_matches[&egraph.find(child_id)].1),
                             ),
                         ))
                     })
@@ -266,7 +275,9 @@ where
                     let matching_children = enode
                         .children()
                         .iter()
-                        .filter_map(|&child_id| {
+                        // Needed since children can be non-canonical
+                        .map(|child_id| egraph.find(*child_id))
+                        .filter_map(|child_id| {
                             rec(
                                 child_id, sketch, sketch_id, cost_fn, egraph, exprs, extracted,
                                 memo,
@@ -281,9 +292,11 @@ where
                     let children_any = enode
                         .children()
                         .iter()
-                        .map(|&child_id| {
-                            assert_eq!(egraph.find(child_id), child_id);
-                            (child_id, extracted[&child_id].clone())
+                        // Needed since children can be non-canonical
+                        .map(|child_id| egraph.find(*child_id))
+                        .map(|child_id| {
+                            // We need the find since child_ids can be non-canonical
+                            (child_id, extracted[&egraph.find(child_id)].clone())
                         })
                         .collect::<Vec<_>>();
 
@@ -292,6 +305,7 @@ where
                     // since the loop wont run at all if there are zero matching children.
                     // Put another way, if the outer loop ever runs the child_id==matching_id
                     // has to be true for at least one
+                    // Also, all entries in matching_children and children_any are canonicalized so no worry here
                     for (matching_child_id, matching) in &matching_children {
                         let to_selected = children_any
                             .iter()
@@ -306,8 +320,13 @@ where
                             .collect::<HashMap<_, _>>();
 
                         candidates.push((
-                            cost_fn.cost(enode, |c| to_selected[&c].0.clone()),
-                            exprs.add(enode.clone().map_children(|c| to_selected[&c].1)),
+                            // We again need the find here since the child_ids can be non-canonical
+                            cost_fn.cost(enode, |c| to_selected[&egraph.find(c)].0.clone()),
+                            exprs.add(
+                                enode
+                                    .clone()
+                                    .map_children(|c| to_selected[&egraph.find(c)].1),
+                            ),
                         ));
                     }
                 }
