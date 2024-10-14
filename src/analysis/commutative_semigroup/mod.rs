@@ -89,17 +89,13 @@ where
 
         assert!(egraph.clean);
 
-        let mut analysis_pending = UniqueQueue::<Id>::default();
-
         // We start at the leaves, since they have no children and can be directly evaluated.
-        for eclass in egraph.classes() {
-            for enode in &eclass.nodes {
-                if enode.is_leaf() {
-                    debug_assert!(eclass.id == egraph.find(eclass.id));
-                    analysis_pending.insert(eclass.id);
-                }
-            }
-        }
+        let mut analysis_pending = egraph
+            .classes()
+            .filter(|eclass| eclass.nodes.iter().any(|enode| enode.is_leaf()))
+            // No egraph.find since we are taking the id directly from the eclass
+            .map(|eclass| eclass.id)
+            .collect();
 
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
 
