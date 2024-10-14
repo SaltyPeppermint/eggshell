@@ -44,17 +44,18 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
                 let u_node = node.clone().map_children(|child_id| egraph.find(child_id));
 
                 if u_node.all(|id| data.contains_key(&id)) {
-                    let canonical_id = egraph.find(current_id);
-                    let eclass = &egraph[canonical_id];
+                    // No egraph.find since since analysis_pending only contains canonical ids
+                    let eclass = &egraph[current_id];
                     let node_data = analysis.make(egraph, &u_node, &|id| &data[&id]);
-                    if let Some(existing) = data.get_mut(&canonical_id) {
+                    if let Some(existing) = data.get_mut(&current_id) {
                         let DidMerge(may_not_be_existing, _) = analysis.merge(existing, node_data);
                         if may_not_be_existing {
                             analysis_pending.extend(old_parents_iter(eclass, egraph));
                         }
                     } else {
+                        // old_parents_iter returns only canonical ids
                         analysis_pending.extend(old_parents_iter(eclass, egraph));
-                        data.insert(canonical_id, node_data);
+                        data.insert(current_id, node_data);
                     };
                 } else {
                     analysis_pending.insert((node, current_id));
@@ -64,15 +65,17 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
 
         assert!(egraph.clean);
 
-        let mut analysis_pending = UniqueQueue::<(&L, Id)>::default();
-
-        for eclass in egraph.classes() {
-            for enode in &eclass.nodes {
-                if enode.all(|c| data.contains_key(&egraph.find(c))) {
-                    analysis_pending.insert((enode, eclass.id));
-                }
-            }
-        }
+        let mut analysis_pending = egraph
+            .classes()
+            .flat_map(|eclass| {
+                eclass
+                    .nodes
+                    .iter()
+                    .filter(|enode| enode.all(|c| data.contains_key(&egraph.find(c))))
+                    // No egraph.find since we are taking the id directly from the eclass
+                    .map(|enode| (enode, eclass.id))
+            })
+            .collect();
 
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
 
