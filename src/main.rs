@@ -4,18 +4,17 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 
 use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser, Subcommand};
-use egg::{AstSize, EGraph, Id, Language, RecExpr, Rewrite, StopReason};
-use hashbrown::HashMap;
+use egg::{AstSize, Id, Language, RecExpr, Rewrite, StopReason};
+use hashbrown::{HashMap, HashSet};
 use indicatif::{ProgressBar, ProgressDrawTarget};
 use log::info;
 use rand::rngs::StdRng;
-use rand::seq::IteratorRandom;
 use rand::SeedableRng;
-use rayon::{prelude::*, ThreadPoolBuilder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -50,15 +49,14 @@ fn main() {
             .build(),
         SampleMode::JustRoot => sample_conf_builder.build(),
     };
-
-    let eqsat_conf = EqsatConf {
-        iter_limit: None,
-        node_limit: cli.node_limit,
-        time_limit: None,
-        explanation: cli.with_explanations,
-        root_check: false,
-        memory_log: false,
-    };
+    let eqsat_conf = EqsatConf::builder()
+        .maybe_node_limit(cli.node_limit)
+        .maybe_time_limit(cli.time_limit.map(|x| Duration::from_secs_f64(x as f64)))
+        .maybe_memory_limit(cli.memory_limit)
+        .explanation(cli.with_explanations)
+        .root_check(false)
+        .memory_log(false)
+        .build();
 
     let now = Local::now();
     let uuid = Uuid::new_v4();
@@ -99,7 +97,7 @@ struct Cli {
 
     /// Number of terms from which to seed egraphs
     #[arg(long, default_value_t = 100)]
-    n_terms: usize,
+    seed_terms: usize,
 
     /// Number of terms from which to seed egraphs
     #[arg(long, default_value_t = 50)]
@@ -121,21 +119,21 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     with_explanations: bool,
 
-    /// Number of processes to run in parallel
-    #[arg(long, default_value_t = 1)]
-    eqsat_processes: usize,
-
-    /// Number of processes to run in parallel
-    #[arg(long, default_value_t = 4)]
-    sample_processes: usize,
+    /// Calculate and save explanations
+    #[arg(long, default_value_t = false)]
+    with_baselines: bool,
 
     /// Node limit for egraph
     #[arg(long)]
     node_limit: Option<usize>,
 
-    /// Calculate and save n baselines
+    /// Memory limit for eqsat
     #[arg(long)]
-    baselines: Option<usize>,
+    memory_limit: Option<usize>,
+
+    /// Time limit for eqsat in seconds
+    #[arg(long)]
+    time_limit: Option<usize>,
 
     #[command(subcommand)]
     sample_mode: SampleMode,
@@ -223,99 +221,96 @@ fn gen_data<R: Trs>(
 ) {
     let bar = ProgressBar::with_draw_target(Some(exprs.len() as u64), ProgressDrawTarget::stdout());
 
-    let eqsat_pool = ThreadPoolBuilder::new()
-        .num_threads(cli.eqsat_processes)
-        .build()
-        .unwrap();
+    for (file_id, chunk) in exprs
+        .into_iter()
+        .take(cli.seed_terms)
+        .enumerate()
+        .collect::<Box<[_]>>()
+        .chunks(cli.saving_batchsize)
+        .enumerate()
+    {
+        let data_buf = chunk
+            .iter()
+            .inspect(|(seed_id, expr)| {
+                info!("Starting work on expr {seed_id}: {}", expr.term);
+            })
+            .map(
+                // || StdRng::seed_from_u64(sample_conf.rng_seed),
+                |(seed_id, expr)| {
+                    let rng = &mut StdRng::seed_from_u64(sample_conf.rng_seed);
+                    info!("Running eqsat {seed_id}");
 
-    let sample_pool = ThreadPoolBuilder::new()
-        .num_threads(cli.sample_processes)
-        .build()
-        .unwrap();
+                    let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
+                    let mut eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
+                        .with_conf(eqsat_conf.clone())
+                        .run(rules);
+                    assert!(eqsat.egraph().clean);
 
-    eqsat_pool.install(|| {
-        for (file_id, chunk) in exprs
-            .into_iter()
-            .take(cli.n_terms)
-            .enumerate()
-            .collect::<Box<[_]>>()
-            .chunks(cli.saving_batchsize)
-            .enumerate()
-        {
-            let data_buf = chunk
-                .into_par_iter()
-                .map_init(
-                    || StdRng::seed_from_u64(sample_conf.rng_seed),
-                    |rng, (seed_id, expr)| {
-                        info!(
-                            "Running Eqsat {seed_id} with {} threads...",
-                            eqsat_pool.current_num_threads()
-                        );
-
-                        let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-                        let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-                            .with_conf(eqsat_conf.clone())
-                            .run(rules);
-                        assert!(eqsat.egraph().clean);
-
-                        info!("Finished Eqsat {seed_id}!");
-
-                        let eclass_data = sample_pool.install(|| {
-                            info!(
-                                "Running Sampling {seed_id} with {} threads...",
-                                sample_pool.current_num_threads()
-                            );
-
-                            let egraph = eqsat.egraph();
-                            match strategy {
-                                SampleStrategy::TermSizeCount => {
-                                    let min_size = seed_expr.as_ref().len();
-
-                                    let strategy =
-                                        TermCountWeighted::new(egraph, rng, min_size + 3);
-                                    let samples =
-                                        gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
-                                    gen_associated_data(samples, cli, eqsat, rules, rng)
-                                }
-                                SampleStrategy::CostWeighted => {
-                                    let strategy = CostWeighted::new(
-                                        egraph,
-                                        AstSize,
-                                        rng,
-                                        sample_conf.loop_limit,
-                                    );
-                                    let samples =
-                                        gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy);
-                                    info!("Finished Sampling {seed_id}!");
-
-                                    gen_associated_data(samples, cli, eqsat, rules, rng)
-                                }
+                    let mem = memory_stats::memory_stats().unwrap().physical_mem;
+                    info!("eqsat took {mem} bytes of memory");
+                    info!("Finished Eqsat {seed_id}!");
+                    info!(
+                        "Running sampling {seed_id} with {} threads...",
+                        rayon::current_num_threads()
+                    );
+                    let eclass_data = {
+                        let samples_by_eclass = match strategy {
+                            SampleStrategy::TermSizeCount => {
+                                let min_size = seed_expr.as_ref().len();
+                                let strategy =
+                                    TermCountWeighted::new(eqsat.egraph(), rng, min_size + 3);
+                                gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy)
                             }
-                        });
-
-                        let truth_value = match expr.truth_value.as_str() {
-                            "true" => true,
-                            "false" => false,
-                            _ => panic!("Wrong truth_value"),
+                            SampleStrategy::CostWeighted => {
+                                let strategy = CostWeighted::new(
+                                    eqsat.egraph(),
+                                    AstSize,
+                                    rng,
+                                    sample_conf.loop_limit,
+                                );
+                                gen_samples(cli.sample_mode, &eqsat, sample_conf, strategy)
+                            }
                         };
 
-                        bar.inc(1);
+                        info!("Finished sampling {seed_id}!");
 
-                        DataEntry {
-                            seed_id: *seed_id,
-                            seed_expr,
-                            eclass_data,
-                            truth_value,
-                        }
-                    },
-                )
-                .collect::<Vec<_>>();
+                        info!("Generating associated data for {seed_id}...");
+                        let d = gen_associated_data(
+                            &seed_expr,
+                            samples_by_eclass,
+                            cli,
+                            &mut eqsat,
+                            rules,
+                        );
+                        info!("Finished generating associated data for {seed_id}!");
+                        d
+                    };
 
-            let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
-            serde_json::to_writer(&mut f, &data_buf).unwrap();
-            f.flush().unwrap();
-        }
-    });
+                    let truth_value = match expr.truth_value.as_str() {
+                        "true" => true,
+                        "false" => false,
+                        _ => panic!("Wrong truth_value"),
+                    };
+
+                    DataEntry {
+                        seed_id: *seed_id,
+                        seed_expr,
+                        eclass_data,
+                        truth_value,
+                    }
+                },
+            )
+            .inspect(|data_entry| {
+                bar.inc(1);
+                info!("Finished work on expr {}", data_entry.seed_id);
+            })
+            .collect::<Vec<_>>();
+
+        let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
+        serde_json::to_writer(&mut f, &data_buf).unwrap();
+        f.flush().unwrap();
+    }
+    // });
 }
 
 fn gen_samples<'a, R, S>(
@@ -323,123 +318,129 @@ fn gen_samples<'a, R, S>(
     eqsat: &EqsatResult<R>,
     sample_conf: &SampleConf,
     mut strategy: S,
-) -> HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>>
+) -> HashMap<Id, HashSet<RecExpr<R::Language>>>
 where
     R: Trs,
     R::Language: 'a,
     R::Analysis: 'a,
     S: Strategy<'a, R::Language, R::Analysis>,
 {
-    let generated = match sample_mode {
+    let root_id = eqsat.roots()[0];
+    match sample_mode {
         SampleMode::Full { egraph_samples: _ } => {
-            let root_id = *eqsat.roots().first().unwrap();
+            let mut samples = strategy.sample(sample_conf).unwrap();
             let root_samples = strategy.sample_eclass(sample_conf, root_id).unwrap();
-            let mut random_samples = strategy.sample(sample_conf).unwrap();
-            random_samples.insert(root_id, root_samples);
-            random_samples
+            samples.insert(root_id, root_samples);
+            samples
         }
         SampleMode::JustRoot => {
-            let root_id = *eqsat.roots().first().unwrap();
             let root_samples = strategy.sample_eclass(sample_conf, root_id).unwrap();
             HashMap::from([(root_id, root_samples)])
         }
     }
-    .into_iter()
-    .map(|(k, v)| (k, Vec::from_iter(v)))
-    .collect::<HashMap<_, Vec<_>>>();
-    generated
 }
 
 fn gen_associated_data<R: Trs>(
-    generated: HashMap<Id, Vec<RecExpr<<R as Trs>::Language>>>,
+    seed_expr: &RecExpr<R::Language>,
+    samples_by_eclass: HashMap<Id, HashSet<RecExpr<<R as Trs>::Language>>>,
     cli: &Cli,
-    mut eqsat: EqsatResult<R>,
+    eqsat: &mut EqsatResult<R>,
     rules: &[Rewrite<<R as Trs>::Language, <R as Trs>::Analysis>],
-    rng: &mut StdRng,
 ) -> Vec<EClassData<<R as Trs>::Language>> {
-    let eclass_data = generated
+    samples_by_eclass
         .into_iter()
-        .map(|(id, generated)| {
-            let explanations = if cli.with_explanations {
-                Some(gen_explanations::<R>(&generated, eqsat.egraph_mut()))
-            } else {
-                None
-            };
-            let baselines = cli
-                .baselines
-                .map(|n_samples| gen_baseline::<R>(&generated, rules, n_samples, rng));
+        .map(|(id, samples)| {
+            let sample_data = samples
+                .into_iter()
+                .map(|sample| {
+                    let explanation = if cli.with_explanations {
+                        info!("Constructing explanation of {sample}...");
+                        let expl = eqsat
+                            .egraph_mut()
+                            .explain_equivalence(seed_expr, &sample)
+                            .get_flat_string();
+                        info!("Explanation constructed!");
+                        Some(expl)
+                    } else {
+                        None
+                    };
+                    let baseline = if cli.with_baselines {
+                        info!("Running baseline for {sample}...");
+                        let baseline = gen_baseline::<R>(seed_expr, &sample, rules);
+                        info!("Baseline run!");
+                        Some(baseline)
+                    } else {
+                        None
+                    };
+                    (
+                        sample,
+                        SampleData {
+                            baseline,
+                            explanation,
+                        },
+                    )
+                })
+                .collect();
+
             EClassData {
                 id,
-                generated,
-                baselines,
-                explanations,
+                samples: sample_data,
             }
-        })
-        .collect();
-    eclass_data
-}
-
-fn gen_explanations<R: Trs>(
-    generated: &[RecExpr<R::Language>],
-    egraph: &mut EGraph<R::Language, R::Analysis>,
-) -> Vec<ExplanationData> {
-    generated
-        .iter()
-        .enumerate()
-        .flat_map(|(lhs_idx, lhs)| {
-            generated
-                .iter()
-                .enumerate()
-                .flat_map(move |(rhs_idx, rhs)| {
-                    if lhs_idx == rhs_idx {
-                        return None;
-                    }
-                    Some((lhs_idx, lhs, rhs_idx, rhs))
-                })
-        })
-        .map(|(lhs_idx, lhs, rhs_idx, rhs)| ExplanationData {
-            from: lhs_idx,
-            to: rhs_idx,
-            explanation: egraph.explain_equivalence(lhs, rhs).get_flat_string(),
         })
         .collect()
 }
 
 fn gen_baseline<R: Trs>(
-    generated: &[RecExpr<R::Language>],
+    seed_expr: &RecExpr<R::Language>,
+    sample: &RecExpr<R::Language>,
     rules: &[Rewrite<R::Language, R::Analysis>],
-    n_samples: usize,
-    rng: &mut StdRng,
-) -> Vec<BaselineData> {
-    generated
-        .iter()
-        .enumerate()
-        .flat_map(|(lhs_idx, lhs)| {
-            generated
-                .iter()
-                .enumerate()
-                .flat_map(move |(rhs_idx, rhs)| {
-                    if lhs_idx == rhs_idx {
-                        return None;
-                    }
-                    Some((lhs_idx, lhs, rhs_idx, rhs))
-                })
-        })
-        .choose_multiple(rng, n_samples)
-        .into_iter()
-        .map(|(lhs_idx, lhs, rhs_idx, rhs)| {
-            let result = Eqsat::<R>::new(vec![lhs.clone(), rhs.clone()]).run(rules);
-            BaselineData {
-                from: lhs_idx,
-                to: rhs_idx,
-                stop_reason: result.report().stop_reason.to_owned(),
-                total_time: result.report().total_time,
-                total_nodes: result.report().egraph_nodes,
-                total_iters: result.report().iterations,
-            }
-        })
-        .collect()
+) -> BaselineData {
+    let result = Eqsat::<R>::new(vec![seed_expr.clone(), sample.clone()]).run(rules);
+    BaselineData {
+        from: seed_expr.to_string(),
+        to: sample.to_string(),
+        stop_reason: result.report().stop_reason.to_owned(),
+        total_time: result.report().total_time,
+        total_nodes: result.report().egraph_nodes,
+        total_iters: result.report().iterations,
+    }
 }
+
+// fn gen_baseline<R: Trs>(
+//     generated: &[RecExpr<R::Language>],
+//     rules: &[Rewrite<R::Language, R::Analysis>],
+//     n_samples: usize,
+//     rng: &mut StdRng,
+// ) -> Vec<BaselineData> {
+//     generated
+//         .iter()
+//         .enumerate()
+//         .flat_map(|(lhs_idx, lhs)| {
+//             generated
+//                 .iter()
+//                 .enumerate()
+//                 .flat_map(move |(rhs_idx, rhs)| {
+//                     if lhs_idx == rhs_idx {
+//                         return None;
+//                     }
+//                     Some((lhs_idx, lhs, rhs_idx, rhs))
+//                 })
+//         })
+//         .choose_multiple(rng, n_samples)
+//         .into_iter()
+//         .map(|(lhs_idx, lhs, rhs_idx, rhs)| {
+//             let result = Eqsat::<R>::new(vec![lhs.clone(), rhs.clone()]).run(rules);
+//             BaselineData {
+//                 from: lhs_idx,
+//                 to: rhs_idx,
+//                 stop_reason: result.report().stop_reason.to_owned(),
+//                 total_time: result.report().total_time,
+//                 total_nodes: result.report().egraph_nodes,
+//                 total_iters: result.report().iterations,
+//             }
+//         })
+//         .collect()
+// }
 
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
@@ -452,24 +453,21 @@ struct DataEntry<L: Language + Display> {
 #[derive(Serialize, Clone, Debug)]
 struct EClassData<L: Language + Display> {
     id: Id,
-    generated: Vec<RecExpr<L>>,
-    baselines: Option<Vec<BaselineData>>,
-    explanations: Option<Vec<ExplanationData>>,
+    samples: HashMap<RecExpr<L>, SampleData>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+struct SampleData {
+    baseline: Option<BaselineData>,
+    explanation: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
 struct BaselineData {
-    from: usize,
-    to: usize,
+    from: String,
+    to: String,
     stop_reason: StopReason,
     total_time: f64,
     total_nodes: usize,
     total_iters: usize,
-}
-
-#[derive(Serialize, Clone, Eq, PartialEq, Debug)]
-struct ExplanationData {
-    from: usize,
-    to: usize,
-    explanation: String,
 }

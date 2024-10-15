@@ -12,9 +12,14 @@ use serde::{Deserialize, Serialize};
 #[pyclass(frozen)]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq, Builder, Default)]
 pub struct EqsatConf {
-    pub iter_limit: Option<usize>,
-    pub node_limit: Option<usize>,
-    pub time_limit: Option<Duration>,
+    #[builder(default = 1000)]
+    pub iter_limit: usize,
+    #[builder(default = 1_000_000_000)]
+    pub node_limit: usize,
+    #[builder(default = 32_000_000_000)]
+    pub memory_limit: usize,
+    #[builder(default = Duration::from_secs_f64(60.0))]
+    pub time_limit: Duration,
     #[builder(default = false)]
     pub explanation: bool,
     #[builder(default = false)]
@@ -27,19 +32,21 @@ pub struct EqsatConf {
 impl EqsatConf {
     #[must_use]
     #[new]
-    #[pyo3(signature = (explanation=false,root_check=false, memory_log=false, iter_limit=Some(10_000_000), node_limit=Some(100_000), time_limit=Some(10.0)))]
+    #[pyo3(signature = (explanation=false,root_check=false, memory_log=false, iter_limit=1000, node_limit=1_000_000_000, memory_limit=32_000_000_000, time_limit=60.0))]
     pub fn new(
         explanation: bool,
         root_check: bool,
         memory_log: bool,
-        iter_limit: Option<usize>,
-        node_limit: Option<usize>,
-        time_limit: Option<f64>,
+        iter_limit: usize,
+        node_limit: usize,
+        memory_limit: usize,
+        time_limit: f64,
     ) -> Self {
         Self {
             iter_limit,
             node_limit,
-            time_limit: time_limit.map(Duration::from_secs_f64),
+            memory_limit,
+            time_limit: Duration::from_secs_f64(time_limit),
             explanation,
             root_check,
             memory_log,
@@ -58,19 +65,11 @@ where
     N: Analysis<L> + Default,
 {
     // Initialize a simple runner and run it.
-    let mut runner = Runner::default();
-    if let Some(iter_limit) = conf.iter_limit {
-        info!("Setting iteration limit to {iter_limit}");
-        runner = runner.with_iter_limit(iter_limit);
-    };
-    if let Some(node_limit) = conf.node_limit {
-        info!("Setting node limit to {node_limit}");
-        runner = runner.with_node_limit(node_limit);
-    };
-    if let Some(time_limit) = conf.time_limit {
-        info!("Setting time limit to {time_limit:?}");
-        runner = runner.with_time_limit(time_limit);
-    };
+    let mut runner = Runner::default()
+        .with_iter_limit(conf.iter_limit)
+        .with_node_limit(conf.node_limit)
+        .with_memory_limit(conf.memory_limit)
+        .with_time_limit(conf.time_limit);
 
     if conf.explanation {
         info!("Running with explanations");

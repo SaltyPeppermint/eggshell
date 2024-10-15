@@ -20,9 +20,8 @@ pub struct Eqsat<R>
 where
     R: Trs,
 {
-    runner_args: EqsatConf,
+    conf: EqsatConf,
     start_exprs: Vec<RecExpr<R::Language>>,
-    root_check: bool,
 }
 
 impl<R> Eqsat<R>
@@ -31,7 +30,7 @@ where
 {
     #[must_use]
     pub fn runner_args(&self) -> &EqsatConf {
-        &self.runner_args
+        &self.conf
     }
 
     /// Create a new Equality Saturation
@@ -44,23 +43,15 @@ where
     #[must_use]
     pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
         Self {
-            runner_args: EqsatConf::default(),
+            conf: EqsatConf::default(),
             start_exprs,
-            root_check: false,
         }
     }
 
     /// With the runner parameters.
     #[must_use]
     pub fn with_conf(mut self, runner_args: EqsatConf) -> Self {
-        self.runner_args = runner_args;
-        self
-    }
-
-    /// With the runner parameters.
-    #[must_use]
-    pub fn with_root_check(mut self) -> Self {
-        self.root_check = true;
+        self.conf = runner_args;
         self
     }
 
@@ -74,13 +65,13 @@ where
     ) -> EqsatResult<R> {
         info!("Running Eqsat with Expression: {:?}", self.start_exprs);
 
-        let runner = conf::build_runner(&self.runner_args, &self.start_exprs).run(rules.iter());
+        let runner = conf::build_runner(&self.conf, &self.start_exprs).run(rules.iter());
 
         let report = runner.report();
 
         info!("{}", &report);
         EqsatResult {
-            runner_args: self.runner_args.clone(),
+            runner_args: self.conf.clone(),
             egraph: runner.egraph,
             roots: runner.roots,
             report,
