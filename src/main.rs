@@ -26,15 +26,6 @@ use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Trs};
 
-// const CHUNKSIZE: usize = 3;
-// const N_SEEDS: usize = 20;
-// const RNG_SEED: u64 = 2024;
-// const SEED_FILE: &str = "data/prefix/5k_dataset.csv";
-
-// const N_SEEDS: usize = 20;
-// const RNG_SEED: u64 = 2024;
-// const SEED_FILE: &str = "data/prefix/5k_dataset.csv";
-
 fn main() {
     env_logger::init();
 
@@ -45,12 +36,7 @@ fn main() {
         .rng_seed(cli.rng_seed)
         .samples_per_eclass(cli.eclass_samples);
     let sample_conf = sample_conf_builder.build();
-    // let sample_conf = match cli.sample_mode {
-    // SampleMode::Full { egraph_samples } => sample_conf_builder
-    //     .samples_per_egraph(egraph_samples)
-    //     .build(),
-    // SampleMode::JustRoot => sample_conf_builder.build(),
-    // };
+
     let eqsat_conf = EqsatConf::builder()
         .maybe_node_limit(cli.node_limit)
         .maybe_time_limit(cli.time_limit.map(|x| Duration::from_secs_f64(x as f64)))
