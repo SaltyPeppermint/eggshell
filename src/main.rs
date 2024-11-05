@@ -15,7 +15,6 @@ use indicatif::{ProgressBar, ProgressDrawTarget};
 use log::info;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-// use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -207,87 +206,66 @@ fn gen_data<R: Trs>(
     cli: &Cli,
 ) {
     let bar = ProgressBar::with_draw_target(Some(exprs.len() as u64), ProgressDrawTarget::stdout());
+    let mut file_id = 0;
+    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
-    for (file_id, chunk) in exprs
-        .into_iter()
-        .take(cli.seed_terms)
-        .enumerate()
-        .collect::<Box<[_]>>()
-        .chunks(cli.saving_batchsize)
-        .enumerate()
-    {
-        let data_buf = chunk
-            .iter()
-            .inspect(|(seed_id, expr)| {
-                info!("Starting work on expr {seed_id}: {}", expr.term);
-            })
-            .map(
-                // || StdRng::seed_from_u64(sample_conf.rng_seed),
-                |(seed_id, expr)| {
-                    let rng = &mut StdRng::seed_from_u64(sample_conf.rng_seed);
-                    info!("Running eqsat {seed_id}");
+    for (seed_id, expr) in exprs.into_iter().take(cli.seed_terms).enumerate() {
+        let mut data_buf = Vec::new();
 
-                    let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-                    let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-                        .with_conf(eqsat_conf.clone())
-                        .run(rules);
-                    assert!(eqsat.egraph().clean);
+        info!("Starting work on expr {seed_id}: {}", expr.term);
 
-                    let mem = memory_stats::memory_stats().unwrap().physical_mem;
-                    info!("eqsat took {mem} bytes of memory");
-                    info!("Finished Eqsat {seed_id}!");
-                    info!(
-                        "Running sampling {seed_id} with {} threads...",
-                        rayon::current_num_threads()
-                    );
-                    let samples = match strategy {
-                        SampleStrategy::TermSizeCount => {
-                            let min_size = seed_expr.as_ref().len();
-                            let strategy =
-                                TermCountWeighted::new(eqsat.egraph(), rng, min_size + 3);
-                            gen_samples(&eqsat, sample_conf, strategy)
-                        }
-                        SampleStrategy::CostWeighted => {
-                            let strategy = CostWeighted::new(
-                                eqsat.egraph(),
-                                AstSize,
-                                rng,
-                                sample_conf.loop_limit,
-                            );
-                            gen_samples(&eqsat, sample_conf, strategy)
-                        }
-                    };
+        info!("Running eqsat {seed_id}");
 
-                    info!("Finished sampling {seed_id}!");
+        let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
+        let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
+            .with_conf(eqsat_conf.clone())
+            .run(rules);
+        assert!(eqsat.egraph().clean);
 
-                    info!("Generating associated data for {seed_id}...");
-                    let associated_data =
-                        gen_associated_data(&seed_expr, samples, cli, eqsat, rules);
-                    info!("Finished generating associated data for {seed_id}!");
+        let mem = memory_stats::memory_stats().unwrap().physical_mem;
+        info!("eqsat took {mem} bytes of memory");
+        info!("Finished Eqsat {seed_id}!");
+        let samples = match strategy {
+            SampleStrategy::TermSizeCount => {
+                let min_size = seed_expr.as_ref().len();
+                let strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 3);
+                gen_samples(&eqsat, sample_conf, strategy)
+            }
+            SampleStrategy::CostWeighted => {
+                let strategy =
+                    CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
+                gen_samples(&eqsat, sample_conf, strategy)
+            }
+        };
 
-                    let truth_value = match expr.truth_value.as_str() {
-                        "true" => true,
-                        "false" => false,
-                        _ => panic!("Wrong truth_value"),
-                    };
+        info!("Finished sampling {seed_id}!");
 
-                    DataEntry {
-                        seed_id: *seed_id,
-                        seed_expr,
-                        associated_data,
-                        truth_value,
-                    }
-                },
-            )
-            .inspect(|data_entry| {
-                bar.inc(1);
-                info!("Finished work on expr {}", data_entry.seed_id);
-            })
-            .collect::<Vec<_>>();
+        info!("Generating associated data for {seed_id}...");
+        let associated_data = gen_associated_data(&seed_expr, samples, cli, eqsat, rules);
+        info!("Finished generating associated data for {seed_id}!");
 
-        let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
-        serde_json::to_writer(&mut f, &data_buf).unwrap();
-        f.flush().unwrap();
+        let truth_value = match expr.truth_value.as_str() {
+            "true" => true,
+            "false" => false,
+            _ => panic!("Wrong truth_value"),
+        };
+
+        data_buf.push(DataEntry {
+            seed_id,
+            seed_expr,
+            associated_data,
+            truth_value,
+        });
+        bar.inc(1);
+        info!("Finished work on expr {}", seed_id);
+
+        if seed_id % cli.saving_batchsize == 0 {
+            let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
+            serde_json::to_writer(&mut f, &data_buf).unwrap();
+            f.flush().unwrap();
+            file_id += 1;
+            data_buf.clear();
+        }
     }
     // });
 }
