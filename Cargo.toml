@@ -37,7 +37,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 smallvec = { version = "1", features = ["const_generics", "serde"] }
 symbolic_expressions = "5"
-thiserror = "1"
+thiserror = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
