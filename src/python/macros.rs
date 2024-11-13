@@ -25,17 +25,14 @@ macro_rules! monomorphize {
 
         /// Gets the symbols inherent to the language
         #[pyo3::pyfunction]
-        pub fn symbols(variables: usize, constants: usize) -> Vec<(String, usize)> {
-            <Lang as $crate::trs::SymbolIter>::symbols(variables, constants).collect()
+        pub fn symbols(variables: usize) -> Vec<(String, usize)> {
+            <Lang as $crate::trs::TrsLang>::symbols(variables)
         }
 
         /// Gets the symbols inherent to the language
         #[pyo3::pyfunction]
-        pub fn symbol_table(
-            variables: usize,
-            constants: usize,
-        ) -> $crate::python::symbols::SymbolTable {
-            let lut = <Lang as $crate::trs::SymbolIter>::symbol_lut(variables, constants);
+        pub fn symbol_table(variables: usize) -> $crate::python::symbols::SymbolTable {
+            let lut = <Lang as $crate::trs::TrsLang>::symbol_lut(variables);
             $crate::python::symbols::SymbolTable::new(lut)
         }
 
@@ -75,15 +72,13 @@ macro_rules! monomorphize {
         #[pyo3::pyfunction]
         #[pyo3(signature = (start_terms, conf=None))]
         pub fn run_eqsat(
-            start_terms: Vec<$crate::python::PyLang>,
+            start_terms: Vec<$crate::python::PyAst>,
             conf: Option<$crate::eqsat::EqsatConf>,
         ) -> pyo3::PyResult<EqsatResult> {
             let start_exprs = start_terms
                 .into_iter()
                 .map(|term| (&term.0).try_into())
-                .collect::<Result<_, _>>()
-                .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
-
+                .collect::<Result<_, _>>()?;
             let eqsat = if let Some(c) = conf {
                 $crate::eqsat::Eqsat::new(start_exprs).with_conf(c)
             } else {
@@ -107,7 +102,7 @@ macro_rules! monomorphize {
                 &self,
                 root: usize,
                 cost_fn: &str,
-            ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
+            ) -> pyo3::PyResult<(usize, $crate::python::PyAst)> {
                 let (cost, term) = {
                     match cost_fn {
                         "ast_size" => self.0.classic_extract(root.into(), egg::AstSize),
@@ -126,9 +121,9 @@ macro_rules! monomorphize {
             fn sketch_extract(
                 &self,
                 root: usize,
-                sketch: $crate::python::PySketch,
+                sketch: $crate::python::PyAst,
                 cost_fn: &str,
-            ) -> pyo3::PyResult<(usize, $crate::python::PyLang)> {
+            ) -> pyo3::PyResult<(usize, $crate::python::PyAst)> {
                 let sketch = &(&sketch.0).try_into()?;
                 let (cost, term) = match cost_fn {
                     "ast_size" => self.0.sketch_extract(root.into(), egg::AstSize, sketch),
@@ -146,7 +141,7 @@ macro_rules! monomorphize {
                 &self,
                 root: usize,
                 table: hashbrown::HashMap<(usize, usize), f64>,
-            ) -> (f64, $crate::python::PyLang) {
+            ) -> (f64, $crate::python::PyAst) {
                 let t = table
                     .into_iter()
                     .map(|(k, v)| ((k.0.into(), k.1), v))

@@ -5,7 +5,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::Serialize;
 
-use super::{SymbolIter, Trs};
+use super::{Trs, TrsAnalysis, TrsLang};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -32,9 +32,17 @@ define_language! {
     }
 }
 
-impl SymbolIter for RiseLang {
+impl TrsLang for RiseLang {
     fn raw_symbols() -> &'static [(&'static str, usize)] {
         &[("var", 1), ("app", 2), ("lam", 2), ("let", 3), (">>", 2)]
+    }
+
+    fn is_const(&self) -> bool {
+        matches!(self, RiseLang::Number(_))
+    }
+
+    fn is_var(&self) -> bool {
+        matches!(self, RiseLang::Symbol(_))
     }
 }
 
@@ -103,6 +111,8 @@ pub fn unwrap_symbol(n: &RiseLang) -> Symbol {
         _ => panic!("expected symbol"),
     }
 }
+
+impl TrsAnalysis<RiseLang> for RiseAnalysis {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Rise;

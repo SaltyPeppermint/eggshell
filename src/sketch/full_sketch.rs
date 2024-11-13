@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use super::SketchParseError;
 use crate::{
-    python::RawSketch,
+    python::RawAst,
     typing::{Type, Typeable, TypingInfo},
 };
 
@@ -137,17 +137,17 @@ where
     }
 }
 
-impl<L> TryFrom<&RawSketch> for (Id, Sketch<L>)
+impl<L> TryFrom<&RawAst> for (Id, Sketch<L>)
 where
     L::Error: Display,
     L: Language + egg::FromOp,
 {
     type Error = SketchParseError<L::Error>;
 
-    fn try_from(pysketch: &RawSketch) -> Result<Self, Self::Error> {
+    fn try_from(pysketch: &RawAst) -> Result<Self, Self::Error> {
         fn rec<L>(
             sketch: &mut Sketch<L>,
-            pysketch: &RawSketch,
+            pysketch: &RawAst,
         ) -> Result<Id, SketchParseError<L::Error>>
         where
             L::Error: Display,
@@ -157,14 +157,15 @@ where
             // `PySketch::Node` since a sketch contains no back edges and is finite
             match pysketch {
                 // Error if a partial node is encountered
-                RawSketch::Open | RawSketch::Active => Err(SketchParseError::PartialSketch),
-                RawSketch::Any => {
+                RawAst::Open | RawAst::Active => Err(SketchParseError::PartialSketch),
+                RawAst::Any => {
                     let id = sketch.add(SketchNode::Any);
                     Ok(id)
                 }
-                RawSketch::Node {
+                RawAst::Node {
                     lang_node: s,
                     children,
+                    features: _,
                 } => {
                     // The recursions operate on a stricktly smaller PySketch with less elements in it.
                     // If this node contains no children, the child_ids will be an empty vector and this
@@ -177,14 +178,14 @@ where
                     let id = sketch.add(SketchNode::Node(node));
                     Ok(id)
                 }
-                RawSketch::Contains(node) => {
+                RawAst::Contains(node) => {
                     // Recursion reduces the number of the remaining elements in the PySketch by removing
                     // the wrapping `PySketch::Contains`
                     let child_id = rec(sketch, node)?;
                     let id = sketch.add(SketchNode::Contains(child_id));
                     Ok(id)
                 }
-                RawSketch::Or(children) => {
+                RawAst::Or(children) => {
                     // Recursions reduces the number of the remaining elements in the PySketch since the or is removed
                     let child_0 = rec(sketch, &children[0])?;
                     let child_1 = rec(sketch, &children[1])?;
@@ -200,14 +201,14 @@ where
     }
 }
 
-impl<L> TryFrom<&RawSketch> for Sketch<L>
+impl<L> TryFrom<&RawAst> for Sketch<L>
 where
     L::Error: Display,
     L: Language + egg::FromOp,
 {
     type Error = SketchParseError<L::Error>;
 
-    fn try_from(pysketch: &RawSketch) -> Result<Self, Self::Error> {
+    fn try_from(pysketch: &RawAst) -> Result<Self, Self::Error> {
         let (_, sketch) = pysketch.try_into()?;
         Ok(sketch)
     }

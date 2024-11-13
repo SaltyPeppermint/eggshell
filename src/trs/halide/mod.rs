@@ -6,7 +6,7 @@ use std::{cmp::Ordering, fmt::Display};
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::Serialize;
 
-use super::{SymbolIter, Trs, TrsError};
+use super::{Trs, TrsAnalysis, TrsError, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -35,12 +35,12 @@ define_language! {
         "||" = Or([Id; 2]),
         "&&" = And([Id; 2]),
         Bool(bool),
-        Constant(i64),
+        Number(i64),
         Symbol(Symbol),
     }
 }
 
-impl SymbolIter for HalideExpr {
+impl TrsLang for HalideExpr {
     fn raw_symbols() -> &'static [(&'static str, usize)] {
         &[
             ("+", 2),
@@ -63,6 +63,14 @@ impl SymbolIter for HalideExpr {
             ("false", 0),
         ]
     }
+
+    fn is_const(&self) -> bool {
+        matches!(self, HalideExpr::Number(_)) || matches!(self, HalideExpr::Bool(_))
+    }
+
+    fn is_var(&self) -> bool {
+        matches!(self, HalideExpr::Symbol(_))
+    }
 }
 
 impl Typeable for HalideExpr {
@@ -72,7 +80,7 @@ impl Typeable for HalideExpr {
         match self {
             // Primitive types
             Self::Bool(_) => TypingInfo::new(Self::Type::Boolean, Self::Type::Top),
-            Self::Constant(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Top),
+            Self::Number(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Top),
             Self::Symbol(_) => TypingInfo::new(Self::Type::Top, Self::Type::Top),
 
             // Fns of type int
@@ -174,7 +182,7 @@ impl Analysis<HalideExpr> for ConstantFold {
         let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
         // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());
         Some(match enode {
-            HalideExpr::Constant(c) => HalideData::Int(*c),
+            HalideExpr::Number(c) => HalideData::Int(*c),
             HalideExpr::Add([a, b]) => (xi(a)? + xi(b)?).into(),
             HalideExpr::Sub([a, b]) => (xi(a)? - xi(b)?).into(),
             HalideExpr::Mul([a, b]) => (xi(a)? * xi(b)?).into(),
@@ -214,7 +222,7 @@ impl Analysis<HalideExpr> for ConstantFold {
     fn modify(egraph: &mut EGraph, id: Id) {
         if let Some(c) = egraph[id].data {
             let added = match c {
-                HalideData::Int(i) => egraph.add(HalideExpr::Constant(i)),
+                HalideData::Int(i) => egraph.add(HalideExpr::Number(i)),
                 HalideData::Bool(b) => egraph.add(HalideExpr::Bool(b)),
             };
 
@@ -315,6 +323,8 @@ impl Halide {
         }
     }
 }
+
+impl TrsAnalysis<HalideExpr> for ConstantFold {}
 
 impl Trs for Halide {
     type Language = HalideExpr;

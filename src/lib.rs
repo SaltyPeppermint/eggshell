@@ -41,6 +41,7 @@
 
 pub mod analysis;
 pub mod eqsat;
+mod features;
 pub mod io;
 mod python;
 pub mod sampling;
@@ -56,8 +57,7 @@ use pyo3::prelude::*;
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Pylang works for all langs that implement Display
-    m.add_class::<python::PyLang>()?;
-    m.add_class::<python::PySketch>()?;
+    m.add_class::<python::PyAst>()?;
     m.add_class::<python::FlatAst>()?;
     m.add_class::<python::FlatNode>()?;
     m.add_class::<python::FlatEGraph>()?;

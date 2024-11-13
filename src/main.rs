@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use chrono::Local;
 use clap::error::ErrorKind;
-use clap::{Error, Parser, Subcommand};
+use clap::{Error, Parser};
 use egg::{AstSize, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashMap;
 use indicatif::{ProgressBar, ProgressDrawTarget};
@@ -110,11 +110,11 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     with_baselines: bool,
 
-    /// Node limit for egraph
+    /// Node limit for egraph in seconds
     #[arg(long)]
     node_limit: Option<usize>,
 
-    /// Memory limit for eqsat
+    /// Memory limit for eqsat in bytes
     #[arg(long)]
     memory_limit: Option<usize>,
 
@@ -150,16 +150,6 @@ impl FromStr for SampleStrategy {
             _ => Err(Error::new(ErrorKind::InvalidValue)),
         }
     }
-}
-
-#[derive(Subcommand, Serialize, Deserialize, Debug, Eq, PartialEq, Clone, Copy)]
-enum SampleMode {
-    Full {
-        /// Number of samples to take for each EGraph
-        #[arg(short = 'g', long, default_value_t = 16)]
-        egraph_samples: usize,
-    },
-    JustRoot,
 }
 
 fn write_metadata(
@@ -363,42 +353,6 @@ fn gen_explanations<R: Trs>(
         })
         .collect::<Vec<_>>()
 }
-
-// fn gen_baseline<R: Trs>(
-//     generated: &[RecExpr<R::Language>],
-//     rules: &[Rewrite<R::Language, R::Analysis>],
-//     n_samples: usize,
-//     rng: &mut StdRng,
-// ) -> Vec<BaselineData> {
-//     generated
-//         .iter()
-//         .enumerate()
-//         .flat_map(|(lhs_idx, lhs)| {
-//             generated
-//                 .iter()
-//                 .enumerate()
-//                 .flat_map(move |(rhs_idx, rhs)| {
-//                     if lhs_idx == rhs_idx {
-//                         return None;
-//                     }
-//                     Some((lhs_idx, lhs, rhs_idx, rhs))
-//                 })
-//         })
-//         .choose_multiple(rng, n_samples)
-//         .into_iter()
-//         .map(|(lhs_idx, lhs, rhs_idx, rhs)| {
-//             let result = Eqsat::<R>::new(vec![lhs.clone(), rhs.clone()]).run(rules);
-//             BaselineData {
-//                 from: lhs_idx,
-//                 to: rhs_idx,
-//                 stop_reason: result.report().stop_reason.to_owned(),
-//                 total_time: result.report().total_time,
-//                 total_nodes: result.report().egraph_nodes,
-//                 total_iters: result.report().iterations,
-//             }
-//         })
-//         .collect()
-// }
 
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {

@@ -6,7 +6,7 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{SymbolIter, Trs};
+use super::{Trs, TrsAnalysis, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -38,7 +38,7 @@ define_language! {
     }
 }
 
-impl SymbolIter for Math {
+impl TrsLang for Math {
     fn raw_symbols() -> &'static [(&'static str, usize)] {
         &[
             ("d", 2),
@@ -53,6 +53,14 @@ impl SymbolIter for Math {
             ("sin", 1),
             ("cos", 1),
         ]
+    }
+
+    fn is_const(&self) -> bool {
+        matches!(self, Math::Constant(_))
+    }
+
+    fn is_var(&self) -> bool {
+        matches!(self, Math::Symbol(_))
     }
 }
 
@@ -159,6 +167,8 @@ impl Analysis<Math> for ConstantFold {
         }
     }
 }
+
+impl TrsAnalysis<Math> for ConstantFold {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;

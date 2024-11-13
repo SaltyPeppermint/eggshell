@@ -4,7 +4,7 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
-use super::{SymbolIter, Trs};
+use super::{Trs, TrsAnalysis, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
@@ -21,9 +21,17 @@ define_language! {
     }
 }
 
-impl SymbolIter for SimpleLang {
+impl TrsLang for SimpleLang {
     fn raw_symbols() -> &'static [(&'static str, usize)] {
         &[("+", 2), ("*", 2)]
+    }
+
+    fn is_const(&self) -> bool {
+        matches!(self, SimpleLang::Num(_))
+    }
+
+    fn is_var(&self) -> bool {
+        matches!(self, SimpleLang::Symbol(_))
     }
 }
 
@@ -80,6 +88,8 @@ fn make_rules() -> Vec<Rewrite> {
         rewrite!("mul-1"; "(* ?a 1)" => "?a"),
     ]
 }
+
+impl TrsAnalysis<SimpleLang> for () {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;
