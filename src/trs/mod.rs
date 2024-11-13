@@ -19,7 +19,6 @@ pub use arithmetic::Arithmetic;
 pub use halide::{Halide, HalideRuleset};
 pub use rise::Rise;
 pub use simple::Simple;
-pub(crate) use simple::SimpleLang;
 
 pub trait TrsLang:
     Language<Discriminant: Debug + Send + Sync> + Display + Serialize + FromOp + Debug + Send + Sync

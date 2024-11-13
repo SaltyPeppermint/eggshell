@@ -3,6 +3,7 @@ mod flat;
 mod macros;
 mod pyast;
 mod pytrs;
+mod raw_ast;
 mod symbols;
 
 use std::fmt::Display;
@@ -15,7 +16,7 @@ pub use flat::{FlatAst, FlatEGraph, FlatNode, FlatVertex};
 pub use pyast::PyAst;
 pub use pytrs::*;
 
-pub(crate) use pyast::RawAst;
+pub(crate) use raw_ast::RawAst;
 pub(crate) use symbols::{SymbolMetaData, SymbolTable};
 
 /// A wrapper around the `RecParseError` so we can circumvent the orphan rule
