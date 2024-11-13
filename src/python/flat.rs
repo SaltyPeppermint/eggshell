@@ -5,10 +5,10 @@ use hashbrown::HashMap;
 use numpy::{IntoPyArray, Ix1, Ix2, PyArray, PyArray2};
 use pyo3::prelude::*;
 
-use super::{RawLang, RawSketch, SymbolTable};
+use super::{RawAst, SymbolTable};
 use crate::eqsat::EqsatResult;
-use crate::trs::Trs;
-use crate::utils::Tree;
+use crate::features;
+use crate::trs::{Trs, TrsLang};
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -26,37 +26,35 @@ impl FlatAst {
     }
 }
 
-impl From<&RawSketch> for FlatAst {
-    fn from(root: &RawSketch) -> Self {
+impl From<&RawAst> for FlatAst {
+    fn from(root: &RawAst) -> Self {
         fn rec(
             parent_idx: usize,
             root_distance: usize,
-            sketch_node: &RawSketch,
+            node: &RawAst,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
         ) {
             nodes.push(FlatNode {
-                name: sketch_node.name().to_owned(),
+                name: node.name().to_owned(),
                 root_distance,
+                features: node.features().expect("Cannot transform into non-feature"),
             });
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
-            match sketch_node {
-                RawSketch::Active | RawSketch::Open | RawSketch::Any => (),
-                RawSketch::Node {
-                    lang_node: _,
-                    children,
-                } => {
+            match node {
+                RawAst::Active | RawAst::Open | RawAst::Any => (),
+                RawAst::Node { children, .. } => {
                     for c in children {
                         rec(current_idx, root_distance + 1, c, nodes, edges);
                     }
                 }
-                RawSketch::Or(children) => {
+                RawAst::Or(children) => {
                     rec(current_idx, root_distance + 1, &children[0], nodes, edges);
                     rec(current_idx, root_distance + 1, &children[1], nodes, edges);
                 }
-                RawSketch::Contains(node) => {
-                    rec(current_idx, root_distance + 1, node, nodes, edges);
+                RawAst::Contains(child) => {
+                    rec(current_idx, root_distance + 1, child, nodes, edges);
                 }
             }
         }
@@ -69,66 +67,54 @@ impl From<&RawSketch> for FlatAst {
     }
 }
 
-impl From<&RawLang> for FlatAst {
-    fn from(root: &RawLang) -> Self {
-        fn rec(
-            parent_idx: usize,
-            root_distance: usize,
-            lang_node: &RawLang,
-            nodes: &mut Vec<FlatNode>,
-            edges: &mut Vec<(usize, usize)>,
-        ) {
-            nodes.push(FlatNode {
-                name: lang_node.name().to_owned(),
-                root_distance,
-            });
-            let current_idx = nodes.len() - 1;
-            edges.push((parent_idx, current_idx));
-            for c in lang_node.children() {
-                rec(current_idx, root_distance + 1, c, nodes, edges);
-            }
-        }
-
-        let mut nodes = Vec::new();
-        let mut edges = Vec::new();
-
-        rec(0, 0, root, &mut nodes, &mut edges);
-        FlatAst { nodes, edges }
-    }
+fn vars_in_expr<L: TrsLang>(expr: &RecExpr<L>) -> usize {
+    expr.as_ref().iter().filter(|n| n.is_var()).count()
 }
 
-impl<L: Language + Display> From<&RecExpr<L>> for FlatAst {
-    fn from(rec_expr: &RecExpr<L>) -> Self {
-        fn rec<IL: Language + Display>(
+impl<L: TrsLang> From<&RecExpr<L>> for FlatAst {
+    #[expect(clippy::too_many_arguments)]
+    fn from(expr: &RecExpr<L>) -> Self {
+        fn rec<IL: TrsLang>(
             node_id: Id,
-            rec_expr: &RecExpr<IL>,
+            expr: &RecExpr<IL>,
             parent_idx: usize,
             root_distance: usize,
             nodes: &mut Vec<FlatNode>,
             edges: &mut Vec<(usize, usize)>,
+            pos: usize,
+            vars_in_expr: usize,
         ) {
+            let node = &expr[node_id];
             nodes.push(FlatNode {
-                name: rec_expr[node_id].to_string(),
+                name: node.to_string(),
                 root_distance,
+                features: [
+                    features::symbol_features(node, vars_in_expr),
+                    features::additional(node, pos, root_distance),
+                ]
+                .concat(),
             });
             let current_idx = nodes.len() - 1;
             edges.push((parent_idx, current_idx));
-            for c_id in rec_expr[node_id].children() {
+            for (c_pos, c_id) in node.children().iter().enumerate() {
                 rec(
                     *c_id,
-                    rec_expr,
+                    expr,
                     current_idx,
                     root_distance + 1,
                     nodes,
                     edges,
+                    c_pos,
+                    vars_in_expr,
                 );
             }
         }
 
+        let vars_in_expr = vars_in_expr(expr);
         let mut nodes = Vec::new();
         let mut edges = Vec::new();
-        let root = (rec_expr.as_ref().len() - 1).into();
-        rec(root, rec_expr, 0, 0, &mut nodes, &mut edges);
+        let root = (expr.as_ref().len() - 1).into();
+        rec(root, expr, 0, 0, &mut nodes, &mut edges, 0, vars_in_expr);
         FlatAst { nodes, edges }
     }
 }
@@ -140,6 +126,8 @@ pub struct FlatNode {
     name: String,
     #[pyo3(get)]
     root_distance: usize,
+    #[pyo3(get)]
+    features: Vec<f64>,
 }
 
 #[pymethods]
@@ -209,15 +197,12 @@ impl FlatVertex {
         let n_symbols = lut.len();
         let f_vec_len = n_symbols + 1 + additional_features;
         match self {
-            FlatVertex::EClass { id: _, analysis: _ } => {
+            FlatVertex::EClass { .. } => {
                 let mut v = vec![0.0; f_vec_len];
                 v[n_symbols + 1] = 1.0;
                 Ok(v)
             }
-            FlatVertex::ENode {
-                symbol,
-                position: _,
-            } => lut
+            FlatVertex::ENode { symbol, .. } => lut
                 .get_symbol(symbol.as_str())
                 .map(|s| s.to_feature_vec(f_vec_len, n_symbols, int_bounds)),
         }

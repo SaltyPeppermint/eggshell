@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
-use egg::Language;
+use egg::{Id, RecExpr};
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::{create_exception, PyErr};
@@ -10,34 +10,35 @@ use thiserror::Error;
 
 use super::FlatAst;
 use crate::sketch::{PartialSketch, PartialSketchNode, Sketch, SketchNode};
+use crate::trs::TrsLang;
 use crate::utils::Tree;
 
 #[pyclass]
 #[derive(Debug, Clone, PartialEq)]
 /// Wrapper type for Python
-pub struct PySketch(pub(crate) RawSketch);
+pub struct PyAst(pub(crate) RawAst);
 
 #[pymethods]
-impl PySketch {
+impl PyAst {
     /// This always generates a new node that has [open] as its children
     #[new]
     fn new(node: &str, arity: usize) -> PyResult<Self> {
-        let new_children = vec![RawSketch::Open; arity];
-        let raw_sketch = RawSketch::new(node, new_children)?;
-        Ok(PySketch(raw_sketch))
+        let new_children = vec![RawAst::Open; arity];
+        let raw_sketch = RawAst::new(node, new_children)?;
+        Ok(PyAst(raw_sketch))
     }
 
     /// Generate a new root with an [active] node
     #[staticmethod]
     pub fn new_root() -> Self {
-        PySketch(RawSketch::Active)
+        PyAst(RawAst::Active)
     }
 
     /// Parse from string
     #[staticmethod]
     pub fn from_str(s_expr_str: &str) -> PyResult<Self> {
-        let raw_sketch = s_expr_str.parse().map_err(RawSketchError::BadSexp)?;
-        Ok(PySketch(raw_sketch))
+        let raw_sketch = s_expr_str.parse().map_err(RawAstError::BadSexp)?;
+        Ok(PyAst(raw_sketch))
     }
 
     fn __str__(&self) -> String {
@@ -79,20 +80,61 @@ impl PySketch {
     pub fn sketch_symbols(&self) -> usize {
         self.0.sketch_symbols()
     }
-}
 
-impl From<RawSketch> for PySketch {
-    fn from(value: RawSketch) -> Self {
-        PySketch(value)
+    /// Checks if it is a sketch
+    pub fn is_sketch(&self) -> bool {
+        self.0.is_sketch()
+    }
+
+    /// Checks if it is a sketch
+    pub fn is_partial_sketch(&self) -> bool {
+        self.0.is_partial_sketch()
+    }
+
+    pub fn features(&self) -> Option<Vec<f64>> {
+        todo!()
     }
 }
 
-impl FromStr for PySketch {
-    type Err = RawSketchParseError;
+impl From<RawAst> for PyAst {
+    fn from(value: RawAst) -> Self {
+        PyAst(value)
+    }
+}
 
-    fn from_str(s: &str) -> Result<Self, RawSketchParseError> {
+impl<L: TrsLang> From<&RecExpr<L>> for PyAst {
+    fn from(expr: &RecExpr<L>) -> Self {
+        let raw_ast = expr.into();
+        PyAst(raw_ast)
+    }
+}
+
+impl<L: TrsLang> From<&PartialSketch<L>> for PyAst {
+    fn from(sketch: &PartialSketch<L>) -> Self {
+        let raw_partial_sketch = sketch.into();
+        PyAst(raw_partial_sketch)
+    }
+}
+
+impl<L: TrsLang> From<&Sketch<L>> for PyAst {
+    fn from(sketch: &Sketch<L>) -> Self {
+        let raw_sketch = sketch.into();
+        PyAst(raw_sketch)
+    }
+}
+
+impl FromStr for PyAst {
+    type Err = RawAstParseError;
+
+    fn from_str(s: &str) -> Result<Self, RawAstParseError> {
         let raw_sketch = s.parse()?;
-        Ok(PySketch(raw_sketch))
+        Ok(PyAst(raw_sketch))
+    }
+}
+
+impl From<RawAstError> for PyErr {
+    fn from(err: RawAstError) -> PyErr {
+        PySketchException::new_err(err.to_string())
     }
 }
 
@@ -103,14 +145,8 @@ create_exception!(
     "Error dealing with a PySketch."
 );
 
-impl From<RawSketchError> for PyErr {
-    fn from(err: RawSketchError) -> PyErr {
-        PySketchException::new_err(err.to_string())
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum RawSketch {
+pub(crate) enum RawAst {
     /// Any program of the underlying [`Language`].
     ///
     /// Corresponds to the `?` syntax.
@@ -128,7 +164,8 @@ pub(crate) enum RawSketch {
     /// Corresponds to the `(language_node s1 .. sn)` syntax.
     Node {
         lang_node: String,
-        children: Box<[RawSketch]>,
+        children: Box<[RawAst]>,
+        features: Option<Vec<f64>>,
     },
     // /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     // ///
@@ -137,56 +174,57 @@ pub(crate) enum RawSketch {
     /// Programs that contain sub-programs satisfying the given sketch.
     ///
     /// Corresponds to the `(contains s)` syntax.
-    Contains(Box<RawSketch>),
+    Contains(Box<RawAst>),
     /// Programs that satisfy any of these sketches.
     ///
     /// Corresponds to the `(or s1 .. sn)` syntax.
-    Or(Box<[RawSketch; 2]>),
+    Or(Box<[RawAst; 2]>),
 }
 
-impl RawSketch {
-    pub fn new(node_type: &str, mut children: Vec<RawSketch>) -> Result<Self, RawSketchError> {
+impl RawAst {
+    pub fn new(node_type: &str, mut children: Vec<RawAst>) -> Result<Self, RawAstError> {
         match (node_type, children.len()) {
-            ("any" | "ANY" | "Any" | "?", 0) => Ok(RawSketch::Any),
-            ("any" | "ANY" | "Any" | "?", n) => Err(RawSketchError::BadNewChildren("?".into(), n)),
+            ("any" | "ANY" | "Any" | "?", 0) => Ok(RawAst::Any),
+            ("any" | "ANY" | "Any" | "?", n) => Err(RawAstError::BadNewChildren("?".into(), n)),
 
-            ("[open]" | "[OPEN]" | "[Open]", 0) => Ok(RawSketch::Open),
+            ("[open]" | "[OPEN]" | "[Open]", 0) => Ok(RawAst::Open),
             ("[open]" | "[OPEN]" | "[Open]", n) => {
-                Err(RawSketchError::BadNewChildren("[open]".into(), n))
+                Err(RawAstError::BadNewChildren("[open]".into(), n))
             }
 
-            ("[active]" | "[ACTIVE]" | "[Active]", 0) => Ok(RawSketch::Active),
+            ("[active]" | "[ACTIVE]" | "[Active]", 0) => Ok(RawAst::Active),
             ("[active]" | "[ACTIVE]" | "[Active]", n) => {
-                Err(RawSketchError::BadNewChildren("[active]".into(), n))
+                Err(RawAstError::BadNewChildren("[active]".into(), n))
             }
 
             ("or" | "OR" | "Or", 2) => {
                 let child_1 = children.pop().expect("Safe cause length 2");
                 let child_0 = children.pop().expect("Safe cause length 2");
-                Ok(RawSketch::Or(Box::new([child_0, child_1])))
+                Ok(RawAst::Or(Box::new([child_0, child_1])))
             }
-            ("or" | "OR" | "Or", n) => Err(RawSketchError::BadNewChildren("or".into(), n)),
+            ("or" | "OR" | "Or", n) => Err(RawAstError::BadNewChildren("or".into(), n)),
 
-            ("contains" | "CONTAINS" | "Contains", 1) => Ok(RawSketch::Contains(Box::new(
+            ("contains" | "CONTAINS" | "Contains", 1) => Ok(RawAst::Contains(Box::new(
                 children.pop().expect("Safe cause len = 1"),
             ))),
             ("contains" | "CONTAINS" | "Contains", n) => {
-                Err(RawSketchError::BadNewChildren("contains".into(), n))
+                Err(RawAstError::BadNewChildren("contains".into(), n))
             }
 
-            (s, _) => Ok(RawSketch::Node {
+            (s, _) => Ok(RawAst::Node {
                 lang_node: s.to_owned(),
                 children: children.into_boxed_slice(),
+                features: None,
             }),
         }
     }
 
     /// Replace active with new node
     /// Returns true if successfull
-    fn replace_active(&mut self, new_pick: &mut Option<RawSketch>) -> bool {
+    fn replace_active(&mut self, new_pick: &mut Option<RawAst>) -> bool {
         match self {
             // Replace active with new node
-            RawSketch::Active => {
+            RawAst::Active => {
                 *self = new_pick.take().expect("Only one Active in any ast");
                 true
             }
@@ -202,8 +240,8 @@ impl RawSketch {
     /// Returns true if successful, meaning there were open [open]s
     fn new_active(&mut self) -> bool {
         match self {
-            RawSketch::Open => {
-                *self = RawSketch::Active;
+            RawAst::Open => {
+                *self = RawAst::Active;
                 // Return true if a new active could be found
                 true
             }
@@ -227,33 +265,47 @@ impl RawSketch {
 
     fn unfinished(&self) -> bool {
         match self {
-            RawSketch::Active => true,
+            RawAst::Active => true,
             _ => self.children().iter().any(|c| c.unfinished()),
+        }
+    }
+
+    fn is_sketch(&self) -> bool {
+        match self {
+            RawAst::Node { children, .. } => children.iter().any(|c| c.is_sketch()),
+            _ => true,
+        }
+    }
+
+    fn is_partial_sketch(&self) -> bool {
+        match self {
+            RawAst::Active | RawAst::Open => true,
+            _ => self.children().iter().any(|c| c.is_partial_sketch()),
         }
     }
 
     pub fn name(&self) -> &str {
         match self {
-            RawSketch::Any => "?",
-            RawSketch::Open => "[open]",
-            RawSketch::Active => "[active]",
-            RawSketch::Node {
-                lang_node,
-                children: _,
-            } => lang_node,
-            RawSketch::Contains(_) => "contains",
-            RawSketch::Or(_) => "or",
+            RawAst::Any => "?",
+            RawAst::Open => "[open]",
+            RawAst::Active => "[active]",
+            RawAst::Node { lang_node, .. } => lang_node,
+            RawAst::Contains(_) => "contains",
+            RawAst::Or(_) => "or",
         }
+    }
+
+    pub fn features(&self) -> Option<Vec<f64>> {
+        todo!()
     }
 
     pub fn sketch_symbols(&self) -> usize {
         match self {
-            RawSketch::Open | RawSketch::Active => 0,
-            RawSketch::Node {
-                lang_node: _,
-                children,
-            } => children.iter().map(|c| c.sketch_symbols()).sum::<usize>(),
-            RawSketch::Any | RawSketch::Contains(_) | RawSketch::Or(_) => {
+            RawAst::Open | RawAst::Active => 0,
+            RawAst::Node { children, .. } => {
+                children.iter().map(|c| c.sketch_symbols()).sum::<usize>()
+            }
+            RawAst::Any | RawAst::Contains(_) | RawAst::Or(_) => {
                 1 + self
                     .children()
                     .iter()
@@ -264,28 +316,22 @@ impl RawSketch {
     }
 }
 
-impl Tree for RawSketch {
+impl Tree for RawAst {
     fn children(&self) -> &[Self] {
         match self {
-            RawSketch::Any | RawSketch::Open | RawSketch::Active => &[],
-            RawSketch::Node {
-                lang_node: _,
-                children,
-            } => children,
-            RawSketch::Contains(child) => std::slice::from_ref(child),
-            RawSketch::Or(children) => children.as_slice(),
+            RawAst::Any | RawAst::Open | RawAst::Active => &[],
+            RawAst::Node { children, .. } => children,
+            RawAst::Contains(child) => std::slice::from_ref(child),
+            RawAst::Or(children) => children.as_slice(),
         }
     }
 
     fn children_mut(&mut self) -> &mut [Self] {
         match self {
-            RawSketch::Any | RawSketch::Open | RawSketch::Active => &mut [],
-            RawSketch::Node {
-                lang_node: _,
-                children,
-            } => children,
-            RawSketch::Contains(child) => std::slice::from_mut(child),
-            RawSketch::Or(children) => children.as_mut_slice(),
+            RawAst::Any | RawAst::Open | RawAst::Active => &mut [],
+            RawAst::Node { children, .. } => children,
+            RawAst::Contains(child) => std::slice::from_mut(child),
+            RawAst::Or(children) => children.as_mut_slice(),
         }
     }
 }
@@ -293,29 +339,46 @@ impl Tree for RawSketch {
 /// An error type for failures when attempting to parse an s-expression as a
 /// [`PySketch`].
 #[derive(Debug, Error)]
-pub enum RawSketchError {
-    /// New Error for the sketch
+pub enum RawAstError {
+    /// Bad child found during parsing
     #[error("Wrong number of children: {0}")]
     BadNewChildren(String, usize),
 
-    /// An error occurred while parsing raw sketch via an the s-expressio
+    /// Tried parsing a `Sketch` or `PartialSketch` as a `RecExpr`
+    #[error("Tried parsing a Sketch or Partial Sketch as a RecExpr: {0}")]
+    NotARecExpr(String),
+
+    /// Tried using a `RecExpr` or `PartialSketch` as a `Sketch`
+    #[error("Tried using a RecExpr or Partial Sketch as a Sketch: {0}")]
+    NotASketchExpr(String),
+
+    /// Tried parsing a `RecExpr` or `Sketch` as a `PartialSketch`
+    #[error("Tried parsing a RecExpr or Sketch as a Partial Sketch: {0}")]
+    NotAPartialSketchExpr(String),
+
+    /// Error converting a node to a L
+    #[error("FromOp Error during parsing: {0}")]
+    FromOp(String),
+
+    /// An error occurred while parsing raw sketch via an the s-expression
     #[error(transparent)]
-    BadSexp(RawSketchParseError),
+    BadSexp(RawAstParseError),
 }
 
-impl Display for RawSketch {
+impl Display for RawAst {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            RawSketch::Any => write!(f, "?"),
-            RawSketch::Open => write!(f, "[open]"),
-            RawSketch::Active => write!(f, "[active]"),
-            RawSketch::Contains(node) => write!(f, "(contains {node})"),
-            RawSketch::Or(children) => {
+            RawAst::Any => write!(f, "?"),
+            RawAst::Open => write!(f, "[open]"),
+            RawAst::Active => write!(f, "[active]"),
+            RawAst::Contains(node) => write!(f, "(contains {node})"),
+            RawAst::Or(children) => {
                 write!(f, "(or {} {})", children[0], children[1])
             }
-            RawSketch::Node {
+            RawAst::Node {
                 lang_node,
                 children,
+                ..
             } => {
                 if children.is_empty() {
                     write!(f, "{lang_node}")
@@ -332,74 +395,62 @@ impl Display for RawSketch {
     }
 }
 
-impl<L: Language + Display> From<&PartialSketch<L>> for PySketch {
-    fn from(sketch: &PartialSketch<L>) -> Self {
-        let raw_sketch = sketch.into();
-        PySketch(raw_sketch)
-    }
-}
+impl FromStr for RawAst {
+    type Err = RawAstParseError;
 
-impl<L: Language + Display> From<&Sketch<L>> for PySketch {
-    fn from(sketch: &Sketch<L>) -> Self {
-        let raw_sketch = sketch.into();
-        PySketch(raw_sketch)
-    }
-}
-
-impl FromStr for RawSketch {
-    type Err = RawSketchParseError;
-
-    fn from_str(s: &str) -> Result<Self, RawSketchParseError> {
-        fn rec(sexp: &Sexp) -> Result<RawSketch, RawSketchParseError> {
+    fn from_str(s: &str) -> Result<Self, RawAstParseError> {
+        fn rec(sexp: &Sexp) -> Result<RawAst, RawAstParseError> {
             match sexp {
-                Sexp::Empty => Err(RawSketchParseError::EmptySexp),
+                Sexp::Empty => Err(RawAstParseError::EmptySexp),
                 Sexp::String(s) => match s.as_str() {
-                    "?" | "any" | "ANY" | "Any" => Ok(RawSketch::Any),
-                    "[open]" | "[OPEN]" | "[Open]" => Ok(RawSketch::Open),
-                    "[active]" | "[ACTIVE]" | "[Active]" => Ok(RawSketch::Active),
-                    "or" | "OR" | "Or" => Err(RawSketchParseError::BadTerminalOr(sexp.to_owned())),
+                    "?" | "any" | "ANY" | "Any" => Ok(RawAst::Any),
+                    "[open]" | "[OPEN]" | "[Open]" => Ok(RawAst::Open),
+                    "[active]" | "[ACTIVE]" | "[Active]" => Ok(RawAst::Active),
+                    "or" | "OR" | "Or" => Err(RawAstParseError::BadTerminalOr(sexp.to_owned())),
                     "contains" | "CONTAINS" | "Contains" => {
-                        Err(RawSketchParseError::BadTerminalContains(sexp.to_owned()))
+                        Err(RawAstParseError::BadTerminalContains(sexp.to_owned()))
                     }
-                    _ => Ok(RawSketch::Node {
+                    _ => Ok(RawAst::Node {
                         lang_node: s.to_string(),
                         children: Box::new([]),
+                        features: None,
                     }),
                 },
-                Sexp::List(list) if list.is_empty() => Err(RawSketchParseError::EmptySexp),
+                Sexp::List(list) if list.is_empty() => Err(RawAstParseError::EmptySexp),
                 Sexp::List(list) => match &list[0] {
                     Sexp::Empty => unreachable!("Cannot be in head position"),
                     empty_list @ Sexp::List(..) => {
-                        Err(RawSketchParseError::HeadList(empty_list.to_owned()))
+                        Err(RawAstParseError::HeadList(empty_list.to_owned()))
                     }
                     Sexp::String(s) => match (s.as_str(), list.len()) {
                         ("contains" | "CONTAINS" | "Contains", 2) => {
                             let inner = rec(&list[1])?;
-                            Ok(RawSketch::Contains(Box::new(inner)))
+                            Ok(RawAst::Contains(Box::new(inner)))
                         }
                         ("contains" | "CONTAINS" | "Contains", _) => {
-                            Err(RawSketchParseError::BadChildrenContains(list.to_owned()))
+                            Err(RawAstParseError::BadChildrenContains(list.to_owned()))
                         }
 
                         ("or" | "OR" | "Or", 3) => {
                             let child_0 = rec(&list[1])?;
                             let child_1 = rec(&list[2])?;
-                            Ok(RawSketch::Or(Box::new([child_0, child_1])))
+                            Ok(RawAst::Or(Box::new([child_0, child_1])))
                         }
                         ("or" | "OR" | "Or", _) => {
-                            Err(RawSketchParseError::BadChildrenOr(list.to_owned()))
+                            Err(RawAstParseError::BadChildrenOr(list.to_owned()))
                         }
-                        _ => Ok(RawSketch::Node {
+                        _ => Ok(RawAst::Node {
                             lang_node: s.to_owned(),
                             children: list[1..].iter().map(rec).collect::<Result<_, _>>()?,
+                            features: None,
                         }),
                     },
                 },
             }
         }
 
-        let sexp = symbolic_expressions::parser::parse_str(s.trim())
-            .map_err(RawSketchParseError::BadSexp)?;
+        let sexp =
+            symbolic_expressions::parser::parse_str(s.trim()).map_err(RawAstParseError::BadSexp)?;
         rec(&sexp)
     }
 }
@@ -407,7 +458,7 @@ impl FromStr for RawSketch {
 /// An error type for failures when attempting to parse an s-expression as a
 /// [`PySketch`].
 #[derive(Debug, Error)]
-pub enum RawSketchParseError {
+pub enum RawAstParseError {
     /// An empty s-expression was found. Usually this is caused by an
     /// empty list "()" somewhere in the input.
     #[error("Found empty s-expression")]
@@ -418,7 +469,7 @@ pub enum RawSketchParseError {
     #[error("Found a list in the head position: {0}")]
     HeadList(Sexp),
 
-    /// A or expression was found where with less or more han 2 children.
+    /// A or expression was found where with less or more than 2 children.
     #[error("Found an 'or' with less or more than 2 children: {0:?}")]
     BadChildrenOr(Vec<Sexp>),
 
@@ -440,24 +491,46 @@ pub enum RawSketchParseError {
     BadSexp(SexpError),
 }
 
-impl<L: Language + Display> From<&Sketch<L>> for RawSketch {
+impl<L: TrsLang> From<&RecExpr<L>> for RawAst {
+    fn from(expr: &RecExpr<L>) -> Self {
+        fn rec<L: TrsLang>(node: &L, expr: &RecExpr<L>) -> RawAst {
+            RawAst::Node {
+                lang_node: node.to_string(),
+                children: node
+                    .children()
+                    .iter()
+                    .map(|child_id| rec(&expr[*child_id], expr))
+                    .collect(),
+                features: None,
+            }
+        }
+        // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
+        // "RecExprs must satisfy the invariant that enodes’ children must refer to elements that come before it in the list."
+        // Therefore, in a RecExpr that has only one root, the last element must be the root.
+        let root = expr.as_ref().last().unwrap();
+        rec(root, expr)
+    }
+}
+
+impl<L: TrsLang> From<&Sketch<L>> for RawAst {
     fn from(sketch: &Sketch<L>) -> Self {
-        fn rec<L: Language + Display>(node: &SketchNode<L>, sketch: &Sketch<L>) -> RawSketch {
+        fn rec<L: TrsLang>(node: &SketchNode<L>, sketch: &Sketch<L>) -> RawAst {
             match node {
-                SketchNode::Any => RawSketch::Any,
-                SketchNode::Node(lang_node) => RawSketch::Node {
+                SketchNode::Any => RawAst::Any,
+                SketchNode::Node(lang_node) => RawAst::Node {
                     lang_node: lang_node.to_string(),
                     children: lang_node
                         .children()
                         .iter()
                         .map(|child_id| rec(&sketch[*child_id], sketch))
                         .collect(),
+                    features: None,
                 },
-                SketchNode::Contains(id) => RawSketch::Contains(rec(&sketch[*id], sketch).into()),
+                SketchNode::Contains(id) => RawAst::Contains(rec(&sketch[*id], sketch).into()),
                 SketchNode::Or(ids) => {
                     let child_0 = rec(&sketch[ids[0]], sketch);
                     let child_1 = rec(&sketch[ids[1]], sketch);
-                    RawSketch::Or(Box::new([child_0, child_1]))
+                    RawAst::Or(Box::new([child_0, child_1]))
                 }
             }
         }
@@ -469,31 +542,29 @@ impl<L: Language + Display> From<&Sketch<L>> for RawSketch {
     }
 }
 
-impl<L: Language + Display> From<&PartialSketch<L>> for RawSketch {
+impl<L: TrsLang> From<&PartialSketch<L>> for RawAst {
     fn from(sketch: &PartialSketch<L>) -> Self {
-        fn rec<L: Language + Display>(
-            node: &PartialSketchNode<L>,
-            sketch: &PartialSketch<L>,
-        ) -> RawSketch {
+        fn rec<L: TrsLang>(node: &PartialSketchNode<L>, sketch: &PartialSketch<L>) -> RawAst {
             match node {
-                PartialSketchNode::Open => RawSketch::Open,
-                PartialSketchNode::Active => RawSketch::Active,
-                PartialSketchNode::Finished(SketchNode::Any) => RawSketch::Any,
+                PartialSketchNode::Open => RawAst::Open,
+                PartialSketchNode::Active => RawAst::Active,
+                PartialSketchNode::Finished(SketchNode::Any) => RawAst::Any,
                 PartialSketchNode::Finished(SketchNode::Contains(id)) => {
-                    RawSketch::Contains(rec(&sketch[*id], sketch).into())
+                    RawAst::Contains(rec(&sketch[*id], sketch).into())
                 }
                 PartialSketchNode::Finished(SketchNode::Or(ids)) => {
                     let child_0 = rec(&sketch[ids[0]], sketch);
                     let child_1 = rec(&sketch[ids[1]], sketch);
-                    RawSketch::Or(Box::new([child_0, child_1]))
+                    RawAst::Or(Box::new([child_0, child_1]))
                 }
-                PartialSketchNode::Finished(SketchNode::Node(lang_node)) => RawSketch::Node {
+                PartialSketchNode::Finished(SketchNode::Node(lang_node)) => RawAst::Node {
                     lang_node: lang_node.to_string(),
                     children: lang_node
                         .children()
                         .iter()
                         .map(|child_id| rec(&sketch[*child_id], sketch))
                         .collect(),
+                    features: None,
                 },
             }
         }
@@ -502,43 +573,72 @@ impl<L: Language + Display> From<&PartialSketch<L>> for RawSketch {
         // Therefore, in a RecExpr that has only one root, the last element must be the root.
         let root = sketch.as_ref().last().unwrap();
         rec(root, sketch)
+    }
+}
+
+impl<L: TrsLang> TryFrom<&RawAst> for RecExpr<L> {
+    type Error = RawAstError;
+
+    fn try_from(value: &RawAst) -> Result<Self, Self::Error> {
+        fn rec<L: TrsLang>(ast: &RawAst, rec_expr: &mut RecExpr<L>) -> Result<Id, RawAstError> {
+            if let RawAst::Node {
+                lang_node,
+                children,
+                ..
+            } = ast
+            {
+                let c_ids = children
+                    .iter()
+                    .map(|c| rec(c, rec_expr))
+                    .collect::<Result<_, _>>()?;
+                let node = L::from_op(lang_node, c_ids)
+                    .map_err(|e| RawAstError::FromOp(format!("{e:?}")))?;
+                Ok(rec_expr.add(node))
+            } else {
+                Err(RawAstError::NotARecExpr(ast.to_string()))
+            }
+        }
+
+        let mut rec_expr = RecExpr::<L>::default();
+        rec(value, &mut rec_expr)?;
+        Ok(rec_expr)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use egg::SymbolLang;
+    use crate::trs::SimpleLang;
 
     #[test]
     fn parse_and_print_contains() {
         let expr = "(contains (f ?))";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch: RawSketch = (&sketch).into();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch: RawAst = (&sketch).into();
         assert_eq!(pysketch.to_string(), expr);
     }
 
     #[test]
     fn parse_and_print_or() {
         let expr = "(or f ?)";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch: RawSketch = (&sketch).into();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch: RawAst = (&sketch).into();
         assert_eq!(pysketch.to_string(), expr);
     }
 
     #[test]
     fn parse_and_print_complex() {
         let expr = "(or (g ?) (f (or (f ?) a)))";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch: RawSketch = (&sketch).into();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch: RawAst = (&sketch).into();
         assert_eq!(pysketch.to_string(), expr);
     }
 
     #[test]
     fn parse_pysketch_vs_sketch() {
         let expr = "(contains (f ?))";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch_a: RawSketch = (&sketch).into();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch_a: RawAst = (&sketch).into();
         let pysketch_b = expr.parse().unwrap();
         assert_eq!(pysketch_a, pysketch_b);
     }
@@ -546,17 +646,17 @@ mod tests {
     #[test]
     fn pysketch_from_str() {
         let expr = "(contains (f ?))";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch_a: RawSketch = (&sketch).into();
-        let pysketch_b = RawSketch::from_str(expr).unwrap();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch_a: RawAst = (&sketch).into();
+        let pysketch_b = RawAst::from_str(expr).unwrap();
         assert_eq!(pysketch_a, pysketch_b);
     }
 
     #[test]
     fn parse_pysketch_vs_sketch_complex() {
         let expr = "(or (g ?) (f (or (f ?) a)))";
-        let sketch = expr.parse::<Sketch<SymbolLang>>().unwrap();
-        let pysketch_a: RawSketch = (&sketch).into();
+        let sketch = expr.parse::<Sketch<SimpleLang>>().unwrap();
+        let pysketch_a: RawAst = (&sketch).into();
         let pysketch_b = expr.parse().unwrap();
         assert_eq!(pysketch_a, pysketch_b);
     }
@@ -564,42 +664,42 @@ mod tests {
     #[test]
     fn bad_children_or() {
         let expr = "(or f)";
-        let parse_error = expr.parse::<RawSketch>();
+        let parse_error = expr.parse::<RawAst>();
         eprintln!("{parse_error:?}");
         assert!(matches!(
             parse_error,
-            Err(RawSketchParseError::BadChildrenOr(_))
+            Err(RawAstParseError::BadChildrenOr(_))
         ));
     }
 
     #[test]
     fn bad_terminal_or() {
         let expr = "(f or)";
-        let parse_error = expr.parse::<RawSketch>();
+        let parse_error = expr.parse::<RawAst>();
         eprintln!("{parse_error:?}");
         assert!(matches!(
             parse_error,
-            Err(RawSketchParseError::BadTerminalOr(_))
+            Err(RawAstParseError::BadTerminalOr(_))
         ));
     }
 
     #[test]
     fn bad_children_contains() {
         let expr = "(contains f g)";
-        let parse_error = expr.parse::<RawSketch>();
+        let parse_error = expr.parse::<RawAst>();
         assert!(matches!(
             parse_error,
-            Err(RawSketchParseError::BadChildrenContains(_))
+            Err(RawAstParseError::BadChildrenContains(_))
         ));
     }
 
     #[test]
     fn bad_terminal_contains() {
         let expr = "(f contains)";
-        let parse_error = expr.parse::<RawSketch>();
+        let parse_error = expr.parse::<RawAst>();
         assert!(matches!(
             parse_error,
-            Err(RawSketchParseError::BadTerminalContains(_))
+            Err(RawAstParseError::BadTerminalContains(_))
         ));
     }
 }
