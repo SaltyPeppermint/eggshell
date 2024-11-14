@@ -155,7 +155,7 @@ mod tests {
     fn simple_sample() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
@@ -176,7 +176,7 @@ mod tests {
     fn stringified_sample_len() {
         let term = "(* (+ a b) 1)";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
@@ -206,7 +206,7 @@ mod tests {
         let term = "(* (+ a b) 1)";
         let term2 = "(+ (+ x 0) (* y 1))";
         let seeds = vec![term.parse().unwrap(), term2.parse().unwrap()];
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
@@ -221,14 +221,14 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(49usize, n_samples);
+        assert_eq!(41usize, n_samples);
     }
 
     #[test]
     fn halide_sample() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -243,6 +243,6 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(150usize, n_samples);
+        assert_eq!(103usize, n_samples);
     }
 }

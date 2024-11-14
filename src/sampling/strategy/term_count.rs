@@ -283,7 +283,7 @@ mod tests {
         let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 5);
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        assert_eq!(8usize, samples.len());
+        assert_eq!(9usize, samples.len());
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod tests {
     fn halide_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
@@ -332,7 +332,7 @@ mod tests {
     fn halide_lut_low_limit() {
         let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
         let seed = term.parse().unwrap();
-        let sample_conf = SampleConf::builder().build();
+        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();

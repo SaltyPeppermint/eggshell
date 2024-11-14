@@ -9,6 +9,12 @@ pub struct SampleConf {
     pub samples_per_eclass: usize,
     #[builder(default = 8)]
     pub loop_limit: usize,
-    #[builder(default = 2024)]
+    #[builder(default = 1024)]
     pub rng_seed: u64,
+}
+
+impl Default for SampleConf {
+    fn default() -> Self {
+        Self::builder().build()
+    }
 }

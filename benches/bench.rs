@@ -49,7 +49,7 @@ fn extraction(c: &mut Criterion) {
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
     let seed: RecExpr<<Simple as Trs>::Language> = term.parse().unwrap();
-    let sample_conf = SampleConf::builder().build();
+    let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
     let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
