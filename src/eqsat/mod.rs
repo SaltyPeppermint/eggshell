@@ -50,8 +50,8 @@ where
 
     /// With the runner parameters.
     #[must_use]
-    pub fn with_conf(mut self, runner_args: EqsatConf) -> Self {
-        self.conf = runner_args;
+    pub fn with_conf(mut self, conf: EqsatConf) -> Self {
+        self.conf = conf;
         self
     }
 

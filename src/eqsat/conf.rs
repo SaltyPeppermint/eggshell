@@ -10,13 +10,13 @@ use serde::{Deserialize, Serialize};
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[expect(clippy::unsafe_derive_deserialize)]
 #[pyclass(frozen)]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq, Builder, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Eq, Builder)]
 pub struct EqsatConf {
     #[builder(default = 1000)]
     pub iter_limit: usize,
-    #[builder(default = 1_000_000_000)]
+    #[builder(default = 1_000_000)]
     pub node_limit: usize,
-    #[builder(default = 32_000_000_000)]
+    #[builder(default = 1_000_000_000)]
     pub memory_limit: usize,
     #[builder(default = Duration::from_secs_f64(60.0))]
     pub time_limit: Duration,
@@ -51,6 +51,12 @@ impl EqsatConf {
             root_check,
             memory_log,
         }
+    }
+}
+
+impl Default for EqsatConf {
+    fn default() -> Self {
+        Self::builder().build()
     }
 }
 
