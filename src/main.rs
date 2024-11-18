@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::fs;
 use std::fs::File;
-use std::io::{BufWriter, Write};
+use std::io::BufWriter;
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -10,13 +10,10 @@ use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
 use egg::{AstSize, Language, RecExpr, Rewrite, StopReason};
-use hashbrown::HashMap;
-use indicatif::{ProgressBar, ProgressDrawTarget};
 use log::info;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult};
 use eggshell::io::reader;
@@ -46,33 +43,22 @@ fn main() {
         .build();
 
     let now = Local::now();
-    let uuid = Uuid::new_v4();
 
     let folder = format!(
         "data/generated_samples/5k_dataset_{}-{}",
-        now.format("%Y-%m-%d_%H:%M:%S"),
-        uuid
+        now.format("%Y-%m-%d"),
+        cli.uuid
     );
     fs::create_dir_all(&folder).unwrap();
 
-    write_metadata(
-        uuid,
-        &folder,
-        now.timestamp(),
-        cli.strategy,
-        &sample_conf,
-        &eqsat_conf,
-        &cli,
-    );
     let rules = Halide::full_rules();
     gen_data::<Halide>(
         exprs,
-        &eqsat_conf,
-        &sample_conf,
-        &cli.strategy,
-        &folder,
+        eqsat_conf,
+        sample_conf,
+        folder,
         rules.as_slice(),
-        &cli,
+        cli,
     );
 }
 
@@ -83,12 +69,8 @@ struct Cli {
     file: PathBuf,
 
     /// Number of terms from which to seed egraphs
-    #[arg(long, default_value_t = 100)]
-    seed_terms: usize,
-
-    /// Number of terms from which to seed egraphs
-    #[arg(long, default_value_t = 50)]
-    saving_batchsize: usize,
+    #[arg(long)]
+    seed_term_id: usize,
 
     /// RNG Seed
     #[arg(long, default_value_t = 2024)]
@@ -121,8 +103,10 @@ struct Cli {
     /// Time limit for eqsat in seconds
     #[arg(long)]
     time_limit: Option<usize>,
-    // #[command(subcommand)]
-    // sample_mode: SampleMode,
+
+    /// UUID to identify run
+    #[arg(long)]
+    uuid: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -152,111 +136,84 @@ impl FromStr for SampleStrategy {
     }
 }
 
-fn write_metadata(
-    uuid: Uuid,
-    folder: &str,
-    timestamp: i64,
-    strategy: SampleStrategy,
-    sample_conf: &SampleConf,
-    eqsat_conf: &EqsatConf,
-    cli: &Cli,
-) {
-    let mut metadata_f = BufWriter::new(File::create(format!("{folder}/metadata.json")).unwrap());
-    let metadata = MetaData {
-        id: uuid,
-        folder: folder.to_owned(),
-        cli: cli.to_owned(),
-        timestamp,
-        strategy,
-        sample_conf: sample_conf.clone(),
-        eqsat_conf: eqsat_conf.clone(),
-    };
-    serde_json::to_writer(&mut metadata_f, &metadata).unwrap();
-    metadata_f.flush().unwrap();
-}
-
-#[derive(Serialize, Deserialize, Eq, PartialEq)]
-struct MetaData {
-    id: Uuid,
-    folder: String,
-    cli: Cli,
-    timestamp: i64,
-    strategy: SampleStrategy,
-    sample_conf: SampleConf,
-    eqsat_conf: EqsatConf,
-}
-
 fn gen_data<R: Trs>(
     exprs: Vec<Expression>,
-    eqsat_conf: &EqsatConf,
-    sample_conf: &SampleConf,
-    strategy: &SampleStrategy,
-    folder: &str,
+    eqsat_conf: EqsatConf,
+    sample_conf: SampleConf,
+    folder: String,
     rules: &[Rewrite<R::Language, R::Analysis>],
-    cli: &Cli,
+    cli: Cli,
 ) {
-    let bar = ProgressBar::with_draw_target(Some(exprs.len() as u64), ProgressDrawTarget::stdout());
-    let mut file_id = 0;
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
-    for (seed_id, expr) in exprs.into_iter().take(cli.seed_terms).enumerate() {
-        let mut data_buf = Vec::new();
+    let expr = exprs
+        .into_iter()
+        .nth(cli.seed_term_id)
+        .expect("Must be in the file!");
 
-        info!("Starting work on expr {seed_id}: {}", expr.term);
+    info!("Starting work on expr {}: {}", cli.seed_term_id, expr.term);
 
-        info!("Running eqsat {seed_id}");
+    info!("Running eqsat {}", cli.seed_term_id);
 
-        let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-        let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-            .with_conf(eqsat_conf.clone())
-            .run(rules);
-        assert!(eqsat.egraph().clean);
+    let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
+    let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
+        .with_conf(eqsat_conf.clone())
+        .run(rules);
+    assert!(eqsat.egraph().clean);
 
-        let mem = memory_stats::memory_stats().unwrap().physical_mem;
-        info!("eqsat took {mem} bytes of memory");
-        info!("Finished Eqsat {seed_id}!");
-        let samples = match strategy {
-            SampleStrategy::TermSizeCount => {
-                let min_size = seed_expr.as_ref().len();
-                let strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 3);
-                gen_samples(&eqsat, sample_conf, strategy)
-            }
-            SampleStrategy::CostWeighted => {
-                let strategy =
-                    CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-                gen_samples(&eqsat, sample_conf, strategy)
-            }
-        };
-
-        info!("Finished sampling {seed_id}!");
-
-        info!("Generating associated data for {seed_id}...");
-        let associated_data = gen_associated_data(&seed_expr, samples, cli, eqsat, rules);
-        info!("Finished generating associated data for {seed_id}!");
-
-        let truth_value = match expr.truth_value.as_str() {
-            "true" => true,
-            "false" => false,
-            _ => panic!("Wrong truth_value"),
-        };
-
-        data_buf.push(DataEntry {
-            seed_id,
-            seed_expr,
-            associated_data,
-            truth_value,
-        });
-        bar.inc(1);
-        info!("Finished work on expr {}", seed_id);
-
-        if seed_id % cli.saving_batchsize == 0 {
-            let mut f = BufWriter::new(File::create(format!("{folder}/{file_id}.json")).unwrap());
-            serde_json::to_writer(&mut f, &data_buf).unwrap();
-            f.flush().unwrap();
-            file_id += 1;
-            data_buf.clear();
+    let mem = memory_stats::memory_stats().unwrap().physical_mem;
+    info!("eqsat took {mem} bytes of memory");
+    info!("Finished Eqsat {}!", cli.seed_term_id);
+    let samples = match &cli.strategy {
+        SampleStrategy::TermSizeCount => {
+            let min_size = seed_expr.as_ref().len();
+            let strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 3);
+            gen_samples(&eqsat, &sample_conf, strategy)
         }
-    }
+        SampleStrategy::CostWeighted => {
+            let strategy =
+                CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
+            gen_samples(&eqsat, &sample_conf, strategy)
+        }
+    };
+
+    info!("Finished sampling {}!", cli.seed_term_id);
+
+    info!("Generating associated data for {}...", cli.seed_term_id);
+    let associated_data = gen_associated_data(&seed_expr, samples, &cli, eqsat, rules);
+    info!(
+        "Finished generating associated data for {}!",
+        cli.seed_term_id
+    );
+
+    let truth_value = match expr.truth_value.as_str() {
+        "true" => true,
+        "false" => false,
+        _ => panic!("Wrong truth_value"),
+    };
+
+    let metadata = MetaData {
+        uuid: cli.uuid.clone(),
+        folder: folder.to_owned(),
+        cli: cli.to_owned(),
+        timestamp: Local::now().timestamp(),
+        strategy: cli.strategy,
+        sample_conf,
+        eqsat_conf,
+    };
+
+    let data = DataEntry {
+        seed_id: cli.seed_term_id,
+        seed_expr,
+        associated_data,
+        truth_value,
+        metadata,
+    };
+    info!("Finished work on expr {}", cli.seed_term_id);
+
+    let mut f =
+        BufWriter::new(File::create(format!("{folder}/{}.json", cli.seed_term_id)).unwrap());
+    serde_json::to_writer(&mut f, &data).unwrap();
     // });
 }
 
@@ -287,7 +244,7 @@ fn gen_associated_data<R: Trs>(
     cli: &Cli,
     eqsat: EqsatResult<R>,
     rules: &[Rewrite<R::Language, R::Analysis>],
-) -> HashMap<RecExpr<R::Language>, SampleData> {
+) -> Vec<SampleData<R::Language>> {
     let expls = gen_explanations(&samples, cli, eqsat, seed_expr);
 
     samples
@@ -295,13 +252,11 @@ fn gen_associated_data<R: Trs>(
         .zip(expls)
         .map(|(sample, explanation)| {
             let baseline = gen_baseline::<R>(cli, seed_expr, &sample, rules);
-            (
+            SampleData {
                 sample,
-                SampleData {
-                    baseline,
-                    explanation,
-                },
-            )
+                baseline,
+                explanation,
+            }
         })
         .collect()
 }
@@ -316,9 +271,7 @@ fn gen_baseline<R: Trs>(
         info!("Running baseline for \"{sample}\"...");
         let result = Eqsat::<R>::new(vec![seed_expr.clone(), sample.clone()]).run(rules);
         let b = BaselineData {
-            from: seed_expr.to_string(),
-            to: sample.to_string(),
-            stop_reason: result.report().stop_reason.to_owned(),
+            stop_reason: result.report().stop_reason.clone(),
             total_time: result.report().total_time,
             total_nodes: result.report().egraph_nodes,
             total_iters: result.report().iterations,
@@ -359,19 +312,30 @@ struct DataEntry<L: Language + Display> {
     seed_id: usize,
     seed_expr: RecExpr<L>,
     truth_value: bool,
-    associated_data: HashMap<RecExpr<L>, SampleData>,
+    associated_data: Vec<SampleData<L>>,
+    metadata: MetaData,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+struct MetaData {
+    uuid: String,
+    folder: String,
+    cli: Cli,
+    timestamp: i64,
+    strategy: SampleStrategy,
+    sample_conf: SampleConf,
+    eqsat_conf: EqsatConf,
 }
 
 #[derive(Serialize, Clone, Debug)]
-struct SampleData {
+struct SampleData<L: Language + Display> {
+    sample: RecExpr<L>,
     baseline: Option<BaselineData>,
     explanation: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
 struct BaselineData {
-    from: String,
-    to: String,
     stop_reason: StopReason,
     total_time: f64,
     total_nodes: usize,
