@@ -10,6 +10,7 @@ use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
 use egg::{AstSize, Language, RecExpr, Rewrite, StopReason};
+use hashbrown::HashSet;
 use log::info;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -21,46 +22,6 @@ use eggshell::io::structs::Expression;
 use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Trs};
-
-fn main() {
-    env_logger::init();
-
-    let cli = Cli::parse();
-
-    let exprs = reader::read_exprs_json(&cli.file, &[]);
-    let sample_conf_builder = SampleConf::builder()
-        .rng_seed(cli.rng_seed)
-        .samples_per_eclass(cli.eclass_samples);
-    let sample_conf = sample_conf_builder.build();
-
-    let eqsat_conf = EqsatConf::builder()
-        .maybe_node_limit(cli.node_limit)
-        .maybe_time_limit(cli.time_limit.map(|x| Duration::from_secs_f64(x as f64)))
-        .maybe_memory_limit(cli.memory_limit)
-        .explanation(cli.with_explanations)
-        .root_check(false)
-        .memory_log(false)
-        .build();
-
-    let now = Local::now();
-
-    let folder = format!(
-        "data/generated_samples/5k_dataset_{}-{}",
-        now.format("%Y-%m-%d"),
-        cli.uuid
-    );
-    fs::create_dir_all(&folder).unwrap();
-
-    let rules = Halide::full_rules();
-    gen_data::<Halide>(
-        exprs,
-        eqsat_conf,
-        sample_conf,
-        folder,
-        rules.as_slice(),
-        cli,
-    );
-}
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[command(version, about, long_about = None)]
@@ -124,6 +85,46 @@ impl Display for SampleStrategy {
     }
 }
 
+fn main() {
+    env_logger::init();
+
+    let cli = Cli::parse();
+
+    let exprs = reader::read_exprs_json(&cli.file, &[]);
+    let sample_conf_builder = SampleConf::builder()
+        .rng_seed(cli.rng_seed)
+        .samples_per_eclass(cli.eclass_samples);
+    let sample_conf = sample_conf_builder.build();
+
+    let eqsat_conf = EqsatConf::builder()
+        .maybe_node_limit(cli.node_limit)
+        .maybe_time_limit(cli.time_limit.map(|x| Duration::from_secs_f64(x as f64)))
+        .maybe_memory_limit(cli.memory_limit)
+        .explanation(cli.with_explanations)
+        .root_check(false)
+        .memory_log(false)
+        .build();
+
+    let now = Local::now();
+
+    let folder = format!(
+        "data/generated_samples/5k_dataset_{}-{}",
+        now.format("%Y-%m-%d"),
+        cli.uuid
+    );
+    fs::create_dir_all(&folder).unwrap();
+
+    let rules = Halide::full_rules();
+    run_eqsat::<Halide>(
+        exprs,
+        eqsat_conf,
+        sample_conf,
+        folder,
+        rules.as_slice(),
+        cli,
+    );
+}
+
 impl FromStr for SampleStrategy {
     type Err = Error;
 
@@ -136,7 +137,7 @@ impl FromStr for SampleStrategy {
     }
 }
 
-fn gen_data<R: Trs>(
+fn run_eqsat<R: Trs>(
     exprs: Vec<Expression>,
     eqsat_conf: EqsatConf,
     sample_conf: SampleConf,
@@ -144,7 +145,7 @@ fn gen_data<R: Trs>(
     rules: &[Rewrite<R::Language, R::Analysis>],
     cli: Cli,
 ) {
-    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
+    let rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
     let expr = exprs
         .into_iter()
@@ -164,23 +165,16 @@ fn gen_data<R: Trs>(
     let mem = memory_stats::memory_stats().unwrap().physical_mem;
     info!("eqsat took {mem} bytes of memory");
     info!("Finished Eqsat {}!", cli.seed_term_id);
-    let samples = match &cli.strategy {
-        SampleStrategy::TermSizeCount => {
-            let min_size = seed_expr.as_ref().len();
-            let strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 3);
-            gen_samples(&eqsat, &sample_conf, strategy)
-        }
-        SampleStrategy::CostWeighted => {
-            let strategy =
-                CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-            gen_samples(&eqsat, &sample_conf, strategy)
-        }
-    };
+
+    let samples: Vec<_> = sample(&cli, &seed_expr, &eqsat, rng, &sample_conf)
+        .into_iter()
+        .collect();
 
     info!("Finished sampling {}!", cli.seed_term_id);
+    info!("Took {} samples!", samples.len());
 
     info!("Generating associated data for {}...", cli.seed_term_id);
-    let associated_data = gen_associated_data(&seed_expr, samples, &cli, eqsat, rules);
+    let associated_data = mk_sample_data(&seed_expr, samples, &cli, eqsat, rules);
     info!(
         "Finished generating associated data for {}!",
         cli.seed_term_id
@@ -192,22 +186,18 @@ fn gen_data<R: Trs>(
         _ => panic!("Wrong truth_value"),
     };
 
-    let metadata = MetaData {
-        uuid: cli.uuid.clone(),
-        folder: folder.to_owned(),
-        cli: cli.to_owned(),
-        timestamp: Local::now().timestamp(),
-        strategy: cli.strategy,
-        sample_conf,
-        eqsat_conf,
-    };
-
     let data = DataEntry {
-        seed_id: cli.seed_term_id,
         seed_expr,
         associated_data,
         truth_value,
-        metadata,
+        metadata: MetaData {
+            uuid: cli.uuid.clone(),
+            folder: folder.to_owned(),
+            cli: cli.to_owned(),
+            timestamp: Local::now().timestamp(),
+            sample_conf,
+            eqsat_conf,
+        },
     };
     info!("Finished work on expr {}", cli.seed_term_id);
 
@@ -217,41 +207,43 @@ fn gen_data<R: Trs>(
     // });
 }
 
-fn gen_samples<'a, R, S>(
-    // sample_mode: SampleMode,
+fn sample<R: Trs>(
+    cli: &Cli,
+    seed_expr: &RecExpr<<R as Trs>::Language>,
     eqsat: &EqsatResult<R>,
+    mut rng: StdRng,
     sample_conf: &SampleConf,
-    mut strategy: S,
-) -> Vec<RecExpr<R::Language>>
-where
-    R: Trs,
-    R::Language: 'a,
-    R::Analysis: 'a,
-    S: Strategy<'a, R::Language, R::Analysis>,
-{
+) -> HashSet<RecExpr<<R as Trs>::Language>> {
     let root_id = eqsat.roots()[0];
 
-    strategy
-        .sample_eclass(sample_conf, root_id)
-        .unwrap()
-        .into_iter()
-        .collect()
+    match &cli.strategy {
+        SampleStrategy::TermSizeCount => {
+            let min_size = seed_expr.as_ref().len();
+            info!("Using min_size {min_size}");
+            TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 8)
+                .sample_eclass(sample_conf, root_id)
+                .unwrap()
+        }
+        SampleStrategy::CostWeighted => {
+            CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit)
+                .sample_eclass(sample_conf, root_id)
+                .unwrap()
+        }
+    }
 }
 
-fn gen_associated_data<R: Trs>(
+fn mk_sample_data<R: Trs>(
     seed_expr: &RecExpr<R::Language>,
     samples: Vec<RecExpr<R::Language>>,
     cli: &Cli,
-    eqsat: EqsatResult<R>,
+    mut eqsat: EqsatResult<R>,
     rules: &[Rewrite<R::Language, R::Analysis>],
 ) -> Vec<SampleData<R::Language>> {
-    let expls = gen_explanations(&samples, cli, eqsat, seed_expr);
-
     samples
         .into_iter()
-        .zip(expls)
-        .map(|(sample, explanation)| {
-            let baseline = gen_baseline::<R>(cli, seed_expr, &sample, rules);
+        .map(|sample| {
+            let baseline = mk_baseline::<R>(cli, seed_expr, &sample, rules);
+            let explanation = mk_explanation(&sample, cli, &mut eqsat, seed_expr);
             SampleData {
                 sample,
                 baseline,
@@ -261,7 +253,7 @@ fn gen_associated_data<R: Trs>(
         .collect()
 }
 
-fn gen_baseline<R: Trs>(
+fn mk_baseline<R: Trs>(
     cli: &Cli,
     seed_expr: &RecExpr<R::Language>,
     sample: &RecExpr<R::Language>,
@@ -283,33 +275,27 @@ fn gen_baseline<R: Trs>(
     }
 }
 
-fn gen_explanations<R: Trs>(
-    samples: &[RecExpr<R::Language>],
+fn mk_explanation<R: Trs>(
+    sample: &RecExpr<R::Language>,
     cli: &Cli,
-    mut eqsat: EqsatResult<R>,
+    eqsat: &mut EqsatResult<R>,
     seed_expr: &RecExpr<R::Language>,
-) -> Vec<Option<String>> {
-    samples
-        .iter()
-        .map(|sample| {
-            if cli.with_explanations {
-                info!("Constructing explanation of \"{seed_expr} == {sample}\"...");
-                let expl = eqsat
-                    .egraph_mut()
-                    .explain_equivalence(seed_expr, sample)
-                    .get_flat_string();
-                info!("Explanation constructed!");
-                Some(expl)
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>()
+) -> Option<String> {
+    if cli.with_explanations {
+        info!("Constructing explanation of \"{seed_expr} == {sample}\"...");
+        let expl = eqsat
+            .egraph_mut()
+            .explain_equivalence(seed_expr, sample)
+            .get_flat_string();
+        info!("Explanation constructed!");
+        Some(expl)
+    } else {
+        None
+    }
 }
 
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
-    seed_id: usize,
     seed_expr: RecExpr<L>,
     truth_value: bool,
     associated_data: Vec<SampleData<L>>,
@@ -322,7 +308,6 @@ struct MetaData {
     folder: String,
     cli: Cli,
     timestamp: i64,
-    strategy: SampleStrategy,
     sample_conf: SampleConf,
     eqsat_conf: EqsatConf,
 }
