@@ -4,7 +4,7 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsAnalysis, TrsLang};
+use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
@@ -94,7 +94,7 @@ impl TrsAnalysis<SimpleLang> for () {}
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;
 
-impl Trs for Simple {
+impl TermRewriteSystem for Simple {
     type Language = SimpleLang;
     type Analysis = ();
 

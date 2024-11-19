@@ -5,7 +5,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::Serialize;
 
-use super::{Trs, TrsAnalysis, TrsLang};
+use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -124,7 +124,7 @@ impl Rise {
     }
 }
 
-impl Trs for Rise {
+impl TermRewriteSystem for Rise {
     type Language = RiseLang;
     type Analysis = RiseAnalysis;
 

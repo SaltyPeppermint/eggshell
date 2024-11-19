@@ -10,7 +10,7 @@ use log::info;
 use serde::Serialize;
 
 use crate::sketch::{extract, Sketch};
-use crate::trs::Trs;
+use crate::trs::TermRewriteSystem;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 
@@ -18,7 +18,7 @@ pub use conf::{EqsatConf, EqsatConfBuilder};
 #[derive(Clone, Debug, Serialize)]
 pub struct Eqsat<R>
 where
-    R: Trs,
+    R: TermRewriteSystem,
 {
     conf: EqsatConf,
     start_exprs: Vec<RecExpr<R::Language>>,
@@ -26,7 +26,7 @@ where
 
 impl<R> Eqsat<R>
 where
-    R: Trs,
+    R: TermRewriteSystem,
 {
     #[must_use]
     pub fn runner_args(&self) -> &EqsatConf {
@@ -83,7 +83,7 @@ where
 #[derive(Clone, Debug, Serialize)]
 pub struct EqsatResult<R>
 where
-    R: Trs,
+    R: TermRewriteSystem,
 {
     runner_args: EqsatConf,
     // stats_history: Vec<EqsatStats>,
@@ -94,7 +94,7 @@ where
 
 impl<R> EqsatResult<R>
 where
-    R: Trs,
+    R: TermRewriteSystem,
 {
     // Extract via a classic cost function
     pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<R::Language>)

@@ -13,7 +13,7 @@ use eggshell::sampling::SampleConf;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
 use eggshell::trs::Simple;
-use eggshell::trs::Trs;
+use eggshell::trs::TermRewriteSystem;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
@@ -48,7 +48,7 @@ fn extraction(c: &mut Criterion) {
 
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
-    let seed: RecExpr<<Simple as Trs>::Language> = term.parse().unwrap();
+    let seed: RecExpr<<Simple as TermRewriteSystem>::Language> = term.parse().unwrap();
     let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();

@@ -6,7 +6,7 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{Trs, TrsAnalysis, TrsLang};
+use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -173,7 +173,7 @@ impl TrsAnalysis<Math> for ConstantFold {}
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;
 
-impl Trs for Arithmetic {
+impl TermRewriteSystem for Arithmetic {
     type Language = Math;
     type Analysis = ConstantFold;
 
