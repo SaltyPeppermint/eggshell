@@ -27,13 +27,13 @@ pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
                 .parse::<usize>()
                 .expect("Wrong index means csv is broken.");
             let expr_str = record.get(1).expect("No expression means csv is broken.");
-            let truth_value = record.get(2).expect("No truth value means csv is broken.");
+            let truth_value = record.get(2).map(|s| s.to_owned());
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.
             Expression {
                 index,
                 term: expr_str.to_owned(),
-                truth_value: truth_value.to_owned(),
+                truth_value,
             }
         })
         .collect()
@@ -53,7 +53,7 @@ struct JsonDatapoint {
 
 #[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn read_exprs_json(file_path: &Path, excluded_expr_ends: &[&str]) -> Vec<Expression> {
+pub fn read_exprs_json(file_path: &Path) -> Vec<Expression> {
     // Declare the vector and the reader
     let file = File::open(file_path).expect("Json file must exist");
     let data: Vec<JsonDatapoint> =
@@ -61,16 +61,10 @@ pub fn read_exprs_json(file_path: &Path, excluded_expr_ends: &[&str]) -> Vec<Exp
     // Read each record and extract then cast the values.
     data.into_iter()
         .enumerate()
-        .filter_map(|(index, entry)| {
-            if excluded_expr_ends.contains(&entry.expression.end.as_str()) {
-                None
-            } else {
-                Some(Expression {
-                    index,
-                    term: entry.expression.start,
-                    truth_value: entry.expression.end,
-                })
-            }
+        .map(|(index, entry)| Expression {
+            index,
+            term: entry.expression.start,
+            truth_value: Some(entry.expression.end),
         })
         .collect()
 }
