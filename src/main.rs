@@ -133,7 +133,6 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let exprs = reader::read_exprs_json(&cli.file, &[]);
     let sample_conf_builder = SampleConf::builder()
         .rng_seed(cli.rng_seed)
         .samples_per_eclass(cli.eclass_samples);
@@ -158,6 +157,12 @@ fn main() {
         cli.uuid
     );
     fs::create_dir_all(&folder).unwrap();
+
+    let exprs = match cli.file.extension().unwrap().to_str().unwrap() {
+        "csv" => reader::read_exprs_csv(&cli.file),
+        "json" => reader::read_exprs_json(&cli.file),
+        extension => panic!("Unknown file extension {}", extension),
+    };
 
     match cli.trs {
         TrsName::Halide => {

@@ -10,7 +10,7 @@ pub struct Expression {
     /// the string of the expression
     pub term: String,
     /// the truth value of the expression
-    pub truth_value: String,
+    pub truth_value: Option<String>,
 }
 
 #[pymethods]
