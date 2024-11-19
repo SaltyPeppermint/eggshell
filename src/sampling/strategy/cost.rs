@@ -147,7 +147,7 @@ mod tests {
 
     use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
     use crate::sampling::SampleConf;
-    use crate::trs::{Halide, Simple, Trs};
+    use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     use super::*;
 

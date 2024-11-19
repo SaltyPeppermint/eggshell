@@ -107,7 +107,7 @@ mod tests {
     use egg::{EGraph, SymbolLang};
 
     use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
-    use crate::trs::{Halide, Trs};
+    use crate::trs::{Halide, TermRewriteSystem};
 
     use super::*;
 

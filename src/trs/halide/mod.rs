@@ -6,7 +6,7 @@ use std::{cmp::Ordering, fmt::Display};
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::Serialize;
 
-use super::{Trs, TrsAnalysis, TrsError, TrsLang};
+use super::{TermRewriteSystem, TrsAnalysis, TrsError, TrsLang};
 use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -326,7 +326,7 @@ impl Halide {
 
 impl TrsAnalysis<HalideExpr> for ConstantFold {}
 
-impl Trs for Halide {
+impl TermRewriteSystem for Halide {
     type Language = HalideExpr;
     type Analysis = ConstantFold;
 

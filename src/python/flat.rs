@@ -8,7 +8,7 @@ use pyo3::prelude::*;
 use super::{RawAst, SymbolTable};
 use crate::eqsat::EqsatResult;
 use crate::features;
-use crate::trs::{Trs, TrsLang};
+use crate::trs::{TermRewriteSystem, TrsLang};
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -173,7 +173,7 @@ impl FlatEGraph {
     }
 }
 
-impl<R: Trs> From<&EqsatResult<R>> for FlatEGraph {
+impl<R: TermRewriteSystem> From<&EqsatResult<R>> for FlatEGraph {
     fn from(eqsat_result: &EqsatResult<R>) -> Self {
         (eqsat_result.egraph(), eqsat_result.roots()).into()
     }

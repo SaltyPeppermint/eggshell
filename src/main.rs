@@ -21,7 +21,7 @@ use eggshell::io::reader;
 use eggshell::io::structs::Expression;
 use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
 use eggshell::sampling::SampleConf;
-use eggshell::trs::{Halide, Trs};
+use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[command(version, about, long_about = None)]
@@ -68,6 +68,10 @@ struct Cli {
     /// UUID to identify run
     #[arg(long)]
     uuid: String,
+
+    /// Trs of the input
+    #[arg(long)]
+    trs: TrsName,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -81,6 +85,45 @@ impl Display for SampleStrategy {
         match self {
             SampleStrategy::TermSizeCount => write!(f, "TermSizeCount"),
             SampleStrategy::CostWeighted => write!(f, "CostWeighted"),
+        }
+    }
+}
+
+impl FromStr for SampleStrategy {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().replace("_", "").as_str() {
+            "termsizecount" => Ok(Self::TermSizeCount),
+            "costweighted" => Ok(Self::CostWeighted),
+            _ => Err(Error::new(ErrorKind::InvalidValue)),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+enum TrsName {
+    Halide,
+    Rise,
+}
+
+impl Display for TrsName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Halide => write!(f, "Halide"),
+            Self::Rise => write!(f, "Rise"),
+        }
+    }
+}
+
+impl FromStr for TrsName {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().replace("_", "").as_str() {
+            "halide" => Ok(Self::Halide),
+            "rise" => Ok(Self::Rise),
+            _ => Err(Error::new(ErrorKind::InvalidValue)),
         }
     }
 }
@@ -108,36 +151,39 @@ fn main() {
     let now = Local::now();
 
     let folder = format!(
-        "data/generated_samples/5k_dataset_{}-{}",
+        "data/generated_samples/{}/{}-{}-{}",
+        cli.trs,
+        cli.file.file_stem().unwrap().to_str().unwrap(),
         now.format("%Y-%m-%d"),
         cli.uuid
     );
     fs::create_dir_all(&folder).unwrap();
 
-    let rules = Halide::full_rules();
-    run_eqsat::<Halide>(
-        exprs,
-        eqsat_conf,
-        sample_conf,
-        folder,
-        rules.as_slice(),
-        cli,
-    );
-}
-
-impl FromStr for SampleStrategy {
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_ascii_lowercase().replace("_", "").as_str() {
-            "termsizecount" => Ok(Self::TermSizeCount),
-            "costweighted" => Ok(Self::CostWeighted),
-            _ => Err(Error::new(ErrorKind::InvalidValue)),
+    match cli.trs {
+        TrsName::Halide => {
+            run_eqsat::<Halide>(
+                exprs,
+                eqsat_conf,
+                sample_conf,
+                folder,
+                Halide::full_rules().as_slice(),
+                cli,
+            );
+        }
+        TrsName::Rise => {
+            run_eqsat::<Rise>(
+                exprs,
+                eqsat_conf,
+                sample_conf,
+                folder,
+                Rise::full_rules().as_slice(),
+                cli,
+            );
         }
     }
 }
 
-fn run_eqsat<R: Trs>(
+fn run_eqsat<R: TermRewriteSystem>(
     exprs: Vec<Expression>,
     eqsat_conf: EqsatConf,
     sample_conf: SampleConf,
@@ -180,16 +226,9 @@ fn run_eqsat<R: Trs>(
         cli.seed_term_id
     );
 
-    let truth_value = match expr.truth_value.as_str() {
-        "true" => true,
-        "false" => false,
-        _ => panic!("Wrong truth_value"),
-    };
-
     let data = DataEntry {
         seed_expr,
         associated_data,
-        truth_value,
         metadata: MetaData {
             uuid: cli.uuid.clone(),
             folder: folder.to_owned(),
@@ -207,13 +246,13 @@ fn run_eqsat<R: Trs>(
     // });
 }
 
-fn sample<R: Trs>(
+fn sample<R: TermRewriteSystem>(
     cli: &Cli,
-    seed_expr: &RecExpr<<R as Trs>::Language>,
+    seed_expr: &RecExpr<<R as TermRewriteSystem>::Language>,
     eqsat: &EqsatResult<R>,
     mut rng: StdRng,
     sample_conf: &SampleConf,
-) -> HashSet<RecExpr<<R as Trs>::Language>> {
+) -> HashSet<RecExpr<<R as TermRewriteSystem>::Language>> {
     let root_id = eqsat.roots()[0];
 
     match &cli.strategy {
@@ -232,7 +271,7 @@ fn sample<R: Trs>(
     }
 }
 
-fn mk_sample_data<R: Trs>(
+fn mk_sample_data<R: TermRewriteSystem>(
     seed_expr: &RecExpr<R::Language>,
     samples: Vec<RecExpr<R::Language>>,
     cli: &Cli,
@@ -253,7 +292,7 @@ fn mk_sample_data<R: Trs>(
         .collect()
 }
 
-fn mk_baseline<R: Trs>(
+fn mk_baseline<R: TermRewriteSystem>(
     cli: &Cli,
     seed_expr: &RecExpr<R::Language>,
     sample: &RecExpr<R::Language>,
@@ -275,7 +314,7 @@ fn mk_baseline<R: Trs>(
     }
 }
 
-fn mk_explanation<R: Trs>(
+fn mk_explanation<R: TermRewriteSystem>(
     sample: &RecExpr<R::Language>,
     cli: &Cli,
     eqsat: &mut EqsatResult<R>,
@@ -297,7 +336,6 @@ fn mk_explanation<R: Trs>(
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
     seed_expr: RecExpr<L>,
-    truth_value: bool,
     associated_data: Vec<SampleData<L>>,
     metadata: MetaData,
 }

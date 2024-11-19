@@ -21,7 +21,7 @@ macro_rules! monomorphize {
             Ok(())
         }
 
-        type Lang = <$type as $crate::trs::Trs>::Language;
+        type Lang = <$type as $crate::trs::TermRewriteSystem>::Language;
 
         /// Gets the symbols inherent to the language
         #[pyo3::pyfunction]
@@ -85,7 +85,7 @@ macro_rules! monomorphize {
                 $crate::eqsat::Eqsat::new(start_exprs)
             };
 
-            let rules = <$type as $crate::trs::Trs>::full_rules();
+            let rules = <$type as $crate::trs::TermRewriteSystem>::full_rules();
             let result = eqsat.run(&rules);
             Ok(EqsatResult(result))
         }
