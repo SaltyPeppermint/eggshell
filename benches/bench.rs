@@ -50,7 +50,7 @@ fn sampling(c: &mut Criterion) {
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
     let eqsat: TrsEqsatResult<Simple> =
-        Eqsat::new(StartMaterial::Terms(vec![term.parse().unwrap()]))
+        Eqsat::new(StartMaterial::Seeds(vec![term.parse().unwrap()]))
             .with_conf(eqsat_conf.clone())
             .run(&rules);
 

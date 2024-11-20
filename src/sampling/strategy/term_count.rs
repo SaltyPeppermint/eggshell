@@ -250,7 +250,7 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Terms(vec![seed]))
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -274,7 +274,7 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Terms(vec![seed]))
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
@@ -294,7 +294,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Terms(vec![seed]))
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
@@ -315,7 +315,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Terms(vec![seed]))
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
@@ -336,7 +336,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Terms(vec![seed]))
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];

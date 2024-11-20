@@ -15,7 +15,7 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Terms(true_stmt));
+        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Seeds(true_stmt));
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize);
@@ -31,7 +31,7 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Terms(false_stmt));
+        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Seeds(false_stmt));
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize);

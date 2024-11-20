@@ -36,7 +36,7 @@ where
     N: Analysis<L> + Clone,
     N::Data: Serialize + Clone,
 {
-    Terms(Vec<RecExpr<L>>),
+    Seeds(Vec<RecExpr<L>>),
     EGraph {
         egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,
@@ -99,7 +99,10 @@ where
         // start_exprs: &[RecExpr<R::Language>],
         rules: &[Rewrite<L, N>],
     ) -> EqsatResult<L, N> {
-        info!("Running Eqsat with Expression: {:?}", self.start_material);
+        match &self.start_material {
+            StartMaterial::Seeds(exprs) => info!("Running Eqsat with Expressions: {:?}", exprs),
+            StartMaterial::EGraph { .. } => info!("Running Eqsat with previous EGraph"),
+        }
 
         let mut runner = Runner::default()
             .with_iter_limit(self.conf.iter_limit)
@@ -130,7 +133,7 @@ where
         }
 
         let egraph_roots = match self.start_material {
-            StartMaterial::Terms(vec) => {
+            StartMaterial::Seeds(vec) => {
                 for expr in &vec {
                     runner = runner.with_expr(expr);
                 }

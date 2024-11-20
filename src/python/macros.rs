@@ -80,10 +80,10 @@ macro_rules! monomorphize {
                 .map(|term| (&term.0).try_into())
                 .collect::<Result<_, _>>()?;
             let eqsat = if let Some(c) = conf {
-                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Terms(start_exprs))
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Seeds(start_exprs))
                     .with_conf(c)
             } else {
-                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Terms(start_exprs))
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Seeds(start_exprs))
             };
 
             let rules = <$type as $crate::trs::TermRewriteSystem>::full_rules();
