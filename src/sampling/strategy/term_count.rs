@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use egg::{Analysis, EClass, EGraph, Id, Language};
 use hashbrown::HashMap;
+use log::info;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
@@ -43,6 +44,7 @@ where
 
         // Make one big analysis for all eclasses
         TermsUpToSize::new(limit).one_shot_analysis(egraph, &mut data);
+        info!("Oneshot Analysis finsished");
         // Filter out data with uninteresting term sizes
 
         let flattened_data = data

@@ -5,8 +5,8 @@ mod hooks;
 use std::fmt::{Debug, Display};
 
 use egg::{
-    Analysis, CostFunction, EGraph, Extractor, Id, Language, RecExpr, Report, Rewrite, Runner,
-    SimpleScheduler,
+    Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
+    Runner, SimpleScheduler,
 };
 use hashbrown::HashMap;
 use log::info;
@@ -159,6 +159,7 @@ where
         EqsatResult {
             runner_args: self.conf.clone(),
             egraph: runner.egraph,
+            iterations: runner.iterations,
             roots,
             report,
         }
@@ -176,6 +177,7 @@ where
     runner_args: EqsatConf,
     // stats_history: Vec<EqsatStats>,
     egraph: EGraph<L, N>,
+    iterations: Vec<Iteration<()>>,
     roots: Vec<Id>,
     report: Report,
 }
@@ -236,6 +238,10 @@ where
 
     pub fn report(&self) -> &Report {
         &self.report
+    }
+
+    pub fn iterations(&self) -> &[Iteration<()>] {
+        &self.iterations
     }
 
     pub fn egraph(&self) -> &EGraph<L, N> {
