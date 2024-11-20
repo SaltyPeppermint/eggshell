@@ -271,17 +271,26 @@ fn run_eqsat<R: TermRewriteSystem>(
         info!("Iteration {iter_count} finished.");
 
         assert!(result.egraph().clean);
-        if let StopReason::IterationLimit(_) = result.report().stop_reason {
-            intermediate_egraphs.push(result.egraph().clone());
-            eqsat = TrsEqsat::<R>::new(result.into()).with_conf(eqsat_conf.clone());
-        } else {
-            info!("Limits reached after {iter_count} iterations!");
-            break result;
+        match result.report().stop_reason {
+            StopReason::IterationLimit(_) => {
+                intermediate_egraphs.push(result.egraph().clone());
+                eqsat = TrsEqsat::<R>::new(result.into()).with_conf(eqsat_conf.clone());
+            }
+            _ => {
+                info!("Limits reached after {iter_count} iterations!");
+                info!(
+                    "Max Memory Consumption: {:?}",
+                    result
+                        .iterations()
+                        .last()
+                        .expect("Should be at least one")
+                        .mem_usage
+                );
+                break result;
+            }
         }
     };
 
-    let mem = memory_stats::memory_stats().unwrap().physical_mem;
-    info!("Eqsat took {mem} bytes of memory");
     info!("Finished Eqsat {}!", cli.seed_id);
     info!("Starting sampling...");
 
@@ -334,8 +343,10 @@ fn sample<R: TermRewriteSystem>(
     match &cli.strategy {
         SampleStrategy::TermSizeCount => {
             let min_size = seed_expr.as_ref().len();
-            info!("Using min_size {min_size}");
-            TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size * 2)
+            // let limit = min_size + (min_size / 2);
+            let limit = min_size * 2;
+            info!("Using limit {limit}");
+            TermCountWeighted::new(eqsat.egraph(), &mut rng, limit)
                 .sample_eclass(sample_conf, root_id)
                 .unwrap()
         }

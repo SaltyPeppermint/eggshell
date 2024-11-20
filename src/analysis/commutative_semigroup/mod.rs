@@ -23,7 +23,7 @@ where
         &self,
         egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &impl Fn(Id) -> &'a Self::Data,
+        analysis_of: &(impl Fn(egg::Id) -> &'a Self::Data + Sync),
     ) -> Self::Data
     where
         Self::Data: 'a,

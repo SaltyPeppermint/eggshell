@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
+use rayon::prelude::*;
 
 use super::CommutativeSemigroupAnalysis;
 
@@ -36,7 +37,7 @@ where
         &self,
         _egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &impl Fn(egg::Id) -> &'a Self::Data,
+        analysis_of: &(impl Fn(egg::Id) -> &'a Self::Data + Sync),
     ) -> Self::Data
     where
         Self::Data: 'a,
@@ -77,7 +78,7 @@ where
         // Thankfully this is cached via `analysis_of`
         let children_counts = enode
             .children()
-            .iter()
+            .par_iter()
             .map(|c_id| analysis_of(*c_id))
             .collect::<Vec<_>>();
         let mut counts = HashMap::new();
@@ -128,7 +129,6 @@ mod tests {
 
         egraph.union(a, apb);
         egraph.rebuild();
-        // dbg!(&egraph);
 
         let mut data = HashMap::new();
         TermsUpToSize::new(10).one_shot_analysis(&egraph, &mut data);
@@ -149,7 +149,6 @@ mod tests {
         egraph.rebuild();
         egraph.union(b, apb);
         egraph.rebuild();
-        // dbg!(&egraph);
 
         let mut data = HashMap::new();
         TermsUpToSize::new(10).one_shot_analysis(&egraph, &mut data);
@@ -170,8 +169,6 @@ mod tests {
             .run(rules.as_slice());
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
-
-        // dbg!(&egraph);
 
         let mut data = HashMap::new();
         TermsUpToSize::new(16).one_shot_analysis(egraph, &mut data);
