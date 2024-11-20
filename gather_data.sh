@@ -9,6 +9,6 @@ uuid=$(uuidgen)
 echo "UUID of run: $uuid"
 
 for i in $(seq $START $END); do
-    RUST_LOG=info cargo run --release -- --file data/halide/dataset/5k_dataset_new_syntax.json --eclass-samples 1000 --memory-limit 1000000000 --time-limit 120 --uuid $uuid --trs halide --seed-term-id $i &>logs/$i.log
+    RUST_LOG=info cargo run --release -- --file data/rise/guided_eqsat.csv --eclass-samples 1000 --memory-limit 1000000000 --time-limit 120 --uuid $uuid --trs rise --seed-id $i &>logs/$i.log
     echo "Finished $i"
 done

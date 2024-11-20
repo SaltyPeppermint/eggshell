@@ -3,8 +3,10 @@ mod tests {
     use egg::AstSize;
 
     use eggshell::eqsat::Eqsat;
+    use eggshell::eqsat::StartMaterial;
     use eggshell::trs::Halide;
     use eggshell::trs::TermRewriteSystem;
+    use eggshell::trs::TrsEqsat;
 
     #[test]
     fn simple_eqsat_solved_true() {
@@ -13,7 +15,7 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::<Halide>::new(true_stmt);
+        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Terms(true_stmt));
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize);
@@ -29,7 +31,7 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::<Halide>::new(false_stmt);
+        let eqsat: TrsEqsat<Halide> = Eqsat::new(StartMaterial::Terms(false_stmt));
         let result = eqsat.run(&rules);
         let root = result.roots().first().unwrap();
         let (_, term) = result.classic_extract(*root, AstSize);

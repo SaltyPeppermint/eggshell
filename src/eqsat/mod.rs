@@ -1,32 +1,53 @@
 mod class_cost;
 mod conf;
+mod hooks;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
-use class_cost::{ClassExtractor, LutCost};
-use egg::{CostFunction, EGraph, Extractor, Id, RecExpr, Report, Rewrite};
+use egg::{
+    Analysis, CostFunction, EGraph, Extractor, Id, Language, RecExpr, Report, Rewrite, Runner,
+    SimpleScheduler,
+};
 use hashbrown::HashMap;
 use log::info;
 use serde::Serialize;
 
 use crate::sketch::{extract, Sketch};
-use crate::trs::TermRewriteSystem;
+use class_cost::{ClassExtractor, LutCost};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug, Serialize)]
-pub struct Eqsat<R>
+pub struct Eqsat<L, N>
 where
-    R: TermRewriteSystem,
+    L: Language + Display,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
 {
     conf: EqsatConf,
-    start_exprs: Vec<RecExpr<R::Language>>,
+    start_material: StartMaterial<L, N>,
 }
 
-impl<R> Eqsat<R>
+#[derive(Clone, Debug, Serialize)]
+pub enum StartMaterial<L, N>
 where
-    R: TermRewriteSystem,
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
+{
+    Terms(Vec<RecExpr<L>>),
+    EGraph {
+        egraph: Box<EGraph<L, N>>,
+        roots: Vec<Id>,
+    },
+}
+
+impl<L, N> Eqsat<L, N>
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
 {
     #[must_use]
     pub fn runner_args(&self) -> &EqsatConf {
@@ -41,12 +62,27 @@ where
     /// Will return an error if the starting term is not parsable in the
     /// [`Trs::Language`].
     #[must_use]
-    pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
+    pub fn new(start_material: StartMaterial<L, N>) -> Self {
         Self {
             conf: EqsatConf::default(),
-            start_exprs,
+            start_material,
         }
     }
+
+    // /// Create a new Equality Saturation with a given egraph
+    // /// Is generic over a given [`Trs`]
+    // ///
+    // /// # Errors
+    // ///
+    // /// Will return an error if the starting term is not parsable in the
+    // /// [`Trs::Language`].
+    // #[must_use]
+    // pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
+    //     Self {
+    //         conf: EqsatConf::default(),
+    //         start_exprs,
+    //     }
+    // }
 
     /// With the runner parameters.
     #[must_use]
@@ -59,21 +95,68 @@ where
     /// (most often true or false) with the given ruleset
     #[must_use]
     pub fn run(
-        &self,
+        self,
         // start_exprs: &[RecExpr<R::Language>],
-        rules: &[Rewrite<R::Language, R::Analysis>],
-    ) -> EqsatResult<R> {
-        info!("Running Eqsat with Expression: {:?}", self.start_exprs);
+        rules: &[Rewrite<L, N>],
+    ) -> EqsatResult<L, N> {
+        info!("Running Eqsat with Expression: {:?}", self.start_material);
 
-        let runner = conf::build_runner(&self.conf, &self.start_exprs).run(rules.iter());
+        let mut runner = Runner::default()
+            .with_iter_limit(self.conf.iter_limit)
+            .with_node_limit(self.conf.node_limit)
+            .with_memory_limit(self.conf.memory_limit)
+            .with_time_limit(self.conf.time_limit);
+
+        if self.conf.explanation {
+            info!("Running with explanations");
+            runner = runner.with_explanations_enabled();
+        };
+
+        if self.conf.root_check {
+            info!("Installing root_check hook");
+            runner = runner.with_hook(hooks::craft_root_check_hook());
+        }
+
+        if self.conf.memory_log {
+            info!("Installing memory display hook");
+            runner = runner.with_hook(hooks::craft_memory_hook());
+        }
+
+        // TODO ADD CONFIG OPTION
+        runner = runner.with_scheduler(SimpleScheduler);
+
+        if self.conf.root_check {
+            runner = runner.with_hook(hooks::craft_root_check_hook());
+        }
+
+        let egraph_roots = match self.start_material {
+            StartMaterial::Terms(vec) => {
+                for expr in &vec {
+                    runner = runner.with_expr(expr);
+                }
+                None
+            }
+            StartMaterial::EGraph { egraph, roots } => {
+                runner = runner.with_egraph(*egraph);
+                Some(roots)
+            }
+        };
+
+        runner = runner.run(rules);
 
         let report = runner.report();
+
+        // Workaround since we need to deconstruct the starting material
+        let roots = match egraph_roots {
+            Some(roots) => roots,
+            None => runner.roots,
+        };
 
         info!("{}", &report);
         EqsatResult {
             runner_args: self.conf.clone(),
             egraph: runner.egraph,
-            roots: runner.roots,
+            roots,
             report,
         }
     }
@@ -81,25 +164,29 @@ where
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug, Serialize)]
-pub struct EqsatResult<R>
+pub struct EqsatResult<L, N>
 where
-    R: TermRewriteSystem,
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
 {
     runner_args: EqsatConf,
     // stats_history: Vec<EqsatStats>,
-    egraph: EGraph<R::Language, R::Analysis>,
+    egraph: EGraph<L, N>,
     roots: Vec<Id>,
     report: Report,
 }
 
-impl<R> EqsatResult<R>
+impl<L, N> EqsatResult<L, N>
 where
-    R: TermRewriteSystem,
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
 {
     // Extract via a classic cost function
-    pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<R::Language>)
+    pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<L>)
     where
-        CF: CostFunction<R::Language>,
+        CF: CostFunction<L>,
     {
         let extractor = Extractor::new(&self.egraph, cost_fn);
         extractor.find_best(root)
@@ -110,7 +197,7 @@ where
         &self,
         root: Id,
         cost_table: HashMap<(Id, usize), f64>,
-    ) -> (f64, RecExpr<R::Language>) {
+    ) -> (f64, RecExpr<L>) {
         let cost_function = LutCost::new(cost_table, &self.egraph);
         let extractor = ClassExtractor::new(&self.egraph, cost_function);
         extractor.find_best(root)
@@ -122,17 +209,17 @@ where
         &self,
         root: Id,
         cost_fn: CF,
-        sketch: &Sketch<R::Language>,
-    ) -> (CF::Cost, RecExpr<R::Language>)
+        sketch: &Sketch<L>,
+    ) -> (CF::Cost, RecExpr<L>)
     where
-        CF: CostFunction<R::Language> + Debug,
+        CF: CostFunction<L> + Debug,
         CF::Cost: Ord + Debug,
     {
         extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
     /// Extract
-    pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<R::Language>) -> bool {
+    pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
         let root = self.roots[root_index];
         extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
     }
@@ -148,11 +235,25 @@ where
         &self.report
     }
 
-    pub fn egraph(&self) -> &EGraph<R::Language, R::Analysis> {
+    pub fn egraph(&self) -> &EGraph<L, N> {
         &self.egraph
     }
 
-    pub fn egraph_mut(&mut self) -> &mut EGraph<R::Language, R::Analysis> {
+    pub fn egraph_mut(&mut self) -> &mut EGraph<L, N> {
         &mut self.egraph
+    }
+}
+
+impl<L, N> From<EqsatResult<L, N>> for StartMaterial<L, N>
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
+{
+    fn from(eqsat_result: EqsatResult<L, N>) -> Self {
+        StartMaterial::EGraph {
+            egraph: Box::new(eqsat_result.egraph),
+            roots: eqsat_result.roots,
+        }
     }
 }

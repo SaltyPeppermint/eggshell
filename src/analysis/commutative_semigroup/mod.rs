@@ -51,25 +51,22 @@ where
                 let eclass = &egraph[canonical_id];
 
                 // Check if we can calculate the analysis for any enode
-                let available_data = eclass
-                    .nodes
-                    .as_slice()
-                    .par_iter()
-                    .filter_map(|n| {
-                        let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
-                        // If all the childs eclass_children have data, we can calculate it!
-                        if u_node.all(|child_id| data.contains_key(&child_id)) {
-                            Some(analysis.make(egraph, &u_node, &|child_id| &data[&child_id]))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                let available_data = eclass.nodes.as_slice().par_iter().filter_map(|n| {
+                    let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
+                    // If all the childs eclass_children have data, we can calculate it!
+                    if u_node.all(|child_id| data.contains_key(&child_id)) {
+                        Some(analysis.make(egraph, &u_node, &|child_id| &data[&child_id]))
+                    } else {
+                        None
+                    }
+                });
+                // TODO: Debug size to find out if its costly, option to reduce early
+                // .collect::<Vec<_>>();
 
                 // If we have some info, we add that info to our storage.
                 // Otherwise, if we have absolutely now info about the nodes, we can only put them back onto the queue.
                 // and hope for a better time later.
-                if let Some(computed_data) = available_data.into_iter().reduce(|mut a, b| {
+                if let Some(computed_data) = available_data.reduce_with(|mut a, b| {
                     analysis.merge(&mut a, b);
                     a
                 }) {
