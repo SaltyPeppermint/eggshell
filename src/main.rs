@@ -1,3 +1,4 @@
+use core::panic;
 use std::fmt::Display;
 use std::fs;
 use std::fs::File;
@@ -9,19 +10,19 @@ use std::time::Duration;
 use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
-use egg::{AstSize, Language, RecExpr, Rewrite, StopReason};
+use egg::{Analysis, AstSize, EGraph, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashSet;
 use log::info;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 
-use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult};
+use eggshell::eqsat::{EqsatConf, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::structs::Expression;
 use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
 use eggshell::sampling::SampleConf;
-use eggshell::trs::{Halide, Rise, TermRewriteSystem};
+use eggshell::trs::{Halide, Rise, TermRewriteSystem, TrsEqsat, TrsEqsatResult};
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
 #[command(version, about, long_about = None)]
@@ -31,7 +32,7 @@ struct Cli {
 
     /// Number of terms from which to seed egraphs
     #[arg(long)]
-    seed_term_id: usize,
+    seed_id: usize,
 
     /// RNG Seed
     #[arg(long, default_value_t = 2024)]
@@ -128,6 +129,55 @@ impl FromStr for TrsName {
     }
 }
 
+// static mut COUNTER: u32 = 0;
+// pub fn fresh_id() -> u32 {
+//     unsafe {
+//         let c = COUNTER;
+//         COUNTER += 1;
+//         c
+//     }
+// }
+
+// fn lambda(f: impl FnOnce(&str) -> String) -> String {
+//     let n = fresh_id();
+//     let x = format!("x{}", n);
+//     format!("(lam {} {})", x, f(x.as_str()))
+// }
+
+// trait Dsl {
+//     // f1 >> f2
+//     fn then<S: Into<String>>(self, other: S) -> String;
+//     // v |> f
+//     fn pipe<S: Into<String>>(self, other: S) -> String;
+// }
+
+// impl Dsl for String {
+//     fn then<S: Into<String>>(self, other: S) -> String {
+//         let c = fresh_id();
+//         format!(
+//             "(lam x{} (app {} (app {} (var x{}))))",
+//             c,
+//             other.into(),
+//             self,
+//             c
+//         )
+//     }
+
+//     fn pipe<S: Into<String>>(self, other: S) -> String {
+//         format!("(app {} {})", other.into(), self)
+//     }
+// }
+
+// impl Dsl for &str {
+//     fn then<S: Into<String>>(self, other: S) -> String {
+//         String::from(self).then(other)
+//     }
+
+//     fn pipe<S: Into<String>>(self, other: S) -> String {
+//         String::from(self).pipe(other)
+//     }
+// }
+
 fn main() {
     env_logger::init();
 
@@ -142,6 +192,7 @@ fn main() {
         .maybe_node_limit(cli.node_limit)
         .maybe_time_limit(cli.time_limit.map(|x| Duration::from_secs_f64(x as f64)))
         .maybe_memory_limit(cli.memory_limit)
+        .iter_limit(1) // Iter limit of one since we manually run the eqsat
         .explanation(cli.with_explanations)
         .root_check(false)
         .memory_log(false)
@@ -200,40 +251,61 @@ fn run_eqsat<R: TermRewriteSystem>(
 
     let expr = exprs
         .into_iter()
-        .nth(cli.seed_term_id)
+        .nth(cli.seed_id)
         .expect("Must be in the file!");
 
-    info!("Starting work on expr {}: {}", cli.seed_term_id, expr.term);
+    info!("Starting work on term {}: {}...", cli.seed_id, expr.term);
 
-    info!("Running eqsat {}", cli.seed_term_id);
+    info!("Starting eqsat on term {}...", cli.seed_id);
 
     let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-    let eqsat: EqsatResult<R> = Eqsat::new(vec![seed_expr.clone()])
-        .with_conf(eqsat_conf.clone())
-        .run(rules);
-    assert!(eqsat.egraph().clean);
+    let mut eqsat = TrsEqsat::<R>::new(StartMaterial::Terms(vec![seed_expr.clone()]))
+        .with_conf(eqsat_conf.clone());
+
+    let mut intermediate_egraphs = Vec::new();
+    let mut iter_count = 0;
+
+    let last_result = loop {
+        let result = eqsat.run(rules);
+        iter_count += 1;
+        info!("Iteration {iter_count} finished.");
+
+        assert!(result.egraph().clean);
+        if let StopReason::IterationLimit(_) = result.report().stop_reason {
+            intermediate_egraphs.push(result.egraph().clone());
+            eqsat = TrsEqsat::<R>::new(result.into()).with_conf(eqsat_conf.clone());
+        } else {
+            info!("Limits reached after {iter_count} iterations!");
+            break result;
+        }
+    };
 
     let mem = memory_stats::memory_stats().unwrap().physical_mem;
-    info!("eqsat took {mem} bytes of memory");
-    info!("Finished Eqsat {}!", cli.seed_term_id);
+    info!("Eqsat took {mem} bytes of memory");
+    info!("Finished Eqsat {}!", cli.seed_id);
+    info!("Starting sampling...");
 
-    let samples: Vec<_> = sample(&cli, &seed_expr, &eqsat, rng, &sample_conf)
+    let samples: Vec<_> = sample::<R>(&cli, &seed_expr, &last_result, rng, &sample_conf)
         .into_iter()
         .collect();
 
-    info!("Finished sampling {}!", cli.seed_term_id);
-    info!("Took {} samples!", samples.len());
+    info!("Finished sampling {}!", cli.seed_id);
+    info!("Took {} samples.", samples.len());
 
-    info!("Generating associated data for {}...", cli.seed_term_id);
-    let associated_data = mk_sample_data(&seed_expr, samples, &cli, eqsat, rules);
-    info!(
-        "Finished generating associated data for {}!",
-        cli.seed_term_id
+    info!("Generating associated data for {}...", cli.seed_id);
+    let associated_data = mk_sample_data::<R>(
+        &seed_expr,
+        samples,
+        intermediate_egraphs.as_slice(),
+        &cli,
+        last_result,
+        rules,
     );
+    info!("Finished generating associated data for {}!", cli.seed_id);
 
     let data = DataEntry {
         seed_expr,
-        associated_data,
+        sample_data: associated_data,
         metadata: MetaData {
             uuid: cli.uuid.clone(),
             folder: folder.to_owned(),
@@ -243,18 +315,17 @@ fn run_eqsat<R: TermRewriteSystem>(
             eqsat_conf,
         },
     };
-    info!("Finished work on expr {}", cli.seed_term_id);
+    info!("Finished work on expr {}!", cli.seed_id);
 
-    let mut f =
-        BufWriter::new(File::create(format!("{folder}/{}.json", cli.seed_term_id)).unwrap());
+    let mut f = BufWriter::new(File::create(format!("{folder}/{}.json", cli.seed_id)).unwrap());
     serde_json::to_writer(&mut f, &data).unwrap();
     // });
 }
 
 fn sample<R: TermRewriteSystem>(
     cli: &Cli,
-    seed_expr: &RecExpr<<R as TermRewriteSystem>::Language>,
-    eqsat: &EqsatResult<R>,
+    seed_expr: &RecExpr<R::Language>,
+    eqsat: &TrsEqsatResult<R>,
     mut rng: StdRng,
     sample_conf: &SampleConf,
 ) -> HashSet<RecExpr<<R as TermRewriteSystem>::Language>> {
@@ -264,7 +335,7 @@ fn sample<R: TermRewriteSystem>(
         SampleStrategy::TermSizeCount => {
             let min_size = seed_expr.as_ref().len();
             info!("Using min_size {min_size}");
-            TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size + 8)
+            TermCountWeighted::new(eqsat.egraph(), &mut rng, min_size * 2)
                 .sample_eclass(sample_conf, root_id)
                 .unwrap()
         }
@@ -279,17 +350,20 @@ fn sample<R: TermRewriteSystem>(
 fn mk_sample_data<R: TermRewriteSystem>(
     seed_expr: &RecExpr<R::Language>,
     samples: Vec<RecExpr<R::Language>>,
+    intermediate_egraphs: &[EGraph<R::Language, R::Analysis>],
     cli: &Cli,
-    mut eqsat: EqsatResult<R>,
+    mut eqsat: TrsEqsatResult<R>,
     rules: &[Rewrite<R::Language, R::Analysis>],
 ) -> Vec<SampleData<R::Language>> {
     samples
         .into_iter()
         .map(|sample| {
             let baseline = mk_baseline::<R>(cli, seed_expr, &sample, rules);
-            let explanation = mk_explanation(&sample, cli, &mut eqsat, seed_expr);
+            let explanation = mk_explanation::<R>(&sample, cli, &mut eqsat, seed_expr);
+            let generation = find_generation(&sample, intermediate_egraphs);
             SampleData {
                 sample,
+                generation,
                 baseline,
                 explanation,
             }
@@ -305,7 +379,8 @@ fn mk_baseline<R: TermRewriteSystem>(
 ) -> Option<BaselineData> {
     if cli.with_baselines {
         info!("Running baseline for \"{sample}\"...");
-        let result = Eqsat::<R>::new(vec![seed_expr.clone(), sample.clone()]).run(rules);
+        let starting_exprs = StartMaterial::Terms(vec![seed_expr.clone(), sample.clone()]);
+        let result = TrsEqsat::<R>::new(starting_exprs).run(rules);
         let b = BaselineData {
             stop_reason: result.report().stop_reason.clone(),
             total_time: result.report().total_time,
@@ -322,7 +397,7 @@ fn mk_baseline<R: TermRewriteSystem>(
 fn mk_explanation<R: TermRewriteSystem>(
     sample: &RecExpr<R::Language>,
     cli: &Cli,
-    eqsat: &mut EqsatResult<R>,
+    eqsat: &mut TrsEqsatResult<R>,
     seed_expr: &RecExpr<R::Language>,
 ) -> Option<String> {
     if cli.with_explanations {
@@ -338,10 +413,23 @@ fn mk_explanation<R: TermRewriteSystem>(
     }
 }
 
+fn find_generation<L: Language, N: Analysis<L>>(
+    sample: &RecExpr<L>,
+    intermediate_egraphs: &[EGraph<L, N>],
+) -> usize {
+    match intermediate_egraphs
+        .iter()
+        .position(|egraph| egraph.lookup_expr(sample).is_some())
+    {
+        Some(generation) => generation,
+        None => intermediate_egraphs.len(),
+    }
+}
+
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
     seed_expr: RecExpr<L>,
-    associated_data: Vec<SampleData<L>>,
+    sample_data: Vec<SampleData<L>>,
     metadata: MetaData,
 }
 
@@ -358,6 +446,7 @@ struct MetaData {
 #[derive(Serialize, Clone, Debug)]
 struct SampleData<L: Language + Display> {
     sample: RecExpr<L>,
+    generation: usize,
     baseline: Option<BaselineData>,
     explanation: Option<String>,
 }

@@ -4,18 +4,16 @@ use criterion::{criterion_group, criterion_main};
 
 use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
-use eggshell::eqsat::EqsatConf;
-use eggshell::eqsat::{Eqsat, EqsatResult};
+use eggshell::eqsat::{Eqsat, EqsatConf, StartMaterial};
 use eggshell::sampling::strategy;
 use eggshell::sampling::strategy::Strategy;
 use eggshell::sampling::SampleConf;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
-use eggshell::trs::Simple;
-use eggshell::trs::TermRewriteSystem;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
+use eggshell::trs::{Simple, TermRewriteSystem, TrsEqsatResult};
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
@@ -48,13 +46,13 @@ fn extraction(c: &mut Criterion) {
 
 fn sampling(c: &mut Criterion) {
     let term = "(+ c (* (+ a b) 1))";
-    let seed: RecExpr<<Simple as TermRewriteSystem>::Language> = term.parse().unwrap();
     let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
-    let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
-        .with_conf(eqsat_conf.clone())
-        .run(&rules);
+    let eqsat: TrsEqsatResult<Simple> =
+        Eqsat::new(StartMaterial::Terms(vec![term.parse().unwrap()]))
+            .with_conf(eqsat_conf.clone())
+            .run(&rules);
 
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
     let mut strategy =

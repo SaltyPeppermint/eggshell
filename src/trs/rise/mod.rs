@@ -129,6 +129,6 @@ impl TermRewriteSystem for Rise {
     type Analysis = RiseAnalysis;
 
     fn full_rules() -> Vec<Rewrite> {
-        self::rules::rules(false).into_values().collect()
+        self::rules::rules(true).into_values().collect()
     }
 }

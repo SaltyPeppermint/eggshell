@@ -100,14 +100,22 @@ where
         }
         DidMerge(true, false)
     }
+
+    // fn new_data() -> Self::Data {
+    //     Self::Data::new()
+    // }
+
+    // fn data_empty(data: &Self::Data) -> bool {
+    //     data.is_empty()
+    // }
 }
 
 #[cfg(test)]
 mod tests {
     use egg::{EGraph, SymbolLang};
 
-    use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
-    use crate::trs::{Halide, TermRewriteSystem};
+    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::trs::{Halide, TermRewriteSystem, TrsEqsatResult};
 
     use super::*;
 
@@ -157,7 +165,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Terms(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let egraph = eqsat.egraph();

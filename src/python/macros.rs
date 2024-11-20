@@ -80,9 +80,10 @@ macro_rules! monomorphize {
                 .map(|term| (&term.0).try_into())
                 .collect::<Result<_, _>>()?;
             let eqsat = if let Some(c) = conf {
-                $crate::eqsat::Eqsat::new(start_exprs).with_conf(c)
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Terms(start_exprs))
+                    .with_conf(c)
             } else {
-                $crate::eqsat::Eqsat::new(start_exprs)
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Terms(start_exprs))
             };
 
             let rules = <$type as $crate::trs::TermRewriteSystem>::full_rules();
@@ -93,7 +94,7 @@ macro_rules! monomorphize {
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
         #[pyo3::pyclass(frozen)]
         #[derive(Debug, Clone)]
-        pub struct EqsatResult($crate::eqsat::EqsatResult<$type>);
+        pub struct EqsatResult($crate::trs::TrsEqsatResult<$type>);
 
         #[pyo3::pymethods]
         impl EqsatResult {

@@ -12,7 +12,10 @@ use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
-use crate::python::SymbolMetaData;
+use crate::{
+    eqsat::{Eqsat, EqsatResult},
+    python::SymbolMetaData,
+};
 // use crate::typing::{Type, Typeable};
 
 pub use arithmetic::Arithmetic;
@@ -63,7 +66,7 @@ pub trait TrsAnalysis<L: TrsLang>:
 /// a [`Analysis`] (can be a simplie as `()`) and one or more `Rulesets` to choose from.
 /// The [`TermRewriteSystem::full_rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
-pub trait TermRewriteSystem: Serialize + Debug {
+pub trait TermRewriteSystem: Serialize + Debug + Clone {
     type Language: TrsLang;
     type Analysis: TrsAnalysis<Self::Language>;
 
@@ -90,3 +93,9 @@ impl From<TrsError> for PyErr {
         TrsException::new_err(err.to_string())
     }
 }
+
+pub type TrsEqsat<R> =
+    Eqsat<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
+
+pub type TrsEqsatResult<R> =
+    EqsatResult<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;

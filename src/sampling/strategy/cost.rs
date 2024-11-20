@@ -145,9 +145,9 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
-    use crate::eqsat::{Eqsat, EqsatConf, EqsatResult};
+    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
     use crate::sampling::SampleConf;
-    use crate::trs::{Halide, Simple, TermRewriteSystem};
+    use crate::trs::{Halide, Simple, TermRewriteSystem, TrsEqsatResult};
 
     use super::*;
 
@@ -159,7 +159,7 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Terms(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -180,7 +180,7 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: EqsatResult<Simple> = Eqsat::new(vec![seed])
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Terms(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -210,7 +210,7 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: EqsatResult<Simple> = Eqsat::new(seeds)
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Terms(seeds))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -232,7 +232,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat: EqsatResult<Halide> = Eqsat::new(vec![seed])
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Terms(vec![seed]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 

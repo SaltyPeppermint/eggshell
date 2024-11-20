@@ -4,11 +4,12 @@ use egg::{Analysis, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use numpy::{IntoPyArray, Ix1, Ix2, PyArray, PyArray2};
 use pyo3::prelude::*;
+use serde::Serialize;
 
 use super::{RawAst, SymbolTable};
 use crate::eqsat::EqsatResult;
 use crate::features;
-use crate::trs::{TermRewriteSystem, TrsLang};
+use crate::trs::TrsLang;
 
 #[pyclass(frozen)]
 #[derive(Debug, Clone, PartialEq)]
@@ -173,8 +174,13 @@ impl FlatEGraph {
     }
 }
 
-impl<R: TermRewriteSystem> From<&EqsatResult<R>> for FlatEGraph {
-    fn from(eqsat_result: &EqsatResult<R>) -> Self {
+impl<L, N> From<&EqsatResult<L, N>> for FlatEGraph
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone + Serialize,
+    N::Data: Serialize + Clone,
+{
+    fn from(eqsat_result: &EqsatResult<L, N>) -> Self {
         (eqsat_result.egraph(), eqsat_result.roots()).into()
     }
 }
