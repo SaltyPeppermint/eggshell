@@ -259,7 +259,7 @@ fn run_eqsat<R: TermRewriteSystem>(
     info!("Starting eqsat on term {}...", cli.seed_id);
 
     let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat = TrsEqsat::<R>::new(StartMaterial::Terms(vec![seed_expr.clone()]))
+    let mut eqsat = TrsEqsat::<R>::new(StartMaterial::Seeds(vec![seed_expr.clone()]))
         .with_conf(eqsat_conf.clone());
 
     let mut intermediate_egraphs = Vec::new();
@@ -379,7 +379,7 @@ fn mk_baseline<R: TermRewriteSystem>(
 ) -> Option<BaselineData> {
     if cli.with_baselines {
         info!("Running baseline for \"{sample}\"...");
-        let starting_exprs = StartMaterial::Terms(vec![seed_expr.clone(), sample.clone()]);
+        let starting_exprs = StartMaterial::Seeds(vec![seed_expr.clone(), sample.clone()]);
         let result = TrsEqsat::<R>::new(starting_exprs).run(rules);
         let b = BaselineData {
             stop_reason: result.report().stop_reason.clone(),
