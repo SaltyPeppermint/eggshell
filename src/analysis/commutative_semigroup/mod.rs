@@ -1,4 +1,5 @@
 mod expr_count;
+mod expr_count_float;
 
 use std::fmt::Debug;
 
@@ -9,6 +10,7 @@ use rayon::prelude::*;
 use crate::utils::UniqueQueue;
 
 pub use expr_count::ExprCount;
+pub use expr_count_float::ExprCountFloat;
 
 pub trait CommutativeSemigroupAnalysis<L, N>: Sized + Debug + Sync + Send
 where

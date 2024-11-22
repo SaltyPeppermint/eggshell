@@ -129,55 +129,6 @@ impl FromStr for TrsName {
     }
 }
 
-// static mut COUNTER: u32 = 0;
-// pub fn fresh_id() -> u32 {
-//     unsafe {
-//         let c = COUNTER;
-//         COUNTER += 1;
-//         c
-//     }
-// }
-
-// fn lambda(f: impl FnOnce(&str) -> String) -> String {
-//     let n = fresh_id();
-//     let x = format!("x{}", n);
-//     format!("(lam {} {})", x, f(x.as_str()))
-// }
-
-// trait Dsl {
-//     // f1 >> f2
-//     fn then<S: Into<String>>(self, other: S) -> String;
-//     // v |> f
-//     fn pipe<S: Into<String>>(self, other: S) -> String;
-// }
-
-// impl Dsl for String {
-//     fn then<S: Into<String>>(self, other: S) -> String {
-//         let c = fresh_id();
-//         format!(
-//             "(lam x{} (app {} (app {} (var x{}))))",
-//             c,
-//             other.into(),
-//             self,
-//             c
-//         )
-//     }
-
-//     fn pipe<S: Into<String>>(self, other: S) -> String {
-//         format!("(app {} {})", other.into(), self)
-//     }
-// }
-
-// impl Dsl for &str {
-//     fn then<S: Into<String>>(self, other: S) -> String {
-//         String::from(self).then(other)
-//     }
-
-//     fn pipe<S: Into<String>>(self, other: S) -> String {
-//         String::from(self).pipe(other)
-//     }
-// }
-
 fn main() {
     env_logger::init();
 

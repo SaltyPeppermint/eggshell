@@ -52,6 +52,10 @@ harness = false
 # lto = true
 # codegen-units = 1
 
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
 # [profile.release.build-override]
 # opt-level = 2
 # codegen-units = 16
