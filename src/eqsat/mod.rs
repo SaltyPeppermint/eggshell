@@ -36,7 +36,7 @@ where
     N: Analysis<L> + Clone,
     N::Data: Serialize + Clone,
 {
-    Seeds(Vec<RecExpr<L>>),
+    RecExprs(Vec<RecExpr<L>>),
     EGraph {
         egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,
@@ -59,7 +59,7 @@ where
     ///
     /// # Errors
     ///
-    /// Will return an error if the starting term is not parsable in the
+    /// Will return an error if the starting expression is not parsable in the
     /// [`Trs::Language`].
     #[must_use]
     pub fn new(start_material: StartMaterial<L, N>) -> Self {
@@ -74,7 +74,7 @@ where
     // ///
     // /// # Errors
     // ///
-    // /// Will return an error if the starting term is not parsable in the
+    // /// Will return an error if the starting expr is not parsable in the
     // /// [`Trs::Language`].
     // #[must_use]
     // pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
@@ -100,7 +100,7 @@ where
         rules: &[Rewrite<L, N>],
     ) -> EqsatResult<L, N> {
         match &self.start_material {
-            StartMaterial::Seeds(exprs) => info!("Running Eqsat with Expressions: {:?}", exprs),
+            StartMaterial::RecExprs(exprs) => info!("Running Eqsat with Expressions: {:?}", exprs),
             StartMaterial::EGraph { .. } => info!("Running Eqsat with previous EGraph"),
         }
 
@@ -133,7 +133,7 @@ where
         }
 
         let egraph_roots = match self.start_material {
-            StartMaterial::Seeds(vec) => {
+            StartMaterial::RecExprs(vec) => {
                 for expr in &vec {
                     runner = runner.with_expr(expr);
                 }

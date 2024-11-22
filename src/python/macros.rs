@@ -12,8 +12,8 @@ macro_rules! monomorphize {
             bound.add_function(pyo3::wrap_pyfunction!(symbols, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(symbol_table, m)?)?;
             bound.add_function(pyo3::wrap_pyfunction!(run_eqsat, m)?)?;
-            // bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_term, m)?)?;
-            // bound.add_function(pyo3::wrap_pyfunction!(typecheck_term, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_expr, m)?)?;
+            // bound.add_function(pyo3::wrap_pyfunction!(typecheck_expr, m)?)?;
             // bound.add_function(pyo3::wrap_pyfunction!(syntaxcheck_sketch, m)?)?;
             // bound.add_function(pyo3::wrap_pyfunction!(typecheck_sketch, m)?)?;
             bound.add_class::<EqsatResult>()?;
@@ -36,17 +36,17 @@ macro_rules! monomorphize {
             $crate::python::symbols::SymbolTable::new(lut)
         }
 
-        // /// Check if a term has the correct syntax
+        // /// Check if a expression has the correct syntax
         // #[pyo3::pyfunction]
-        // pub fn syntaxcheck_term(term: &$crate::python::PyLang) -> bool {
-        //     let expr: Result<egg::RecExpr<Lang>, _> = (&term.0).try_into();
+        // pub fn syntaxcheck_expression(expression: &$crate::python::PyLang) -> bool {
+        //     let expr: Result<egg::RecExpr<Lang>, _> = (&expression.0).try_into();
         //     expr.is_ok()
         // }
 
-        // /// Check if a term typechecks
+        // /// Check if a expression typechecks
         // #[pyo3::pyfunction]
-        // pub fn typecheck_term(term: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
-        //     let expr: egg::RecExpr<Lang> = (&term.0)
+        // pub fn typecheck_expression(expression: &$crate::python::PyLang) -> pyo3::PyResult<bool> {
+        //     let expr: egg::RecExpr<Lang> = (&expression.0)
         //         .try_into()
         //         .map_err(|e| $crate::python::EggError::FromOp::<<Lang as egg::FromOp>::Error>(e))?;
         //     Ok($crate::typing::typecheck_expr(&expr).is_ok())
@@ -54,36 +54,36 @@ macro_rules! monomorphize {
 
         // /// Check if a partial sketch has the correct syntax
         // #[pyo3::pyfunction]
-        // pub fn syntaxcheck_sketch(term: &$crate::python::PySketch) -> bool {
+        // pub fn syntaxcheck_sketch(expression: &$crate::python::PySketch) -> bool {
         //     let sketch: Result<egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>>, _> =
-        //         (&term.0).try_into();
+        //         (&expression.0).try_into();
         //     sketch.is_ok()
         // }
 
         // /// Check if a partial sketch typechecks
         // #[pyo3::pyfunction]
-        // pub fn typecheck_sketch(term: &$crate::python::PySketch) -> pyo3::PyResult<bool> {
+        // pub fn typecheck_sketch(expression: &$crate::python::PySketch) -> pyo3::PyResult<bool> {
         //     let sketch: egg::RecExpr<$crate::sketch::PartialSketchNode<Lang>> =
-        //         (&term.0).try_into()?;
+        //         (&expression.0).try_into()?;
         //     Ok($crate::typing::typecheck_expr(&sketch).is_ok())
         // }
 
         /// Run an eqsat on the expr
         #[pyo3::pyfunction]
-        #[pyo3(signature = (start_terms, conf=None))]
+        #[pyo3(signature = (start_asts, conf=None))]
         pub fn run_eqsat(
-            start_terms: Vec<$crate::python::PyAst>,
+            start_asts: Vec<$crate::python::PyAst>,
             conf: Option<$crate::eqsat::EqsatConf>,
         ) -> pyo3::PyResult<EqsatResult> {
-            let start_exprs = start_terms
+            let start_exprs = start_asts
                 .into_iter()
-                .map(|term| (&term.0).try_into())
+                .map(|start_ast| (&start_ast.0).try_into())
                 .collect::<Result<_, _>>()?;
             let eqsat = if let Some(c) = conf {
-                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Seeds(start_exprs))
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::RecExprs(start_exprs))
                     .with_conf(c)
             } else {
-                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::Seeds(start_exprs))
+                $crate::eqsat::Eqsat::new($crate::eqsat::StartMaterial::RecExprs(start_exprs))
             };
 
             let rules = <$type as $crate::trs::TermRewriteSystem>::full_rules();
@@ -104,7 +104,7 @@ macro_rules! monomorphize {
                 root: usize,
                 cost_fn: &str,
             ) -> pyo3::PyResult<(usize, $crate::python::PyAst)> {
-                let (cost, term) = {
+                let (cost, expr) = {
                     match cost_fn {
                         "ast_size" => self.0.classic_extract(root.into(), egg::AstSize),
                         "ast_depth" => self.0.classic_extract(root.into(), egg::AstDepth),
@@ -115,7 +115,7 @@ macro_rules! monomorphize {
                         }
                     }
                 };
-                Ok((cost, (&term).into()))
+                Ok((cost, (&expr).into()))
             }
 
             #[pyo3(signature = (root, sketch,cost_fn="ast_size"))]
@@ -126,7 +126,7 @@ macro_rules! monomorphize {
                 cost_fn: &str,
             ) -> pyo3::PyResult<(usize, $crate::python::PyAst)> {
                 let sketch = &(&sketch.0).try_into()?;
-                let (cost, term) = match cost_fn {
+                let (cost, expr) = match cost_fn {
                     "ast_size" => self.0.sketch_extract(root.into(), egg::AstSize, sketch),
                     "ast_depth" => self.0.sketch_extract(root.into(), egg::AstDepth, sketch),
                     _ => {
@@ -135,7 +135,7 @@ macro_rules! monomorphize {
                         ))
                     }
                 };
-                Ok((cost, (&term).into()))
+                Ok((cost, (&expr).into()))
             }
 
             fn table_extract(
@@ -147,8 +147,8 @@ macro_rules! monomorphize {
                     .into_iter()
                     .map(|(k, v)| ((k.0.into(), k.1), v))
                     .collect();
-                let (cost, term) = self.0.table_extract(root.into(), t);
-                (cost, (&term).into())
+                let (cost, expr) = self.0.table_extract(root.into(), t);
+                (cost, (&expr).into())
             }
 
             fn flat_egraph(&self) -> $crate::python::flat::FlatEGraph {

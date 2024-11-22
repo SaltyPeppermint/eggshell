@@ -45,14 +45,13 @@ fn extraction(c: &mut Criterion) {
 }
 
 fn sampling(c: &mut Criterion) {
-    let term = "(+ c (* (+ a b) 1))";
+    let start_expr = "(+ c (* (+ a b) 1))".parse().unwrap();
     let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
-    let eqsat: TrsEqsatResult<Simple> =
-        Eqsat::new(StartMaterial::Seeds(vec![term.parse().unwrap()]))
-            .with_conf(eqsat_conf.clone())
-            .run(&rules);
+    let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
+        .with_conf(eqsat_conf.clone())
+        .run(&rules);
 
     let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
     let mut strategy =
