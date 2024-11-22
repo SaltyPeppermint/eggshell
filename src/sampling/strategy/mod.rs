@@ -5,7 +5,8 @@ use std::fmt::Debug;
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
-use rand::{rngs::StdRng, seq::IteratorRandom};
+use rand::rngs::StdRng;
+use rand::seq::IteratorRandom;
 
 use super::SampleError;
 use super::{choices::ChoiceList, SampleConf};
@@ -43,22 +44,23 @@ where
     ///
     /// # Errors
     ///
-    /// This function will return an error if .
+    /// This function will return an error if something goes wrong during sampling.
     fn sample_term(&mut self, root_eclass: &EClass<L, N::Data>) -> Result<RecExpr<L>, SampleError> {
         let egraph = self.egraph();
 
         let canonical_root_id = egraph.find(root_eclass.id);
         self.extractable(canonical_root_id)?;
 
-        let choice_list = ChoiceList::from(canonical_root_id);
-        let mut choices: ChoiceList<L> = choice_list;
-        // let mut visited = HashSet::from([root_eclass.id]);
+        let mut choices = ChoiceList::from(canonical_root_id);
 
-        while let Some(next_open_id) = choices.next_open() {
-            let eclass_id = egraph.find(next_open_id);
+        while let Some(id) = choices.next_open(self.rng_mut()) {
+            let eclass_id = egraph.find(id);
             let eclass = &egraph[eclass_id];
             let pick = self.pick(eclass);
-            choices.fill_next(pick);
+            choices.fill_next(pick)?;
+            // if choices.len() > 10000 {
+            //     warn!("Building very large sample with {} entries!", choices.len());
+            // }
         }
         self.start_new();
         let expr = choices.try_into().expect("No open choices should be left");

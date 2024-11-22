@@ -91,8 +91,8 @@ pub(crate) trait Tree: Sized {
 
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
-#[derive(Debug)]
-pub struct ExprHashCons<L> {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ExprHashCons<L: Hash + Eq> {
     expr: RecExpr<L>,
     memo: HashMap<L, Id>,
 }

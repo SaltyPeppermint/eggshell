@@ -221,7 +221,7 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(41usize, n_samples);
+        assert_eq!(46usize, n_samples);
     }
 
     #[test]
@@ -243,6 +243,6 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(103usize, n_samples);
+        assert_eq!(107usize, n_samples);
     }
 }
