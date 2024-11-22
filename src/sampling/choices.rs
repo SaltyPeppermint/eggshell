@@ -2,49 +2,64 @@ use std::fmt::Debug;
 use std::iter::IntoIterator;
 
 use egg::{Id, Language, RecExpr};
+use hashbrown::HashSet;
+use rand::{seq::IteratorRandom, Rng};
 use serde::Serialize;
 
-#[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
+use super::SampleError;
+
+#[derive(Serialize, Debug, Clone, PartialEq, Eq)]
 pub struct ChoiceList<L: Language> {
     choices: Vec<Choice<L>>,
-    open_idx: usize,
+    open_positions: HashSet<usize>,
+    next_to_fill: Option<usize>,
 }
 
 impl<L: Language> ChoiceList<L> {
-    pub fn new(choices: Vec<Choice<L>>) -> Self {
-        Self {
-            choices,
-            open_idx: 0,
-        }
-    }
-
-    pub fn next_open(&mut self) -> Option<Id> {
-        if self.choices.len() <= self.open_idx {
-            None
+    // Returns position of next open
+    pub fn next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
+        if let Some(next_position) = self.open_positions.iter().choose(rng) {
+            self.next_to_fill = Some(*next_position);
+            // dbg!(&self.choices[*next_position]);
+            let id = self.choices[*next_position].eclass_id().unwrap();
+            Some(id)
         } else {
-            Some(self.choices[self.open_idx].eclass_id().unwrap())
+            self.next_to_fill = None;
+            None
         }
     }
 
-    pub fn fill_next(&mut self, pick: &L) {
+    pub fn fill_next(&mut self, pick: &L) -> Result<(), SampleError> {
+        // Check if there is an open position to be filled
+        let position = self.next_to_fill.ok_or(SampleError::ChoiceError)?;
+        assert!(matches!(self.choices[position], Choice::Open(_)));
+
         let mut owned_pick = pick.clone();
 
+        // Create new open choices for children with the eclass ids of the children
         let new_open_choices = owned_pick
             .children()
             .iter()
             .map(|child_id| Choice::Open(*child_id));
 
         let old_len = self.choices.len();
-
         self.choices.extend(new_open_choices);
 
+        // Calculate and add new positions to open positions hashmap
         for (i, child) in owned_pick.children_mut().iter_mut().enumerate() {
-            *child = Id::from(old_len + i);
+            let child_position = old_len + i;
+            *child = Id::from(child_position);
+            self.open_positions.insert(child_position);
         }
 
-        self.choices[self.open_idx] = Choice::Picked(owned_pick);
+        // Remove spot about to be filled from open positions
+        self.open_positions.remove(&position);
+        self.choices[position] = Choice::Picked(owned_pick);
+        Ok(())
+    }
 
-        self.open_idx += 1;
+    pub fn len(&self) -> usize {
+        self.choices.len()
     }
 }
 
@@ -52,7 +67,8 @@ impl<L: Language> From<Id> for ChoiceList<L> {
     fn from(id: Id) -> Self {
         ChoiceList {
             choices: vec![Choice::Open(id)],
-            open_idx: 0,
+            open_positions: HashSet::from([0]),
+            next_to_fill: Some(0),
         }
     }
 }
@@ -74,7 +90,7 @@ impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
         let len_1 = choice_list.choices.len() - 1;
 
         // Reversing so we get a sensible insertion order for RecExpr
-        Ok(choice_list
+        let rec_expr = choice_list
             .choices
             .into_iter()
             .rev()
@@ -86,7 +102,8 @@ impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
                 Ok(pick)
             })
             .collect::<Result<Vec<_>, _>>()?
-            .into())
+            .into();
+        Ok(rec_expr)
     }
 }
 

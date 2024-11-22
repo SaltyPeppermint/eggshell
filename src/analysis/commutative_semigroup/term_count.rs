@@ -2,16 +2,17 @@ use std::fmt::Debug;
 
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
+use num::BigUint;
 use rayon::prelude::*;
 
 use super::CommutativeSemigroupAnalysis;
 
 #[derive(Debug)]
-pub struct TermsUpToSize {
+pub struct TermCount {
     limit: usize,
 }
 
-impl TermsUpToSize {
+impl TermCount {
     #[must_use]
     pub fn new(limit: usize) -> Self {
         Self { limit }
@@ -23,15 +24,15 @@ impl TermsUpToSize {
     }
 }
 
-impl<L, N> CommutativeSemigroupAnalysis<L, N> for TermsUpToSize
+impl<L, N> CommutativeSemigroupAnalysis<L, N> for TermCount
 where
-    L: Language + Debug + Sync,
+    L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
 {
     // Size and number of programs of that size
-    type Data = HashMap<usize, usize>;
+    type Data = HashMap<usize, BigUint>;
 
     fn make<'a>(
         &self,
@@ -44,10 +45,10 @@ where
         Self: 'a,
     {
         fn rec(
-            remaining: &[&HashMap<usize, usize>],
+            remaining: &[&HashMap<usize, BigUint>],
             size: usize,
-            count: usize,
-            counts: &mut HashMap<usize, usize>,
+            count: BigUint,
+            counts: &mut HashMap<usize, BigUint>,
             limit: usize,
         ) {
             // If we have reached the term size limit, stop the recursion
@@ -62,15 +63,27 @@ where
             // the recursion depth (which is the size)
             if let Some((head, tail)) = remaining.split_first() {
                 for (s, c) in *head {
-                    rec(tail, size + s, count * c, counts, limit);
+                    rec(
+                        tail,
+                        size + s, //size.checked_add(*s).expect("Add failed in rec"),
+                        count.clone() * c, //count.checked_mul(*c).expect("Mul failed in rec"),
+                        counts,
+                        limit,
+                    );
                 }
             } else {
-                counts
-                    .entry(size)
-                    .and_modify(|c| {
-                        *c += count;
-                    })
-                    .or_insert(count);
+                // counts
+                //     .entry(size)
+                //     .and_modify(|c| {
+                //         *c += count;
+                //     })
+                //     .or_insert(count);
+                match counts.get_mut(&size) {
+                    Some(c) => *c += count, // .checked_add(count).expect("Add failed in else"),
+                    None => {
+                        counts.insert(size, count);
+                    }
+                }
             }
         }
         // We start with the initial analysis of all the children since we need to know those
@@ -83,7 +96,7 @@ where
             .collect::<Vec<_>>();
         let mut counts = HashMap::new();
 
-        rec(&children_counts, 1, 1, &mut counts, self.limit);
+        rec(&children_counts, 1, 1usize.into(), &mut counts, self.limit);
         counts
     }
 
@@ -93,11 +106,17 @@ where
         }
 
         for (size, count) in b {
-            a.entry(size)
-                .and_modify(|c| {
-                    *c += count;
-                })
-                .or_insert(count);
+            // a.entry(size)
+            //     .and_modify(|c| {
+            //         *c += count;
+            //     })
+            //     .or_insert(count);
+            match a.get_mut(&size) {
+                Some(c) => *c += count, //  .checked_add(count).expect("Add failed in merge"),
+                None => {
+                    a.insert(size, count);
+                }
+            }
         }
         DidMerge(true, false)
     }
@@ -131,11 +150,11 @@ mod tests {
         egraph.rebuild();
 
         let mut data = HashMap::new();
-        TermsUpToSize::new(10).one_shot_analysis(&egraph, &mut data);
+        TermCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
 
-        assert_eq!(root_data[&5], 1);
+        assert_eq!(root_data[&5], 1usize.into());
     }
 
     #[test]
@@ -151,10 +170,10 @@ mod tests {
         egraph.rebuild();
 
         let mut data = HashMap::new();
-        TermsUpToSize::new(10).one_shot_analysis(&egraph, &mut data);
+        TermCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
-        assert_eq!(root_data[&5], 16);
+        assert_eq!(root_data[&5], 16usize.into());
     }
 
     #[test]
@@ -171,10 +190,10 @@ mod tests {
         let root = eqsat.roots()[0];
 
         let mut data = HashMap::new();
-        TermsUpToSize::new(16).one_shot_analysis(egraph, &mut data);
+        TermCount::new(16).one_shot_analysis(egraph, &mut data);
 
         let root_data = &data[&egraph.find(root)];
 
-        assert_eq!(root_data[&16], 40512);
+        assert_eq!(root_data[&16], 40512usize.into());
     }
 }

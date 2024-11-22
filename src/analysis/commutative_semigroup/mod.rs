@@ -1,3 +1,4 @@
+// mod term_collect;
 mod term_count;
 
 use std::fmt::Debug;
@@ -8,11 +9,11 @@ use rayon::prelude::*;
 
 use crate::utils::UniqueQueue;
 
-pub use term_count::TermsUpToSize;
+pub use term_count::TermCount;
 
 pub trait CommutativeSemigroupAnalysis<L, N>: Sized + Debug + Sync + Send
 where
-    L: Language + Debug + Sync,
+    L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
@@ -27,7 +28,8 @@ where
     ) -> Self::Data
     where
         Self::Data: 'a,
-        Self: 'a;
+        Self: 'a,
+        L: 'a;
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
@@ -38,11 +40,11 @@ where
             data: &mut HashMap<Id, B::Data>,
             analysis_pending: &mut UniqueQueue<Id>,
         ) where
-            L: Language + Debug + Sync,
+            L: Language + Debug + Sync + Send,
             L::Discriminant: Debug + Sync,
             N: Analysis<L> + Debug + Sync,
             N::Data: Debug + Sync,
-            B: CommutativeSemigroupAnalysis<L, N> + Sync,
+            B: CommutativeSemigroupAnalysis<L, N> + Sync + Send,
             B::Data: PartialEq + Debug,
         {
             while let Some(id) = analysis_pending.pop() {

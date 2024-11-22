@@ -343,8 +343,8 @@ fn sample<R: TermRewriteSystem>(
     match &cli.strategy {
         SampleStrategy::TermSizeCount => {
             let min_size = seed_expr.as_ref().len();
-            // let limit = min_size + (min_size / 2);
-            let limit = min_size * 2;
+            let limit = min_size + (min_size / 2);
+            // let limit = min_size * 2;
             info!("Using limit {limit}");
             TermCountWeighted::new(eqsat.egraph(), &mut rng, limit)
                 .sample_eclass(sample_conf, root_id)
