@@ -63,7 +63,7 @@ where
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>) -> &'c L {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         let pick = if self.loop_limit > self.loop_count {
             eclass
                 .nodes
@@ -153,13 +153,12 @@ mod tests {
 
     #[test]
     fn simple_sample() {
-        let term = "(* (+ a b) 1)";
-        let seed = term.parse().unwrap();
+        let start_expr = "(* (+ a b) 1)".parse().unwrap();
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -174,13 +173,12 @@ mod tests {
 
     #[test]
     fn stringified_sample_len() {
-        let term = "(* (+ a b) 1)";
-        let seed = term.parse().unwrap();
+        let start_expr = "(* (+ a b) 1)".parse().unwrap();
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -203,14 +201,15 @@ mod tests {
 
     #[test]
     fn multi_seed_sample() {
-        let term = "(* (+ a b) 1)";
-        let term2 = "(+ (+ x 0) (* y 1))";
-        let seeds = vec![term.parse().unwrap(), term2.parse().unwrap()];
+        let start_exprs = vec![
+            "(* (+ a b) 1)".parse().unwrap(),
+            "(+ (+ x 0) (* y 1))".parse().unwrap(),
+        ];
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(seeds))
+        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::RecExprs(start_exprs))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
@@ -226,13 +225,14 @@ mod tests {
 
     #[test]
     fn halide_sample() {
-        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
-        let seed = term.parse().unwrap();
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse()
+            .unwrap();
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 

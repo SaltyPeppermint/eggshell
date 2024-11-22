@@ -194,6 +194,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::sketch;
     use crate::trs::{Halide, TermRewriteSystem};
     use crate::typing::typecheck_expr;
 
@@ -201,18 +202,15 @@ mod tests {
 
     #[test]
     fn parse_and_print() {
-        let term = "(contains (max (min 1 [active]) ?))";
-        let sketch = term
+        let sketch = "(contains (max (min 1 [active]) ?))"
             .parse::<PartialSketch<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
-
         assert_eq!(&sketch.to_string(), "(contains (max (min 1 [active]) ?))");
     }
 
     #[test]
     fn typecheck_partial_sketch1() {
-        let term = "(or (max (min 1 [active]) ?) (== 2 ?))";
-        let sketch = term
+        let sketch = "(or (max (min 1 [active]) ?) (== 2 ?))"
             .parse::<PartialSketch<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
 
@@ -221,8 +219,7 @@ mod tests {
 
     #[test]
     fn typecheck_partial_sketch2() {
-        let term = "(or (< (min 1 [active]) ?) (== 2 ?))";
-        let sketch = term
+        let sketch = "(or (< (min 1 [active]) ?) (== 2 ?))"
             .parse::<PartialSketch<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
 
@@ -236,8 +233,7 @@ mod tests {
 
     #[test]
     fn typecheck_partial_sketch3() {
-        let term = "(or (or (> 1 [active]) ?) (or 2 ?))";
-        let sketch = term
+        let sketch = "(or (or (> 1 [active]) ?) (or 2 ?))"
             .parse::<PartialSketch<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
 

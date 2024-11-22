@@ -6,14 +6,14 @@ use serde::{Deserialize, Serialize};
 
 // use pyo3::prelude::*;
 
-use super::structs::Expression;
+use super::structs::Entry;
 
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.
 ///
 /// [`Expression`]: super::structs::Expression
 #[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
+pub fn read_exprs_csv(file_path: &Path) -> Vec<Entry> {
     // Declare the vector and the reader
     let file = File::open(file_path).expect("CSV File needs to exist");
     let mut rdr = csv::Reader::from_reader(file);
@@ -30,9 +30,9 @@ pub fn read_exprs_csv(file_path: &Path) -> Vec<Expression> {
             let truth_value = record.get(2).map(|s| s.to_owned());
 
             // Push the new ExpressionStruct initialized with the values extracted into the vector.
-            Expression {
+            Entry {
                 index,
-                term: expr_str.to_owned(),
+                expr: expr_str.to_owned(),
                 truth_value,
             }
         })
@@ -53,7 +53,7 @@ struct JsonDatapoint {
 
 #[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn read_exprs_json(file_path: &Path) -> Vec<Expression> {
+pub fn read_exprs_json(file_path: &Path) -> Vec<Entry> {
     // Declare the vector and the reader
     let file = File::open(file_path).expect("Json file must exist");
     let data: Vec<JsonDatapoint> =
@@ -61,9 +61,9 @@ pub fn read_exprs_json(file_path: &Path) -> Vec<Expression> {
     // Read each record and extract then cast the values.
     data.into_iter()
         .enumerate()
-        .map(|(index, entry)| Expression {
+        .map(|(index, entry)| Entry {
             index,
-            term: entry.expression.start,
+            expr: entry.expression.start,
             truth_value: Some(entry.expression.end),
         })
         .collect()

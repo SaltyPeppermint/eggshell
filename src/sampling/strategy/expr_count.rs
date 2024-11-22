@@ -1,19 +1,19 @@
 use std::fmt::Debug;
 
-use egg::{Analysis, EClass, EGraph, Id, Language};
+use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use log::info;
 use num::BigUint;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
-use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, TermCount};
+use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, ExprCount};
 use crate::sampling::SampleError;
 
 use super::Strategy;
 
 #[derive(Debug)]
-pub struct TermCountWeighted<'a, 'b, L, N>
+pub struct SizeCountWeighted<'a, 'b, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
@@ -21,10 +21,11 @@ where
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
     flattened_data: HashMap<Id, BigUint>,
+    start_size: usize,
     limit: usize,
 }
 
-impl<'a, 'b, L, N> TermCountWeighted<'a, 'b, L, N>
+impl<'a, 'b, L, N> SizeCountWeighted<'a, 'b, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -40,12 +41,21 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, limit: usize) -> Self {
+    pub fn new_with_limit(
+        egraph: &'a EGraph<L, N>,
+        rng: &'b mut StdRng,
+        start_expr: &RecExpr<L>,
+        limit: usize,
+    ) -> Self {
+        let start_size = AstSize.cost_rec(start_expr);
+        // let limit = start_size + (start_size / 2);
+        info!("Using limit {limit}");
+
         let mut data = HashMap::new();
 
         // Make one big analysis for all eclasses
         info!("Starting oneshot analysis...");
-        TermCount::new(limit).one_shot_analysis(egraph, &mut data);
+        ExprCount::new(limit).one_shot_analysis(egraph, &mut data);
         info!("Oneshot analysis finsished!");
 
         // Flatten for easier consumption
@@ -56,10 +66,40 @@ where
             .collect();
         info!("Flattened analysis data!");
 
-        TermCountWeighted {
+        SizeCountWeighted {
             egraph,
             rng,
             flattened_data,
+            start_size,
+            limit,
+        }
+    }
+
+    pub fn new(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, start_expr: &RecExpr<L>) -> Self {
+        let start_size = AstSize.cost_rec(start_expr);
+        let limit = start_size + (start_size / 2);
+        info!("Using limit {limit}");
+
+        let mut data = HashMap::new();
+
+        // Make one big analysis for all eclasses
+        info!("Starting oneshot analysis...");
+        ExprCount::new(limit).one_shot_analysis(egraph, &mut data);
+        info!("Oneshot analysis finsished!");
+
+        // Flatten for easier consumption
+        info!("Flattening analysis data...");
+        let flattened_data = data
+            .into_iter()
+            .map(|(k, v)| (k, v.values().sum::<BigUint>()))
+            .collect();
+        info!("Flattened analysis data!");
+
+        SizeCountWeighted {
+            egraph,
+            rng,
+            flattened_data,
+            start_size,
             limit,
         }
     }
@@ -70,12 +110,12 @@ where
     }
 }
 
-impl<'a, 'b, L, N> Strategy<'a, L, N> for TermCountWeighted<'a, 'b, L, N>
+impl<'a, 'b, L, N> Strategy<'a, L, N> for SizeCountWeighted<'a, 'b, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>) -> &'c L {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         eclass
             .nodes
             .choose_weighted(&mut self.rng, |node| {
@@ -107,7 +147,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct TermCountLutWeighted<'a, 'b, L, N>
+pub struct SizeCountLutWeighted<'a, 'b, L, N>
 where
     L: Language,
     N: Analysis<L>,
@@ -116,9 +156,11 @@ where
     rng: &'b mut StdRng,
     data: HashMap<Id, HashMap<usize, BigUint>>,
     interesting_sizes: HashMap<usize, BigUint>,
+    start_size: usize,
+    limit: usize,
 }
 
-impl<'a, 'b, L, N> TermCountLutWeighted<'a, 'b, L, N>
+impl<'a, 'b, L, N> SizeCountLutWeighted<'a, 'b, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -138,26 +180,30 @@ where
     pub fn new(
         egraph: &'a EGraph<L, N>,
         rng: &'b mut StdRng,
+        start_expr: &RecExpr<L>,
         interesting_sizes: HashMap<usize, BigUint>,
     ) -> Self {
+        let start_size = AstSize.cost_rec(start_expr);
         let mut data = HashMap::new();
-        let max_term_size = interesting_sizes
+        let limit = *interesting_sizes
             .keys()
             .max()
             .expect("At least one term size of interest");
 
         // Make one big analysis for all eclasses
-        TermCount::new(*max_term_size).one_shot_analysis(egraph, &mut data);
+        ExprCount::new(limit).one_shot_analysis(egraph, &mut data);
         // Filter out data with uninteresting term sizes
         for class_data in data.values_mut() {
             class_data.retain(|k, _| interesting_sizes.contains_key(k));
         }
 
-        TermCountLutWeighted {
+        SizeCountLutWeighted {
             egraph,
             rng,
             data,
             interesting_sizes,
+            start_size,
+            limit,
         }
     }
 
@@ -167,12 +213,12 @@ where
     }
 }
 
-impl<'a, 'b, L, N> Strategy<'a, L, N> for TermCountLutWeighted<'a, 'b, L, N>
+impl<'a, 'b, L, N> Strategy<'a, L, N> for SizeCountLutWeighted<'a, 'b, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>) -> &'c L {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         eclass
             .nodes
             .choose_weighted(&mut self.rng, |node| {
@@ -250,19 +296,21 @@ mod tests {
     #[test]
     fn simple_sample_lut() {
         let term = "(* (+ a b) 1)";
-        let seed = term.parse().unwrap();
+        let start_expr = term.parse::<RecExpr<_>>().unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
+        let eqsat: TrsEqsatResult<Simple> =
+            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+                .with_conf(eqsat_conf.clone())
+                .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = TermCountLutWeighted::new(
+        let mut strategy = SizeCountLutWeighted::new(
             eqsat.egraph(),
             &mut rng,
+            &start_expr,
             HashMap::from([(1, 1usize.into()), (2, 2usize.into()), (17, 1usize.into())]),
         );
         let samples = strategy.sample(&sample_conf).unwrap();
@@ -273,19 +321,20 @@ mod tests {
 
     #[test]
     fn simple_sample() {
-        let term = "(* (+ a b) 1)";
-        let seed = term.parse().unwrap();
+        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
+        let eqsat: TrsEqsatResult<Simple> =
+            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+                .with_conf(eqsat_conf.clone())
+                .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 5);
+        let mut strategy =
+            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 5);
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
         assert_eq!(10usize, samples.len());
@@ -293,19 +342,22 @@ mod tests {
 
     #[test]
     fn halide_sample() {
-        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
-        let seed = term.parse().unwrap();
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse::<RecExpr<_>>()
+            .unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
+        let eqsat: TrsEqsatResult<Halide> =
+            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+                .with_conf(eqsat_conf.clone())
+                .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 32);
+        let mut strategy =
+            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 32);
 
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
@@ -314,19 +366,22 @@ mod tests {
 
     #[test]
     fn halide_low_limit() {
-        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
-        let seed = term.parse().unwrap();
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse::<RecExpr<_>>()
+            .unwrap();
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
+        let eqsat: TrsEqsatResult<Halide> =
+            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+                .with_conf(eqsat_conf.clone())
+                .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = TermCountWeighted::new(eqsat.egraph(), &mut rng, 2);
+        let mut strategy =
+            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 2);
         assert_eq!(
             Err(SampleError::LimitError(2)),
             strategy.sample_eclass(&sample_conf, root_id)
@@ -335,21 +390,24 @@ mod tests {
 
     #[test]
     fn halide_lut_low_limit() {
-        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
-        let seed = term.parse().unwrap();
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse::<RecExpr<_>>()
+            .unwrap();
         let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
+        let eqsat: TrsEqsatResult<Halide> =
+            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+                .with_conf(eqsat_conf.clone())
+                .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = TermCountLutWeighted::new(
+        let mut strategy = SizeCountLutWeighted::new(
             eqsat.egraph(),
             &mut rng,
+            &start_expr,
             HashMap::from([(1, 1usize.into()), (2, 2usize.into()), (3, 1usize.into())]),
         );
         assert_eq!(

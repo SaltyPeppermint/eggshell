@@ -8,11 +8,11 @@ use rayon::prelude::*;
 use super::CommutativeSemigroupAnalysis;
 
 #[derive(Debug)]
-pub struct TermCount {
+pub struct ExprCount {
     limit: usize,
 }
 
-impl TermCount {
+impl ExprCount {
     #[must_use]
     pub fn new(limit: usize) -> Self {
         Self { limit }
@@ -24,7 +24,7 @@ impl TermCount {
     }
 }
 
-impl<L, N> CommutativeSemigroupAnalysis<L, N> for TermCount
+impl<L, N> CommutativeSemigroupAnalysis<L, N> for ExprCount
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -150,7 +150,7 @@ mod tests {
         egraph.rebuild();
 
         let mut data = HashMap::new();
-        TermCount::new(10).one_shot_analysis(&egraph, &mut data);
+        ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
 
@@ -170,7 +170,7 @@ mod tests {
         egraph.rebuild();
 
         let mut data = HashMap::new();
-        TermCount::new(10).one_shot_analysis(&egraph, &mut data);
+        ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
         assert_eq!(root_data[&5], 16usize.into());
@@ -178,19 +178,20 @@ mod tests {
 
     #[test]
     fn halide_count_size() {
-        let term = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )";
-        let seed = term.parse().unwrap();
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse()
+            .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::Seeds(vec![seed]))
+        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 
         let mut data = HashMap::new();
-        TermCount::new(16).one_shot_analysis(egraph, &mut data);
+        ExprCount::new(16).one_shot_analysis(egraph, &mut data);
 
         let root_data = &data[&egraph.find(root)];
 

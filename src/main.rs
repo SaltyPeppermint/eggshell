@@ -10,7 +10,7 @@ use std::time::Duration;
 use chrono::Local;
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
-use egg::{Analysis, AstSize, EGraph, Language, RecExpr, Rewrite, StopReason};
+use egg::{Analysis, AstSize, CostFunction, EGraph, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashSet;
 use log::info;
 use rand::rngs::StdRng;
@@ -19,8 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use eggshell::eqsat::{EqsatConf, StartMaterial};
 use eggshell::io::reader;
-use eggshell::io::structs::Expression;
-use eggshell::sampling::strategy::{CostWeighted, Strategy, TermCountWeighted};
+use eggshell::io::structs::Entry;
+use eggshell::sampling::strategy::{CostWeighted, SizeCountWeighted, Strategy};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem, TrsEqsat, TrsEqsatResult};
 
@@ -30,9 +30,9 @@ struct Cli {
     #[arg(long)]
     file: PathBuf,
 
-    /// Number of terms from which to seed egraphs
+    /// Id of expr from which to seed egraphs
     #[arg(long)]
-    seed_id: usize,
+    expr_id: usize,
 
     /// RNG Seed
     #[arg(long, default_value_t = 2024)]
@@ -43,7 +43,7 @@ struct Cli {
     eclass_samples: usize,
 
     /// Sampling strategy
-    #[arg(long, default_value_t = SampleStrategy::TermSizeCount)]
+    #[arg(long, default_value_t = SampleStrategy::SizeCount)]
     strategy: SampleStrategy,
 
     /// Calculate and save explanations
@@ -77,14 +77,14 @@ struct Cli {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 enum SampleStrategy {
-    TermSizeCount,
+    SizeCount,
     CostWeighted,
 }
 
 impl Display for SampleStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SampleStrategy::TermSizeCount => write!(f, "TermSizeCount"),
+            SampleStrategy::SizeCount => write!(f, "SizeCount"),
             SampleStrategy::CostWeighted => write!(f, "CostWeighted"),
         }
     }
@@ -95,7 +95,7 @@ impl FromStr for SampleStrategy {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().replace("_", "").as_str() {
-            "termsizecount" => Ok(Self::TermSizeCount),
+            "sizecount" => Ok(Self::SizeCount),
             "costweighted" => Ok(Self::CostWeighted),
             _ => Err(Error::new(ErrorKind::InvalidValue)),
         }
@@ -240,7 +240,7 @@ fn main() {
 }
 
 fn run_eqsat<R: TermRewriteSystem>(
-    exprs: Vec<Expression>,
+    exprs: Vec<Entry>,
     eqsat_conf: EqsatConf,
     sample_conf: SampleConf,
     folder: String,
@@ -249,17 +249,20 @@ fn run_eqsat<R: TermRewriteSystem>(
 ) {
     let rng = StdRng::seed_from_u64(sample_conf.rng_seed);
 
-    let expr = exprs
+    let entry = exprs
         .into_iter()
-        .nth(cli.seed_id)
+        .nth(cli.expr_id)
         .expect("Must be in the file!");
 
-    info!("Starting work on term {}: {}...", cli.seed_id, expr.term);
+    info!(
+        "Starting work on expression {}: {}...",
+        cli.expr_id, entry.expr
+    );
 
-    info!("Starting eqsat on term {}...", cli.seed_id);
+    info!("Starting eqsat on expression {}...", cli.expr_id);
 
-    let seed_expr = expr.term.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat = TrsEqsat::<R>::new(StartMaterial::Seeds(vec![seed_expr.clone()]))
+    let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
+    let mut eqsat = TrsEqsat::<R>::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
         .with_conf(eqsat_conf.clone());
 
     let mut intermediate_egraphs = Vec::new();
@@ -291,29 +294,29 @@ fn run_eqsat<R: TermRewriteSystem>(
         }
     };
 
-    info!("Finished Eqsat {}!", cli.seed_id);
+    info!("Finished Eqsat {}!", cli.expr_id);
     info!("Starting sampling...");
 
-    let samples: Vec<_> = sample::<R>(&cli, &seed_expr, &last_result, rng, &sample_conf)
+    let samples: Vec<_> = sample::<R>(&cli, &start_expr, &last_result, rng, &sample_conf)
         .into_iter()
         .collect();
 
-    info!("Finished sampling {}!", cli.seed_id);
+    info!("Finished sampling {}!", cli.expr_id);
     info!("Took {} samples.", samples.len());
 
-    info!("Generating associated data for {}...", cli.seed_id);
+    info!("Generating associated data for {}...", cli.expr_id);
     let associated_data = mk_sample_data::<R>(
-        &seed_expr,
+        &start_expr,
         samples,
         intermediate_egraphs.as_slice(),
         &cli,
         last_result,
         rules,
     );
-    info!("Finished generating associated data for {}!", cli.seed_id);
+    info!("Finished generating associated data for {}!", cli.expr_id);
 
     let data = DataEntry {
-        seed_expr,
+        start_expr,
         sample_data: associated_data,
         metadata: MetaData {
             uuid: cli.uuid.clone(),
@@ -324,16 +327,16 @@ fn run_eqsat<R: TermRewriteSystem>(
             eqsat_conf,
         },
     };
-    info!("Finished work on expr {}!", cli.seed_id);
+    info!("Finished work on expr {}!", cli.expr_id);
 
-    let mut f = BufWriter::new(File::create(format!("{folder}/{}.json", cli.seed_id)).unwrap());
+    let mut f = BufWriter::new(File::create(format!("{folder}/{}.json", cli.expr_id)).unwrap());
     serde_json::to_writer(&mut f, &data).unwrap();
     // });
 }
 
 fn sample<R: TermRewriteSystem>(
     cli: &Cli,
-    seed_expr: &RecExpr<R::Language>,
+    start_expr: &RecExpr<R::Language>,
     eqsat: &TrsEqsatResult<R>,
     mut rng: StdRng,
     sample_conf: &SampleConf,
@@ -341,12 +344,9 @@ fn sample<R: TermRewriteSystem>(
     let root_id = eqsat.roots()[0];
 
     match &cli.strategy {
-        SampleStrategy::TermSizeCount => {
-            let min_size = seed_expr.as_ref().len();
-            let limit = min_size + (min_size / 2);
-            // let limit = min_size * 2;
-            info!("Using limit {limit}");
-            TermCountWeighted::new(eqsat.egraph(), &mut rng, limit)
+        SampleStrategy::SizeCount => {
+            let limit = (AstSize.cost_rec(start_expr) as f64 * 1.5) as usize;
+            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, start_expr, limit)
                 .sample_eclass(sample_conf, root_id)
                 .unwrap()
         }
@@ -359,7 +359,7 @@ fn sample<R: TermRewriteSystem>(
 }
 
 fn mk_sample_data<R: TermRewriteSystem>(
-    seed_expr: &RecExpr<R::Language>,
+    start_expr: &RecExpr<R::Language>,
     samples: Vec<RecExpr<R::Language>>,
     intermediate_egraphs: &[EGraph<R::Language, R::Analysis>],
     cli: &Cli,
@@ -369,8 +369,8 @@ fn mk_sample_data<R: TermRewriteSystem>(
     samples
         .into_iter()
         .map(|sample| {
-            let baseline = mk_baseline::<R>(cli, seed_expr, &sample, rules);
-            let explanation = mk_explanation::<R>(&sample, cli, &mut eqsat, seed_expr);
+            let baseline = mk_baseline::<R>(cli, start_expr, &sample, rules);
+            let explanation = mk_explanation::<R>(&sample, cli, &mut eqsat, start_expr);
             let generation = find_generation(&sample, intermediate_egraphs);
             SampleData {
                 sample,
@@ -384,13 +384,13 @@ fn mk_sample_data<R: TermRewriteSystem>(
 
 fn mk_baseline<R: TermRewriteSystem>(
     cli: &Cli,
-    seed_expr: &RecExpr<R::Language>,
+    start_expr: &RecExpr<R::Language>,
     sample: &RecExpr<R::Language>,
     rules: &[Rewrite<R::Language, R::Analysis>],
 ) -> Option<BaselineData> {
     if cli.with_baselines {
         info!("Running baseline for \"{sample}\"...");
-        let starting_exprs = StartMaterial::Seeds(vec![seed_expr.clone(), sample.clone()]);
+        let starting_exprs = StartMaterial::RecExprs(vec![start_expr.clone(), sample.clone()]);
         let result = TrsEqsat::<R>::new(starting_exprs).run(rules);
         let b = BaselineData {
             stop_reason: result.report().stop_reason.clone(),
@@ -409,13 +409,13 @@ fn mk_explanation<R: TermRewriteSystem>(
     sample: &RecExpr<R::Language>,
     cli: &Cli,
     eqsat: &mut TrsEqsatResult<R>,
-    seed_expr: &RecExpr<R::Language>,
+    start_expr: &RecExpr<R::Language>,
 ) -> Option<String> {
     if cli.with_explanations {
-        info!("Constructing explanation of \"{seed_expr} == {sample}\"...");
+        info!("Constructing explanation of \"{start_expr} == {sample}\"...");
         let expl = eqsat
             .egraph_mut()
-            .explain_equivalence(seed_expr, sample)
+            .explain_equivalence(start_expr, sample)
             .get_flat_string();
         info!("Explanation constructed!");
         Some(expl)
@@ -439,7 +439,7 @@ fn find_generation<L: Language, N: Analysis<L>>(
 
 #[derive(Serialize, Clone, Debug)]
 struct DataEntry<L: Language + Display> {
-    seed_expr: RecExpr<L>,
+    start_expr: RecExpr<L>,
     sample_data: Vec<SampleData<L>>,
     metadata: MetaData,
 }

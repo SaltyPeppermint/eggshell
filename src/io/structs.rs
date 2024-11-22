@@ -4,17 +4,17 @@ use serde::Serialize;
 /// Used to represent an expression
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[pyclass(frozen)]
-pub struct Expression {
+pub struct Entry {
     /// Index of the expression
     pub index: usize,
     /// the string of the expression
-    pub term: String,
+    pub expr: String,
     /// the truth value of the expression
     pub truth_value: Option<String>,
 }
 
 #[pymethods]
-impl Expression {
+impl Entry {
     #[expect(clippy::cast_possible_wrap)]
     #[must_use]
     #[getter]
@@ -24,8 +24,8 @@ impl Expression {
 
     #[must_use]
     #[getter]
-    pub fn term(&self) -> String {
-        self.term.clone()
+    pub fn expr(&self) -> String {
+        self.expr.clone()
     }
 }
 

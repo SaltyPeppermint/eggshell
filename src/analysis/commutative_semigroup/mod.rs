@@ -1,5 +1,4 @@
-// mod term_collect;
-mod term_count;
+mod expr_count;
 
 use std::fmt::Debug;
 
@@ -9,7 +8,7 @@ use rayon::prelude::*;
 
 use crate::utils::UniqueQueue;
 
-pub use term_count::TermCount;
+pub use expr_count::ExprCount;
 
 pub trait CommutativeSemigroupAnalysis<L, N>: Sized + Debug + Sync + Send
 where
