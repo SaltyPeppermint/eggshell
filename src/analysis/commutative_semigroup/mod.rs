@@ -1,5 +1,4 @@
 mod expr_count;
-mod expr_count_float;
 
 use std::fmt::Debug;
 
@@ -9,10 +8,10 @@ use rayon::prelude::*;
 
 use crate::utils::UniqueQueue;
 
+pub use expr_count::Counter;
 pub use expr_count::ExprCount;
-pub use expr_count_float::ExprCountFloat;
 
-pub trait CommutativeSemigroupAnalysis<L, N>: Sized + Debug + Sync + Send
+pub trait CommutativeSemigroupAnalysis<C, L, N>: Sized + Debug + Sync + Send
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -30,12 +29,13 @@ where
     where
         Self::Data: 'a,
         Self: 'a,
+        C: 'a,
         L: 'a;
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
     fn one_shot_analysis(&self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>) {
-        fn resolve_pending_analysis<L, N, B>(
+        fn resolve_pending_analysis<CC, L, N, B>(
             egraph: &EGraph<L, N>,
             analysis: &B,
             data: &mut HashMap<Id, B::Data>,
@@ -45,7 +45,7 @@ where
             L::Discriminant: Debug + Sync,
             N: Analysis<L> + Debug + Sync,
             N::Data: Debug + Sync,
-            B: CommutativeSemigroupAnalysis<L, N> + Sync + Send,
+            B: CommutativeSemigroupAnalysis<CC, L, N> + Sync + Send,
             B::Data: PartialEq + Debug,
         {
             while let Some(id) = analysis_pending.pop() {

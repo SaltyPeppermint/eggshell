@@ -194,7 +194,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::sketch;
     use crate::trs::{Halide, TermRewriteSystem};
     use crate::typing::typecheck_expr;
 

@@ -1,4 +1,6 @@
 use std::fmt::Debug;
+use std::ops::AddAssign;
+use std::ops::Mul;
 
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
@@ -6,6 +8,21 @@ use num::BigUint;
 use rayon::prelude::*;
 
 use super::CommutativeSemigroupAnalysis;
+
+pub trait Counter:
+    Debug
+    + Clone
+    + PartialEq
+    + From<u32>
+    + for<'x> Mul<&'x Self, Output = Self>
+    + AddAssign
+    + Send
+    + Sync
+{
+}
+
+impl Counter for f64 {}
+impl Counter for BigUint {}
 
 #[derive(Debug)]
 pub struct ExprCount {
@@ -24,15 +41,16 @@ impl ExprCount {
     }
 }
 
-impl<L, N> CommutativeSemigroupAnalysis<L, N> for ExprCount
+impl<C, L, N> CommutativeSemigroupAnalysis<C, L, N> for ExprCount
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
+    C: Counter,
 {
     // Size and number of programs of that size
-    type Data = HashMap<usize, BigUint>;
+    type Data = HashMap<usize, C>;
 
     fn make<'a>(
         &self,
@@ -42,13 +60,14 @@ where
     ) -> Self::Data
     where
         Self::Data: 'a,
+        C: 'a,
         Self: 'a,
     {
-        fn rec(
-            remaining: &[&HashMap<usize, BigUint>],
+        fn rec<CC: Counter>(
+            remaining: &[&HashMap<usize, CC>],
             size: usize,
-            count: BigUint,
-            counts: &mut HashMap<usize, BigUint>,
+            count: CC,
+            counts: &mut HashMap<usize, CC>,
             limit: usize,
         ) {
             // If we have reached the term size limit, stop the recursion
@@ -96,7 +115,7 @@ where
             .collect::<Vec<_>>();
         let mut counts = HashMap::new();
 
-        rec(&children_counts, 1, 1usize.into(), &mut counts, self.limit);
+        rec(&children_counts, 1, 1u32.into(), &mut counts, self.limit);
         counts
     }
 
@@ -133,6 +152,7 @@ where
 #[cfg(test)]
 mod tests {
     use egg::{EGraph, SymbolLang};
+    use num::BigUint;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
     use crate::trs::{Halide, TermRewriteSystem, TrsEqsatResult};
@@ -149,12 +169,12 @@ mod tests {
         egraph.union(a, apb);
         egraph.rebuild();
 
-        let mut data = HashMap::new();
+        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
         ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
 
-        assert_eq!(root_data[&5], 1usize.into());
+        assert_eq!(root_data[&5], 1u32.into());
     }
 
     #[test]
@@ -169,11 +189,11 @@ mod tests {
         egraph.union(b, apb);
         egraph.rebuild();
 
-        let mut data = HashMap::new();
+        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
         ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
-        assert_eq!(root_data[&5], 16usize.into());
+        assert_eq!(root_data[&5], 16u32.into());
     }
 
     #[test]
@@ -190,11 +210,11 @@ mod tests {
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 
-        let mut data = HashMap::new();
+        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
         ExprCount::new(16).one_shot_analysis(egraph, &mut data);
 
         let root_data = &data[&egraph.find(root)];
 
-        assert_eq!(root_data[&16], 40512usize.into());
+        assert_eq!(root_data[&16], 40512u32.into());
     }
 }

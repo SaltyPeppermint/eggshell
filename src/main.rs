@@ -13,6 +13,7 @@ use clap::{Error, Parser};
 use egg::{Analysis, AstSize, CostFunction, EGraph, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::HashSet;
 use log::info;
+use num::BigUint;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
@@ -297,9 +298,14 @@ fn sample<R: TermRewriteSystem>(
     match &cli.strategy {
         SampleStrategy::SizeCount => {
             let limit = (AstSize.cost_rec(start_expr) as f64 * 1.5) as usize;
-            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, start_expr, limit)
-                .sample_eclass(sample_conf, root_id)
-                .unwrap()
+            SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+                eqsat.egraph(),
+                &mut rng,
+                start_expr,
+                limit,
+            )
+            .sample_eclass(sample_conf, root_id)
+            .unwrap()
         }
         SampleStrategy::CostWeighted => {
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit)
