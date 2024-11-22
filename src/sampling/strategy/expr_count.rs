@@ -1,36 +1,40 @@
 use std::fmt::Debug;
+use std::iter::{Product, Sum};
+use std::ops::{AddAssign, Mul};
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use log::info;
-use num::BigUint;
+use rand::distributions::uniform::SampleUniform;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
-use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, ExprCount};
+use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::sampling::SampleError;
 
 use super::Strategy;
 
 #[derive(Debug)]
-pub struct SizeCountWeighted<'a, 'b, L, N>
+pub struct SizeCountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
+    C: Counter,
 {
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
-    flattened_data: HashMap<Id, BigUint>,
+    flattened_data: HashMap<Id, C>,
     start_size: usize,
     limit: usize,
 }
 
-impl<'a, 'b, L, N> SizeCountWeighted<'a, 'b, L, N>
+impl<'a, 'b, C, L, N> SizeCountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
+    C: Counter + for<'x> Sum<&'x C>,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -62,7 +66,7 @@ where
         info!("Flattening analysis data...");
         let flattened_data = data
             .into_iter()
-            .map(|(k, v)| (k, v.values().sum::<BigUint>()))
+            .map(|(k, v)| (k, v.values().sum::<C>()))
             .collect();
         info!("Flattened analysis data!");
 
@@ -91,7 +95,7 @@ where
         info!("Flattening analysis data...");
         let flattened_data = data
             .into_iter()
-            .map(|(k, v)| (k, v.values().sum::<BigUint>()))
+            .map(|(k, v)| (k, v.values().sum::<C>()))
             .collect();
         info!("Flattened analysis data!");
 
@@ -105,15 +109,22 @@ where
     }
 
     #[must_use]
-    pub fn flattened_data(&self) -> &HashMap<Id, BigUint> {
+    pub fn flattened_data(&self) -> &HashMap<Id, C> {
         &self.flattened_data
     }
 }
 
-impl<'a, 'b, L, N> Strategy<'a, L, N> for SizeCountWeighted<'a, 'b, L, N>
+impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
+    C: Counter
+        + for<'x> Product<&'x C>
+        + for<'x> Sum<&'x C>
+        + SampleUniform
+        + PartialOrd
+        + Default
+        + for<'x> AddAssign<&'x C>,
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         eclass
@@ -122,13 +133,13 @@ where
                 node.children()
                     .iter()
                     .map(|child| &self.flattened_data[child])
-                    .product::<BigUint>()
+                    .product::<C>()
             })
             .unwrap()
     }
 
     fn extractable(&self, id: Id) -> Result<(), SampleError> {
-        if self.flattened_data[&id] == 0usize.into() {
+        if self.flattened_data[&id] == 0u32.into() {
             Err(SampleError::LimitError(self.limit))
         } else {
             Ok(())
@@ -147,25 +158,26 @@ where
 }
 
 #[derive(Debug)]
-pub struct SizeCountLutWeighted<'a, 'b, L, N>
+pub struct SizeCountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language,
     N: Analysis<L>,
 {
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
-    data: HashMap<Id, HashMap<usize, BigUint>>,
-    interesting_sizes: HashMap<usize, BigUint>,
+    data: HashMap<Id, HashMap<usize, C>>,
+    interesting_sizes: HashMap<usize, C>,
     start_size: usize,
     limit: usize,
 }
 
-impl<'a, 'b, L, N> SizeCountLutWeighted<'a, 'b, L, N>
+impl<'a, 'b, C, L, N> SizeCountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
+    C: Counter + SampleUniform + PartialOrd + Default + for<'x> AddAssign<&'x C>,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -181,7 +193,7 @@ where
         egraph: &'a EGraph<L, N>,
         rng: &'b mut StdRng,
         start_expr: &RecExpr<L>,
-        interesting_sizes: HashMap<usize, BigUint>,
+        interesting_sizes: HashMap<usize, C>,
     ) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
         let mut data = HashMap::new();
@@ -208,32 +220,36 @@ where
     }
 
     #[must_use]
-    pub fn data(&self) -> &HashMap<Id, HashMap<usize, BigUint>> {
+    pub fn data(&self) -> &HashMap<Id, HashMap<usize, C>> {
         &self.data
     }
 }
 
-impl<'a, 'b, L, N> Strategy<'a, L, N> for SizeCountLutWeighted<'a, 'b, L, N>
+impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
+    C: Counter
+        + Sum<C>
+        + SampleUniform
+        + PartialOrd
+        + Default
+        + for<'x> AddAssign<&'x C>
+        + for<'x> Mul<&'x C, Output = C>,
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         eclass
             .nodes
-            .choose_weighted(&mut self.rng, |node| {
-                // 1 + to account for the term size of itself
-                BigUint::from(1usize)
-                    + node
-                        .children()
-                        .iter()
-                        .map(|child| &self.data[child])
-                        .map(|m| {
-                            m.iter()
-                                .map(|(k, v)| self.interesting_sizes[k].clone() * v)
-                                .sum::<BigUint>()
-                        })
-                        .sum::<BigUint>()
+            .choose_weighted(&mut self.rng, |node| -> C {
+                node.children()
+                    .iter()
+                    .map(|child| &self.data[child])
+                    .map(|m| {
+                        m.iter()
+                            .map(|(k, v)| self.interesting_sizes[k].clone() * v)
+                            .sum::<C>()
+                    })
+                    .sum::<C>()
             })
             .unwrap()
     }
@@ -284,6 +300,7 @@ where
 
 #[cfg(test)]
 mod tests {
+    use num::BigUint;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
 
@@ -307,16 +324,16 @@ mod tests {
                 .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountLutWeighted::new(
+        let mut strategy = SizeCountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
-            HashMap::from([(1, 1usize.into()), (2, 2usize.into()), (17, 1usize.into())]),
+            HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (17, 1u32.into())]),
         );
         let samples = strategy.sample(&sample_conf).unwrap();
 
-        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(13usize, n_samples);
+        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum::<usize>();
+        assert_eq!(13, n_samples);
     }
 
     #[test]
@@ -333,11 +350,15 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 5);
+        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+            eqsat.egraph(),
+            &mut rng,
+            &start_expr,
+            5,
+        );
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        assert_eq!(10usize, samples.len());
+        assert_eq!(10, samples.len());
     }
 
     #[test]
@@ -356,12 +377,16 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 32);
+        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+            eqsat.egraph(),
+            &mut rng,
+            &start_expr,
+            32,
+        );
 
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        assert_eq!(10usize, samples.len());
+        assert_eq!(10, samples.len());
     }
 
     #[test]
@@ -380,8 +405,12 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            SizeCountWeighted::new_with_limit(eqsat.egraph(), &mut rng, &start_expr, 2);
+        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+            eqsat.egraph(),
+            &mut rng,
+            &start_expr,
+            2,
+        );
         assert_eq!(
             Err(SampleError::LimitError(2)),
             strategy.sample_eclass(&sample_conf, root_id)
@@ -404,11 +433,11 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountLutWeighted::new(
+        let mut strategy = SizeCountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
-            HashMap::from([(1, 1usize.into()), (2, 2usize.into()), (3, 1usize.into())]),
+            HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (3, 1u32.into())]),
         );
         assert_eq!(
             Err(SampleError::LimitError(3)),

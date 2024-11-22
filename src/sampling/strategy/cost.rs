@@ -33,7 +33,6 @@ where
     CF::Cost: Into<usize> + Debug,
 {
     /// Creates a new [`CostWeighted<'a, 'b, L, N, CF>`].
-    ///
     pub fn new(
         egraph: &'a EGraph<L, N>,
         cost_fn: CF,
