@@ -62,7 +62,7 @@ where
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, _size: usize) -> &'c L {
         let pick = if self.loop_limit > self.loop_count {
             eclass
                 .nodes
@@ -108,7 +108,7 @@ where
         self.rng
     }
 
-    fn start_new(&mut self) {
+    fn reset(&mut self) {
         self.loop_count = 0;
     }
 }

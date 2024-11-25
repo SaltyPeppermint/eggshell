@@ -22,9 +22,9 @@ where
     N: Analysis<L> + Debug + 'a,
     N::Data: Debug,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L;
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, current_size: usize) -> &'c L;
 
-    fn start_new(&mut self);
+    fn reset(&mut self);
 
     fn egraph(&self) -> &'a EGraph<L, N>;
 
@@ -63,7 +63,7 @@ where
                 warn!("Building very large sample with {} entries!", choices.len());
             }
         }
-        self.start_new();
+        self.reset();
         let expr = choices.try_into().expect("No open choices should be left");
         Ok(expr)
     }
