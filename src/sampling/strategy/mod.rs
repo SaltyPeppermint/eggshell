@@ -24,8 +24,6 @@ where
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, current_size: usize) -> &'c L;
 
-    fn reset(&mut self);
-
     fn egraph(&self) -> &'a EGraph<L, N>;
 
     fn rng_mut(&mut self) -> &mut StdRng;
@@ -63,7 +61,6 @@ where
                 warn!("Building very large sample with {} entries!", choices.len());
             }
         }
-        self.reset();
         let expr: RecExpr<L> = choices.try_into().expect("No open choices should be left");
         debug!(
             "Sampled expression of size {}: {} ",
