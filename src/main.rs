@@ -254,10 +254,14 @@ fn run_eqsat<R: TermRewriteSystem>(
         .collect();
 
     info!("Finished sampling {}!", cli.expr_id);
-    info!("Took {} samples.", samples.len());
+    info!(
+        "Took {} unique samples while aiming for {}.",
+        samples.len(),
+        cli.eclass_samples
+    );
 
     info!("Generating associated data for {}...", cli.expr_id);
-    let associated_data = mk_sample_data::<R>(
+    let sample_data = mk_sample_data::<R>(
         &start_expr,
         samples,
         intermediate_egraphs.as_slice(),
@@ -265,11 +269,11 @@ fn run_eqsat<R: TermRewriteSystem>(
         last_result,
         rules,
     );
-    info!("Finished generating associated data for {}!", cli.expr_id);
+    info!("Finished generating sample data for {}!", cli.expr_id);
 
     let data = DataEntry {
         start_expr,
-        sample_data: associated_data,
+        sample_data,
         metadata: MetaData {
             uuid: cli.uuid.clone(),
             folder: folder.to_owned(),
@@ -286,6 +290,8 @@ fn run_eqsat<R: TermRewriteSystem>(
     // });
 }
 
+/// Inner sample logic.
+/// Samples guranteed to be unique.
 fn sample<R: TermRewriteSystem>(
     cli: &Cli,
     start_expr: &RecExpr<R::Language>,
