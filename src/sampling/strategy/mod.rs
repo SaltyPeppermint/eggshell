@@ -1,11 +1,11 @@
 mod cost;
 mod expr_count;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
-use log::warn;
+use log::{debug, warn};
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 
@@ -18,7 +18,7 @@ pub use expr_count::SizeCountWeighted;
 
 pub trait Strategy<'a, L, N>: Debug
 where
-    L: Language + Debug + 'a,
+    L: Language + Display + Debug + 'a,
     N: Analysis<L> + Debug + 'a,
     N::Data: Debug,
 {
@@ -64,7 +64,12 @@ where
             }
         }
         self.reset();
-        let expr = choices.try_into().expect("No open choices should be left");
+        let expr: RecExpr<L> = choices.try_into().expect("No open choices should be left");
+        debug!(
+            "Sampled expression of size {}: {} ",
+            expr.as_ref().len(),
+            expr
+        );
         Ok(expr)
     }
 
