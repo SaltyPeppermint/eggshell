@@ -93,6 +93,7 @@ where
         AstSize.one_shot_analysis(egraph, &mut ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
+        info!("Strategy read to start sampling!");
         SizeCountWeighted {
             egraph,
             rng,
@@ -272,6 +273,7 @@ where
         AstSize.one_shot_analysis(egraph, &mut ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
+        info!("Strategy read to start sampling!");
         SizeCountLutWeighted {
             egraph,
             rng,

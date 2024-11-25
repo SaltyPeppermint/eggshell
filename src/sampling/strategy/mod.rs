@@ -5,7 +5,7 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::seq::IteratorRandom;
 
@@ -84,9 +84,15 @@ where
         root: Id,
     ) -> Result<HashSet<RecExpr<L>>, SampleError> {
         let root_eclass = &self.egraph()[root];
-        (0..conf.samples_per_eclass)
-            .map(|_| self.sample_expr(root_eclass))
-            .collect()
+        let mut samples = HashSet::with_capacity(conf.samples_per_eclass);
+        for i in 0..conf.samples_per_eclass {
+            let sample = self.sample_expr(root_eclass)?;
+            if i % 1000 == 0 {
+                info!("Sampled {i} expressions from eclass {}", root_eclass.id);
+            }
+            samples.insert(sample);
+        }
+        Ok(samples)
     }
 
     /// .
@@ -107,11 +113,15 @@ where
             .choose_multiple(self.rng_mut(), conf.samples_per_egraph)
             .into_iter()
             .map(|eclass| {
-                let exprs = (0..conf.samples_per_eclass)
-                    .map(|_| self.sample_expr(eclass))
-                    .collect::<Result<_, _>>()?;
-
-                Ok((eclass.id, exprs))
+                let mut samples = HashSet::with_capacity(conf.samples_per_eclass);
+                for i in 0..conf.samples_per_eclass {
+                    let sample = self.sample_expr(eclass)?;
+                    if i % 1000 == 0 {
+                        info!("Sampled {i} expressions from eclass {}", eclass.id);
+                    }
+                    samples.insert(sample);
+                }
+                Ok((eclass.id, samples))
             })
             .collect()
     }
