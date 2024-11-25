@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language};
 use hashbrown::HashMap;
@@ -52,7 +52,7 @@ where
 
 impl<'a, 'b, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, 'b, L, N, CF>
 where
-    L: Language + Debug,
+    L: Language + Display + Debug,
     N: Analysis<L> + Debug,
     CF: CostFunction<L> + Debug,
     CF::Cost: Into<usize> + Debug,

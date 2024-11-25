@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::iter::{Product, Sum};
 use std::ops::{AddAssign, Mul};
 
@@ -6,6 +6,7 @@ use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr
 use hashbrown::HashMap;
 use log::info;
 use rand::distributions::uniform::SampleUniform;
+use rand::distributions::WeightedError;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
@@ -128,7 +129,17 @@ where
                     })
                     .product::<C>()
             })
-            .unwrap()
+            .or_else(|e| match e {
+                // If all weights are zero, we are already way too big and we don't have
+                // any data about the options to pick we are reasoning about.
+                // We need to pick according to AstSize now to "close out" the expr as fast
+                // as possible to prevent it from growing even more.
+                WeightedError::AllWeightsZero => {
+                    Ok(pick_by_ast_size::<L, N>(&self.ast_sizes, eclass))
+                }
+                _ => Err(e),
+            })
+            .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
     }
 
     #[must_use]
@@ -139,7 +150,7 @@ where
 
 impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountWeighted<'a, 'b, C, L, N>
 where
-    L: Language + Debug + Sync + Send,
+    L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
@@ -153,7 +164,8 @@ where
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         if size <= self.start_size {
-            self.pick_by_size_counts(eclass, self.limit - size)
+            let budget = self.limit.saturating_sub(size);
+            self.pick_by_size_counts(eclass, budget)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
@@ -201,6 +213,7 @@ where
     interesting_sizes: HashMap<usize, C>,
     ast_sizes: HashMap<Id, usize>,
     start_size: usize,
+    limit: usize,
 }
 
 impl<'a, 'b, C, L, N> SizeCountLutWeighted<'a, 'b, C, L, N>
@@ -266,10 +279,15 @@ where
             interesting_sizes,
             ast_sizes,
             start_size,
+            limit,
         }
     }
 
-    fn pick_by_lut<'c>(&mut self, eclass: &'c EClass<L, <N as Analysis<L>>::Data>) -> &'c L {
+    fn pick_by_lut<'c>(
+        &mut self,
+        eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
+        budget: usize,
+    ) -> &'c L {
         eclass
             .nodes
             .choose_weighted(&mut self.rng, |node| -> C {
@@ -283,7 +301,26 @@ where
                     })
                     .product::<C>()
             })
-            .unwrap()
+            .or_else(|e| match e {
+                // If all weights are zero, we are don't have
+                // any data about the options to pick we are reasoning about.
+                // If we have exhausted our budget we need to pick according
+                // to AstSize now to "close out" the expr as fast as possible
+                // to prevent it from growing even more.
+                // Otherwise, go random.
+                WeightedError::AllWeightsZero => {
+                    if budget == 0 {
+                        Ok(pick_by_ast_size::<L, N>(&self.ast_sizes, eclass))
+                    } else {
+                        Ok(eclass
+                            .nodes
+                            .choose(&mut self.rng)
+                            .expect("EClass cant be empty"))
+                    }
+                }
+                _ => Err(e),
+            })
+            .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
     }
 
     #[must_use]
@@ -294,7 +331,7 @@ where
 
 impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountLutWeighted<'a, 'b, C, L, N>
 where
-    L: Language + Debug + Sync + Send,
+    L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
@@ -309,7 +346,8 @@ where
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         if size <= self.start_size {
-            self.pick_by_lut(eclass)
+            let budget = self.limit.saturating_sub(size);
+            self.pick_by_lut(eclass, budget)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
