@@ -9,6 +9,7 @@ use crate::sampling::SampleError;
 
 use super::Strategy;
 
+/// Not well tested, do not use!
 #[derive(Debug)]
 pub struct CostWeighted<'a, 'b, L, N, CF>
 where
@@ -20,9 +21,8 @@ where
     egraph: &'a EGraph<L, N>,
     extractor: Extractor<'a, CF, L, N>,
     rng: &'b mut StdRng,
-    loop_count: usize,
     raw_weights_memo: HashMap<Id, HashMap<&'a L, usize>>,
-    loop_limit: usize,
+    limit: usize,
 }
 
 impl<'a, 'b, L, N, CF> CostWeighted<'a, 'b, L, N, CF>
@@ -33,18 +33,12 @@ where
     CF::Cost: Into<usize> + Debug,
 {
     /// Creates a new [`CostWeighted<'a, 'b, L, N, CF>`].
-    pub fn new(
-        egraph: &'a EGraph<L, N>,
-        cost_fn: CF,
-        rng: &'b mut StdRng,
-        loop_limit: usize,
-    ) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF, rng: &'b mut StdRng, limit: usize) -> Self {
         CostWeighted {
             egraph,
             extractor: Extractor::new(egraph, cost_fn),
             rng,
-            loop_count: 0,
-            loop_limit,
+            limit,
             raw_weights_memo: HashMap::new(),
         }
     }
@@ -57,13 +51,8 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: Into<usize> + Debug,
 {
-    #[expect(
-        clippy::cast_precision_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap
-    )]
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, _size: usize) -> &'c L {
-        let pick = if self.loop_limit > self.loop_count {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
+        if size > self.limit {
             eclass
                 .nodes
                 .choose(&mut self.rng)
@@ -74,26 +63,12 @@ where
                 .entry(eclass.id)
                 .or_insert_with(|| calc_weights(eclass, &self.extractor));
 
-            let urgency = (self.loop_count - self.loop_limit) as i32;
-
-            let pick = if urgency < 32 {
-                eclass
-                    .nodes
-                    .choose_weighted(&mut self.rng, |node| {
-                        (raw_weights[node] as f64).powi(urgency)
-                    })
-                    .expect("Infallible weight calculation.")
-            } else {
-                eclass
-                    .nodes
-                    .iter()
-                    .max_by_key(|node| raw_weights[node])
-                    .unwrap()
-            };
-            pick
-        };
-        self.loop_count += 1;
-        pick
+            eclass
+                .nodes
+                .iter()
+                .max_by_key(|node| raw_weights[node])
+                .unwrap()
+        }
     }
 
     fn extractable(&self, _id: Id) -> Result<(), SampleError> {
@@ -106,10 +81,6 @@ where
 
     fn rng_mut(&mut self) -> &mut StdRng {
         self.rng
-    }
-
-    fn reset(&mut self) {
-        self.loop_count = 0;
     }
 }
 

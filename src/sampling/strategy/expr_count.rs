@@ -180,8 +180,6 @@ where
         }
     }
 
-    fn reset(&mut self) {}
-
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
@@ -354,8 +352,6 @@ where
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
     }
-
-    fn reset(&mut self) {}
 
     fn extractable(&self, id: Id) -> Result<(), SampleError> {
         if self.size_counts[&id].is_empty() {
