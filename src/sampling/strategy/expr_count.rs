@@ -18,12 +18,21 @@ use super::Strategy;
 #[derive(Debug)]
 pub struct SizeCountWeighted<'a, 'b, C, L, N>
 where
-    L: Language + Debug,
-    N: Analysis<L> + Debug,
-    C: Counter,
+    L: Language + Debug + Sync + Send,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
+    C: Counter
+        + Product<C>
+        + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
+        + SampleUniform
+        + PartialOrd
+        + Default,
 {
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
+    size_counts: HashMap<Id, HashMap<usize, C>>,
     flattened_size_counts: HashMap<Id, C>,
     ast_sizes: HashMap<Id, usize>,
     start_size: usize,
@@ -37,12 +46,12 @@ where
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
     C: Counter
-        + for<'x> Product<&'x C>
+        + Product<C>
         + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
         + SampleUniform
         + PartialOrd
-        + Default
-        + for<'x> AddAssign<&'x C>,
+        + Default,
 {
     /// Creates a new [`TermNumberWeighted<L, N>`].
     ///
@@ -65,9 +74,9 @@ where
 
         let mut size_counts = HashMap::new();
         // Make one big size count analysis for all eclasses
-        info!("Starting oneshot analysis...");
+        info!("Starting size count oneshot analysis...");
         ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
-        info!("Oneshot analysis finsished!");
+        info!("Size count oneshot analysis finsished!");
 
         // Flatten for easier consumption
         info!("Flattening analysis data...");
@@ -79,13 +88,14 @@ where
 
         let mut ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
-        info!("Starting size count oneshot analysis...");
+        info!("Starting ast size oneshot analysis...");
         AstSize.one_shot_analysis(egraph, &mut ast_sizes);
-        info!("Oneshot size count analysis finsished!");
+        info!("Ast size oneshot analysis finsished!");
 
         SizeCountWeighted {
             egraph,
             rng,
+            size_counts,
             flattened_size_counts,
             ast_sizes,
             start_size,
@@ -102,13 +112,20 @@ where
     fn pick_by_size_counts<'c>(
         &mut self,
         eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
+        budget: usize,
     ) -> &'c L {
         eclass
             .nodes
             .choose_weighted(&mut self.rng, |node| {
                 node.children()
                     .iter()
-                    .map(|child| &self.flattened_size_counts[child])
+                    .map(|child_id| {
+                        self.size_counts[child_id]
+                            .iter()
+                            .filter(|(size, _)| size <= &&budget)
+                            .map(|(_, cost)| cost)
+                            .sum::<C>()
+                    })
                     .product::<C>()
             })
             .unwrap()
@@ -127,16 +144,16 @@ where
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
     C: Counter
-        + for<'x> Product<&'x C>
+        + Product<C>
         + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
         + SampleUniform
         + PartialOrd
-        + Default
-        + for<'x> AddAssign<&'x C>,
+        + Default,
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         if size <= self.start_size {
-            self.pick_by_size_counts(eclass)
+            self.pick_by_size_counts(eclass, self.limit - size)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
@@ -165,8 +182,18 @@ where
 #[derive(Debug)]
 pub struct SizeCountLutWeighted<'a, 'b, C, L, N>
 where
-    L: Language,
-    N: Analysis<L>,
+    L: Language + Debug + Sync + Send,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Debug + Sync,
+    C: Counter
+        + Sum<C>
+        + Product<C>
+        + for<'x> AddAssign<&'x C>
+        + for<'x> Mul<&'x C, Output = C>
+        + SampleUniform
+        + PartialOrd
+        + Default,
 {
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
@@ -208,29 +235,34 @@ where
         interesting_sizes: HashMap<usize, C>,
     ) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
-        let mut data = HashMap::new();
+        let mut size_counts = HashMap::new();
         let limit = *interesting_sizes
             .keys()
             .max()
             .expect("At least one term size of interest");
 
         // Make one big size counts analysis for all eclasses
-        ExprCount::new(limit).one_shot_analysis(egraph, &mut data);
-        // Filter out data with uninteresting term sizes
-        for class_data in data.values_mut() {
+        info!("Starting size count oneshot analysis...");
+        ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
+        info!("Size count oneshot analysis finsished!");
+
+        // Filter out data with uninteresting expression sizes
+        info!("Filtering out uninteresting expression sizes...");
+        for class_data in size_counts.values_mut() {
             class_data.retain(|k, _| interesting_sizes.contains_key(k));
         }
+        info!("Filtering done!");
 
         let mut ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
-        info!("Starting size count oneshot analysis...");
+        info!("Starting ast size oneshot analysis...");
         AstSize.one_shot_analysis(egraph, &mut ast_sizes);
-        info!("Oneshot size count analysis finsished!");
+        info!("Ast size oneshot analysis finsished!");
 
         SizeCountLutWeighted {
             egraph,
             rng,
-            size_counts: data,
+            size_counts,
             interesting_sizes,
             ast_sizes,
             start_size,
@@ -243,7 +275,7 @@ where
             .choose_weighted(&mut self.rng, |node| -> C {
                 node.children()
                     .iter()
-                    .map(|child| &self.size_counts[child])
+                    .map(|child_id| &self.size_counts[child_id])
                     .map(|m| {
                         m.iter()
                             .map(|(k, v)| self.interesting_sizes[k].clone() * v)
@@ -269,11 +301,11 @@ where
     C: Counter
         + Sum<C>
         + Product<C>
+        + for<'x> AddAssign<&'x C>
+        + for<'x> Mul<&'x C, Output = C>
         + SampleUniform
         + PartialOrd
-        + Default
-        + for<'x> AddAssign<&'x C>
-        + for<'x> Mul<&'x C, Output = C>,
+        + Default,
 {
     fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
         if size <= self.start_size {
@@ -315,38 +347,14 @@ fn pick_by_ast_size<'a, L: Language, N: Analysis<L>>(
             let cost = node
                 .children()
                 .iter()
-                .map(|child| ast_sizes[child])
-                .min()
-                .unwrap_or(0);
+                .map(|child_id| ast_sizes[child_id])
+                .sum::<usize>();
             (node, cost)
         })
         .min_by(|a, b| a.1.cmp(&b.1))
         .expect("EClasses can't have 0 members")
         .0
 }
-
-// let node_values = eclass
-//     .nodes
-//     .iter()
-//     .map(|node| {
-//         (
-//             node,
-//             node.children().iter().map(|child| &self.data[child]).fold(
-//                 HashMap::new(),
-//                 |mut lhs, rhs| {
-//                     for (k, v) in rhs {
-//                         lhs.entry(*k)
-//                             .and_modify(|x| {
-//                                 *x += v;
-//                             })
-//                             .or_insert(*v);
-//                     }
-//                     lhs
-//                 },
-//             ),
-//         )
-//     })
-//     .collect::<Vec<_>>();
 
 #[cfg(test)]
 mod tests {
