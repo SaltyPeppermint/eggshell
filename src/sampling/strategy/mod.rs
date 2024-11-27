@@ -1,5 +1,5 @@
 mod cost;
-mod expr_count;
+mod count;
 
 use std::fmt::{Debug, Display};
 
@@ -13,8 +13,7 @@ use super::SampleError;
 use super::{choices::ChoiceList, SampleConf};
 
 pub use cost::CostWeighted;
-pub use expr_count::SizeCountLutWeighted;
-pub use expr_count::SizeCountWeighted;
+pub use count::{CountLutWeighted, CountWeighted, CountWeightedUniformly};
 
 pub trait Strategy<'a, L, N>: Debug
 where
@@ -22,7 +21,7 @@ where
     N: Analysis<L> + Debug + 'a,
     N::Data: Debug,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, current_size: usize) -> &'c L;
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L;
 
     fn egraph(&self) -> &'a EGraph<L, N>;
 
@@ -52,10 +51,10 @@ where
 
         let mut choices = ChoiceList::from(canonical_root_id);
 
-        while let Some(id) = choices.next_open(self.rng_mut()) {
+        while let Some(id) = choices.select_next_open(self.rng_mut()) {
             let eclass_id = egraph.find(id);
             let eclass = &egraph[eclass_id];
-            let pick = self.pick(eclass, choices.len());
+            let pick = self.pick(eclass, &choices);
             choices.fill_next(pick)?;
             if choices.len() > 10000 && choices.len() % 100 == 0 {
                 warn!("Building very large sample with {} entries!", choices.len());
@@ -111,9 +110,9 @@ where
             .into_iter()
             .map(|eclass| {
                 let mut samples = HashSet::with_capacity(conf.samples_per_eclass);
-                for i in 0..conf.samples_per_eclass {
+                for i in 1..=conf.samples_per_eclass {
                     let sample = self.sample_expr(eclass)?;
-                    if i % 1000 == 0 {
+                    if i % 10000 == 0 {
                         info!("Sampled {i} expressions from eclass {}", eclass.id);
                     }
                     samples.insert(sample);
