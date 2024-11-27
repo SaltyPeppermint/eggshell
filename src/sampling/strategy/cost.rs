@@ -5,6 +5,7 @@ use hashbrown::HashMap;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 
+use crate::sampling::choices::ChoiceList;
 use crate::sampling::SampleError;
 
 use super::Strategy;
@@ -51,8 +52,8 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: Into<usize> + Debug,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
-        if size > self.limit {
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+        if choices.len() > self.limit {
             eclass
                 .nodes
                 .choose(&mut self.rng)
@@ -138,7 +139,7 @@ mod tests {
         let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(12usize, n_samples);
+        assert_eq!(4usize, n_samples);
     }
 
     #[test]
@@ -190,7 +191,7 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(46usize, n_samples);
+        assert_eq!(8usize, n_samples);
     }
 
     #[test]
@@ -213,6 +214,6 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(107usize, n_samples);
+        assert_eq!(38usize, n_samples);
     }
 }

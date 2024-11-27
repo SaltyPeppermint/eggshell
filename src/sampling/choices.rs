@@ -17,7 +17,7 @@ pub struct ChoiceList<L: Language> {
 
 impl<L: Language> ChoiceList<L> {
     // Returns position of next open
-    pub fn next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
+    pub fn select_next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
         if let Some(next_position) = self.open_positions.iter().choose(rng) {
             self.next_to_fill = Some(*next_position);
             // dbg!(&self.choices[*next_position]);
@@ -60,6 +60,28 @@ impl<L: Language> ChoiceList<L> {
 
     pub fn len(&self) -> usize {
         self.choices.len()
+    }
+
+    pub fn other_open_positions(&self) -> impl Iterator<Item = Id> + use<'_, L> {
+        self.open_positions
+            .iter()
+            // The next_to_fill position is not included if it exists
+            .filter(|p| self.next_to_fill.map_or(true, |x| x != **p))
+            .map(|p| self.choices[*p].eclass_id().unwrap())
+    }
+
+    pub fn n_chosen_positions(&self) -> usize {
+        self.choices
+            .iter()
+            .filter(|c| matches!(c, Choice::Picked(_)))
+            .count()
+    }
+
+    pub fn n_open_choices(&self) -> usize {
+        self.choices
+            .iter()
+            .filter(|c| matches!(c, Choice::Picked(_)))
+            .count()
     }
 }
 

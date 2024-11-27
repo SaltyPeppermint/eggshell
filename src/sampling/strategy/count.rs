@@ -4,20 +4,23 @@ use std::ops::{AddAssign, Mul};
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
-use log::info;
+use log::{debug, info, log_enabled, Level};
 use rand::distributions::uniform::SampleUniform;
 use rand::distributions::WeightedError;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
+use rayon::prelude::*;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
+use crate::sampling::choices::ChoiceList;
 use crate::sampling::SampleError;
 
 use super::Strategy;
 
+/// Buggy budget consideration
 #[derive(Debug)]
-pub struct SizeCountWeighted<'a, 'b, C, L, N>
+pub struct CountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -34,13 +37,13 @@ where
     egraph: &'a EGraph<L, N>,
     rng: &'b mut StdRng,
     size_counts: HashMap<Id, HashMap<usize, C>>,
-    flattened_size_counts: HashMap<Id, C>,
+    // flattened_size_counts: HashMap<Id, C>,
     ast_sizes: HashMap<Id, usize>,
     start_size: usize,
     limit: usize,
 }
 
-impl<'a, 'b, C, L, N> SizeCountWeighted<'a, 'b, C, L, N>
+impl<'a, 'b, C, L, N> CountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -54,7 +57,7 @@ where
         + PartialOrd
         + Default,
 {
-    /// Creates a new [`TermNumberWeighted<L, N>`].
+    /// Creates a new [`CountWeighted<C, L, N>`].
     ///
     /// Terms are weighted according to the number of terms up to the size
     /// cutoff limit
@@ -79,14 +82,6 @@ where
         ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
         info!("Size count oneshot analysis finsished!");
 
-        // Flatten for easier consumption
-        info!("Flattening analysis data...");
-        let flattened_size_counts = size_counts
-            .iter()
-            .map(|(k, v)| (*k, v.values().sum::<C>()))
-            .collect();
-        info!("Flattened analysis data!");
-
         let mut ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
         info!("Starting ast size oneshot analysis...");
@@ -94,11 +89,10 @@ where
         info!("Ast size oneshot analysis finsished!");
 
         info!("Strategy read to start sampling!");
-        SizeCountWeighted {
+        CountWeighted {
             egraph,
             rng,
             size_counts,
-            flattened_size_counts,
             ast_sizes,
             start_size,
             limit,
@@ -114,7 +108,6 @@ where
     fn pick_by_size_counts<'c>(
         &mut self,
         eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
-        budget: usize,
     ) -> &'c L {
         eclass
             .nodes
@@ -124,8 +117,7 @@ where
                     .map(|child_id| {
                         self.size_counts[child_id]
                             .iter()
-                            .filter(|(size, _)| size <= &&budget)
-                            .map(|(_, cost)| cost)
+                            .map(|(_, count)| count)
                             .sum::<C>()
                     })
                     .product::<C>()
@@ -142,14 +134,9 @@ where
             })
             .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
     }
-
-    #[must_use]
-    pub fn flattened_size_counts(&self) -> &HashMap<Id, C> {
-        &self.flattened_size_counts
-    }
 }
 
-impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountWeighted<'a, 'b, C, L, N>
+impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, 'b, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -163,17 +150,216 @@ where
         + PartialOrd
         + Default,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
-        if size <= self.start_size {
-            let budget = self.limit.saturating_sub(size);
-            self.pick_by_size_counts(eclass, budget)
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+        if choices.len() <= self.start_size {
+            self.pick_by_size_counts(eclass)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
     }
 
     fn extractable(&self, id: Id) -> Result<(), SampleError> {
-        if self.flattened_size_counts[&id] == 0u32.into() {
+        if self.size_counts[&id].is_empty() {
+            Err(SampleError::LimitError(self.limit))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn egraph(&self) -> &'a EGraph<L, N> {
+        self.egraph
+    }
+
+    fn rng_mut(&mut self) -> &mut StdRng {
+        self.rng
+    }
+}
+
+#[derive(Debug)]
+pub struct CountWeightedUniformly<'a, 'b, C, L, N>
+where
+    L: Language + Debug + Sync + Send,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
+    C: Counter
+        + Product<C>
+        + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
+        + SampleUniform
+        + PartialOrd
+        + Default,
+{
+    egraph: &'a EGraph<L, N>,
+    rng: &'b mut StdRng,
+    size_counts: HashMap<Id, HashMap<usize, C>>,
+    ast_sizes: HashMap<Id, usize>,
+    limit: usize,
+}
+
+impl<'a, 'b, C, L, N> CountWeightedUniformly<'a, 'b, C, L, N>
+where
+    L: Language + Display + Debug + Sync + Send,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
+    C: Counter
+        + Product<C>
+        + Sum<C>
+        + for<'x> Product<&'x C>
+        + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
+        + SampleUniform
+        + PartialOrd
+        + Default,
+{
+    /// Creates a new [`CountWeightedUniformly<C, L, N>`].
+    ///
+    /// Terms are weighted according to the number of terms up to the size
+    ///
+    ///
+    /// # Panics
+    ///
+    /// Panics if given an empty Hashset of term sizes.
+    pub fn new_with_limit(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, limit: usize) -> Self {
+        // let limit = start_size + (start_size / 2);
+        info!("Using limit {limit}");
+
+        let mut size_counts = HashMap::new();
+        // Make one big size count analysis for all eclasses
+        info!("Starting size count oneshot analysis...");
+        ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
+        info!("Size count oneshot analysis finsished!");
+
+        // let mut max: C = 0u32.into();
+        // for (_id, counts) in &size_counts {
+        //     for (_size, count) in counts {
+        //         if count > &max {
+        //             max = count.clone();
+        //         }
+        //     }
+        // }
+        // println!("MAX ENCOUNTERED IS {max:?}");
+
+        let mut ast_sizes = HashMap::new();
+        // Make one big ast size analysis for all eclasses
+        info!("Starting ast size oneshot analysis...");
+        AstSize.one_shot_analysis(egraph, &mut ast_sizes);
+        info!("Ast size oneshot analysis finsished!");
+
+        info!("Strategy read to start sampling!");
+        CountWeightedUniformly {
+            egraph,
+            rng,
+            size_counts,
+            ast_sizes,
+            limit,
+        }
+    }
+
+    pub fn new(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, start_expr: &RecExpr<L>) -> Self {
+        let start_size = AstSize.cost_rec(start_expr);
+        let limit = start_size + (start_size / 2);
+        Self::new_with_limit(egraph, rng, limit)
+    }
+
+    fn calc_node_weight<I: Iterator<Item = Vec<usize>>>(
+        &self,
+        budget_combinations: I,
+        node: &L,
+    ) -> C {
+        budget_combinations
+            // Go over all the possible combinations and zip them with the children of the node
+            // Guranteed to be same length
+            .map(|budget_combination| {
+                let combination_count = node
+                    .children()
+                    .iter()
+                    .zip(budget_combination)
+                    // For each child we have a specific budget in this combination
+                    .map(|(child_id, child_budget)| {
+                        // We only look at the counts that fit into that childs specific budget
+                        // for this combination to spend the budget
+                        self.size_counts[child_id].get(&child_budget)
+                    })
+                    // And multiply up the number of terms this specific combination would give us
+                    .product::<Option<C>>()
+                    // If for a combination any child has no expression, the combination is impossible
+                    // and we need to default to 0 as it does not contribute to the count
+                    .unwrap_or_else(|| 0u32.into());
+                combination_count
+            })
+            .sum::<C>()
+    }
+}
+
+impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, 'b, C, L, N>
+where
+    L: Language + Display + Debug + Sync + Send,
+    L::Discriminant: Debug + Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
+    C: Counter
+        + Product<C>
+        + Sum<C>
+        + for<'x> Product<&'x C>
+        + for<'x> Sum<&'x C>
+        + for<'x> AddAssign<&'x C>
+        + SampleUniform
+        + PartialOrd
+        + Default,
+{
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+        debug!("Current EClass {:?}", eclass);
+        debug!("Choices: {:?}", choices);
+        // We need to know what is the minimum size required to fill the rest of the open positions
+        let min_to_fill_other_open = choices
+            .other_open_positions()
+            .map(|id| self.ast_sizes[&id])
+            .sum::<usize>();
+        debug!("Required to fill rest: {min_to_fill_other_open}");
+        // Budget for the children is one less because the node itself has size one at least
+        // Also subtract the reserv budget needed for the other open positions
+        let budget = self
+            .limit
+            .checked_sub(choices.n_chosen_positions() + min_to_fill_other_open)
+            .unwrap();
+        debug!("Budget available: {budget}");
+        debug!("Current EClass Counts {:?}", self.size_counts[&eclass.id]);
+        // There has to be at least budget 1 left or something went horribly wrong
+        // assert!(budget > 0);
+
+        let weights = eclass
+            .nodes
+            .par_iter()
+            .map(|node| {
+                debug!("Node being weighted: {node}");
+                // Get all the ways we could divide up the budget AND PARTS OF THE BUDGET
+                // among the children of the node under consideration
+                let arity = node.children().len();
+                let budget_combinations = (0..=budget).flat_map(|i| sum_combinations(i, arity));
+
+                if log_enabled!(Level::Debug) {
+                    let vec = budget_combinations.clone().collect::<Vec<Vec<usize>>>();
+                    debug!("Budget combinations: {vec:?}");
+                }
+
+                let count = self.calc_node_weight(budget_combinations, node);
+
+                (node, count)
+            })
+            .collect::<HashMap<_, _>>();
+
+        eclass
+            .nodes
+            .choose_weighted(&mut self.rng, |node| {
+                weights.get(node).expect("Every node has a weight.")
+            })
+            .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
+    }
+
+    fn extractable(&self, id: Id) -> Result<(), SampleError> {
+        if self.size_counts[&id].is_empty() {
             Err(SampleError::LimitError(self.limit))
         } else {
             Ok(())
@@ -191,7 +377,7 @@ where
 
 /// Don't trust this, not really tested
 #[derive(Debug)]
-pub struct SizeCountLutWeighted<'a, 'b, C, L, N>
+pub struct CountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -215,7 +401,7 @@ where
     limit: usize,
 }
 
-impl<'a, 'b, C, L, N> SizeCountLutWeighted<'a, 'b, C, L, N>
+impl<'a, 'b, C, L, N> CountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -230,7 +416,7 @@ where
         + for<'x> AddAssign<&'x C>
         + for<'x> Mul<&'x C, Output = C>,
 {
-    /// Creates a new [`TermNumberWeighted<L, N>`].
+    /// Creates a new [`CountLutWeighted<C, L, N>`].
     ///
     /// Terms are weighted according to their value in the hashtable.
     ///
@@ -272,7 +458,7 @@ where
         info!("Ast size oneshot analysis finsished!");
 
         info!("Strategy read to start sampling!");
-        SizeCountLutWeighted {
+        CountLutWeighted {
             egraph,
             rng,
             size_counts,
@@ -322,14 +508,9 @@ where
             })
             .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
     }
-
-    #[must_use]
-    pub fn size_counts(&self) -> &HashMap<Id, HashMap<usize, C>> {
-        &self.size_counts
-    }
 }
 
-impl<'a, 'b, C, L, N> Strategy<'a, L, N> for SizeCountLutWeighted<'a, 'b, C, L, N>
+impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, 'b, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -344,9 +525,9 @@ where
         + PartialOrd
         + Default,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, size: usize) -> &'c L {
-        if size <= self.start_size {
-            let budget = self.limit.saturating_sub(size);
+    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+        if choices.len() <= self.start_size {
+            let budget = self.limit.saturating_sub(choices.len());
             self.pick_by_lut(eclass, budget)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
@@ -392,6 +573,44 @@ fn pick_by_ast_size<'a, L: Language, N: Analysis<L>>(
         .0
 }
 
+/// Returns the number of ways you can write `num` as the sum of `n` positive natural numbers
+fn sum_combinations(num: usize, n: usize) -> Vec<Vec<usize>> {
+    fn rec(num: usize, n: usize, current: &mut Vec<usize>, result: &mut Vec<Vec<usize>>) {
+        if n == 1 {
+            // If only one number is left, add the remainder of the sum
+            if num >= 1 {
+                current.push(num);
+                result.push(current.clone());
+                current.pop();
+            }
+            return;
+        }
+
+        for i in 1..=num - (n - 1) {
+            current.push(i);
+            rec(num - i, n - 1, current, result);
+            current.pop();
+        }
+    }
+
+    // How many ways can you write an integer num as the sum of n positive natural numbers?
+    // Zero is the only number that can be written as the sum of n natural numbers
+    if num == 0 && n == 0 {
+        return vec![Vec::new()];
+    }
+    // If num < n => Not possible => Empty vector
+    // if num = 0 => 0 is the sum of no positive integers => Empty vector
+    // If n = 0 => No way to write smth other than 0 as the sum of 0 positive numbers => Empty vector
+    if num < n || num == 0 || n == 0 {
+        return Vec::new();
+    }
+
+    let mut result = Vec::new();
+    let mut current = Vec::new();
+    rec(num, n, &mut current, &mut result);
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use num::BigUint;
@@ -418,7 +637,7 @@ mod tests {
                 .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountLutWeighted::<BigUint, _, _>::new(
+        let mut strategy = CountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
@@ -444,7 +663,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
@@ -471,7 +690,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
@@ -499,7 +718,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountWeighted::<BigUint, _, _>::new_with_limit(
+        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
@@ -527,7 +746,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = SizeCountLutWeighted::<BigUint, _, _>::new(
+        let mut strategy = CountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
             &mut rng,
             &start_expr,
@@ -537,5 +756,58 @@ mod tests {
             Err(SampleError::LimitError(3)),
             strategy.sample_eclass(&sample_conf, root_id)
         );
+    }
+
+    #[test]
+    fn combinations_2_10() {
+        let combinations = sum_combinations(10, 2);
+        assert_eq!(
+            vec![
+                vec![1, 9],
+                vec![2, 8],
+                vec![3, 7],
+                vec![4, 6],
+                vec![5, 5],
+                vec![6, 4],
+                vec![7, 3],
+                vec![8, 2],
+                vec![9, 1]
+            ],
+            combinations
+        );
+    }
+
+    #[test]
+    fn combinations_3_5() {
+        let combinations = sum_combinations(5, 3);
+        assert_eq!(
+            vec![
+                vec![1, 1, 3],
+                vec![1, 2, 2],
+                vec![1, 3, 1],
+                vec![2, 1, 2],
+                vec![2, 2, 1],
+                vec![3, 1, 1],
+            ],
+            combinations
+        );
+    }
+
+    #[test]
+    fn combinations_0_0() {
+        let combinations = sum_combinations(0, 0);
+        assert_eq!(combinations, vec![Vec::<usize>::new()]);
+    }
+
+    #[test]
+    fn combinations_0_4() {
+        let combinations = sum_combinations(0, 4);
+        assert!(combinations.is_empty());
+    }
+
+    #[test]
+    fn combinations_4_0() {
+        let combinations = sum_combinations(4, 0);
+        assert!(combinations.is_empty());
     }
 }

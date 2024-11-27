@@ -2,7 +2,7 @@ use core::panic;
 use std::fmt::Display;
 use std::fs;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use eggshell::eqsat::{EqsatConf, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::structs::Entry;
-use eggshell::sampling::strategy::{CostWeighted, SizeCountWeighted, Strategy};
+use eggshell::sampling::strategy::{CostWeighted, CountWeightedUniformly, Strategy};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem, TrsEqsat, TrsEqsatResult};
 
@@ -112,8 +112,8 @@ enum TrsName {
 impl Display for TrsName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Halide => write!(f, "Halide"),
-            Self::Rise => write!(f, "Rise"),
+            Self::Halide => write!(f, "halide"),
+            Self::Rise => write!(f, "rise"),
         }
     }
 }
@@ -271,6 +271,8 @@ fn run_eqsat<R: TermRewriteSystem>(
     );
     info!("Finished generating sample data for {}!", cli.expr_id);
 
+    info!("Finished work on expr {}!", cli.expr_id);
+
     let data = DataEntry {
         start_expr,
         sample_data,
@@ -283,10 +285,14 @@ fn run_eqsat<R: TermRewriteSystem>(
             eqsat_conf,
         },
     };
-    info!("Finished work on expr {}!", cli.expr_id);
 
     let mut f = BufWriter::new(File::create(format!("{folder}/{}.json", cli.expr_id)).unwrap());
     serde_json::to_writer(&mut f, &data).unwrap();
+    f.flush().unwrap();
+
+    info!("All written to disk, done!");
+
+    info!("EXPR {} IS DONE!", cli.expr_id)
     // });
 }
 
@@ -303,15 +309,16 @@ fn sample<R: TermRewriteSystem>(
 
     match &cli.strategy {
         SampleStrategy::SizeCount => {
-            let limit = (AstSize.cost_rec(start_expr) as f64 * 1.5) as usize;
-            SizeCountWeighted::<BigUint, _, _>::new_with_limit(
-                eqsat.egraph(),
-                &mut rng,
-                start_expr,
-                limit,
-            )
-            .sample_eclass(sample_conf, root_id)
-            .unwrap()
+            let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
+            // CountWeighted::<BigUint, _, _>::new_with_limit(
+            //     eqsat.egraph(),
+            //     &mut rng,
+            //     start_expr,
+            //     limit,
+            // )
+            CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &mut rng, limit)
+                .sample_eclass(sample_conf, root_id)
+                .unwrap()
         }
         SampleStrategy::CostWeighted => {
             CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit)
