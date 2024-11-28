@@ -136,7 +136,7 @@ where
     }
 }
 
-impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, 'b, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, '_, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -293,7 +293,7 @@ where
     }
 }
 
-impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, 'b, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, '_, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -510,7 +510,7 @@ where
     }
 }
 
-impl<'a, 'b, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, 'b, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, '_, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,

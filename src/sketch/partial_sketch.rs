@@ -140,7 +140,6 @@ where
                 RawAst::Node {
                     lang_node: s,
                     children,
-                    features: _,
                 } => {
                     // The recursions operate on a stricktly smaller PySketch with less elements in it.
                     // If this node contains no children, the child_ids will be an empty vector and this
