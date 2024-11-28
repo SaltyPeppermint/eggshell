@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<'a, 'b, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, 'b, L, N, CF>
+impl<'a, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, '_, L, N, CF>
 where
     L: Language + Display + Debug,
     N: Analysis<L> + Debug,

@@ -15,7 +15,7 @@ impl<'a, L: Language, N: Analysis<L>> LutCost<'a, L, N> {
     }
 }
 
-impl<'a, L: Language, N: Analysis<L>> ClassCostFunction<L> for LutCost<'a, L, N> {
+impl<L: Language, N: Analysis<L>> ClassCostFunction<L> for LutCost<'_, L, N> {
     type Cost = f64;
 
     fn cost<C>(&self, class_id: Id, enode: &L, costs: C) -> Self::Cost
@@ -58,7 +58,7 @@ pub struct ClassExtractor<'a, CF: ClassCostFunction<L>, L: Language, N: Analysis
     egraph: &'a EGraph<L, N>,
 }
 
-fn cmp<T: PartialOrd>(a: &Option<T>, b: &Option<T>) -> Ordering {
+fn cmp<T: PartialOrd>(a: Option<&T>, b: Option<&T>) -> Ordering {
     // None is high
     match (a, b) {
         (None, None) => Ordering::Equal,
@@ -153,7 +153,7 @@ where
         let (cost, node) = eclass
             .iter()
             .map(|n| (self.node_total_cost(eclass.id, n), n))
-            .min_by(|a, b| cmp(&a.0, &b.0))
+            .min_by(|a, b| cmp(a.0.as_ref(), b.0.as_ref()))
             .unwrap_or_else(|| panic!("Can't extract, eclass is empty: {eclass:#?}"));
         cost.map(|c| (c, node.clone()))
     }

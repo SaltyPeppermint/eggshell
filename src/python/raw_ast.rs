@@ -29,7 +29,6 @@ pub(crate) enum RawAst {
     Node {
         lang_node: String,
         children: Box<[RawAst]>,
-        features: Option<Vec<f64>>,
     },
     // /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     // ///
@@ -78,7 +77,6 @@ impl RawAst {
             (s, _) => Ok(RawAst::Node {
                 lang_node: s.to_owned(),
                 children: children.into_boxed_slice(),
-                features: None,
             }),
         }
     }
@@ -160,10 +158,7 @@ impl RawAst {
     }
 
     pub fn features(&self) -> Option<Vec<f64>> {
-        match self {
-            RawAst::Node { features, .. } => features.clone(),
-            _ => None,
-        }
+        todo!()
     }
 
     pub fn sketch_symbols(&self) -> usize {
@@ -280,7 +275,6 @@ impl FromStr for RawAst {
                     _ => Ok(RawAst::Node {
                         lang_node: s.to_string(),
                         children: Box::new([]),
-                        features: None,
                     }),
                 },
                 Sexp::List(list) if list.is_empty() => Err(RawAstParseError::EmptySexp),
@@ -309,7 +303,6 @@ impl FromStr for RawAst {
                         _ => Ok(RawAst::Node {
                             lang_node: s.to_owned(),
                             children: list[1..].iter().map(rec).collect::<Result<_, _>>()?,
-                            features: None,
                         }),
                     },
                 },
@@ -368,7 +361,6 @@ impl<L: TrsLang> From<&RecExpr<L>> for RawAst {
                     .iter()
                     .map(|child_id| rec(&expr[*child_id], expr))
                     .collect(),
-                features: None,
             }
         }
         // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
@@ -391,7 +383,6 @@ impl<L: Language + Display> From<&Sketch<L>> for RawAst {
                         .iter()
                         .map(|child_id| rec(&sketch[*child_id], sketch))
                         .collect(),
-                    features: None,
                 },
                 SketchNode::Contains(id) => RawAst::Contains(rec(&sketch[*id], sketch).into()),
                 SketchNode::Or(ids) => {
@@ -434,7 +425,6 @@ impl<L: Language + Display> From<&PartialSketch<L>> for RawAst {
                         .iter()
                         .map(|child_id| rec(&sketch[*child_id], sketch))
                         .collect(),
-                    features: None,
                 },
             }
         }

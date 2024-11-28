@@ -5,14 +5,12 @@ mod simple;
 
 use std::fmt::{Debug, Display};
 
-use indexmap::IndexMap;
 use thiserror::Error;
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
-use crate::python::SymbolMetaData;
 // use crate::typing::{Type, Typeable};
 
 pub use arithmetic::Arithmetic;
@@ -35,14 +33,6 @@ pub trait TrsLang:
             .iter()
             .map(|(s, a)| ((*s).to_owned(), *a))
             .chain((0..variables).map(|n| (format!("v{n}"), 0)))
-            .collect()
-    }
-
-    #[must_use]
-    fn symbol_lut(variables: usize) -> IndexMap<String, SymbolMetaData> {
-        Self::symbols(variables)
-            .into_iter()
-            .map(|(name, arity)| (name, SymbolMetaData::Lang { arity }))
             .collect()
     }
 }
