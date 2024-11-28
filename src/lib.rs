@@ -40,6 +40,7 @@
 // clippy::ref_patterns,
 
 pub mod analysis;
+pub mod cli;
 pub mod eqsat;
 mod features;
 pub mod io;

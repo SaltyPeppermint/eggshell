@@ -4,6 +4,8 @@ use bon::Builder;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::cli::Cli;
+
 /// Struct to hold the arguments with which the [`egg::Runner`] is set up
 #[expect(clippy::unsafe_derive_deserialize)]
 #[pyclass(frozen)]
@@ -23,6 +25,21 @@ pub struct EqsatConf {
     pub root_check: bool,
     #[builder(default = false)]
     pub memory_log: bool,
+}
+
+impl From<&Cli> for EqsatConf {
+    #[expect(clippy::cast_precision_loss)]
+    fn from(cli: &Cli) -> Self {
+        EqsatConf::builder()
+            .maybe_node_limit(cli.node_limit())
+            .maybe_time_limit(cli.time_limit().map(|x| Duration::from_secs_f64(x as f64)))
+            .maybe_memory_limit(cli.memory_limit())
+            .iter_limit(1) // Iter limit of one since we manually run the eqsat
+            .explanation(cli.with_explanations())
+            .root_check(false)
+            .memory_log(false)
+            .build()
+    }
 }
 
 #[pymethods]
