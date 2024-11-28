@@ -155,7 +155,7 @@ mod tests {
     use num::BigUint;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    use crate::trs::{Halide, TermRewriteSystem, TrsEqsatResult};
+    use crate::trs::{Halide, TermRewriteSystem};
 
     use super::*;
 
@@ -204,7 +204,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let egraph = eqsat.egraph();

@@ -619,7 +619,7 @@ mod tests {
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
     use crate::sampling::SampleConf;
-    use crate::trs::{Halide, Simple, TermRewriteSystem, TrsEqsatResult};
+    use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     use super::*;
 
@@ -631,10 +631,9 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> =
-            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-                .with_conf(eqsat_conf.clone())
-                .run(rules.as_slice());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
         let mut strategy = CountLutWeighted::<BigUint, _, _>::new(
@@ -656,10 +655,9 @@ mod tests {
         let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
-        let eqsat: TrsEqsatResult<Simple> =
-            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-                .with_conf(eqsat_conf.clone())
-                .run(rules.as_slice());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
@@ -683,10 +681,9 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> =
-            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-                .with_conf(eqsat_conf.clone())
-                .run(rules.as_slice());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
@@ -711,10 +708,9 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> =
-            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-                .with_conf(eqsat_conf.clone())
-                .run(rules.as_slice());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
@@ -739,10 +735,9 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat: TrsEqsatResult<Halide> =
-            Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-                .with_conf(eqsat_conf.clone())
-                .run(rules.as_slice());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
         let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);

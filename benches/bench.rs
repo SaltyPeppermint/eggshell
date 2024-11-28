@@ -13,7 +13,7 @@ use eggshell::sampling::strategy::Strategy;
 use eggshell::sampling::SampleConf;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
-use eggshell::trs::{Simple, TermRewriteSystem, TrsEqsatResult};
+use eggshell::trs::{Simple, TermRewriteSystem};
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
@@ -49,7 +49,7 @@ fn sampling(c: &mut Criterion) {
     let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
-    let eqsat: TrsEqsatResult<Simple> = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
+    let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
         .with_conf(eqsat_conf.clone())
         .run(&rules);
 

@@ -4,7 +4,7 @@ set -e
 
 START=0
 END=0
-N_SAMPLES=1000000
+N_SAMPLES=200000
 uuid=$(uuidgen)
 
 echo "UUID of run: $uuid"

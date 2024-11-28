@@ -12,10 +12,7 @@ use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 
-use crate::{
-    eqsat::{Eqsat, EqsatResult},
-    python::SymbolMetaData,
-};
+use crate::python::SymbolMetaData;
 // use crate::typing::{Type, Typeable};
 
 pub use arithmetic::Arithmetic;
@@ -94,8 +91,8 @@ impl From<TrsError> for PyErr {
     }
 }
 
-pub type TrsEqsat<R> =
-    Eqsat<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
+// pub type TrsEqsat<R> =
+//     Eqsat<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
 
-pub type TrsEqsatResult<R> =
-    EqsatResult<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
+// pub type TrsEqsatResult<R> =
+//     EqsatResult<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
