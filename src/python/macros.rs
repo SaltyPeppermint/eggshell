@@ -94,7 +94,12 @@ macro_rules! monomorphize {
         /// Manual wrapper (or monomorphization) of [`Eqsat`] to work around Pyo3 limitations
         #[pyo3::pyclass(frozen)]
         #[derive(Debug, Clone)]
-        pub struct EqsatResult($crate::trs::TrsEqsatResult<$type>);
+        pub struct EqsatResult(
+            $crate::eqsat::EqsatResult<
+                <$type as $crate::trs::TermRewriteSystem>::Language,
+                <$type as $crate::trs::TermRewriteSystem>::Analysis,
+            >,
+        );
 
         #[pyo3::pymethods]
         impl EqsatResult {
