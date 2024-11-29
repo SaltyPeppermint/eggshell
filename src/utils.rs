@@ -78,8 +78,6 @@ where
 pub(crate) trait Tree: Sized {
     fn children(&self) -> &[Self];
 
-    fn children_mut(&mut self) -> &mut [Self];
-
     fn size(&self) -> usize {
         1 + self.children().iter().map(|c| c.size()).sum::<usize>()
     }

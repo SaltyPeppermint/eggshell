@@ -645,7 +645,7 @@ mod tests {
         let samples = strategy.sample(&sample_conf).unwrap();
 
         let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum::<usize>();
-        assert_eq!(8, n_samples);
+        assert_eq!(10, n_samples);
     }
 
     #[test]
@@ -669,7 +669,7 @@ mod tests {
         );
         let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
 
-        assert_eq!(7, samples.len());
+        assert_eq!(8, samples.len());
     }
 
     #[test]

@@ -10,8 +10,6 @@ use thiserror::Error;
 
 pub use pyast::*;
 
-pub(crate) use raw_ast::RawAst;
-
 /// A wrapper around the `RecParseError` so we can circumvent the orphan rule
 #[derive(Debug, Error)]
 pub enum EggError<E: Display> {

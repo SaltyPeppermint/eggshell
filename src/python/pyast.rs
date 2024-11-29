@@ -1,8 +1,3 @@
-use pyo3::exceptions::PyException;
-use pyo3::{create_exception, PyErr};
-
-use super::raw_ast::RawAstError;
-
 /// Macro to generate a manuaol monomorphization via a wrapper cause
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
@@ -28,27 +23,13 @@ macro_rules! monomorphize {
 
         #[pyo3::pymethods]
         impl PyAst {
-            /// This always generates a new node that has [open] as its children
-            #[new]
-            fn new(node: &str, arity: usize) -> pyo3::PyResult<Self> {
-                let new_children = vec![$crate::python::raw_ast::RawAst::Open; arity];
-                let raw_sketch = $crate::python::raw_ast::RawAst::new(node, new_children)?;
-                Ok(PyAst(raw_sketch))
-            }
-
-            /// Generate a new root with an [active] node
-            #[staticmethod]
-            pub fn new_root() -> Self {
-                PyAst($crate::python::raw_ast::RawAst::Active)
-            }
-
             /// Parse from string
             #[staticmethod]
-            pub fn from_str(s_expr_str: &str) -> pyo3::PyResult<Self> {
+            pub fn new(s_expr_str: &str) -> pyo3::PyResult<Self> {
                 let raw_sketch = s_expr_str
-                    .parse()
-                    .map_err($crate::python::raw_ast::RawAstError::BadSexp)?;
-                Ok(PyAst(raw_sketch))
+                    .parse::<egg::RecExpr<Lang>>()
+                    .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
+                Ok(PyAst((&raw_sketch).into()))
             }
 
             fn __str__(&self) -> String {
@@ -71,71 +52,14 @@ macro_rules! monomorphize {
                 <$crate::python::raw_ast::RawAst as crate::utils::Tree>::depth(&self.0)
             }
 
-            /// Appends at the current [active] node and turns an open [open]
-            /// into a new [active]
-            /// Returns if the sketch is finished
-            pub fn append(&mut self, new_child: Self) -> bool {
-                self.0.append(new_child.0)
-            }
-
-            /// Checks if sketch has open [active]
-            pub fn finished(&self) -> bool {
-                self.0.finished()
-            }
-
-            /// Checks if sketch has open [active]
-            pub fn sketch_symbols(&self) -> usize {
-                self.0.sketch_symbols()
-            }
-
-            /// Checks if it is a sketch
-            pub fn is_sketch(&self) -> bool {
-                self.0.is_sketch()
-            }
-
-            /// Checks if it is a sketch
-            pub fn is_partial_sketch(&self) -> bool {
-                self.0.is_partial_sketch()
-            }
-
-            pub fn features(&self) -> Option<Vec<f64>> {
-                self.0.features()
+            pub fn features(&self) -> Vec<f64> {
+                self.0.features().to_owned()
             }
         }
 
         impl From<$crate::python::raw_ast::RawAst> for PyAst {
             fn from(value: $crate::python::raw_ast::RawAst) -> Self {
                 PyAst(value)
-            }
-        }
-
-        impl From<&egg::RecExpr<Lang>> for PyAst {
-            fn from(expr: &egg::RecExpr<Lang>) -> Self {
-                let raw_ast = expr.into();
-                PyAst(raw_ast)
-            }
-        }
-
-        impl From<&crate::sketch::PartialSketch<Lang>> for PyAst {
-            fn from(sketch: &$crate::sketch::PartialSketch<Lang>) -> Self {
-                let raw_partial_sketch = sketch.into();
-                PyAst(raw_partial_sketch)
-            }
-        }
-
-        impl From<&$crate::sketch::Sketch<Lang>> for PyAst {
-            fn from(sketch: &$crate::sketch::Sketch<Lang>) -> Self {
-                let raw_sketch = sketch.into();
-                PyAst(raw_sketch)
-            }
-        }
-
-        impl std::str::FromStr for PyAst {
-            type Err = $crate::python::raw_ast::RawAstParseError;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                let raw_sketch = s.parse()?;
-                Ok(PyAst(raw_sketch))
             }
         }
     };
@@ -173,16 +97,3 @@ pub mod halide {
 pub mod rise {
     monomorphize!(crate::trs::Rise);
 }
-
-impl From<RawAstError> for PyErr {
-    fn from(err: RawAstError) -> PyErr {
-        PySketchException::new_err(err.to_string())
-    }
-}
-
-create_exception!(
-    eggshell,
-    PySketchException,
-    PyException,
-    "Error dealing with a PySketch."
-);
