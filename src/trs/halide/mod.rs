@@ -1,23 +1,27 @@
 mod data;
 mod rules;
 
-use std::{cmp::Ordering, fmt::Display};
+use std::cmp::Ordering;
+use std::fmt::Display;
 
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::Serialize;
 
-use super::{TermRewriteSystem, TrsAnalysis, TrsError, TrsLang};
-use crate::typing::{Type, Typeable, TypingInfo};
+use super::{TermRewriteSystem, TrsError};
+use crate::{
+    features::{AsFeatures, SymbolList, SymbolType},
+    typing::{Type, Typeable, TypingInfo},
+};
 use data::HalideData;
 
 // Defining aliases to reduce code.
-type EGraph = egg::EGraph<HalideExpr, ConstantFold>;
-type Rewrite = egg::Rewrite<HalideExpr, ConstantFold>;
+type EGraph = egg::EGraph<HalideLang, ConstantFold>;
+type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 
 // Definition of the language used.
 define_language! {
     #[derive(Serialize)]
-    pub enum HalideExpr {
+    pub enum HalideLang {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
@@ -40,40 +44,43 @@ define_language! {
     }
 }
 
-impl TrsLang for HalideExpr {
-    fn raw_symbols() -> &'static [(&'static str, usize)] {
-        &[
-            ("+", 2),
-            ("-", 2),
-            ("*", 2),
-            ("/", 2),
-            ("%", 2),
-            ("max", 2),
-            ("min", 2),
-            ("<", 2),
-            (">", 2),
-            ("!", 1),
-            ("<=", 2),
-            (">=", 2),
-            ("==", 2),
-            ("!=", 2),
-            ("||", 2),
-            ("&&", 2),
-            ("true", 0),
-            ("false", 0),
-        ]
+impl AsFeatures for HalideLang {
+    fn symbols() -> SymbolList<Self> {
+        SymbolList::new(vec![
+            HalideLang::Add([0.into(), 0.into()]),
+            HalideLang::Sub([0.into(), 0.into()]),
+            HalideLang::Mul([0.into(), 0.into()]),
+            HalideLang::Div([0.into(), 0.into()]),
+            HalideLang::Mod([0.into(), 0.into()]),
+            HalideLang::Max([0.into(), 0.into()]),
+            HalideLang::Min([0.into(), 0.into()]),
+            HalideLang::Lt([0.into(), 0.into()]),
+            HalideLang::Gt([0.into(), 0.into()]),
+            HalideLang::Not(0.into()),
+            HalideLang::Let([0.into(), 0.into()]),
+            HalideLang::Get([0.into(), 0.into()]),
+            HalideLang::Eq([0.into(), 0.into()]),
+            HalideLang::IEq([0.into(), 0.into()]),
+            HalideLang::Or([0.into(), 0.into()]),
+            HalideLang::And([0.into(), 0.into()]),
+            HalideLang::Bool(true),
+            HalideLang::Number(0),
+            HalideLang::Symbol(Symbol::new("SYMBOL")),
+        ])
     }
 
-    fn is_const(&self) -> bool {
-        matches!(self, HalideExpr::Number(_)) || matches!(self, HalideExpr::Bool(_))
-    }
-
-    fn is_var(&self) -> bool {
-        matches!(self, HalideExpr::Symbol(_))
+    #[expect(clippy::cast_precision_loss)]
+    fn symbol_type(&self) -> SymbolType {
+        match self {
+            HalideLang::Bool(value) => SymbolType::Constant(if *value { 1.0 } else { 0.0 }),
+            HalideLang::Number(value) => SymbolType::Constant(*value as f64),
+            HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
+            _ => SymbolType::Operator,
+        }
     }
 }
 
-impl Typeable for HalideExpr {
+impl Typeable for HalideLang {
     type Type = HalideType;
 
     fn type_info(&self) -> TypingInfo<Self::Type> {
@@ -101,7 +108,7 @@ impl Typeable for HalideExpr {
             }
 
             // Fns of generic type
-            Self::Eq(_) | HalideExpr::IEq(_) => {
+            Self::Eq(_) | HalideLang::IEq(_) => {
                 TypingInfo::new(Self::Type::Boolean, Self::Type::Top)
             }
         }
@@ -163,7 +170,7 @@ impl Type for HalideType {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;
 
-impl Analysis<HalideExpr> for ConstantFold {
+impl Analysis<HalideLang> for ConstantFold {
     type Data = Option<HalideData>;
 
     fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> DidMerge {
@@ -177,16 +184,16 @@ impl Analysis<HalideExpr> for ConstantFold {
         }
     }
 
-    fn make(egraph: &mut EGraph, enode: &HalideExpr) -> Self::Data {
+    fn make(egraph: &mut EGraph, enode: &HalideLang) -> Self::Data {
         let xi = |i: &Id| egraph[*i].data.map(|d| i64::try_from(d).unwrap());
         let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
         // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());
         Some(match enode {
-            HalideExpr::Number(c) => HalideData::Int(*c),
-            HalideExpr::Add([a, b]) => (xi(a)? + xi(b)?).into(),
-            HalideExpr::Sub([a, b]) => (xi(a)? - xi(b)?).into(),
-            HalideExpr::Mul([a, b]) => (xi(a)? * xi(b)?).into(),
-            HalideExpr::Div([a, b]) => {
+            HalideLang::Number(c) => HalideData::Int(*c),
+            HalideLang::Add([a, b]) => (xi(a)? + xi(b)?).into(),
+            HalideLang::Sub([a, b]) => (xi(a)? - xi(b)?).into(),
+            HalideLang::Mul([a, b]) => (xi(a)? * xi(b)?).into(),
+            HalideLang::Div([a, b]) => {
                 // Important to check otherwise integer division loss or div 0 error
                 if xi(b)? != 0 && xi(a)? % xi(b)? == 0 {
                     (xi(a)? / xi(b)?).into()
@@ -194,9 +201,9 @@ impl Analysis<HalideExpr> for ConstantFold {
                     return None;
                 }
             }
-            HalideExpr::Max([a, b]) => std::cmp::max(xi(a)?, xi(b)?).into(),
-            HalideExpr::Min([a, b]) => std::cmp::min(xi(a)?, xi(b)?).into(),
-            HalideExpr::Mod([a, b]) => {
+            HalideLang::Max([a, b]) => std::cmp::max(xi(a)?, xi(b)?).into(),
+            HalideLang::Min([a, b]) => std::cmp::min(xi(a)?, xi(b)?).into(),
+            HalideLang::Mod([a, b]) => {
                 if xi(b)? == 0 {
                     HalideData::Int(0)
                 } else {
@@ -204,16 +211,16 @@ impl Analysis<HalideExpr> for ConstantFold {
                 }
             }
 
-            HalideExpr::Lt([a, b]) => (xi(a)? < xi(b)?).into(),
-            HalideExpr::Gt([a, b]) => (xi(a)? > xi(b)?).into(),
-            HalideExpr::Let([a, b]) => (xi(a)? <= xi(b)?).into(),
-            HalideExpr::Get([a, b]) => (xi(a)? >= xi(b)?).into(),
-            HalideExpr::Eq([a, b]) => (xi(a)? == xi(b)?).into(),
-            HalideExpr::IEq([a, b]) => (xi(a)? != xi(b)?).into(),
+            HalideLang::Lt([a, b]) => (xi(a)? < xi(b)?).into(),
+            HalideLang::Gt([a, b]) => (xi(a)? > xi(b)?).into(),
+            HalideLang::Let([a, b]) => (xi(a)? <= xi(b)?).into(),
+            HalideLang::Get([a, b]) => (xi(a)? >= xi(b)?).into(),
+            HalideLang::Eq([a, b]) => (xi(a)? == xi(b)?).into(),
+            HalideLang::IEq([a, b]) => (xi(a)? != xi(b)?).into(),
 
-            HalideExpr::Not(a) => (!xb(a)?).into(),
-            HalideExpr::And([a, b]) => (xb(a)? && xb(b)?).into(),
-            HalideExpr::Or([a, b]) => (xb(a)? || xb(b)?).into(),
+            HalideLang::Not(a) => (!xb(a)?).into(),
+            HalideLang::And([a, b]) => (xb(a)? && xb(b)?).into(),
+            HalideLang::Or([a, b]) => (xb(a)? || xb(b)?).into(),
 
             _ => return None,
         })
@@ -222,8 +229,8 @@ impl Analysis<HalideExpr> for ConstantFold {
     fn modify(egraph: &mut EGraph, id: Id) {
         if let Some(c) = egraph[id].data {
             let added = match c {
-                HalideData::Int(i) => egraph.add(HalideExpr::Number(i)),
-                HalideData::Bool(b) => egraph.add(HalideExpr::Bool(b)),
+                HalideData::Int(i) => egraph.add(HalideLang::Number(i)),
+                HalideData::Bool(b) => egraph.add(HalideLang::Bool(b)),
             };
 
             // let _ =
@@ -324,10 +331,8 @@ impl Halide {
     }
 }
 
-impl TrsAnalysis<HalideExpr> for ConstantFold {}
-
 impl TermRewriteSystem for Halide {
-    type Language = HalideExpr;
+    type Language = HalideLang;
     type Analysis = ConstantFold;
 
     fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
@@ -352,7 +357,7 @@ mod tests {
         let result = Eqsat::new(StartMaterial::RecExprs(false_expr)).run(&rules);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
-        assert_eq!(HalideExpr::Bool(true), expr[0.into()]);
+        assert_eq!(HalideLang::Bool(true), expr[0.into()]);
     }
 
     #[test]
@@ -363,7 +368,7 @@ mod tests {
         let result = Eqsat::new(StartMaterial::RecExprs(false_expr)).run(&rules);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
-        assert_eq!(HalideExpr::Bool(false), expr[0.into()]);
+        assert_eq!(HalideLang::Bool(false), expr[0.into()]);
     }
 
     #[test]
@@ -406,7 +411,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn false_typing_1() {
-        let expr: RecExpr<HalideExpr> = "( < ( * v0 35 ) false )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) false )".parse().unwrap();
         let tc = typecheck_expr(&expr);
         assert!(tc.is_err());
     }
@@ -414,7 +419,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn false_typing_2() {
-        let expr: RecExpr<HalideExpr> = "( max ( == v0 v1 ) v2 )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( max ( == v0 v1 ) v2 )".parse().unwrap();
         let tc = typecheck_expr(&expr);
         assert!(tc.is_err());
     }
@@ -422,7 +427,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn correct_typing() {
-        let expr: RecExpr<HalideExpr> = "( && ( == ( * v0 35 ) v1 ) true )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( && ( == ( * v0 35 ) v1 ) true )".parse().unwrap();
         let tc = typecheck_expr(&expr);
         assert!(tc.is_ok());
     }
@@ -430,7 +435,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn bool_typing() {
-        let expr: RecExpr<HalideExpr> = "( && ( == ( * v0 35 ) v1 ) v2 )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( && ( == ( * v0 35 ) v1 ) v2 )".parse().unwrap();
         let tc = typecheck_expr(&expr).unwrap();
         assert_eq!(HalideType::Boolean, tc);
     }
@@ -438,7 +443,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn int_typing() {
-        let expr: RecExpr<HalideExpr> = "( - ( + ( * v0 35 ) v1 ) v2 )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( - ( + ( * v0 35 ) v1 ) v2 )".parse().unwrap();
         let tc = typecheck_expr(&expr).unwrap();
         assert_eq!(HalideType::Integer, tc);
     }
@@ -446,7 +451,7 @@ mod tests {
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn false_typing_inferred() {
-        let expr: RecExpr<HalideExpr> = "( max ( + v0 v1 ) v2 )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( max ( + v0 v1 ) v2 )".parse().unwrap();
         let tc = typecheck_expr(&expr).unwrap();
         assert_eq!(HalideType::Integer, tc);
     }

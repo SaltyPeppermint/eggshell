@@ -4,8 +4,11 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::Serialize;
 
-use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
-use crate::typing::{Type, Typeable, TypingInfo};
+use super::TermRewriteSystem;
+use crate::{
+    features::{AsFeatures, SymbolList, SymbolType},
+    typing::{Type, Typeable, TypingInfo},
+};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -21,17 +24,21 @@ define_language! {
     }
 }
 
-impl TrsLang for SimpleLang {
-    fn raw_symbols() -> &'static [(&'static str, usize)] {
-        &[("+", 2), ("*", 2)]
+impl AsFeatures for SimpleLang {
+    fn symbols() -> SymbolList<Self> {
+        SymbolList::new(vec![
+            SimpleLang::Num(0),
+            SimpleLang::Add([0.into(), 0.into()]),
+            SimpleLang::Mul([0.into(), 0.into()]),
+            SimpleLang::Symbol(Symbol::new("SYMBOL")),
+        ])
     }
 
-    fn is_const(&self) -> bool {
-        matches!(self, SimpleLang::Num(_))
-    }
-
-    fn is_var(&self) -> bool {
-        matches!(self, SimpleLang::Symbol(_))
+    fn symbol_type(&self) -> SymbolType {
+        match self {
+            SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
+            _ => SymbolType::Operator,
+        }
     }
 }
 
@@ -88,8 +95,6 @@ fn make_rules() -> Vec<Rewrite> {
         rewrite!("mul-1"; "(* ?a 1)" => "?a"),
     ]
 }
-
-impl TrsAnalysis<SimpleLang> for () {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;

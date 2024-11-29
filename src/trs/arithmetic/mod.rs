@@ -1,13 +1,17 @@
 mod rules;
 
-use std::{cmp::Ordering, fmt::Display};
+use std::cmp::Ordering;
+use std::fmt::Display;
 
 use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::Serialize;
 
-use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
-use crate::typing::{Type, Typeable, TypingInfo};
+use super::TermRewriteSystem;
+use crate::{
+    features::{AsFeatures, SymbolList, SymbolType},
+    typing::{Type, Typeable, TypingInfo},
+};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -38,29 +42,31 @@ define_language! {
     }
 }
 
-impl TrsLang for Math {
-    fn raw_symbols() -> &'static [(&'static str, usize)] {
-        &[
-            ("d", 2),
-            ("i", 2),
-            ("+", 2),
-            ("-", 2),
-            ("*", 2),
-            ("/", 2),
-            ("pow", 2),
-            ("ln", 1),
-            ("sqrt", 1),
-            ("sin", 1),
-            ("cos", 1),
-        ]
+impl AsFeatures for Math {
+    fn symbols() -> SymbolList<Self> {
+        SymbolList::new(vec![
+            Math::Diff([0.into(), 0.into()]),
+            Math::Integral([0.into(), 0.into()]),
+            Math::Add([0.into(), 0.into()]),
+            Math::Sub([0.into(), 0.into()]),
+            Math::Mul([0.into(), 0.into()]),
+            Math::Div([0.into(), 0.into()]),
+            Math::Pow([0.into(), 0.into()]),
+            Math::Ln(0.into()),
+            Math::Sqrt(0.into()),
+            Math::Sin(0.into()),
+            Math::Cos(0.into()),
+            Math::Constant(Constant::new(0.0).unwrap()),
+            Math::Symbol(Symbol::new("SYMBOL")),
+        ])
     }
 
-    fn is_const(&self) -> bool {
-        matches!(self, Math::Constant(_))
-    }
-
-    fn is_var(&self) -> bool {
-        matches!(self, Math::Symbol(_))
+    fn symbol_type(&self) -> SymbolType {
+        match self {
+            Math::Constant(value) => SymbolType::Constant(*value.as_ref()),
+            Math::Symbol(name) => SymbolType::Variable(name.as_str()),
+            _ => SymbolType::Operator,
+        }
     }
 }
 
@@ -167,8 +173,6 @@ impl Analysis<Math> for ConstantFold {
         }
     }
 }
-
-impl TrsAnalysis<Math> for ConstantFold {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;

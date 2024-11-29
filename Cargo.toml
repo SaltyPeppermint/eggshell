@@ -16,13 +16,13 @@ name = "eggshell"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-bon = "2"
+bon = "3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
 egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit" , features = ["serde-1"] }
 env_logger = "0.11.5"
-hashbrown = { version = "0.14", features = ["rayon", "serde"] }
+hashbrown = { version = "0.15", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
 indicatif = "0.17"
 log = "0.4"

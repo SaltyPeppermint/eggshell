@@ -5,7 +5,9 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::Serialize;
 
-use super::{TermRewriteSystem, TrsAnalysis, TrsLang};
+use crate::features::{AsFeatures, SymbolList, SymbolType};
+
+use super::TermRewriteSystem;
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -32,17 +34,25 @@ define_language! {
     }
 }
 
-impl TrsLang for RiseLang {
-    fn raw_symbols() -> &'static [(&'static str, usize)] {
-        &[("var", 1), ("app", 2), ("lam", 2), ("let", 3), (">>", 2)]
+impl AsFeatures for RiseLang {
+    fn symbols() -> SymbolList<Self> {
+        SymbolList::new(vec![
+            RiseLang::Var(0.into()),
+            RiseLang::App([0.into(), 0.into()]),
+            RiseLang::Lambda([0.into(), 0.into()]),
+            RiseLang::Let([0.into(), 0.into(), 0.into()]),
+            RiseLang::Then([0.into(), 0.into()]),
+            RiseLang::Number(0),
+            RiseLang::Symbol(Symbol::new("SYMBOL")),
+        ])
     }
 
-    fn is_const(&self) -> bool {
-        matches!(self, RiseLang::Number(_))
-    }
-
-    fn is_var(&self) -> bool {
-        matches!(self, RiseLang::Symbol(_))
+    fn symbol_type(&self) -> SymbolType {
+        match self {
+            RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
+            RiseLang::Number(value) => SymbolType::Constant((*value).into()),
+            _ => SymbolType::Operator,
+        }
     }
 }
 
@@ -111,8 +121,6 @@ pub fn unwrap_symbol(n: &RiseLang) -> Symbol {
         _ => panic!("expected symbol"),
     }
 }
-
-impl TrsAnalysis<RiseLang> for RiseAnalysis {}
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Rise;

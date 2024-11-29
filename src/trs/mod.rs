@@ -18,35 +18,7 @@ pub use halide::{Halide, HalideRuleset};
 pub use rise::Rise;
 pub use simple::Simple;
 
-pub trait TrsLang:
-    Language<Discriminant: Debug + Send + Sync> + Display + Serialize + FromOp + Debug + Send + Sync
-{
-    fn raw_symbols() -> &'static [(&'static str, usize)];
-
-    fn is_const(&self) -> bool;
-
-    fn is_var(&self) -> bool;
-
-    #[must_use]
-    fn symbols(variables: usize) -> Vec<(String, usize)> {
-        Self::raw_symbols()
-            .iter()
-            .map(|(s, a)| ((*s).to_owned(), *a))
-            .chain((0..variables).map(|n| (format!("v{n}"), 0)))
-            .collect()
-    }
-}
-
-pub trait TrsAnalysis<L: TrsLang>:
-    Analysis<L, Data: Serialize + Clone + Debug + Send + Sync>
-    + Clone
-    + Serialize
-    + Debug
-    + Default
-    + Send
-    + Sync
-{
-}
+use crate::features::AsFeatures;
 
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
@@ -54,8 +26,22 @@ pub trait TrsAnalysis<L: TrsLang>:
 /// The [`TermRewriteSystem::full_rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
 pub trait TermRewriteSystem: Serialize + Debug + Clone {
-    type Language: TrsLang;
-    type Analysis: TrsAnalysis<Self::Language>;
+    type Language: Language<Discriminant: Debug + Send + Sync>
+        + Display
+        + Serialize
+        + FromOp
+        + Debug
+        + Send
+        + Sync
+        + AsFeatures
+        + 'static;
+    type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug + Send + Sync>
+        + Clone
+        + Serialize
+        + Debug
+        + Default
+        + Send
+        + Sync;
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }

@@ -1,11 +1,14 @@
 use core::panic;
+use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
 use chrono::Local;
 use clap::Parser;
-use egg::{Analysis, AstSize, CostFunction, EGraph, Language, RecExpr, Rewrite, StopReason};
+use egg::{
+    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
+};
 use hashbrown::HashSet;
 use log::info;
 use num::BigUint;
@@ -19,7 +22,8 @@ use eggshell::io::sampling::{BaselineData, DataEntry, MetaData, SampleData};
 use eggshell::io::structs::Entry;
 use eggshell::sampling::strategy::{CostWeighted, CountWeighted, CountWeightedUniformly, Strategy};
 use eggshell::sampling::SampleConf;
-use eggshell::trs::{Halide, Rise, TermRewriteSystem, TrsAnalysis, TrsLang};
+use eggshell::trs::{Halide, Rise, TermRewriteSystem};
+use serde::Serialize;
 
 fn main() {
     env_logger::init();
@@ -180,8 +184,10 @@ fn sample<L, N>(
     sample_conf: &SampleConf,
 ) -> HashSet<RecExpr<L>>
 where
-    L: TrsLang,
-    N: TrsAnalysis<L>,
+    L: Language + Display + Clone + Send + Sync,
+    L::Discriminant: Sync,
+    N: Analysis<L> + Clone + Debug + Sync,
+    N::Data: Serialize + Clone + Sync,
 {
     let root_id = eqsat.roots()[0];
 
@@ -206,13 +212,18 @@ where
     }
 }
 
-fn mk_sample_data<L: TrsLang, N: TrsAnalysis<L>>(
+fn mk_sample_data<L, N>(
     start_expr: &RecExpr<L>,
     samples: Vec<RecExpr<L>>,
     eqsat_result: &mut [EqsatResult<L, N>],
     cli: &Cli,
     rules: &[Rewrite<L, N>],
-) -> Vec<SampleData<L>> {
+) -> Vec<SampleData<L>>
+where
+    L: Language + Display + Clone + FromOp,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
+{
     samples
         .into_iter()
         .map(|sample| {
@@ -230,12 +241,17 @@ fn mk_sample_data<L: TrsLang, N: TrsAnalysis<L>>(
         .collect()
 }
 
-fn mk_baseline<L: TrsLang, N: TrsAnalysis<L>>(
+fn mk_baseline<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
     sample: &RecExpr<L>,
     rules: &[Rewrite<L, N>],
-) -> Option<BaselineData> {
+) -> Option<BaselineData>
+where
+    L: Language + Display + Clone,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
+{
     if cli.with_baselines() {
         info!("Running baseline for \"{sample}\"...");
         let starting_exprs = StartMaterial::RecExprs(vec![start_expr.clone(), sample.clone()]);
@@ -253,12 +269,16 @@ fn mk_baseline<L: TrsLang, N: TrsAnalysis<L>>(
     }
 }
 
-fn mk_explanation<L: TrsLang, N: TrsAnalysis<L>>(
+fn mk_explanation<L, N>(
     sample: &RecExpr<L>,
     cli: &Cli,
     egraph: &mut EGraph<L, N>,
     start_expr: &RecExpr<L>,
-) -> Option<String> {
+) -> Option<String>
+where
+    L: Language + Display + FromOp,
+    N: Analysis<L>,
+{
     if cli.with_explanations() {
         info!("Constructing explanation of \"{start_expr} == {sample}\"...");
         let expl = egraph
