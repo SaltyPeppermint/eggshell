@@ -59,7 +59,7 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // m.add_class::<python:>()?;
 
     python::simple::add_mod(m, "simple")?;
-    python::arithmatic::add_mod(m, "arithmatic")?;
+    python::arithmetic::add_mod(m, "arithmetic")?;
     python::halide::add_mod(m, "halide")?;
     python::rise::add_mod(m, "rise")?;
 
