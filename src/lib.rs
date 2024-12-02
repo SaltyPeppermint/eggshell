@@ -32,24 +32,23 @@
     clippy::unnecessary_self_imports,
     clippy::verbose_file_reads,
     clippy::shadow_unrelated,
+    // clippy::use_debug,
+    // clippy::cfg_not_test,
     // clippy::allow_attributes
 )]
 
-// clippy::cfg_not_test,
-// clippy::use_debug
-// clippy::ref_patterns,
-
 mod analysis;
+mod features;
+mod python;
+mod utils;
+
 pub mod cli;
 pub mod eqsat;
-mod features;
 pub mod io;
-mod python;
 pub mod sampling;
 pub mod sketch;
 pub mod trs;
 pub mod typing;
-mod utils;
 
 use pyo3::prelude::*;
 
