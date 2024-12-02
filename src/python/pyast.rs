@@ -103,7 +103,7 @@ pub mod simple {
     monomorphize!(crate::trs::Simple);
 }
 
-pub mod arithmatic {
+pub mod arithmetic {
     monomorphize!(crate::trs::Arithmetic);
 }
 
