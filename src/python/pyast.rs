@@ -10,7 +10,7 @@ macro_rules! monomorphize {
         ) -> pyo3::PyResult<()> {
             use pyo3::prelude::PyModuleMethods;
 
-            let bound = pyo3::prelude::PyModule::new_bound(m.py(), module_name)?;
+            let bound = pyo3::prelude::PyModule::new(m.py(), module_name)?;
 
             m.add_submodule(&bound)?;
             Ok(())
@@ -71,17 +71,28 @@ macro_rules! monomorphize {
                 <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::depth(&self.0)
             }
 
-            pub fn feature_vec(&self) -> Option<Vec<f64>> {
+            pub fn feature_vec<'py>(
+                &self,
+                py: pyo3::Python<'py>,
+            ) -> pyo3::PyResult<pyo3::Bound<'py, numpy::PyArray1<f64>>> {
                 match self.0.features() {
-                    $crate::features::Feature::Leaf(f) => Some(f.clone()),
-                    $crate::features::Feature::NonLeaf(_) => None,
+                    $crate::features::Feature::Leaf(f) => Ok(numpy::PyArray::from_slice(py, f)),
+                    $crate::features::Feature::NonLeaf(_) => {
+                        Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                            "Tried calling feature_vec on a non-leaf node",
+                        ))
+                    }
                 }
             }
 
-            pub fn node_id(&self) -> Option<usize> {
+            pub fn node_id(&self) -> pyo3::PyResult<usize> {
                 match self.0.features() {
-                    $crate::features::Feature::NonLeaf(id) => Some(*id),
-                    $crate::features::Feature::Leaf(_) => None,
+                    $crate::features::Feature::NonLeaf(id) => Ok(*id),
+                    $crate::features::Feature::Leaf(_) => {
+                        Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
+                            "Tried calling node_id on a leaf node",
+                        ))
+                    }
                 }
             }
         }
