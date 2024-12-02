@@ -24,15 +24,13 @@ macro_rules! monomorphize {
         #[pyo3::pymethods]
         impl PyAst {
             /// Parse from string
-            #[staticmethod]
+            #[new]
             pub fn new(s_expr_str: &str, symbol_list: Vec<String>) -> pyo3::PyResult<Self> {
                 let raw_sketch = s_expr_str
                     .parse::<egg::RecExpr<Lang>>()
                     .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
-                Ok(PyAst($crate::python::raw_ast::RawAst::new(
-                    &raw_sketch,
-                    symbol_list,
-                )))
+                let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, symbol_list);
+                Ok(Self(raw_ast))
             }
 
             fn __str__(&self) -> String {
@@ -43,8 +41,26 @@ macro_rules! monomorphize {
                 format!("{self:?}")
             }
 
+            #[getter(name)]
             pub fn name(&self) -> String {
                 self.0.name().to_owned()
+            }
+
+            #[getter(is_leaf)]
+            pub fn is_leaf(&self) -> bool {
+                self.0.is_leaf()
+            }
+
+            #[getter(arity)]
+            pub fn arity(&self) -> usize {
+                self.0.arity()
+            }
+
+            pub fn children(&self) -> Vec<Self> {
+                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::children(&self.0)
+                    .iter()
+                    .map(|c| Self(c.to_owned()))
+                    .collect()
             }
 
             pub fn size(&self) -> usize {
@@ -53,14 +69,6 @@ macro_rules! monomorphize {
 
             pub fn depth(&self) -> usize {
                 <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::depth(&self.0)
-            }
-
-            pub fn is_leaf(&self) -> bool {
-                self.0.is_leaf()
-            }
-
-            pub fn arity(&self) -> usize {
-                self.0.arity()
             }
 
             pub fn feature_vec(&self) -> Option<Vec<f64>> {
@@ -75,12 +83,6 @@ macro_rules! monomorphize {
                     $crate::features::Feature::NonLeaf(id) => Some(*id),
                     $crate::features::Feature::Leaf(_) => None,
                 }
-            }
-        }
-
-        impl From<$crate::python::raw_ast::RawAst> for PyAst {
-            fn from(value: $crate::python::raw_ast::RawAst) -> Self {
-                PyAst(value)
             }
         }
     };
