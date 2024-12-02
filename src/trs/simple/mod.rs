@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use super::TermRewriteSystem;
 use crate::{
-    features::{AsFeatures, SymbolList, SymbolType},
+    features::{AsFeatures, Featurizer, SymbolType},
     typing::{Type, Typeable, TypingInfo},
 };
 
@@ -25,13 +25,16 @@ define_language! {
 }
 
 impl AsFeatures for SimpleLang {
-    fn symbols() -> SymbolList<Self> {
-        SymbolList::new(vec![
-            SimpleLang::Num(0),
-            SimpleLang::Add([0.into(), 0.into()]),
-            SimpleLang::Mul([0.into(), 0.into()]),
-            SimpleLang::Symbol(Symbol::new("SYMBOL")),
-        ])
+    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+        Featurizer::new(
+            vec![
+                SimpleLang::Num(0),
+                SimpleLang::Add([0.into(), 0.into()]),
+                SimpleLang::Mul([0.into(), 0.into()]),
+                SimpleLang::Symbol(Symbol::new("SYMBOL")),
+            ],
+            variable_names,
+        )
     }
 
     fn symbol_type(&self) -> SymbolType {

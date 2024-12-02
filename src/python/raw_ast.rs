@@ -2,22 +2,51 @@ use std::fmt::{Display, Formatter};
 
 use egg::RecExpr;
 
-use crate::features::{AsFeatures, SymbolList};
+use crate::features::{AsFeatures, Feature, Featurizer};
 use crate::utils::Tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RawAst {
     name: String,
     children: Box<[RawAst]>,
-    features: Vec<f64>,
+    features: Feature,
 }
 
 impl RawAst {
+    pub fn new<L: AsFeatures + Display>(expr: &RecExpr<L>, variable_names: Vec<String>) -> Self {
+        fn rec<L: AsFeatures + Display>(
+            node: &L,
+            expr: &RecExpr<L>,
+            featurizer: &Featurizer<L>,
+        ) -> RawAst {
+            RawAst {
+                name: node.to_string(),
+                children: node
+                    .children()
+                    .iter()
+                    .map(|child_id| rec(&expr[*child_id], expr, featurizer))
+                    .collect(),
+                features: featurizer.features(node),
+            }
+        }
+        let symbol_list = L::symbol_list(variable_names);
+        let root = expr.as_ref().last().unwrap();
+        rec(root, expr, &symbol_list)
+    }
+
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn features(&self) -> &[f64] {
+    pub fn is_leaf(&self) -> bool {
+        self.children.is_empty()
+    }
+
+    pub fn arity(&self) -> usize {
+        self.children.len()
+    }
+
+    pub fn features(&self) -> &Feature {
         &self.features
     }
 }
@@ -41,31 +70,5 @@ impl Display for RawAst {
                 .join(" ");
             write!(f, "({} {inner})", self.name)
         }
-    }
-}
-
-impl<L: AsFeatures + Display> From<&RecExpr<L>> for RawAst {
-    fn from(expr: &RecExpr<L>) -> Self {
-        fn rec<L: AsFeatures + Display>(
-            node: &L,
-            expr: &RecExpr<L>,
-            symbol_list: &SymbolList<L>,
-        ) -> RawAst {
-            RawAst {
-                name: node.to_string(),
-                children: node
-                    .children()
-                    .iter()
-                    .map(|child_id| rec(&expr[*child_id], expr, symbol_list))
-                    .collect(),
-                features: node.features(symbol_list),
-            }
-        }
-        // See https://docs.rs/egg/latest/egg/struct.RecExpr.html
-        // "RecExprs must satisfy the invariant that enodes’ children must refer to elements that come before it in the list."
-        // Therefore, in a RecExpr that has only one root, the last element must be the root.
-        let root = expr.as_ref().last().unwrap();
-        let symbol_list = L::symbols();
-        rec(root, expr, &symbol_list)
     }
 }

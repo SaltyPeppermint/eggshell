@@ -5,7 +5,7 @@ use egg::{Id, Language, RecExpr};
 use serde::Serialize;
 
 use super::SketchParseError;
-use crate::features::{AsFeatures, SymbolList, SymbolType};
+use crate::features::{AsFeatures, Featurizer, SymbolType};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -80,8 +80,8 @@ impl<L: Typeable> Typeable for SketchNode<L> {
 }
 
 impl<L: Language + AsFeatures> AsFeatures for SketchNode<L> {
-    fn symbols() -> SymbolList<Self> {
-        L::symbols().into_meta_lang(|l| SketchNode::Node(l))
+    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+        L::symbol_list(variable_names).into_meta_lang(|l| SketchNode::Node(l))
     }
 
     fn symbol_type(&self) -> SymbolType {

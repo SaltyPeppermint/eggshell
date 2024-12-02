@@ -25,11 +25,14 @@ macro_rules! monomorphize {
         impl PyAst {
             /// Parse from string
             #[staticmethod]
-            pub fn new(s_expr_str: &str) -> pyo3::PyResult<Self> {
+            pub fn new(s_expr_str: &str, symbol_list: Vec<String>) -> pyo3::PyResult<Self> {
                 let raw_sketch = s_expr_str
                     .parse::<egg::RecExpr<Lang>>()
                     .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
-                Ok(PyAst((&raw_sketch).into()))
+                Ok(PyAst($crate::python::raw_ast::RawAst::new(
+                    &raw_sketch,
+                    symbol_list,
+                )))
             }
 
             fn __str__(&self) -> String {
@@ -45,15 +48,33 @@ macro_rules! monomorphize {
             }
 
             pub fn size(&self) -> usize {
-                <$crate::python::raw_ast::RawAst as crate::utils::Tree>::size(&self.0)
+                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::size(&self.0)
             }
 
             pub fn depth(&self) -> usize {
-                <$crate::python::raw_ast::RawAst as crate::utils::Tree>::depth(&self.0)
+                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::depth(&self.0)
             }
 
-            pub fn features(&self) -> Vec<f64> {
-                self.0.features().to_owned()
+            pub fn is_leaf(&self) -> bool {
+                self.0.is_leaf()
+            }
+
+            pub fn arity(&self) -> usize {
+                self.0.arity()
+            }
+
+            pub fn feature_vec(&self) -> Option<Vec<f64>> {
+                match self.0.features() {
+                    $crate::features::Feature::Leaf(f) => Some(f.clone()),
+                    $crate::features::Feature::NonLeaf(_) => None,
+                }
+            }
+
+            pub fn node_id(&self) -> Option<usize> {
+                match self.0.features() {
+                    $crate::features::Feature::NonLeaf(id) => Some(*id),
+                    $crate::features::Feature::Leaf(_) => None,
+                }
             }
         }
 
@@ -64,23 +85,6 @@ macro_rules! monomorphize {
         }
     };
 }
-
-// /// Macro to generate the necessary implementations so pyo3 doesnt freak out about
-// /// self-referential types using boxes
-// // macro_rules! pyboxable {
-// //     ($type: ty) => {
-// //         impl pyo3::FromPyObject<'_> for std::boxed::Box<$type> {
-// //             fn extract_bound(ob: &Bound<'_, PyAny>) -> pyo3::PyResult<Self> {
-// //                 ob.extract::<$type>().map(Box::new)
-// //             }
-// //         }
-// //         impl pyo3::IntoPy<pyo3::PyObject> for std::boxed::Box<$type> {
-// //             fn into_py(self, py: pyo3::Python<'_>) -> pyo3::PyObject {
-// //                 (*self).into_py(py)
-// //             }
-// //         }
-// //     };
-// // }
 
 pub mod simple {
     monomorphize!(crate::trs::Simple);

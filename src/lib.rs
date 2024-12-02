@@ -39,7 +39,7 @@
 // clippy::use_debug
 // clippy::ref_patterns,
 
-pub mod analysis;
+mod analysis;
 pub mod cli;
 pub mod eqsat;
 mod features;

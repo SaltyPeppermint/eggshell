@@ -34,11 +34,6 @@ impl ExprCount {
     pub fn new(limit: usize) -> Self {
         Self { limit }
     }
-
-    #[must_use]
-    pub fn limit(&self) -> usize {
-        self.limit
-    }
 }
 
 impl<C, L, N> CommutativeSemigroupAnalysis<C, L, N> for ExprCount
