@@ -5,7 +5,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::Serialize;
 
-use crate::features::{AsFeatures, SymbolList, SymbolType};
+use crate::features::{AsFeatures, Featurizer, SymbolType};
 
 use super::TermRewriteSystem;
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -35,16 +35,19 @@ define_language! {
 }
 
 impl AsFeatures for RiseLang {
-    fn symbols() -> SymbolList<Self> {
-        SymbolList::new(vec![
-            RiseLang::Var(0.into()),
-            RiseLang::App([0.into(), 0.into()]),
-            RiseLang::Lambda([0.into(), 0.into()]),
-            RiseLang::Let([0.into(), 0.into(), 0.into()]),
-            RiseLang::Then([0.into(), 0.into()]),
-            RiseLang::Number(0),
-            RiseLang::Symbol(Symbol::new("SYMBOL")),
-        ])
+    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+        Featurizer::new(
+            vec![
+                RiseLang::Var(0.into()),
+                RiseLang::App([0.into(), 0.into()]),
+                RiseLang::Lambda([0.into(), 0.into()]),
+                RiseLang::Let([0.into(), 0.into(), 0.into()]),
+                RiseLang::Then([0.into(), 0.into()]),
+                RiseLang::Number(0),
+                RiseLang::Symbol(Symbol::new("SYMBOL")),
+            ],
+            variable_names,
+        )
     }
 
     fn symbol_type(&self) -> SymbolType {

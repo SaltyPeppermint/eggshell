@@ -64,8 +64,9 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
 }
 
 impl<L: Language + AsFeatures> AsFeatures for PartialSketchNode<L> {
-    fn symbols() -> crate::features::SymbolList<Self> {
-        SketchNode::<L>::symbols().into_meta_lang(|l| PartialSketchNode::Finished(l))
+    fn symbol_list(variable_names: Vec<String>) -> crate::features::Featurizer<Self> {
+        SketchNode::<L>::symbol_list(variable_names)
+            .into_meta_lang(|l| PartialSketchNode::Finished(l))
     }
 
     fn symbol_type(&self) -> SymbolType {

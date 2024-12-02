@@ -9,7 +9,7 @@ use serde::Serialize;
 
 use super::{TermRewriteSystem, TrsError};
 use crate::{
-    features::{AsFeatures, SymbolList, SymbolType},
+    features::{AsFeatures, Featurizer, SymbolType},
     typing::{Type, Typeable, TypingInfo},
 };
 use data::HalideData;
@@ -45,28 +45,31 @@ define_language! {
 }
 
 impl AsFeatures for HalideLang {
-    fn symbols() -> SymbolList<Self> {
-        SymbolList::new(vec![
-            HalideLang::Add([0.into(), 0.into()]),
-            HalideLang::Sub([0.into(), 0.into()]),
-            HalideLang::Mul([0.into(), 0.into()]),
-            HalideLang::Div([0.into(), 0.into()]),
-            HalideLang::Mod([0.into(), 0.into()]),
-            HalideLang::Max([0.into(), 0.into()]),
-            HalideLang::Min([0.into(), 0.into()]),
-            HalideLang::Lt([0.into(), 0.into()]),
-            HalideLang::Gt([0.into(), 0.into()]),
-            HalideLang::Not(0.into()),
-            HalideLang::Let([0.into(), 0.into()]),
-            HalideLang::Get([0.into(), 0.into()]),
-            HalideLang::Eq([0.into(), 0.into()]),
-            HalideLang::IEq([0.into(), 0.into()]),
-            HalideLang::Or([0.into(), 0.into()]),
-            HalideLang::And([0.into(), 0.into()]),
-            HalideLang::Bool(true),
-            HalideLang::Number(0),
-            HalideLang::Symbol(Symbol::new("SYMBOL")),
-        ])
+    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+        Featurizer::new(
+            vec![
+                HalideLang::Add([0.into(), 0.into()]),
+                HalideLang::Sub([0.into(), 0.into()]),
+                HalideLang::Mul([0.into(), 0.into()]),
+                HalideLang::Div([0.into(), 0.into()]),
+                HalideLang::Mod([0.into(), 0.into()]),
+                HalideLang::Max([0.into(), 0.into()]),
+                HalideLang::Min([0.into(), 0.into()]),
+                HalideLang::Lt([0.into(), 0.into()]),
+                HalideLang::Gt([0.into(), 0.into()]),
+                HalideLang::Not(0.into()),
+                HalideLang::Let([0.into(), 0.into()]),
+                HalideLang::Get([0.into(), 0.into()]),
+                HalideLang::Eq([0.into(), 0.into()]),
+                HalideLang::IEq([0.into(), 0.into()]),
+                HalideLang::Or([0.into(), 0.into()]),
+                HalideLang::And([0.into(), 0.into()]),
+                HalideLang::Bool(true),
+                HalideLang::Number(0),
+                HalideLang::Symbol(Symbol::new("SYMBOL")),
+            ],
+            variable_names,
+        )
     }
 
     #[expect(clippy::cast_precision_loss)]
