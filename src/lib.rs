@@ -53,7 +53,6 @@ pub mod typing;
 use pyo3::prelude::*;
 
 /// A Python module implemented in Rust.
-#[expect(clippy::shadow_reuse)]
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Pylang works for all langs that implement Display
