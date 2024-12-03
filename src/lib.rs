@@ -50,7 +50,18 @@ pub mod sketch;
 pub mod trs;
 pub mod typing;
 
+use std::fmt::Display;
+
+use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
+use pyo3::{create_exception, PyErr};
+
+use features::FeatureError;
+use io::IoError;
+use python::EggError;
+use sampling::SampleError;
+use thiserror::Error;
+use trs::TrsError;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -64,4 +75,33 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     python::rise::add_mod(m, "rise")?;
 
     Ok(())
+}
+
+#[derive(Debug, Error)]
+pub enum EggshellError<L: Display> {
+    #[error(transparent)]
+    Io(#[from] IoError),
+    #[error(transparent)]
+    Trs(#[from] TrsError),
+    #[error(transparent)]
+    Sample(#[from] SampleError),
+    #[error(transparent)]
+    Feature(#[from] FeatureError),
+    #[error(transparent)]
+    Egg(#[from] EggError<L>),
+    #[error("Unknown Error happend!")]
+    Unknown,
+}
+
+create_exception!(
+    eggshell,
+    EggshellException,
+    PyException,
+    "Eggshell internal error."
+);
+
+impl<L: Display> From<EggshellError<L>> for PyErr {
+    fn from(err: EggshellError<L>) -> PyErr {
+        EggshellException::new_err(err.to_string())
+    }
 }

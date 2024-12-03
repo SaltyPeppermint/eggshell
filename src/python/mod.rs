@@ -4,8 +4,6 @@ mod raw_ast;
 
 use std::fmt::Display;
 
-use pyo3::exceptions::PyException;
-use pyo3::{create_exception, PyErr};
 use thiserror::Error;
 
 pub use pyast::*;
@@ -17,17 +15,4 @@ pub enum EggError<E: Display> {
     RecExprParse(#[from] egg::RecExprParseError<E>),
     #[error(transparent)]
     FromOp(#[from] egg::FromOpError),
-}
-
-create_exception!(
-    eggshell,
-    EggException,
-    PyException,
-    "Eggshell internal error."
-);
-
-impl<E: Display> From<EggError<E>> for PyErr {
-    fn from(err: EggError<E>) -> PyErr {
-        EggException::new_err(err.to_string())
-    }
 }

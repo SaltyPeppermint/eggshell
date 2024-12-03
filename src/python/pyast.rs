@@ -10,9 +10,10 @@ macro_rules! monomorphize {
         ) -> pyo3::PyResult<()> {
             use pyo3::prelude::PyModuleMethods;
 
-            let bound = pyo3::prelude::PyModule::new(m.py(), module_name)?;
+            let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
+            module.add_class::<PyAst>()?;
 
-            m.add_submodule(&bound)?;
+            m.add_submodule(&module)?;
             Ok(())
         }
 
@@ -26,11 +27,12 @@ macro_rules! monomorphize {
             /// Parse from string
             #[new]
             pub fn new(s_expr_str: &str, variable_names: Vec<String>) -> pyo3::PyResult<Self> {
-                let raw_sketch = s_expr_str
-                    .parse::<egg::RecExpr<Lang>>()
-                    .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
+                let raw_sketch = s_expr_str.parse::<egg::RecExpr<Lang>>().map_err(|e| {
+                    $crate::EggshellError::from($crate::python::EggError::RecExprParse(e))
+                })?;
                 let (raw_ast, _) =
-                    $crate::python::raw_ast::RawAst::new(&raw_sketch, variable_names);
+                    $crate::python::raw_ast::RawAst::new(&raw_sketch, variable_names)
+                        .map_err(|e| $crate::EggshellError::<Lang>::from(e))?;
                 Ok(Self(raw_ast))
             }
 
@@ -73,9 +75,9 @@ macro_rules! monomorphize {
                 match self.0.features() {
                     $crate::features::Feature::Leaf(f) => Ok(f.to_owned()),
                     $crate::features::Feature::NonLeaf(_) => {
-                        Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                            "Tried calling feature_vec_ml on a non-leaf node",
-                        ))
+                        Err($crate::EggshellError::<Lang>::from(
+                            $crate::features::FeatureError::NonLeaf(self.name()),
+                        ))?
                     }
                 }
             }
@@ -84,9 +86,9 @@ macro_rules! monomorphize {
                 match self.0.features() {
                     $crate::features::Feature::NonLeaf(id) => Ok(*id),
                     $crate::features::Feature::Leaf(_) => {
-                        Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                            "Tried calling node_id on a leaf node",
-                        ))
+                        Err($crate::EggshellError::<Lang>::from(
+                            $crate::features::FeatureError::Leaf(self.name()),
+                        ))?
                     }
                 }
             }

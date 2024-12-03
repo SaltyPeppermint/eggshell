@@ -2,37 +2,40 @@ use std::fmt::{Display, Formatter};
 
 use egg::RecExpr;
 
-use crate::features::{AsFeatures, Feature, Featurizer, SymbolType};
+use crate::features::{AsFeatures, Feature, FeatureError, Featurizer, SymbolType};
 use crate::utils::Tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct RawAst<L: AsFeatures + Display> {
+pub(crate) struct RawAst<L: AsFeatures> {
     node: L,
     children: Box<[RawAst<L>]>,
     features: Feature,
 }
 
-impl<L: AsFeatures + Display> RawAst<L> {
-    pub fn new(expr: &RecExpr<L>, variable_names: Vec<String>) -> (Self, Featurizer<L>) {
-        fn rec<L: AsFeatures + Display>(
+impl<L: AsFeatures> RawAst<L> {
+    pub fn new(
+        expr: &RecExpr<L>,
+        variable_names: Vec<String>,
+    ) -> Result<(Self, Featurizer<L>), FeatureError> {
+        fn rec<L: AsFeatures>(
             node: &L,
             expr: &RecExpr<L>,
             featurizer: &Featurizer<L>,
-        ) -> RawAst<L> {
-            RawAst {
+        ) -> Result<RawAst<L>, FeatureError> {
+            Ok(RawAst {
                 node: node.clone(),
                 children: node
                     .children()
                     .iter()
                     .map(|child_id| rec(&expr[*child_id], expr, featurizer))
-                    .collect(),
-                features: featurizer.features(node),
-            }
+                    .collect::<Result<_, _>>()?,
+                features: featurizer.features(node)?,
+            })
         }
         let featurizer = L::symbol_list(variable_names);
         let root = expr.as_ref().last().unwrap();
-        let raw_ast = rec(root, expr, &featurizer);
-        (raw_ast, featurizer)
+        let raw_ast = rec(root, expr, &featurizer)?;
+        Ok((raw_ast, featurizer))
     }
 
     pub fn node(&self) -> &L {
@@ -40,10 +43,16 @@ impl<L: AsFeatures + Display> RawAst<L> {
     }
 
     fn count_symbol(&self, symbol: &L) -> usize {
-        usize::from(if let SymbolType::Constant(_) = self.node.symbol_type() {
-            self.node.discriminant() == symbol.discriminant()
-        } else {
-            symbol.matches(&self.node)
+        usize::from(match self.node.symbol_type() {
+            SymbolType::Constant(_) => self.node.discriminant() == symbol.discriminant(),
+            SymbolType::Variable(name) => {
+                if let SymbolType::Variable(other_name) = symbol.symbol_type() {
+                    name == other_name && self.node.discriminant() == symbol.discriminant()
+                } else {
+                    false
+                }
+            }
+            SymbolType::Operator | SymbolType::MetaSymbol => symbol.matches(&self.node),
         }) + self
             .children
             .iter()
@@ -88,13 +97,13 @@ impl<L: AsFeatures + Display> RawAst<L> {
     }
 }
 
-impl<L: AsFeatures + Display> Tree for RawAst<L> {
+impl<L: AsFeatures> Tree for RawAst<L> {
     fn children(&self) -> &[Self] {
         &self.children
     }
 }
 
-impl<L: AsFeatures + Display> Display for RawAst<L> {
+impl<L: AsFeatures> Display for RawAst<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.children.is_empty() {
             write!(f, "{}", self.node)
@@ -121,7 +130,7 @@ mod tests {
         let expr = "(* (+ a b) 1)"
             .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
             .unwrap();
-        let raw_ast = RawAst::new(&expr, vec!["a".into(), "b".into()]).0;
+        let raw_ast = RawAst::new(&expr, vec!["a".into(), "b".into()]).unwrap().0;
 
         assert_eq!(&Feature::NonLeaf(1), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());
@@ -144,7 +153,7 @@ mod tests {
         let expr = "(* (+ a b) 1)"
             .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
             .unwrap();
-        let (raw_ast, _) = RawAst::new(&expr, vec!["a".into(), "b".into()]);
+        let (raw_ast, _) = RawAst::new(&expr, vec!["a".into(), "b".into()]).unwrap();
         let inverted_flattened = raw_ast.flatten();
 
         assert_eq!(
@@ -166,7 +175,9 @@ mod tests {
         let expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
-        let raw_ast = RawAst::new(&expr, vec!["v0".into(), "v1".into(), "v2".into()]).0;
+        let raw_ast = RawAst::new(&expr, vec!["v0".into(), "v1".into(), "v2".into()])
+            .unwrap()
+            .0;
 
         assert_eq!(&Feature::NonLeaf(10), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());

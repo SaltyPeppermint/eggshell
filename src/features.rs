@@ -1,4 +1,7 @@
+use std::fmt::Display;
+
 use egg::Language;
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Feature {
@@ -40,12 +43,21 @@ impl<L: AsFeatures> Featurizer<L> {
     }
 
     fn symbol_position(&self, symbol: &L) -> Option<usize> {
-        if let SymbolType::Constant(_) = symbol.symbol_type() {
-            self.symbols
+        match symbol.symbol_type() {
+            SymbolType::Constant(_) => self
+                .symbols
                 .iter()
-                .position(|s| s.discriminant() == symbol.discriminant())
-        } else {
-            self.symbols.iter().position(|s| symbol.matches(s))
+                .position(|s| s.discriminant() == symbol.discriminant()),
+            SymbolType::Variable(name) => self.symbols.iter().position(|s| {
+                if let SymbolType::Variable(other_name) = s.symbol_type() {
+                    name == other_name && symbol.discriminant() == s.discriminant()
+                } else {
+                    false
+                }
+            }),
+            SymbolType::Operator | SymbolType::MetaSymbol => {
+                self.symbols.iter().position(|s| symbol.matches(s))
+            }
         }
     }
 
@@ -62,14 +74,16 @@ impl<L: AsFeatures> Featurizer<L> {
         self.leaves() + 1
     }
 
-    pub fn features(&self, symbol: &L) -> Feature {
+    pub fn features(&self, symbol: &L) -> Result<Feature, FeatureError> {
         if !symbol.children().is_empty() {
-            return Feature::NonLeaf(self.symbol_position(symbol).unwrap());
+            return Ok(Feature::NonLeaf(
+                self.symbol_position(symbol)
+                    .ok_or(FeatureError::UnknownSymbol(symbol.to_string()))?,
+            ));
         }
-
         let symbol_idx = self
             .symbol_position(symbol)
-            .expect("Do not call on symbols with children")
+            .ok_or(FeatureError::UnknownSymbol(symbol.to_string()))?
             - self.non_leaves();
 
         let mut features = vec![0.0; self.feature_vec_len()];
@@ -84,7 +98,7 @@ impl<L: AsFeatures> Featurizer<L> {
                 features[last_position] = value;
             }
         }
-        Feature::Leaf(features)
+        Ok(Feature::Leaf(features))
     }
 
     pub fn symbols(&self) -> &[L] {
@@ -92,10 +106,20 @@ impl<L: AsFeatures> Featurizer<L> {
     }
 }
 
-pub trait AsFeatures: Language {
+pub trait AsFeatures: Language + Display {
     fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self>;
 
     fn symbol_type(&self) -> SymbolType;
 
     fn into_symbol(name: String) -> Self;
+}
+
+#[derive(Error, Debug, PartialEq, Eq)]
+pub enum FeatureError {
+    #[error("Symbol not in language: {0}")]
+    UnknownSymbol(String),
+    #[error("Non Leaf Node has no feature! {0}")]
+    NonLeaf(String),
+    #[error("Leaf has no network id: {0}")]
+    Leaf(String),
 }
