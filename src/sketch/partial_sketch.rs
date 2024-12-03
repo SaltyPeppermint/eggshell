@@ -75,6 +75,10 @@ impl<L: Language + AsFeatures> AsFeatures for PartialSketchNode<L> {
             _ => SymbolType::MetaSymbol,
         }
     }
+
+    fn into_symbol(name: String) -> Self {
+        PartialSketchNode::Finished(SketchNode::Node(L::into_symbol(name)))
+    }
 }
 
 impl<L: Language + Display> Display for PartialSketchNode<L> {

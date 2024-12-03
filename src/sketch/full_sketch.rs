@@ -90,6 +90,10 @@ impl<L: Language + AsFeatures> AsFeatures for SketchNode<L> {
             _ => SymbolType::MetaSymbol,
         }
     }
+
+    fn into_symbol(name: String) -> Self {
+        SketchNode::Node(L::into_symbol(name))
+    }
 }
 
 impl<L: Language + Display> Display for SketchNode<L> {

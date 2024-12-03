@@ -66,7 +66,8 @@ impl AsFeatures for HalideLang {
                 HalideLang::And([0.into(), 0.into()]),
                 HalideLang::Bool(true),
                 HalideLang::Number(0),
-                HalideLang::Symbol(Symbol::new("SYMBOL")),
+                // We do not include symbols!
+                // HalideLang::Symbol(Symbol::new("")),
             ],
             variable_names,
         )
@@ -80,6 +81,10 @@ impl AsFeatures for HalideLang {
             HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
             _ => SymbolType::Operator,
         }
+    }
+
+    fn into_symbol(name: String) -> Self {
+        HalideLang::Symbol(name.into())
     }
 }
 

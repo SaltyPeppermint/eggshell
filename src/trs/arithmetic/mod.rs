@@ -58,7 +58,8 @@ impl AsFeatures for Math {
                 Math::Sin(0.into()),
                 Math::Cos(0.into()),
                 Math::Constant(Constant::new(0.0).unwrap()),
-                Math::Symbol(Symbol::new("SYMBOL")),
+                // We do not include symbols!
+                // Math::Symbol(Symbol::new("")),
             ],
             variable_names,
         )
@@ -66,10 +67,14 @@ impl AsFeatures for Math {
 
     fn symbol_type(&self) -> SymbolType {
         match self {
-            Math::Constant(value) => SymbolType::Constant(*value.as_ref()),
+            Math::Constant(value) => SymbolType::Constant((*value).into()),
             Math::Symbol(name) => SymbolType::Variable(name.as_str()),
             _ => SymbolType::Operator,
         }
+    }
+
+    fn into_symbol(name: String) -> Self {
+        Math::Symbol(name.into())
     }
 }
 
