@@ -2,28 +2,25 @@ use std::fmt::{Display, Formatter};
 
 use egg::RecExpr;
 
-use crate::features::{AsFeatures, Feature, Featurizer};
+use crate::features::{AsFeatures, Feature, Featurizer, SymbolType};
 use crate::utils::Tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct RawAst {
-    name: String,
-    children: Box<[RawAst]>,
+pub(crate) struct RawAst<L: AsFeatures + Display> {
+    node: L,
+    children: Box<[RawAst<L>]>,
     features: Feature,
 }
 
-impl RawAst {
-    pub fn new<L: AsFeatures + Display>(
-        expr: &RecExpr<L>,
-        variable_names: Vec<String>,
-    ) -> (Self, usize) {
+impl<L: AsFeatures + Display> RawAst<L> {
+    pub fn new(expr: &RecExpr<L>, variable_names: Vec<String>) -> (Self, Featurizer<L>) {
         fn rec<L: AsFeatures + Display>(
             node: &L,
             expr: &RecExpr<L>,
             featurizer: &Featurizer<L>,
-        ) -> RawAst {
+        ) -> RawAst<L> {
             RawAst {
-                name: node.to_string(),
+                node: node.clone(),
                 children: node
                     .children()
                     .iter()
@@ -32,15 +29,34 @@ impl RawAst {
                 features: featurizer.features(node),
             }
         }
-        let symbol_list = L::symbol_list(variable_names);
-        let feature_vec_len = symbol_list.feature_vec_len();
+        let featurizer = L::symbol_list(variable_names);
         let root = expr.as_ref().last().unwrap();
-        let raw_ast = rec(root, expr, &symbol_list);
-        (raw_ast, feature_vec_len)
+        let raw_ast = rec(root, expr, &featurizer);
+        (raw_ast, featurizer)
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
+    pub fn node(&self) -> &L {
+        &self.node
+    }
+
+    fn count_symbol(&self, symbol: &L) -> usize {
+        usize::from(if let SymbolType::Constant(_) = self.node.symbol_type() {
+            self.node.discriminant() == symbol.discriminant()
+        } else {
+            symbol.matches(&self.node)
+        }) + self
+            .children
+            .iter()
+            .map(|c| c.count_symbol(symbol))
+            .sum::<usize>()
+    }
+
+    pub fn count_symbols(&self, variable_names: Vec<String>) -> Vec<usize> {
+        L::symbol_list(variable_names)
+            .symbols()
+            .iter()
+            .map(|symbol| self.count_symbol(symbol))
+            .collect()
     }
 
     pub fn is_leaf(&self) -> bool {
@@ -55,8 +71,11 @@ impl RawAst {
         &self.features
     }
 
-    pub fn flatten(&self) -> Vec<&RawAst> {
-        fn rec<'a>(raw_ast: &'a RawAst, flat: &mut Vec<&'a RawAst>) {
+    pub fn flatten(&self) -> Vec<&RawAst<L>> {
+        fn rec<'a, IL: AsFeatures + Display>(
+            raw_ast: &'a RawAst<IL>,
+            flat: &mut Vec<&'a RawAst<IL>>,
+        ) {
             flat.push(raw_ast);
             for c in raw_ast.children() {
                 rec(c, flat);
@@ -69,16 +88,16 @@ impl RawAst {
     }
 }
 
-impl Tree for RawAst {
+impl<L: AsFeatures + Display> Tree for RawAst<L> {
     fn children(&self) -> &[Self] {
         &self.children
     }
 }
 
-impl Display for RawAst {
+impl<L: AsFeatures + Display> Display for RawAst<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if self.children.is_empty() {
-            write!(f, "{}", self.name)
+            write!(f, "{}", self.node)
         } else {
             let inner = self
                 .children
@@ -86,7 +105,7 @@ impl Display for RawAst {
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
                 .join(" ");
-            write!(f, "({} {inner})", self.name)
+            write!(f, "({} {inner})", self.node)
         }
     }
 }
@@ -130,7 +149,11 @@ mod tests {
 
         assert_eq!(
             &RawAst {
-                name: "1".to_owned(),
+                node: "1"
+                    .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
+                    .unwrap()
+                    .as_ref()[0]
+                    .clone(),
                 children: Box::new([]),
                 features: Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0])
             },

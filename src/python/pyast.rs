@@ -19,10 +19,7 @@ macro_rules! monomorphize {
         #[pyo3::pyclass]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyAst {
-            raw_ast: $crate::python::raw_ast::RawAst,
-            feature_vec_len: usize,
-        }
+        pub struct PyAst($crate::python::raw_ast::RawAst<Lang>);
 
         #[pyo3::pymethods]
         impl PyAst {
@@ -32,16 +29,13 @@ macro_rules! monomorphize {
                 let raw_sketch = s_expr_str
                     .parse::<egg::RecExpr<Lang>>()
                     .map_err(|e| $crate::python::EggError::RecExprParse(e))?;
-                let (raw_ast, feature_vec_len) =
+                let (raw_ast, _) =
                     $crate::python::raw_ast::RawAst::new(&raw_sketch, variable_names);
-                Ok(Self {
-                    raw_ast,
-                    feature_vec_len,
-                })
+                Ok(Self(raw_ast))
             }
 
             fn __str__(&self) -> String {
-                self.raw_ast.to_string()
+                self.0.to_string()
             }
 
             pub fn __repr__(&self) -> String {
@@ -50,53 +44,44 @@ macro_rules! monomorphize {
 
             #[getter(name)]
             pub fn name(&self) -> String {
-                self.raw_ast.name().to_owned()
+                self.0.node().to_string()
             }
 
             #[getter(is_leaf)]
             pub fn is_leaf(&self) -> bool {
-                self.raw_ast.is_leaf()
+                self.0.is_leaf()
             }
 
             #[getter(arity)]
             pub fn arity(&self) -> usize {
-                self.raw_ast.arity()
-            }
-
-            pub fn children(&self) -> Vec<Self> {
-                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::children(&self.raw_ast)
-                    .iter()
-                    .map(|c| Self {
-                        raw_ast: c.to_owned(),
-                        feature_vec_len: self.feature_vec_len,
-                    })
-                    .collect()
+                self.0.arity()
             }
 
             pub fn size(&self) -> usize {
-                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::size(&self.raw_ast)
+                <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::size(&self.0)
             }
 
             pub fn depth(&self) -> usize {
-                <$crate::python::raw_ast::RawAst as $crate::utils::Tree>::depth(&self.raw_ast)
+                <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(&self.0)
             }
 
-            pub fn feature_vec<'py>(
-                &self,
-                py: pyo3::Python<'py>,
-            ) -> pyo3::PyResult<pyo3::Bound<'py, numpy::PyArray1<f64>>> {
-                match self.raw_ast.features() {
-                    $crate::features::Feature::Leaf(f) => Ok(numpy::PyArray::from_slice(py, f)),
+            pub fn count_symbols(&self, variable_names: Vec<String>) -> Vec<usize> {
+                self.0.count_symbols(variable_names)
+            }
+
+            pub fn feature_vec_ml(&self) -> pyo3::PyResult<Vec<f64>> {
+                match self.0.features() {
+                    $crate::features::Feature::Leaf(f) => Ok(f.to_owned()),
                     $crate::features::Feature::NonLeaf(_) => {
                         Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                            "Tried calling feature_vec on a non-leaf node",
+                            "Tried calling feature_vec_ml on a non-leaf node",
                         ))
                     }
                 }
             }
 
             pub fn node_id(&self) -> pyo3::PyResult<usize> {
-                match self.raw_ast.features() {
+                match self.0.features() {
                     $crate::features::Feature::NonLeaf(id) => Ok(*id),
                     $crate::features::Feature::Leaf(_) => {
                         Err(pyo3::PyErr::new::<pyo3::exceptions::PyTypeError, _>(
@@ -107,13 +92,10 @@ macro_rules! monomorphize {
             }
 
             pub fn invert_flatten(&self) -> Vec<Self> {
-                self.raw_ast
+                self.0
                     .flatten()
                     .into_iter()
-                    .map(|c| Self {
-                        raw_ast: c.to_owned(),
-                        feature_vec_len: self.feature_vec_len,
-                    })
+                    .map(|c| Self(c.to_owned()))
                     .rev()
                     .collect()
             }

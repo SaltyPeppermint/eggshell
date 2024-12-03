@@ -14,6 +14,7 @@ pub enum SymbolType<'a> {
     MetaSymbol,
 }
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Featurizer<L: AsFeatures> {
     symbols: Vec<L>,
     leaves: usize,
@@ -39,12 +40,12 @@ impl<L: AsFeatures> Featurizer<L> {
     }
 
     fn symbol_position(&self, symbol: &L) -> Option<usize> {
-        match symbol.symbol_type() {
-            SymbolType::Constant(_) => self
-                .symbols
+        if let SymbolType::Constant(_) = symbol.symbol_type() {
+            self.symbols
                 .iter()
-                .position(|s| s.discriminant() == symbol.discriminant()),
-            _ => self.symbols.iter().position(|s| symbol.matches(s)),
+                .position(|s| s.discriminant() == symbol.discriminant())
+        } else {
+            self.symbols.iter().position(|s| symbol.matches(s))
         }
     }
 
@@ -84,6 +85,10 @@ impl<L: AsFeatures> Featurizer<L> {
             }
         }
         Feature::Leaf(features)
+    }
+
+    pub fn symbols(&self) -> &[L] {
+        &self.symbols
     }
 }
 
