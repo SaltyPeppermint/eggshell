@@ -6,7 +6,7 @@ pub enum Feature {
     Leaf(Vec<f64>),
 }
 
-#[derive(PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SymbolType<'a> {
     Operator,
     Constant(f64),
@@ -16,21 +16,17 @@ pub enum SymbolType<'a> {
 
 pub struct Featurizer<L: AsFeatures> {
     symbols: Vec<L>,
-    variable_names: Vec<String>,
     leaves: usize,
 }
 
 impl<L: AsFeatures> Featurizer<L> {
     pub fn new(mut symbols: Vec<L>, variable_names: Vec<String>) -> Self {
         // We want the symbols with many children at the start
+        symbols.extend(variable_names.into_iter().map(|name| L::into_symbol(name)));
+
         symbols.sort_by_key(|b| std::cmp::Reverse(b.children().len()));
-        let leaves =
-            symbols.iter().filter(|s| s.children().is_empty()).count() + variable_names.len();
-        Featurizer {
-            symbols,
-            variable_names,
-            leaves,
-        }
+        let leaves = symbols.iter().filter(|s| s.children().is_empty()).count();
+        Featurizer { symbols, leaves }
     }
 
     pub fn into_meta_lang<M: AsFeatures, F: Fn(L) -> M>(self, meta_wrapper: F) -> Featurizer<M> {
@@ -39,19 +35,30 @@ impl<L: AsFeatures> Featurizer<L> {
             .into_iter()
             .map(meta_wrapper)
             .collect::<Vec<M>>();
-        Featurizer::new(i, self.variable_names)
+        Featurizer::new(i, vec![])
     }
 
     fn symbol_position(&self, symbol: &L) -> Option<usize> {
-        self.symbols.iter().position(|s| symbol.matches(s))
-    }
-
-    fn variable_names(&self) -> &[String] {
-        &self.variable_names
+        match symbol.symbol_type() {
+            SymbolType::Constant(_) => self
+                .symbols
+                .iter()
+                .position(|s| s.discriminant() == symbol.discriminant()),
+            _ => self.symbols.iter().position(|s| symbol.matches(s)),
+        }
     }
 
     fn leaves(&self) -> usize {
         self.leaves
+    }
+
+    fn non_leaves(&self) -> usize {
+        self.symbols.len() - self.leaves
+    }
+
+    pub fn feature_vec_len(&self) -> usize {
+        // All the leaves plus one for the constant type value
+        self.leaves() + 1
     }
 
     pub fn features(&self, symbol: &L) -> Feature {
@@ -61,13 +68,13 @@ impl<L: AsFeatures> Featurizer<L> {
 
         let symbol_idx = self
             .symbol_position(symbol)
-            .expect("DO NOT CALL ON SYMBOLS WITH CHILDREN")
-            - self.leaves();
+            .expect("Do not call on symbols with children")
+            - self.non_leaves();
 
-        let mut features = self.empty_features();
+        let mut features = vec![0.0; self.feature_vec_len()];
 
         match symbol.symbol_type() {
-            SymbolType::Operator | SymbolType::MetaSymbol => {
+            SymbolType::Operator | SymbolType::MetaSymbol | SymbolType::Variable(_) => {
                 features[symbol_idx] = 1.0;
             }
             SymbolType::Constant(value) => {
@@ -75,22 +82,8 @@ impl<L: AsFeatures> Featurizer<L> {
                 let last_position = features.len() - 1;
                 features[last_position] = value;
             }
-            SymbolType::Variable(name) => {
-                features[symbol_idx] = 1.0;
-
-                let var_idx = self
-                    .variable_names()
-                    .iter()
-                    .position(|s| s.as_str() == name)
-                    .unwrap();
-                features[self.leaves() + var_idx] = 1.0;
-            }
         }
         Feature::Leaf(features)
-    }
-
-    fn empty_features(&self) -> Vec<f64> {
-        vec![0.0; self.leaves() + self.variable_names().len() + 1]
     }
 }
 
@@ -98,4 +91,6 @@ pub trait AsFeatures: Language {
     fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self>;
 
     fn symbol_type(&self) -> SymbolType;
+
+    fn into_symbol(name: String) -> Self;
 }

@@ -44,7 +44,8 @@ impl AsFeatures for RiseLang {
                 RiseLang::Let([0.into(), 0.into(), 0.into()]),
                 RiseLang::Then([0.into(), 0.into()]),
                 RiseLang::Number(0),
-                RiseLang::Symbol(Symbol::new("SYMBOL")),
+                // We do not include symbols!
+                // RiseLang::Symbol(Symbol::new("")),
             ],
             variable_names,
         )
@@ -56,6 +57,10 @@ impl AsFeatures for RiseLang {
             RiseLang::Number(value) => SymbolType::Constant((*value).into()),
             _ => SymbolType::Operator,
         }
+    }
+
+    fn into_symbol(name: String) -> Self {
+        RiseLang::Symbol(name.into())
     }
 }
 

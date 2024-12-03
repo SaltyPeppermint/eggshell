@@ -31,7 +31,8 @@ impl AsFeatures for SimpleLang {
                 SimpleLang::Num(0),
                 SimpleLang::Add([0.into(), 0.into()]),
                 SimpleLang::Mul([0.into(), 0.into()]),
-                SimpleLang::Symbol(Symbol::new("SYMBOL")),
+                // We do not include symbols!
+                // SimpleLang::Symbol(Symbol::new("")),
             ],
             variable_names,
         )
@@ -40,8 +41,13 @@ impl AsFeatures for SimpleLang {
     fn symbol_type(&self) -> SymbolType {
         match self {
             SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
+            SimpleLang::Num(value) => SymbolType::Constant((*value).into()),
             _ => SymbolType::Operator,
         }
+    }
+
+    fn into_symbol(name: String) -> Self {
+        SimpleLang::Symbol(name.into())
     }
 }
 
