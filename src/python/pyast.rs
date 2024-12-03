@@ -71,6 +71,14 @@ macro_rules! monomorphize {
                 self.0.count_symbols(variable_names)
             }
 
+            #[expect(clippy::cast_precision_loss)]
+            pub fn feature_vec_simple(&self, variable_names: Vec<String>) -> Vec<f64> {
+                let mut f = self.0.count_symbols(variable_names);
+                f.push(self.size());
+                f.push(self.depth());
+                f.into_iter().map(|v| v as f64).collect()
+            }
+
             pub fn feature_vec_ml(&self) -> pyo3::PyResult<Vec<f64>> {
                 match self.0.features() {
                     $crate::features::Feature::Leaf(f) => Ok(f.to_owned()),
