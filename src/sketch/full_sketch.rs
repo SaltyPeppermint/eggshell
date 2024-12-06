@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::Discriminant;
 
 use egg::{Id, Language, RecExpr};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::SketchParseError;
 use crate::features::{AsFeatures, Featurizer, SymbolType};
@@ -11,7 +11,7 @@ use crate::typing::{Type, Typeable, TypingInfo};
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchNode<L>>;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SketchNode<L: Language> {
     /// Any program of the underlying [`Language`].
     ///
@@ -80,8 +80,8 @@ impl<L: Typeable> Typeable for SketchNode<L> {
 }
 
 impl<L: Language + AsFeatures> AsFeatures for SketchNode<L> {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
-        L::symbol_list(variable_names).into_meta_lang(|l| SketchNode::Node(l))
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
+        L::featurizer(variable_names).into_meta_lang(|l| SketchNode::Node(l))
     }
 
     fn symbol_type(&self) -> SymbolType {

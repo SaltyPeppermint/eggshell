@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::Discriminant;
 
 use egg::{Id, Language, RecExpr};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{SketchNode, SketchParseError};
 use crate::features::{AsFeatures, SymbolType};
@@ -14,7 +14,7 @@ use crate::typing::{Type, Typeable, TypingInfo};
 /// Simple alias
 pub type PartialSketch<L> = RecExpr<PartialSketchNode<L>>;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PartialSketchNode<L: Language> {
     /// Inactive open placeholder that needs to be filled
     Open,
@@ -64,8 +64,8 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
 }
 
 impl<L: Language + AsFeatures> AsFeatures for PartialSketchNode<L> {
-    fn symbol_list(variable_names: Vec<String>) -> crate::features::Featurizer<Self> {
-        SketchNode::<L>::symbol_list(variable_names)
+    fn featurizer(variable_names: Vec<String>) -> crate::features::Featurizer<Self> {
+        SketchNode::<L>::featurizer(variable_names)
             .into_meta_lang(|l| PartialSketchNode::Finished(l))
     }
 

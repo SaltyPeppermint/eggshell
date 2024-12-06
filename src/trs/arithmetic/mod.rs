@@ -5,7 +5,7 @@ use std::fmt::Display;
 
 use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::TermRewriteSystem;
 use crate::{
@@ -21,7 +21,7 @@ pub type Constant = NotNan<f64>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     pub enum Math {
         "d" = Diff([Id; 2]),
         "i" = Integral([Id; 2]),
@@ -43,7 +43,7 @@ define_language! {
 }
 
 impl AsFeatures for Math {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
         Featurizer::new(
             vec![
                 Math::Diff([0.into(), 0.into()]),

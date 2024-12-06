@@ -68,11 +68,12 @@ use trs::TrsError;
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Pylang works for all langs that implement Display
     // m.add_class::<python:>()?;
-
     python::simple::add_mod(m, "simple")?;
     python::arithmetic::add_mod(m, "arithmetic")?;
     python::halide::add_mod(m, "halide")?;
     python::rise::add_mod(m, "rise")?;
+
+    m.add("EggshellException", m.py().get_type::<EggshellException>())?;
 
     Ok(())
 }

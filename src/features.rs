@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 use egg::Language;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,7 +18,7 @@ pub enum SymbolType<'a> {
     MetaSymbol,
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Featurizer<L: AsFeatures> {
     symbols: Vec<L>,
     leaves: usize,
@@ -104,10 +105,17 @@ impl<L: AsFeatures> Featurizer<L> {
     pub fn symbols(&self) -> &[L] {
         &self.symbols
     }
+
+    pub fn symbol_names(&self) -> Vec<String> {
+        self.symbols()
+            .iter()
+            .map(|symbol| symbol.to_string())
+            .collect()
+    }
 }
 
 pub trait AsFeatures: Language + Display {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self>;
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self>;
 
     fn symbol_type(&self) -> SymbolType;
 

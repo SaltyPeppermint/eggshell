@@ -3,7 +3,7 @@ mod substitute;
 
 use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::features::{AsFeatures, Featurizer, SymbolType};
 
@@ -18,7 +18,7 @@ type EGraph = egg::EGraph<RiseLang, RiseAnalysis>;
 type Rewrite = egg::Rewrite<RiseLang, RiseAnalysis>;
 
 define_language! {
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     pub enum RiseLang {
         "var" = Var(Id),
         "app" = App([Id; 2]),
@@ -35,7 +35,7 @@ define_language! {
 }
 
 impl AsFeatures for RiseLang {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
         Featurizer::new(
             vec![
                 RiseLang::Var(0.into()),

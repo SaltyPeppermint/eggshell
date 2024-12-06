@@ -13,10 +13,7 @@ pub(crate) struct RawAst<L: AsFeatures> {
 }
 
 impl<L: AsFeatures> RawAst<L> {
-    pub fn new(
-        expr: &RecExpr<L>,
-        variable_names: Vec<String>,
-    ) -> Result<(Self, Featurizer<L>), FeatureError> {
+    pub fn new(expr: &RecExpr<L>, featurizer: &Featurizer<L>) -> Result<Self, FeatureError> {
         fn rec<L: AsFeatures>(
             node: &L,
             expr: &RecExpr<L>,
@@ -32,10 +29,9 @@ impl<L: AsFeatures> RawAst<L> {
                 features: featurizer.features(node)?,
             })
         }
-        let featurizer = L::symbol_list(variable_names);
         let root = expr.as_ref().last().unwrap();
-        let raw_ast = rec(root, expr, &featurizer)?;
-        Ok((raw_ast, featurizer))
+        let raw_ast = rec(root, expr, featurizer)?;
+        Ok(raw_ast)
     }
 
     pub fn node(&self) -> &L {
@@ -61,7 +57,7 @@ impl<L: AsFeatures> RawAst<L> {
     }
 
     pub fn count_symbols(&self, variable_names: Vec<String>) -> Vec<usize> {
-        L::symbol_list(variable_names)
+        L::featurizer(variable_names)
             .symbols()
             .iter()
             .map(|symbol| self.count_symbol(symbol))
@@ -130,7 +126,9 @@ mod tests {
         let expr = "(* (+ a b) 1)"
             .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
             .unwrap();
-        let raw_ast = RawAst::new(&expr, vec!["a".into(), "b".into()]).unwrap().0;
+        let featurizer =
+            <Simple as TermRewriteSystem>::Language::featurizer(vec!["a".into(), "b".into()]);
+        let raw_ast = RawAst::new(&expr, &featurizer).unwrap();
 
         assert_eq!(&Feature::NonLeaf(1), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());
@@ -153,7 +151,9 @@ mod tests {
         let expr = "(* (+ a b) 1)"
             .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
             .unwrap();
-        let (raw_ast, _) = RawAst::new(&expr, vec!["a".into(), "b".into()]).unwrap();
+        let featurizer =
+            <Simple as TermRewriteSystem>::Language::featurizer(vec!["a".into(), "b".into()]);
+        let raw_ast = RawAst::new(&expr, &featurizer).unwrap();
         let inverted_flattened = raw_ast.flatten();
 
         assert_eq!(
@@ -175,9 +175,12 @@ mod tests {
         let expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<<Halide as TermRewriteSystem>::Language>>()
             .unwrap();
-        let raw_ast = RawAst::new(&expr, vec!["v0".into(), "v1".into(), "v2".into()])
-            .unwrap()
-            .0;
+        let featurizer = <Halide as TermRewriteSystem>::Language::featurizer(vec![
+            "v0".into(),
+            "v1".into(),
+            "v2".into(),
+        ]);
+        let raw_ast = RawAst::new(&expr, &featurizer).unwrap();
 
         assert_eq!(&Feature::NonLeaf(10), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());

@@ -28,15 +28,16 @@ fn is_const(v: Var) -> impl Fn(&mut EGraph, Id, &Subst) -> bool {
 
 pub fn rules(use_explicit_subs: bool) -> HashMap<Symbol, Rewrite> {
     let common = vec![
-        // algorithmic
-        rewrite!("map-fusion";
-            "(app (app map ?f) (app (app map ?g) ?arg))" =>
-            { with_fresh_var("?mfu", "(app (app map (lam ?mfu (app ?f (app ?g (var ?mfu))))) ?arg)") }),
-        rewrite!("map-fission";
-            "(app map (lam ?x (app ?f ?gx)))" =>
-            { with_fresh_var("?mfi", "(lam ?mfi (app (app map ?f) (app (app map (lam ?x ?gx)) (var ?mfi))))") }
-            // TODO: if conditions should be recursive filters?
-            if neg(contains_ident(var("?f"), var("?x")))),
+        // Commented out for now because we cant deal with unexpected new symbols
+        // // algorithmic
+        // rewrite!("map-fusion";
+        //     "(app (app map ?f) (app (app map ?g) ?arg))" =>
+        //     { with_fresh_var("?mfu", "(app (app map (lam ?mfu (app ?f (app ?g (var ?mfu))))) ?arg)") }),
+        // rewrite!("map-fission";
+        //     "(app map (lam ?x (app ?f ?gx)))" =>
+        //     { with_fresh_var("?mfi", "(lam ?mfi (app (app map ?f) (app (app map (lam ?x ?gx)) (var ?mfi))))") }
+        //     // TODO: if conditions should be recursive filters?
+        //     if neg(contains_ident(var("?f"), var("?x")))),
         rewrite!("map-fusion-then";
             "(>> (app map ?f) (app map ?g))" => "(app map (>> ?f ?g))"),
         rewrite!("map-fission-then";

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use egg::{define_language, rewrite, Id, Symbol};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::TermRewriteSystem;
 use crate::{
@@ -15,7 +15,7 @@ pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     pub enum SimpleLang {
         Num(i32),
         "+" = Add([Id; 2]),
@@ -25,7 +25,7 @@ define_language! {
 }
 
 impl AsFeatures for SimpleLang {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
         Featurizer::new(
             vec![
                 SimpleLang::Num(0),

@@ -31,6 +31,7 @@ num = { version = "0.4", features = ["serde", "rand"] }
 numpy = "0.23"
 ordered-float = { version = "4", features = ["serde"] }
 petgraph = "0.6"
+postcard = { version = "1.1.1", features = ["alloc"] }
 pyo3 = { version = "0.23", features = ["hashbrown"] }
 rand = "0.8"
 rayon = "1"

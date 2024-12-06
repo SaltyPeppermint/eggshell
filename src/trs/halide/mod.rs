@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::{TermRewriteSystem, TrsError};
 use crate::{
@@ -20,7 +20,7 @@ type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 
 // Definition of the language used.
 define_language! {
-    #[derive(Serialize)]
+    #[derive(Serialize, Deserialize)]
     pub enum HalideLang {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
@@ -45,7 +45,7 @@ define_language! {
 }
 
 impl AsFeatures for HalideLang {
-    fn symbol_list(variable_names: Vec<String>) -> Featurizer<Self> {
+    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
         Featurizer::new(
             vec![
                 HalideLang::Add([0.into(), 0.into()]),
