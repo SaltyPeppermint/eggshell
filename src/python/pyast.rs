@@ -16,9 +16,9 @@ macro_rules! monomorphize {
             pub fn new(s_expr_str: &str, featurizer: &PyFeaturizer) -> pyo3::PyResult<Self> {
                 let raw_sketch = s_expr_str
                     .parse::<egg::RecExpr<Lang>>()
-                    .map_err(|e| $crate::EggshellError::from(e))?;
+                    .map_err(|e| $crate::error::EggshellError::from(e))?;
                 let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)
-                    .map_err(|e| $crate::EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
                 Ok(Self(raw_ast))
             }
 
@@ -69,7 +69,7 @@ macro_rules! monomorphize {
                 match self.0.features() {
                     $crate::features::Feature::Leaf(f) => Ok(f.to_owned()),
                     $crate::features::Feature::NonLeaf(_) => {
-                        Err($crate::EggshellError::<Lang>::from(
+                        Err($crate::error::EggshellError::<Lang>::from(
                             $crate::features::FeatureError::NonLeaf(self.name()),
                         ))?
                     }
@@ -80,7 +80,7 @@ macro_rules! monomorphize {
                 match self.0.features() {
                     $crate::features::Feature::NonLeaf(id) => Ok(*id),
                     $crate::features::Feature::Leaf(_) => {
-                        Err($crate::EggshellError::<Lang>::from(
+                        Err($crate::error::EggshellError::<Lang>::from(
                             $crate::features::FeatureError::Leaf(self.name()),
                         ))?
                     }
@@ -134,7 +134,7 @@ macro_rules! monomorphize {
                 .map(|s| {
                     let raw_sketch = s
                         .parse::<egg::RecExpr<Lang>>()
-                        .map_err(|e| $crate::EggshellError::from(e))?;
+                        .map_err(|e| $crate::error::EggshellError::from(e))?;
                     let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)?;
                     let mut features = raw_ast.count_symbols(&featurizer.0);
                     features.push(
@@ -149,7 +149,7 @@ macro_rules! monomorphize {
                     );
                     Ok(features.into_iter().map(|v| v as f64).collect())
                 })
-                .collect::<Result<Vec<_>, $crate::EggshellError<_>>>()?;
+                .collect::<Result<Vec<_>, $crate::error::EggshellError<_>>>()?;
 
             Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
         }

@@ -38,6 +38,7 @@
 )]
 
 mod analysis;
+mod error;
 mod features;
 mod python;
 mod utils;
@@ -50,12 +51,7 @@ pub mod sketch;
 pub mod trs;
 pub mod typing;
 
-use std::fmt::Display;
-
-use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::{create_exception, PyErr};
-use thiserror::Error;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -67,40 +63,10 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     python::halide::add_mod(m, "halide")?;
     python::rise::add_mod(m, "rise")?;
 
-    m.add("EggshellException", m.py().get_type::<EggshellException>())?;
+    m.add(
+        "EggshellException",
+        m.py().get_type::<error::EggshellException>(),
+    )?;
 
     Ok(())
-}
-
-#[derive(Debug, Error)]
-pub enum EggshellError<L: Display> {
-    // #[error(transparent)]
-    // Io(#[from] std::io::Error),
-    // #[error(transparent)]
-    // Csv(#[from] csv::Error),
-    #[error(transparent)]
-    Trs(#[from] trs::TrsError),
-    #[error(transparent)]
-    Sample(#[from] sampling::SampleError),
-    #[error(transparent)]
-    Feature(#[from] features::FeatureError),
-    #[error(transparent)]
-    RecExprParse(#[from] egg::RecExprParseError<L>),
-    #[error(transparent)]
-    FromOp(#[from] egg::FromOpError),
-    #[error("Unknown Error happend!")]
-    Unknown,
-}
-
-create_exception!(
-    eggshell,
-    EggshellException,
-    PyException,
-    "Eggshell internal error."
-);
-
-impl<L: Display> From<EggshellError<L>> for PyErr {
-    fn from(err: EggshellError<L>) -> PyErr {
-        EggshellException::new_err(err.to_string())
-    }
 }
