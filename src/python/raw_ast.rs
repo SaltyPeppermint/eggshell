@@ -56,8 +56,8 @@ impl<L: AsFeatures> RawAst<L> {
             .sum::<usize>()
     }
 
-    pub fn count_symbols(&self, variable_names: Vec<String>) -> Vec<usize> {
-        L::featurizer(variable_names)
+    pub fn count_symbols(&self, featurizer: &Featurizer<L>) -> Vec<usize> {
+        featurizer
             .symbols()
             .iter()
             .map(|symbol| self.count_symbol(symbol))

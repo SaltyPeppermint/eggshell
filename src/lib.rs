@@ -55,13 +55,7 @@ use std::fmt::Display;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use pyo3::{create_exception, PyErr};
-
-use features::FeatureError;
-use io::IoError;
-use python::EggError;
-use sampling::SampleError;
 use thiserror::Error;
-use trs::TrsError;
 
 /// A Python module implemented in Rust.
 #[pymodule]
@@ -80,16 +74,20 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[derive(Debug, Error)]
 pub enum EggshellError<L: Display> {
+    // #[error(transparent)]
+    // Io(#[from] std::io::Error),
+    // #[error(transparent)]
+    // Csv(#[from] csv::Error),
     #[error(transparent)]
-    Io(#[from] IoError),
+    Trs(#[from] trs::TrsError),
     #[error(transparent)]
-    Trs(#[from] TrsError),
+    Sample(#[from] sampling::SampleError),
     #[error(transparent)]
-    Sample(#[from] SampleError),
+    Feature(#[from] features::FeatureError),
     #[error(transparent)]
-    Feature(#[from] FeatureError),
+    RecExprParse(#[from] egg::RecExprParseError<L>),
     #[error(transparent)]
-    Egg(#[from] EggError<L>),
+    FromOp(#[from] egg::FromOpError),
     #[error("Unknown Error happend!")]
     Unknown,
 }

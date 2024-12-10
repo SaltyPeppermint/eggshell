@@ -14,9 +14,9 @@ macro_rules! monomorphize {
             /// Parse from string
             #[new]
             pub fn new(s_expr_str: &str, featurizer: &PyFeaturizer) -> pyo3::PyResult<Self> {
-                let raw_sketch = s_expr_str.parse::<egg::RecExpr<Lang>>().map_err(|e| {
-                    $crate::EggshellError::from($crate::python::EggError::RecExprParse(e))
-                })?;
+                let raw_sketch = s_expr_str
+                    .parse::<egg::RecExpr<Lang>>()
+                    .map_err(|e| $crate::EggshellError::from(e))?;
                 let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)
                     .map_err(|e| $crate::EggshellError::<Lang>::from(e))?;
                 Ok(Self(raw_ast))
@@ -53,13 +53,13 @@ macro_rules! monomorphize {
                 <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(&self.0)
             }
 
-            pub fn count_symbols(&self, variable_names: Vec<String>) -> Vec<usize> {
-                self.0.count_symbols(variable_names)
+            pub fn count_symbols(&self, featurizer: &PyFeaturizer) -> Vec<usize> {
+                self.0.count_symbols(&featurizer.0)
             }
 
             #[expect(clippy::cast_precision_loss)]
-            pub fn feature_vec_simple(&self, variable_names: Vec<String>) -> Vec<f64> {
-                let mut features = self.0.count_symbols(variable_names.clone());
+            pub fn feature_vec_simple(&self, featurizer: &PyFeaturizer) -> Vec<f64> {
+                let mut features = self.0.count_symbols(&featurizer.0);
                 features.push(self.size());
                 features.push(self.depth());
                 features.into_iter().map(|v| v as f64).collect()
@@ -118,30 +118,40 @@ macro_rules! monomorphize {
                 symbol_names.push(String::from("DEPTH"));
                 symbol_names
             }
+        }
 
-            pub fn __setstate__(&mut self, state: Vec<u8>) -> pyo3::PyResult<()> {
-                self.0 = postcard::from_bytes(&state).unwrap();
-                Ok(())
-            }
+        use rayon::prelude::*;
 
-            pub fn __getstate__(&self) -> pyo3::PyResult<Vec<u8>> {
-                Ok(postcard::to_allocvec(&self.0).unwrap())
-            }
+        #[expect(clippy::cast_precision_loss)]
+        #[pyo3::pyfunction]
+        pub fn many_featurize_simple<'py>(
+            py: pyo3::Python<'py>,
+            ss: Vec<String>,
+            featurizer: &PyFeaturizer,
+        ) -> pyo3::PyResult<pyo3::Bound<'py, numpy::PyArray2<f64>>> {
+            let rust_vec = ss
+                .par_iter()
+                .map(|s| {
+                    let raw_sketch = s
+                        .parse::<egg::RecExpr<Lang>>()
+                        .map_err(|e| $crate::EggshellError::from(e))?;
+                    let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)?;
+                    let mut features = raw_ast.count_symbols(&featurizer.0);
+                    features.push(
+                        <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::size(
+                            &raw_ast,
+                        ),
+                    );
+                    features.push(
+                        <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(
+                            &raw_ast,
+                        ),
+                    );
+                    Ok(features.into_iter().map(|v| v as f64).collect())
+                })
+                .collect::<Result<Vec<_>, $crate::EggshellError<_>>>()?;
 
-            pub fn __getnewargs__(&self) -> pyo3::PyResult<Vec<String>> {
-                Ok(self
-                    .0
-                    .symbols()
-                    .iter()
-                    .filter(|s| {
-                        matches!(
-                            <Lang as $crate::features::AsFeatures>::symbol_type(s),
-                            $crate::features::SymbolType::Variable(_)
-                        )
-                    })
-                    .map(|s| s.to_string())
-                    .collect())
-            }
+            Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
         }
 
         pub(crate) fn add_mod(
@@ -152,8 +162,9 @@ macro_rules! monomorphize {
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<PyAst>()?;
-            // module.add_function(pyo3::wrap_pyfunction!(str_to_simple_feature_vec, m)?)?;
             module.add_class::<PyFeaturizer>()?;
+
+            module.add_function(pyo3::wrap_pyfunction!(many_featurize_simple, m)?)?;
 
             m.add_submodule(&module)?;
             Ok(())
