@@ -9,7 +9,6 @@ use rand::distributions::uniform::SampleUniform;
 use rand::distributions::WeightedError;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
-use rayon::prelude::*;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
@@ -329,7 +328,7 @@ where
 
         let weights = eclass
             .nodes
-            .par_iter()
+            .iter() // previously par_iter
             .map(|node| {
                 debug!("Node being weighted: {node}");
                 // Get all the ways we could divide up the budget AND PARTS OF THE BUDGET

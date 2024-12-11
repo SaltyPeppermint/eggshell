@@ -27,18 +27,18 @@ use serde::Serialize;
 
 fn main() {
     env_logger::init();
+    let start_time = Local::now();
 
     let cli = Cli::parse();
 
     let sample_conf = (&cli).into();
     let eqsat_conf = (&cli).into();
-    let now = Local::now();
 
     let folder = format!(
         "data/generated_samples/{}/{}-{}-{}",
         cli.trs(),
         cli.file().file_stem().unwrap().to_str().unwrap(),
-        now.format("%Y-%m-%d"),
+        start_time.format("%Y-%m-%d"),
         cli.uuid()
     );
     fs::create_dir_all(&folder).unwrap();
@@ -57,7 +57,7 @@ fn main() {
                 sample_conf,
                 folder,
                 Halide::full_rules().as_slice(),
-                cli,
+                &cli,
             );
         }
         TrsName::Rise => {
@@ -67,10 +67,20 @@ fn main() {
                 sample_conf,
                 folder,
                 Rise::full_rules().as_slice(),
-                cli,
+                &cli,
             );
         }
     }
+
+    let runtime = Local::now() - start_time;
+    info!(
+        "Runtime: {}:{}:{}",
+        runtime.num_hours(),
+        runtime.num_minutes(),
+        runtime.num_seconds()
+    );
+
+    info!("EXPR {} DONE!", cli.expr_id());
 }
 
 fn run_eqsat<R: TermRewriteSystem>(
@@ -79,7 +89,7 @@ fn run_eqsat<R: TermRewriteSystem>(
     sample_conf: SampleConf,
     folder: String,
     rules: &[Rewrite<R::Language, R::Analysis>],
-    cli: Cli,
+    cli: &Cli,
 ) {
     let entry = exprs
         .into_iter()
@@ -133,7 +143,13 @@ fn run_eqsat<R: TermRewriteSystem>(
 
     let samples: Vec<_> = eqsat_results
         .iter()
-        .flat_map(|eqsat_result| sample(&cli, &start_expr, eqsat_result, &sample_conf))
+        .enumerate()
+        .flat_map(|(eqsat_round, eqsat_result)| {
+            info!("Running sampling of round {eqsat_round}...");
+            let s = sample(cli, &start_expr, eqsat_result, &sample_conf);
+            info!("Finished sampling of round {eqsat_round}!");
+            s
+        })
         .collect();
 
     info!("Finished sampling {}!", cli.expr_id());
@@ -144,7 +160,7 @@ fn run_eqsat<R: TermRewriteSystem>(
     );
 
     info!("Generating associated data for {}...", cli.expr_id());
-    let sample_data = mk_sample_data(&start_expr, samples, &mut eqsat_results, &cli, rules);
+    let sample_data = mk_sample_data(&start_expr, samples, &mut eqsat_results, cli, rules);
     info!("Finished generating sample data for {}!", cli.expr_id());
 
     info!("Finished work on expr {}!", cli.expr_id());
@@ -166,9 +182,8 @@ fn run_eqsat<R: TermRewriteSystem>(
     serde_json::to_writer(&mut f, &data).unwrap();
     f.flush().unwrap();
 
-    info!("All written to disk, done!");
+    info!("Results for expr {} written to disk!", cli.expr_id());
 
-    info!("EXPR {} IS DONE!", cli.expr_id())
     // });
 }
 

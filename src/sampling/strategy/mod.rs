@@ -101,13 +101,18 @@ where
                 let mut h = HashSet::new();
                 let mut inner_rng = rng.clone();
                 inner_rng.set_stream((range_id + 1) as u64);
+
                 for _ in batch_start..=batch_end {
                     let sample = self.sample_expr(&mut inner_rng, root_eclass)?;
                     h.insert(sample);
                 }
-                let c = counter.fetch_add(BATCH_SIZE, Ordering::SeqCst) + BATCH_SIZE;
-                info!("Finsihed sampling batch {range_id}");
-                info!("Sampled {c} expressions from eclass {}", root_eclass.id);
+                let len = batch_end - batch_start;
+                let c = counter.fetch_add(len, Ordering::SeqCst) + len;
+                info!("Finished sampling batch {range_id}");
+                info!(
+                    "Sampled {c} expressions from eclass {} in batch {range_id}",
+                    root_eclass.id
+                );
 
                 Ok(h)
             })
