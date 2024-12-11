@@ -1,21 +1,22 @@
-use std::fmt::Debug;
-use std::iter::IntoIterator;
+use std::collections::BTreeSet;
 
 use egg::{Id, Language, RecExpr};
-use hashbrown::HashSet;
-use rand::{seq::IteratorRandom, Rng};
+use rand::seq::IteratorRandom;
+use rand::Rng;
 use serde::Serialize;
 
 use super::SampleError;
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct ChoiceList<L: Language> {
+pub struct ChoiceList<L: Language + Send + Sync> {
     choices: Vec<Choice<L>>,
-    open_positions: HashSet<usize>,
+    // We need something other than hashbrown or std HashSet cause
+    // they DO NOT produce stable iterators between program runs
+    open_positions: BTreeSet<usize>,
     next_to_fill: Option<usize>,
 }
 
-impl<L: Language> ChoiceList<L> {
+impl<L: Language + Send + Sync> ChoiceList<L> {
     // Returns position of next open
     pub fn select_next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
         if let Some(next_position) = self.open_positions.iter().choose(rng) {
@@ -85,17 +86,17 @@ impl<L: Language> ChoiceList<L> {
     }
 }
 
-impl<L: Language> From<Id> for ChoiceList<L> {
+impl<L: Language + Send + Sync> From<Id> for ChoiceList<L> {
     fn from(id: Id) -> Self {
         ChoiceList {
             choices: vec![Choice::Open(id)],
-            open_positions: HashSet::from([0]),
+            open_positions: BTreeSet::from([0]),
             next_to_fill: Some(0),
         }
     }
 }
 
-impl<L: Language> IntoIterator for ChoiceList<L> {
+impl<L: Language + Send + Sync> IntoIterator for ChoiceList<L> {
     type Item = Choice<L>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -104,7 +105,7 @@ impl<L: Language> IntoIterator for ChoiceList<L> {
     }
 }
 
-impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
+impl<L: Language + Send + Sync> TryFrom<ChoiceList<L>> for RecExpr<L> {
     type Error = super::SampleError;
 
     fn try_from(choice_list: ChoiceList<L>) -> Result<Self, Self::Error> {
@@ -130,12 +131,12 @@ impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Choice<L: Language> {
+pub enum Choice<L: Language + Send + Sync> {
     Open(Id),
     Picked(L),
 }
 
-impl<L: Language> Choice<L> {
+impl<L: Language + Send + Sync> Choice<L> {
     pub fn eclass_id(&self) -> Option<Id> {
         match self {
             Choice::Open(eclass_id) => Some(*eclass_id),

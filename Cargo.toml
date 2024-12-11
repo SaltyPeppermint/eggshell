@@ -34,6 +34,7 @@ petgraph = "0.6"
 postcard = { version = "1.1.1", features = ["alloc"] }
 pyo3 = { version = "0.23", features = ["hashbrown"] }
 rand = "0.8"
+rand_chacha = "0.3.1"
 rayon = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
