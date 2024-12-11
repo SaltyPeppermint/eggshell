@@ -2,8 +2,8 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language};
 use hashbrown::HashMap;
-use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
+use rand_chacha::ChaCha12Rng;
 
 use crate::sampling::choices::ChoiceList;
 use crate::sampling::SampleError;
@@ -12,7 +12,7 @@ use super::Strategy;
 
 /// Not well tested, do not use!
 #[derive(Debug)]
-pub struct CostWeighted<'a, 'b, L, N, CF>
+pub struct CostWeighted<'a, L, N, CF>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
@@ -21,12 +21,10 @@ where
 {
     egraph: &'a EGraph<L, N>,
     extractor: Extractor<'a, CF, L, N>,
-    rng: &'b mut StdRng,
-    raw_weights_memo: HashMap<Id, HashMap<&'a L, usize>>,
     limit: usize,
 }
 
-impl<'a, 'b, L, N, CF> CostWeighted<'a, 'b, L, N, CF>
+impl<'a, L, N, CF> CostWeighted<'a, L, N, CF>
 where
     L: Language + Debug,
     N: Analysis<L> + Debug,
@@ -34,35 +32,37 @@ where
     CF::Cost: Into<usize> + Debug,
 {
     /// Creates a new [`CostWeighted<'a, 'b, L, N, CF>`].
-    pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF, rng: &'b mut StdRng, limit: usize) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF, limit: usize) -> Self {
         CostWeighted {
             egraph,
             extractor: Extractor::new(egraph, cost_fn),
-            rng,
             limit,
-            raw_weights_memo: HashMap::new(),
         }
     }
 }
 
-impl<'a, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, '_, L, N, CF>
+impl<'a, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, L, N, CF>
 where
-    L: Language + Display + Debug,
-    N: Analysis<L> + Debug,
-    CF: CostFunction<L> + Debug,
-    CF::Cost: Into<usize> + Debug,
+    L: Language + Display + Debug + Send + Sync,
+    L::Discriminant: Sync,
+    N: Analysis<L> + Debug + Sync,
+    N::Data: Sync,
+    CF: CostFunction<L> + Debug + Send + Sync,
+    CF::Cost: Into<usize> + Debug + Send + Sync,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+    fn pick<'c: 'a>(
+        &self,
+        rng: &mut ChaCha12Rng,
+        eclass: &'c EClass<L, N::Data>,
+        choices: &ChoiceList<L>,
+    ) -> &'c L {
         if choices.len() > self.limit {
             eclass
                 .nodes
-                .choose(&mut self.rng)
+                .choose(rng)
                 .expect("Each class contains at least one enode.")
         } else {
-            let raw_weights = self
-                .raw_weights_memo
-                .entry(eclass.id)
-                .or_insert_with(|| calc_weights(eclass, &self.extractor));
+            let raw_weights = calc_weights(eclass, &self.extractor);
 
             eclass
                 .nodes
@@ -78,10 +78,6 @@ where
 
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
-    }
-
-    fn rng_mut(&mut self) -> &mut StdRng {
-        self.rng
     }
 }
 
@@ -113,7 +109,6 @@ where
 mod tests {
     use egg::AstSize;
     use hashbrown::HashSet;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
@@ -133,13 +128,12 @@ mod tests {
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-        assert_eq!(4usize, n_samples);
+        assert_eq!(n_samples, 4);
     }
 
     #[test]
@@ -153,10 +147,9 @@ mod tests {
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
@@ -184,16 +177,12 @@ mod tests {
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
-
-        // 7 or 8, flaky cause rng
-        assert!(n_samples >= 7);
-        assert!(n_samples <= 8);
+        assert_eq!(n_samples, 8);
     }
 
     #[test]
@@ -209,15 +198,12 @@ mod tests {
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy =
-            CostWeighted::new(eqsat.egraph(), AstSize, &mut rng, sample_conf.loop_limit);
-        let samples = strategy.sample(&sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        // 36 or 40, flaky cause rng
-        assert!(n_samples >= 36);
-        assert!(n_samples <= 40);
+        assert_eq!(n_samples, 38);
     }
 }

@@ -133,16 +133,16 @@ mod tests {
         assert_eq!(&Feature::NonLeaf(1), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());
         assert_eq!(
-            &Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0]),
-            raw_ast.children()[1].features()
+            raw_ast.children()[1].features(),
+            &Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0])
         );
         assert_eq!(
-            &Feature::Leaf(vec![0.0, 1.0, 0.0, 0.0]),
-            raw_ast.children()[0].children()[0].features()
+            raw_ast.children()[0].children()[0].features(),
+            &Feature::Leaf(vec![0.0, 1.0, 0.0, 0.0])
         );
         assert_eq!(
-            &Feature::Leaf(vec![0.0, 0.0, 1.0, 0.0]),
-            raw_ast.children()[0].children()[1].features()
+            raw_ast.children()[0].children()[1].features(),
+            &Feature::Leaf(vec![0.0, 0.0, 1.0, 0.0])
         );
     }
 
@@ -157,6 +157,7 @@ mod tests {
         let inverted_flattened = raw_ast.flatten();
 
         assert_eq!(
+            inverted_flattened[0],
             &RawAst {
                 node: "1"
                     .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
@@ -165,8 +166,7 @@ mod tests {
                     .clone(),
                 children: Box::new([]),
                 features: Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0])
-            },
-            inverted_flattened[0]
+            }
         );
     }
 
@@ -185,16 +185,16 @@ mod tests {
         assert_eq!(&Feature::NonLeaf(10), raw_ast.features());
         assert_eq!(&Feature::NonLeaf(0), raw_ast.children()[0].features());
         assert_eq!(
-            &Feature::Leaf(vec![0.0, 1.0, 0.0, 0.0, 0.0, 1.0]),
-            raw_ast.children()[1].children()[1].features()
+            raw_ast.children()[1].children()[1].features(),
+            &Feature::Leaf(vec![0.0, 1.0, 0.0, 0.0, 0.0, 1.0])
         );
         assert_eq!(
-            &Feature::Leaf(vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
-            raw_ast.children()[0].children()[0].children()[0].features()
+            raw_ast.children()[0].children()[0].children()[0].features(),
+            &Feature::Leaf(vec![0.0, 0.0, 1.0, 0.0, 0.0, 0.0])
         );
         assert_eq!(
-            &Feature::Leaf(vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0]),
-            raw_ast.children()[0].children()[0].children()[1].features()
+            raw_ast.children()[0].children()[0].children()[1].features(),
+            &Feature::Leaf(vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0])
         );
     }
 }

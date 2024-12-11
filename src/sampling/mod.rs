@@ -24,7 +24,7 @@ pub enum SampleError {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct Sample<L: Language + Display> {
+pub struct Sample<L: Language + Display + Send + Sync> {
     start_exprs: RecExpr<L>,
     samples: HashMap<Id, HashSet<RecExpr<L>>>,
     sample_conf: SampleConf,

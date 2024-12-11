@@ -7,8 +7,8 @@ use hashbrown::HashMap;
 use log::{debug, info, log_enabled, Level};
 use rand::distributions::uniform::SampleUniform;
 use rand::distributions::WeightedError;
-use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
+use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
@@ -20,7 +20,7 @@ use super::Strategy;
 
 /// Buggy budget consideration
 #[derive(Debug)]
-pub struct CountWeighted<'a, 'b, C, L, N>
+pub struct CountWeighted<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -35,7 +35,6 @@ where
         + Default,
 {
     egraph: &'a EGraph<L, N>,
-    rng: &'b mut StdRng,
     size_counts: HashMap<Id, HashMap<usize, C>>,
     // flattened_size_counts: HashMap<Id, C>,
     ast_sizes: HashMap<Id, usize>,
@@ -43,7 +42,7 @@ where
     limit: usize,
 }
 
-impl<'a, 'b, C, L, N> CountWeighted<'a, 'b, C, L, N>
+impl<'a, C, L, N> CountWeighted<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -66,12 +65,7 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new_with_limit(
-        egraph: &'a EGraph<L, N>,
-        rng: &'b mut StdRng,
-        start_expr: &RecExpr<L>,
-        limit: usize,
-    ) -> Self {
+    pub fn new_with_limit(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>, limit: usize) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
         // let limit = start_size + (start_size / 2);
         info!("Using limit {limit}");
@@ -91,7 +85,6 @@ where
         info!("Strategy read to start sampling!");
         CountWeighted {
             egraph,
-            rng,
             size_counts,
             ast_sizes,
             start_size,
@@ -99,19 +92,20 @@ where
         }
     }
 
-    pub fn new(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, start_expr: &RecExpr<L>) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
         let limit = start_size + (start_size / 2);
-        Self::new_with_limit(egraph, rng, start_expr, limit)
+        Self::new_with_limit(egraph, start_expr, limit)
     }
 
     fn pick_by_size_counts<'c>(
-        &mut self,
+        &self,
+        rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
     ) -> &'c L {
         eclass
             .nodes
-            .choose_weighted(&mut self.rng, |node| {
+            .choose_weighted(rng, |node| {
                 node.children()
                     .iter()
                     .map(|child_id| {
@@ -136,7 +130,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, '_, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -150,9 +144,14 @@ where
         + PartialOrd
         + Default,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+    fn pick<'c: 'a>(
+        &self,
+        rng: &mut ChaCha12Rng,
+        eclass: &'c EClass<L, N::Data>,
+        choices: &ChoiceList<L>,
+    ) -> &'c L {
         if choices.len() <= self.start_size {
-            self.pick_by_size_counts(eclass)
+            self.pick_by_size_counts(rng, eclass)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
@@ -169,14 +168,10 @@ where
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
-
-    fn rng_mut(&mut self) -> &mut StdRng {
-        self.rng
-    }
 }
 
 #[derive(Debug)]
-pub struct CountWeightedUniformly<'a, 'b, C, L, N>
+pub struct CountWeightedUniformly<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -191,13 +186,12 @@ where
         + Default,
 {
     egraph: &'a EGraph<L, N>,
-    rng: &'b mut StdRng,
     size_counts: HashMap<Id, HashMap<usize, C>>,
     ast_sizes: HashMap<Id, usize>,
     limit: usize,
 }
 
-impl<'a, 'b, C, L, N> CountWeightedUniformly<'a, 'b, C, L, N>
+impl<'a, C, L, N> CountWeightedUniformly<'a, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -221,7 +215,7 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new_with_limit(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, limit: usize) -> Self {
+    pub fn new_with_limit(egraph: &'a EGraph<L, N>, limit: usize) -> Self {
         // let limit = start_size + (start_size / 2);
         info!("Using limit {limit}");
 
@@ -250,17 +244,16 @@ where
         info!("Strategy read to start sampling!");
         CountWeightedUniformly {
             egraph,
-            rng,
             size_counts,
             ast_sizes,
             limit,
         }
     }
 
-    pub fn new(egraph: &'a EGraph<L, N>, rng: &'b mut StdRng, start_expr: &RecExpr<L>) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
         let limit = start_size + (start_size / 2);
-        Self::new_with_limit(egraph, rng, limit)
+        Self::new_with_limit(egraph, limit)
     }
 
     fn calc_node_weight<I: Iterator<Item = Vec<usize>>>(
@@ -293,7 +286,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, '_, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -309,7 +302,12 @@ where
         + PartialOrd
         + Default,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+    fn pick<'c: 'a>(
+        &self,
+        rng: &mut ChaCha12Rng,
+        eclass: &'c EClass<L, N::Data>,
+        choices: &ChoiceList<L>,
+    ) -> &'c L {
         debug!("Current EClass {:?}", eclass);
         debug!("Choices: {:?}", choices);
         // We need to know what is the minimum size required to fill the rest of the open positions
@@ -352,7 +350,7 @@ where
 
         eclass
             .nodes
-            .choose_weighted(&mut self.rng, |node| {
+            .choose_weighted(rng, |node| {
                 weights.get(node).expect("Every node has a weight.")
             })
             .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
@@ -369,15 +367,11 @@ where
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
-
-    fn rng_mut(&mut self) -> &mut StdRng {
-        self.rng
-    }
 }
 
 /// Don't trust this, not really tested
 #[derive(Debug)]
-pub struct CountLutWeighted<'a, 'b, C, L, N>
+pub struct CountLutWeighted<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -393,7 +387,6 @@ where
         + Default,
 {
     egraph: &'a EGraph<L, N>,
-    rng: &'b mut StdRng,
     size_counts: HashMap<Id, HashMap<usize, C>>,
     interesting_sizes: HashMap<usize, C>,
     ast_sizes: HashMap<Id, usize>,
@@ -401,7 +394,7 @@ where
     limit: usize,
 }
 
-impl<'a, 'b, C, L, N> CountLutWeighted<'a, 'b, C, L, N>
+impl<'a, C, L, N> CountLutWeighted<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -428,7 +421,6 @@ where
     /// Panics if given an empty Hashset of term sizes.
     pub fn new(
         egraph: &'a EGraph<L, N>,
-        rng: &'b mut StdRng,
         start_expr: &RecExpr<L>,
         interesting_sizes: HashMap<usize, C>,
     ) -> Self {
@@ -460,7 +452,6 @@ where
         info!("Strategy read to start sampling!");
         CountLutWeighted {
             egraph,
-            rng,
             size_counts,
             interesting_sizes,
             ast_sizes,
@@ -470,13 +461,14 @@ where
     }
 
     fn pick_by_lut<'c>(
-        &mut self,
+        &self,
+        rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
         budget: usize,
     ) -> &'c L {
         eclass
             .nodes
-            .choose_weighted(&mut self.rng, |node| -> C {
+            .choose_weighted(rng, |node| -> C {
                 node.children()
                     .iter()
                     .map(|child_id| &self.size_counts[child_id])
@@ -498,10 +490,7 @@ where
                     if budget == 0 {
                         Ok(pick_by_ast_size::<L, N>(&self.ast_sizes, eclass))
                     } else {
-                        Ok(eclass
-                            .nodes
-                            .choose(&mut self.rng)
-                            .expect("EClass cant be empty"))
+                        Ok(eclass.nodes.choose(rng).expect("EClass cant be empty"))
                     }
                 }
                 _ => Err(e),
@@ -510,7 +499,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, '_, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -525,10 +514,15 @@ where
         + PartialOrd
         + Default,
 {
-    fn pick<'c: 'a>(&mut self, eclass: &'c EClass<L, N::Data>, choices: &ChoiceList<L>) -> &'c L {
+    fn pick<'c: 'a>(
+        &self,
+        rng: &mut ChaCha12Rng,
+        eclass: &'c EClass<L, N::Data>,
+        choices: &ChoiceList<L>,
+    ) -> &'c L {
         if choices.len() <= self.start_size {
             let budget = self.limit.saturating_sub(choices.len());
-            self.pick_by_lut(eclass, budget)
+            self.pick_by_lut(rng, eclass, budget)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
@@ -546,10 +540,6 @@ where
 
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
-    }
-
-    fn rng_mut(&mut self) -> &mut StdRng {
-        self.rng
     }
 }
 
@@ -614,7 +604,6 @@ fn sum_combinations(num: usize, n: usize) -> Vec<Vec<usize>> {
 #[cfg(test)]
 mod tests {
     use num::BigUint;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
@@ -635,19 +624,17 @@ mod tests {
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = CountLutWeighted::<BigUint, _, _>::new(
+        let strategy = CountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
-            &mut rng,
             &start_expr,
             HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (17, 1u32.into())]),
         );
-        let samples = strategy.sample(&sample_conf).unwrap();
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
 
         let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum::<usize>();
-        // Between 8 and 10, flaky cause rng
-        assert!(n_samples >= 8);
-        assert!(n_samples <= 10);
+
+        assert_eq!(n_samples, 8);
     }
 
     #[test]
@@ -662,18 +649,14 @@ mod tests {
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
-            eqsat.egraph(),
-            &mut rng,
-            &start_expr,
-            5,
-        );
-        let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
+        let strategy =
+            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy
+            .sample_eclass(&mut rng, &sample_conf, root_id)
+            .unwrap();
 
-        // Between 6 and 8, flaky cause rng
-        assert!(samples.len() >= 6);
-        assert!(samples.len() <= 8);
+        assert_eq!(samples.len(), 8);
     }
 
     #[test]
@@ -690,17 +673,14 @@ mod tests {
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
-            eqsat.egraph(),
-            &mut rng,
-            &start_expr,
-            32,
-        );
+        let strategy =
+            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 32);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy
+            .sample_eclass(&mut rng, &sample_conf, root_id)
+            .unwrap();
 
-        let samples = strategy.sample_eclass(&sample_conf, root_id).unwrap();
-
-        assert_eq!(10, samples.len());
+        assert_eq!(samples.len(), 11);
     }
 
     #[test]
@@ -717,16 +697,13 @@ mod tests {
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = CountWeighted::<BigUint, _, _>::new_with_limit(
-            eqsat.egraph(),
-            &mut rng,
-            &start_expr,
-            2,
-        );
+        let strategy =
+            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 2);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+
         assert_eq!(
-            Err(SampleError::LimitError(2)),
-            strategy.sample_eclass(&sample_conf, root_id)
+            strategy.sample_eclass(&mut rng, &sample_conf, root_id),
+            Err(SampleError::LimitError(2))
         );
     }
 
@@ -744,16 +721,16 @@ mod tests {
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
-        let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-        let mut strategy = CountLutWeighted::<BigUint, _, _>::new(
+        let strategy = CountLutWeighted::<BigUint, _, _>::new(
             eqsat.egraph(),
-            &mut rng,
             &start_expr,
             HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (3, 1u32.into())]),
         );
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+
         assert_eq!(
-            Err(SampleError::LimitError(3)),
-            strategy.sample_eclass(&sample_conf, root_id)
+            strategy.sample_eclass(&mut rng, &sample_conf, root_id),
+            Err(SampleError::LimitError(3))
         );
     }
 
@@ -761,6 +738,7 @@ mod tests {
     fn combinations_2_10() {
         let combinations = sum_combinations(10, 2);
         assert_eq!(
+            combinations,
             vec![
                 vec![1, 9],
                 vec![2, 8],
@@ -772,7 +750,6 @@ mod tests {
                 vec![8, 2],
                 vec![9, 1]
             ],
-            combinations
         );
     }
 
@@ -780,6 +757,7 @@ mod tests {
     fn combinations_3_5() {
         let combinations = sum_combinations(5, 3);
         assert_eq!(
+            combinations,
             vec![
                 vec![1, 1, 3],
                 vec![1, 2, 2],
@@ -788,7 +766,6 @@ mod tests {
                 vec![2, 2, 1],
                 vec![3, 1, 1],
             ],
-            combinations
         );
     }
 

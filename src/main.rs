@@ -12,7 +12,6 @@ use egg::{
 use hashbrown::HashSet;
 use log::info;
 use num::BigUint;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
 
 use eggshell::cli::{Cli, SampleStrategy, TrsName};
@@ -23,6 +22,7 @@ use eggshell::io::structs::Entry;
 use eggshell::sampling::strategy::{CostWeighted, CountWeighted, CountWeightedUniformly, Strategy};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem};
+use rand_chacha::ChaCha12Rng;
 use serde::Serialize;
 
 fn main() {
@@ -81,8 +81,6 @@ fn run_eqsat<R: TermRewriteSystem>(
     rules: &[Rewrite<R::Language, R::Analysis>],
     cli: Cli,
 ) {
-    let mut rng = StdRng::seed_from_u64(sample_conf.rng_seed);
-
     let entry = exprs
         .into_iter()
         .nth(cli.expr_id())
@@ -135,7 +133,7 @@ fn run_eqsat<R: TermRewriteSystem>(
 
     let samples: Vec<_> = eqsat_results
         .iter()
-        .flat_map(|eqsat_result| sample(&cli, &start_expr, eqsat_result, &mut rng, &sample_conf))
+        .flat_map(|eqsat_result| sample(&cli, &start_expr, eqsat_result, &sample_conf))
         .collect();
 
     info!("Finished sampling {}!", cli.expr_id());
@@ -180,7 +178,6 @@ fn sample<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
     eqsat: &EqsatResult<L, N>,
-    rng: &mut StdRng,
     sample_conf: &SampleConf,
 ) -> HashSet<RecExpr<L>>
 where
@@ -190,23 +187,24 @@ where
     N::Data: Serialize + Clone + Sync,
 {
     let root_id = eqsat.roots()[0];
+    let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
 
     match &cli.strategy() {
         SampleStrategy::CountWeightedUniformly => {
             let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
-            CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), rng, limit)
-                .sample_eclass(sample_conf, root_id)
+            CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), limit)
+                .sample_eclass(&mut rng, sample_conf, root_id)
                 .unwrap()
         }
         SampleStrategy::CountWeighted => {
             let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
-            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), rng, start_expr, limit)
-                .sample_eclass(sample_conf, root_id)
+            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), start_expr, limit)
+                .sample_eclass(&mut rng, sample_conf, root_id)
                 .unwrap()
         }
         SampleStrategy::CostWeighted => {
-            CostWeighted::new(eqsat.egraph(), AstSize, rng, sample_conf.loop_limit)
-                .sample_eclass(sample_conf, root_id)
+            CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit)
+                .sample_eclass(&mut rng, sample_conf, root_id)
                 .unwrap()
         }
     }

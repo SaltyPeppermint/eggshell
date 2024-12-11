@@ -54,7 +54,7 @@ where
                 let eclass = &egraph[canonical_id];
 
                 // Check if we can calculate the analysis for any enode
-                let available_data = eclass.nodes.as_slice().par_iter().filter_map(|n| {
+                let available_data = eclass.nodes.par_iter().filter_map(|n| {
                     let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
                     // If all the childs eclass_children have data, we can calculate it!
                     if u_node.all(|child_id| data.contains_key(&child_id)) {
