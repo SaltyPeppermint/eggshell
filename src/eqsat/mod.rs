@@ -18,23 +18,23 @@ use class_cost::{ClassExtractor, LutCost};
 pub use conf::{EqsatConf, EqsatConfBuilder};
 
 /// API accessible struct holding the equality Saturation
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub struct Eqsat<L, N>
 where
     L: Language + Display,
     N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Serialize + Clone,
+    N::Data: Clone,
 {
     conf: EqsatConf,
     start_material: StartMaterial<L, N>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug)]
 pub enum StartMaterial<L, N>
 where
     L: Language + Display,
     N: Analysis<L> + Clone,
-    N::Data: Serialize + Clone,
+    N::Data: Clone,
 {
     RecExprs(Vec<RecExpr<L>>),
     EGraph {
@@ -46,7 +46,7 @@ where
 impl<L, N> Eqsat<L, N>
 where
     L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
+    N: Analysis<L> + Clone + Default + Debug + Default,
     N::Data: Serialize + Clone,
 {
     #[must_use]

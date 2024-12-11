@@ -48,6 +48,18 @@ pub struct Cli {
     #[arg(long)]
     time_limit: Option<usize>,
 
+    /// Number of random goals to pick
+    #[arg(long, default_value_t = 1)]
+    random_goals: usize,
+
+    /// Number of random guides to pick
+    #[arg(long)]
+    random_guides: usize,
+
+    /// Number of random guides to pick
+    #[arg(long)]
+    random_guide_generations: usize,
+
     /// UUID to identify run
     #[arg(long)]
     uuid: String,
@@ -116,6 +128,21 @@ impl Cli {
     #[must_use]
     pub(crate) fn memory_limit(&self) -> Option<usize> {
         self.memory_limit
+    }
+
+    #[must_use]
+    pub fn random_goals(&self) -> usize {
+        self.random_goals
+    }
+
+    #[must_use]
+    pub fn random_guides(&self) -> usize {
+        self.random_guides
+    }
+
+    #[must_use]
+    pub fn random_guide_generations(&self) -> usize {
+        self.random_guide_generations
     }
 }
 

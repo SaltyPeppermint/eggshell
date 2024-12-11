@@ -1,16 +1,18 @@
 use std::fmt::Display;
 
-use egg::{Language, RecExpr, StopReason};
+use egg::{Analysis, Language, RecExpr, StopReason};
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::cli::Cli;
-use crate::eqsat::EqsatConf;
+use crate::eqsat::{EqsatConf, EqsatResult};
 use crate::sampling::SampleConf;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct DataEntry<L: Language + Display> {
     start_expr: RecExpr<L>,
     sample_data: Vec<SampleData<L>>,
+    random_goals: Vec<usize>,
     metadata: MetaData,
 }
 
@@ -19,11 +21,14 @@ impl<L: Language + Display> DataEntry<L> {
     pub fn new(
         start_expr: RecExpr<L>,
         sample_data: Vec<SampleData<L>>,
+        random_goals: Vec<usize>,
+
         metadata: MetaData,
     ) -> Self {
         Self {
             start_expr,
             sample_data,
+            random_goals,
             metadata,
         }
     }
@@ -64,8 +69,7 @@ impl MetaData {
 pub struct SampleData<L: Language + Display> {
     sample: RecExpr<L>,
     generation: usize,
-    baseline: Option<BaselineData>,
-    explanation: Option<String>,
+    baseline: Option<HashMap<usize, EqsatStats>>,
 }
 
 impl<L: Language + Display> SampleData<L> {
@@ -73,27 +77,25 @@ impl<L: Language + Display> SampleData<L> {
     pub fn new(
         sample: RecExpr<L>,
         generation: usize,
-        baseline: Option<BaselineData>,
-        explanation: Option<String>,
+        baseline: Option<HashMap<usize, EqsatStats>>,
     ) -> Self {
         Self {
             sample,
             generation,
             baseline,
-            explanation,
         }
     }
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct BaselineData {
+pub struct EqsatStats {
     stop_reason: StopReason,
     total_time: f64,
     total_nodes: usize,
     total_iters: usize,
 }
 
-impl BaselineData {
+impl EqsatStats {
     #[must_use]
     pub fn new(
         stop_reason: StopReason,
@@ -107,5 +109,21 @@ impl BaselineData {
             total_nodes,
             total_iters,
         }
+    }
+}
+
+impl<L, N> From<EqsatResult<L, N>> for EqsatStats
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
+{
+    fn from(result: EqsatResult<L, N>) -> Self {
+        EqsatStats::new(
+            result.report().stop_reason.clone(),
+            result.report().total_time,
+            result.report().egraph_nodes,
+            result.report().iterations,
+        )
     }
 }
