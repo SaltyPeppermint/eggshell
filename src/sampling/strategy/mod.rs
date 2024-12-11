@@ -34,22 +34,10 @@ where
 
     fn egraph(&self) -> &'a EGraph<L, N>;
 
-    /// .
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if .
+    #[expect(clippy::missing_errors_doc)]
     fn extractable(&self, id: Id) -> Result<(), SampleError>;
 
-    /// .
-    ///
-    /// # Panics
-    ///
-    /// Panics if .
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if something goes wrong during sampling.
+    #[expect(clippy::missing_errors_doc)]
     fn sample_expr(
         &self,
         rng: &mut ChaCha12Rng,
@@ -63,8 +51,7 @@ where
         let mut choices = ChoiceList::from(canonical_root_id);
 
         while let Some(id) = choices.select_next_open(rng) {
-            let eclass_id = egraph.find(id);
-            let eclass = &egraph[eclass_id];
+            let eclass = &egraph[id];
             let pick = self.pick(rng, eclass, &choices);
             choices.fill_next(pick)?;
             if choices.len() > 10000 && choices.len() % 100 == 0 {
@@ -116,10 +103,6 @@ where
 
                 Ok(h)
             })
-            // .try_fold(HashSet::new(), |mut a, b| {
-            //     a.extend(b?);
-            //     Ok(a)
-            // })?;
             .try_reduce(HashSet::new, |mut a, b| {
                 a.extend(b);
                 Ok(a)

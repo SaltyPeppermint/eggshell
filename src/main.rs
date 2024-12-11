@@ -106,7 +106,7 @@ fn run<R: TermRewriteSystem>(
     info!("Starting eqsat on expression {}...", cli.expr_id());
 
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules);
+    let eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules);
 
     info!("Finished Eqsat {}!", cli.expr_id());
     info!("Starting sampling...");
@@ -132,8 +132,7 @@ fn run<R: TermRewriteSystem>(
     );
 
     info!("Generating associated data for {}...", cli.expr_id());
-    let (random_goals, sample_data) =
-        mk_sample_data(samples, &mut eqsat_results, cli, rules, &mut rng);
+    let (random_goals, sample_data) = mk_sample_data(samples, eqsat_results, cli, rules, &mut rng);
     info!("Finished generating sample data for {}!", cli.expr_id());
 
     info!("Finished work on expr {}!", cli.expr_id());
@@ -190,7 +189,6 @@ where
             }
             _ => {
                 info!("Limits reached after {} full iterations!", iter_count - 1);
-                //
                 info!(
                     "Max Memory Consumption: {:?}",
                     result
@@ -246,7 +244,7 @@ where
 
 fn mk_sample_data<L, N>(
     samples: Vec<RecExpr<L>>,
-    eqsat_result: &mut [EqsatResult<L, N>],
+    mut eqsat_result: Vec<EqsatResult<L, N>>,
     cli: &Cli,
     rules: &[Rewrite<L, N>],
     rng: &mut ChaCha12Rng,
@@ -264,7 +262,7 @@ where
     let random_goals = random_indices_eq(&generations, eqsat_result.len(), cli.random_goals(), rng);
     let random_guides = random_indices_eq(
         &generations,
-        cli.random_guide_generations(),
+        cli.random_guide_generation(),
         cli.random_goals(),
         rng,
     );

@@ -58,7 +58,7 @@ pub struct Cli {
 
     /// Number of random guides to pick
     #[arg(long)]
-    random_guide_generations: usize,
+    random_guide_generation: usize,
 
     /// UUID to identify run
     #[arg(long)]
@@ -141,8 +141,8 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn random_guide_generations(&self) -> usize {
-        self.random_guide_generations
+    pub fn random_guide_generation(&self) -> usize {
+        self.random_guide_generation
     }
 }
 
