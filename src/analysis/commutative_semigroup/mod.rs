@@ -28,9 +28,7 @@ where
     ) -> Self::Data
     where
         Self::Data: 'a,
-        Self: 'a,
-        C: 'a,
-        L: 'a;
+        C: 'a;
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
@@ -63,11 +61,9 @@ where
                         None
                     }
                 });
-                // TODO: Debug size to find out if its costly, option to reduce early
-                // .collect::<Vec<_>>();
 
                 // If we have some info, we add that info to our storage.
-                // Otherwise, if we have absolutely now info about the nodes, we can only put them back onto the queue.
+                // Otherwise we have absolutely no info about the nodes so we can only put them back onto the queue.
                 // and hope for a better time later.
                 if let Some(computed_data) = available_data.reduce_with(|mut a, b| {
                     analysis.merge(&mut a, b);

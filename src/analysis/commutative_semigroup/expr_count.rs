@@ -56,7 +56,6 @@ where
     where
         Self::Data: 'a,
         C: 'a,
-        Self: 'a,
     {
         fn rec<CC: Counter>(
             remaining: &[&HashMap<usize, CC>],
