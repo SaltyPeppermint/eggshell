@@ -100,7 +100,18 @@ where
         rules: &[Rewrite<L, N>],
     ) -> EqsatResult<L, N> {
         match &self.start_material {
-            StartMaterial::RecExprs(exprs) => info!("Running Eqsat with Expressions: {:?}", exprs),
+            StartMaterial::RecExprs(exprs) => {
+                let expr_strs =
+                    exprs
+                        .iter()
+                        .map(|x| x.to_string())
+                        .fold(String::new(), |mut a, b| {
+                            a.push_str(", ");
+                            a.push_str(&b);
+                            a
+                        });
+                info!("Running Eqsat with Expressions: [{expr_strs}]");
+            }
             StartMaterial::EGraph { .. } => info!("Running Eqsat with previous EGraph"),
         }
 

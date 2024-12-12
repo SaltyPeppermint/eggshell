@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 8)]
     eclass_samples: usize,
 
+    /// Sample batch size
+    #[arg(long)]
+    sample_batch_size: Option<usize>,
+
     /// Sampling strategy
     #[arg(long, default_value_t = SampleStrategy::CountWeightedUniformly)]
     strategy: SampleStrategy,
@@ -55,10 +59,6 @@ pub struct Cli {
     /// Number of random guides to pick
     #[arg(long)]
     random_guides: usize,
-
-    /// Number of random guides to pick
-    #[arg(long)]
-    random_guide_generation: usize,
 
     /// UUID to identify run
     #[arg(long)]
@@ -141,8 +141,8 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn random_guide_generation(&self) -> usize {
-        self.random_guide_generation
+    pub(crate) fn sample_batch_size(&self) -> Option<usize> {
+        self.sample_batch_size
     }
 }
 

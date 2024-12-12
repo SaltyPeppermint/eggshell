@@ -17,8 +17,6 @@ use super::{choices::ChoiceList, SampleConf};
 pub use cost::CostWeighted;
 pub use count::{CountLutWeighted, CountWeighted, CountWeightedUniformly};
 
-const BATCH_SIZE: usize = 1000;
-
 pub trait Strategy<'a, L, N>: Debug + Send + Sync
 where
     L: Language + Display + Debug + Send + Sync + std::hash::Hash + 'a,
@@ -85,29 +83,27 @@ where
             .into_par_iter() // into_par_iter_here
             .enumerate()
             .map(|(range_id, (batch_start, batch_end))| {
-                let mut h = HashSet::new();
                 let mut inner_rng = rng.clone();
                 inner_rng.set_stream((range_id + 1) as u64);
 
-                for _ in batch_start..=batch_end {
-                    let sample = self.sample_expr(&mut inner_rng, root_eclass)?;
-                    h.insert(sample);
-                }
+                let batch_samples = (batch_start..batch_end)
+                    .map(|_| self.sample_expr(&mut inner_rng, root_eclass))
+                    .collect::<Result<_, _>>()?;
                 let len = batch_end - batch_start;
                 let c = counter.fetch_add(len, Ordering::SeqCst) + len;
-                info!("Finished sampling batch {range_id}");
+                info!("Finished sampling batch {}", range_id + 1);
                 info!(
                     "Sampled {c} expressions from eclass {} in batch {range_id}",
                     root_eclass.id
                 );
 
-                Ok(h)
+                Ok(batch_samples)
             })
             .try_reduce(HashSet::new, |mut a, b| {
                 a.extend(b);
                 Ok(a)
             })?;
-
+        info!("Sampled {} expressions from {root}", samples.len());
         Ok(samples)
     }
 
@@ -133,17 +129,30 @@ where
 
 fn batch_ranges(conf: &SampleConf) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
-    let mut start = 0;
+    let mut range_start = 0;
 
-    loop {
-        let end = start + BATCH_SIZE;
-        if end < conf.samples_per_eclass {
-            ranges.push((start, end));
-        } else {
-            ranges.push((start, conf.samples_per_eclass));
-            break;
-        }
-        start = end + 1;
+    while range_start + conf.batch_size < conf.samples_per_eclass {
+        ranges.push((range_start, range_start + conf.batch_size));
+        range_start += conf.batch_size;
     }
+
+    ranges.push((range_start, conf.samples_per_eclass));
     ranges
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn batch_ranges_small() {
+        let sample_conf = SampleConf::builder()
+            .samples_per_eclass(2500)
+            .batch_size(1000)
+            .build();
+
+        let ranges = batch_ranges(&sample_conf);
+        assert_eq!(ranges, vec![(0, 1000), (1000, 2000), (2000, 2500)]);
+    }
 }

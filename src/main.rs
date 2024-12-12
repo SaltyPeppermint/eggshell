@@ -132,7 +132,8 @@ fn run<R: TermRewriteSystem>(
     );
 
     info!("Generating associated data for {}...", cli.expr_id());
-    let (random_goals, sample_data) = mk_sample_data(samples, eqsat_results, cli, rules, &mut rng);
+    let (random_goals, sample_data) =
+        mk_sample_data(samples, eqsat_results, &eqsat_conf, cli, rules, &mut rng);
     info!("Finished generating sample data for {}!", cli.expr_id());
 
     info!("Finished work on expr {}!", cli.expr_id());
@@ -170,8 +171,8 @@ where
     N: Analysis<L> + Clone + Serialize + Default + Debug,
     N::Data: Serialize + Clone,
 {
-    let mut eqsat =
-        Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()])).with_conf(eqsat_conf.clone());
+    let mut eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.to_owned()]))
+        .with_conf(eqsat_conf.to_owned());
 
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
@@ -185,7 +186,7 @@ where
         match result.report().stop_reason {
             StopReason::IterationLimit(_) => {
                 eqsat_results.push(result.clone());
-                eqsat = Eqsat::new(result.into()).with_conf(eqsat_conf.clone());
+                eqsat = Eqsat::new(result.into()).with_conf(eqsat_conf.to_owned());
             }
             _ => {
                 info!("Limits reached after {} full iterations!", iter_count - 1);
@@ -245,6 +246,7 @@ where
 fn mk_sample_data<L, N>(
     samples: Vec<RecExpr<L>>,
     mut eqsat_result: Vec<EqsatResult<L, N>>,
+    eqsat_conf: &EqsatConf,
     cli: &Cli,
     rules: &[Rewrite<L, N>],
     rng: &mut ChaCha12Rng,
@@ -259,15 +261,16 @@ where
         .map(|sample| find_generation(sample, &mut eqsat_result.iter_mut().map(|r| r.egraph())))
         .collect::<Vec<_>>();
 
-    let random_goals = random_indices_eq(&generations, eqsat_result.len(), cli.random_goals(), rng);
-    let random_guides = random_indices_eq(
-        &generations,
-        cli.random_guide_generation(),
-        cli.random_goals(),
-        rng,
-    );
+    let goal_gen = eqsat_result.len();
+    info!("Taking goals from generation {goal_gen}");
+    let random_goals = random_indices_eq(&generations, goal_gen, cli.random_goals(), rng);
+    let guide_gen = goal_gen / 2;
+    info!("Taking guides from generation {guide_gen}");
+    let random_guides = random_indices_eq(&generations, guide_gen, cli.random_goals(), rng);
 
-    let mut baselines = mk_baselines(&samples, &random_guides, &random_goals, rules);
+    info!("Running goal-guide baselines...");
+    let mut baselines = mk_baselines(eqsat_conf, &samples, &random_guides, &random_goals, rules);
+    info!("Goal-guide baselines run!");
 
     let sample_data = samples
         .into_iter()
@@ -278,6 +281,7 @@ where
 }
 
 fn mk_baselines<L, N>(
+    eqsat_conf: &EqsatConf,
     samples: &[RecExpr<L>],
     random_guides: &[usize],
     random_goals: &[usize],
@@ -294,11 +298,13 @@ where
             let baseline = random_goals
                 .iter()
                 .map(|goal_idx| {
-                    let goal = samples[*goal_idx].clone();
-                    let guide = samples[*guide_idx].clone();
-                    info!("Running baseline for \"{goal}\"...");
+                    let goal = samples[*goal_idx].to_owned();
+                    let guide = samples[*guide_idx].to_owned();
+                    info!("Running baseline for \"{goal}\" with guide \"{guide}\"...");
                     let starting_exprs = StartMaterial::RecExprs(vec![guide, goal]);
-                    let result = Eqsat::new(starting_exprs).run(rules);
+                    let mut conf = eqsat_conf.to_owned();
+                    conf.root_check = true;
+                    let result = Eqsat::new(starting_exprs).with_conf(conf).run(rules);
                     let baseline = result.into();
                     info!("Baseline run!");
                     (*goal_idx, baseline)
@@ -350,8 +356,8 @@ fn find_generation<'a, L: Language + 'a, N: Analysis<L> + 'a>(
     sample: &RecExpr<L>,
     egraphs: &mut impl ExactSizeIterator<Item = &'a EGraph<L, N>>,
 ) -> usize {
-    match egraphs.position(|egraph| egraph.lookup_expr(sample).is_some()) {
-        Some(generation) => generation + 1,
-        None => egraphs.len(),
-    }
+    egraphs
+        .position(|egraph| egraph.lookup_expr(sample).is_some())
+        .expect("Must be in at least one of the egraphs")
+        + 1
 }

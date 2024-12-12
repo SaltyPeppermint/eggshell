@@ -679,7 +679,7 @@ mod tests {
             .sample_eclass(&mut rng, &sample_conf, root_id)
             .unwrap();
 
-        assert_eq!(samples.len(), 11);
+        assert_eq!(samples.len(), 10);
     }
 
     #[test]

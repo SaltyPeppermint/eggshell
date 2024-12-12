@@ -13,6 +13,8 @@ pub struct SampleConf {
     pub loop_limit: usize,
     #[builder(default = 1024)]
     pub rng_seed: u64,
+    #[builder(default = 1000)]
+    pub batch_size: usize,
 }
 
 impl From<&Cli> for SampleConf {
@@ -20,6 +22,7 @@ impl From<&Cli> for SampleConf {
         SampleConf::builder()
             .rng_seed(cli.rng_seed())
             .samples_per_eclass(cli.eclass_samples())
+            .maybe_batch_size(cli.sample_batch_size())
             .build()
     }
 }
