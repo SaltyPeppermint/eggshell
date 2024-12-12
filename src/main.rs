@@ -245,7 +245,7 @@ where
 
 fn mk_sample_data<L, N>(
     samples: Vec<RecExpr<L>>,
-    mut eqsat_result: Vec<EqsatResult<L, N>>,
+    mut eqsat_results: Vec<EqsatResult<L, N>>,
     eqsat_conf: &EqsatConf,
     cli: &Cli,
     rules: &[Rewrite<L, N>],
@@ -258,10 +258,11 @@ where
 {
     let generations = samples
         .iter()
-        .map(|sample| find_generation(sample, &mut eqsat_result.iter_mut().map(|r| r.egraph())))
+        .map(|sample| find_generation(sample, &mut eqsat_results.iter_mut().map(|r| r.egraph())))
         .collect::<Vec<_>>();
 
-    let goal_gen = eqsat_result.len();
+    let goal_gen = eqsat_results.len();
+    drop(eqsat_results);
     info!("Taking goals from generation {goal_gen}");
     let random_goals = random_indices_eq(&generations, goal_gen, cli.random_goals(), rng);
     let guide_gen = goal_gen / 2;

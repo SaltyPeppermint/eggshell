@@ -17,7 +17,7 @@ for i in $(seq $START $END); do
         --file data/rise/guided_eqsat.csv \
         --eclass-samples $N_SAMPLES \
         --memory-limit 1000000000 \
-        --random-guides 1000 \
+        --random-guides 5000 \
         --random-goals 5 \
         --time-limit 120 \
         --uuid $uuid \
