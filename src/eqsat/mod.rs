@@ -93,6 +93,7 @@ where
 
     /// Runs single cycle of to prove an expression to be equal to the goals
     /// (most often true or false) with the given ruleset
+    #[expect(clippy::missing_panics_doc)]
     #[must_use]
     pub fn run(
         self,
@@ -101,15 +102,15 @@ where
     ) -> EqsatResult<L, N> {
         match &self.start_material {
             StartMaterial::RecExprs(exprs) => {
-                let expr_strs =
-                    exprs
-                        .iter()
-                        .map(|x| x.to_string())
-                        .fold(String::new(), |mut a, b| {
-                            a.push_str(", ");
-                            a.push_str(&b);
-                            a
-                        });
+                let expr_strs = exprs
+                    .iter()
+                    .map(|x| x.to_string())
+                    .reduce(|mut a, b| {
+                        a.push_str(", ");
+                        a.push_str(&b);
+                        a
+                    })
+                    .expect("Eqsat needs at least one starting material!");
                 info!("Running Eqsat with Expressions: [{expr_strs}]");
             }
             StartMaterial::EGraph { .. } => info!("Running Eqsat with previous EGraph"),

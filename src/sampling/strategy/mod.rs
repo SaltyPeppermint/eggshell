@@ -91,8 +91,8 @@ where
                     .collect::<Result<_, _>>()?;
                 let len = batch_end - batch_start;
                 let c = counter.fetch_add(len, Ordering::SeqCst) + len;
-                info!("Finished sampling batch {}", range_id + 1);
-                info!(
+                debug!("Finished sampling batch {}", range_id + 1);
+                debug!(
                     "Sampled {c} expressions from eclass {} in batch {range_id}",
                     root_eclass.id
                 );

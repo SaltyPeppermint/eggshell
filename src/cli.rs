@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::error::ErrorKind;
-use clap::{Error, Parser};
+use clap::{Args, Error, Parser};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -36,10 +36,9 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     with_explanations: bool,
 
-    /// Calculate and save explanations
-    #[arg(long, default_value_t = false)]
-    with_baselines: bool,
-
+    // /// Calculate and save explanations
+    // #[arg(long, default_value_t = false)]
+    // with_baselines: bool,
     /// Node limit for egraph in seconds
     #[arg(long)]
     node_limit: Option<usize>,
@@ -52,14 +51,6 @@ pub struct Cli {
     #[arg(long)]
     time_limit: Option<usize>,
 
-    /// Number of random goals to pick
-    #[arg(long, default_value_t = 1)]
-    random_goals: usize,
-
-    /// Number of random guides to pick
-    #[arg(long)]
-    random_guides: usize,
-
     /// UUID to identify run
     #[arg(long)]
     uuid: String,
@@ -67,6 +58,32 @@ pub struct Cli {
     /// Trs of the input
     #[arg(long)]
     trs: TrsName,
+
+    #[command(flatten)]
+    baseline_args: Option<BaselineArgs>,
+}
+
+#[derive(Debug, Args, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub struct BaselineArgs {
+    /// Number of random goals to pick
+    #[arg(long, default_value_t = 1, group = "baselines")]
+    random_goals: usize,
+
+    /// Number of random guides to pick
+    #[arg(long, group = "baselines")]
+    random_guides: usize,
+}
+
+impl BaselineArgs {
+    #[must_use]
+    pub fn random_goals(&self) -> usize {
+        self.random_goals
+    }
+
+    #[must_use]
+    pub fn random_guides(&self) -> usize {
+        self.random_guides
+    }
 }
 
 impl Cli {
@@ -88,11 +105,6 @@ impl Cli {
     #[must_use]
     pub fn uuid(&self) -> &str {
         &self.uuid
-    }
-
-    #[must_use]
-    pub fn with_baselines(&self) -> bool {
-        self.with_baselines
     }
 
     #[must_use]
@@ -131,18 +143,13 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn random_goals(&self) -> usize {
-        self.random_goals
-    }
-
-    #[must_use]
-    pub fn random_guides(&self) -> usize {
-        self.random_guides
-    }
-
-    #[must_use]
     pub(crate) fn sample_batch_size(&self) -> Option<usize> {
         self.sample_batch_size
+    }
+
+    #[must_use]
+    pub fn baseline_args(&self) -> Option<&BaselineArgs> {
+        self.baseline_args.as_ref()
     }
 }
 

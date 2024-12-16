@@ -12,7 +12,7 @@ use crate::sampling::SampleConf;
 pub struct DataEntry<L: Language + Display> {
     start_expr: RecExpr<L>,
     sample_data: Vec<SampleData<L>>,
-    random_goals: Vec<usize>,
+    baselines: Option<HashMap<usize, HashMap<usize, EqsatStats>>>,
     metadata: MetaData,
 }
 
@@ -21,14 +21,14 @@ impl<L: Language + Display> DataEntry<L> {
     pub fn new(
         start_expr: RecExpr<L>,
         sample_data: Vec<SampleData<L>>,
-        random_goals: Vec<usize>,
+        baselines: Option<HashMap<usize, HashMap<usize, EqsatStats>>>,
 
         metadata: MetaData,
     ) -> Self {
         Self {
             start_expr,
             sample_data,
-            random_goals,
+            baselines,
             metadata,
         }
     }
@@ -69,21 +69,12 @@ impl MetaData {
 pub struct SampleData<L: Language + Display> {
     sample: RecExpr<L>,
     generation: usize,
-    baseline: Option<HashMap<usize, EqsatStats>>,
 }
 
 impl<L: Language + Display> SampleData<L> {
     #[must_use]
-    pub fn new(
-        sample: RecExpr<L>,
-        generation: usize,
-        baseline: Option<HashMap<usize, EqsatStats>>,
-    ) -> Self {
-        Self {
-            sample,
-            generation,
-            baseline,
-        }
+    pub fn new(sample: RecExpr<L>, generation: usize) -> Self {
+        Self { sample, generation }
     }
 }
 

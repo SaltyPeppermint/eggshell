@@ -6,16 +6,14 @@ use std::io::{BufWriter, Write};
 
 use chrono::Local;
 use clap::Parser;
-use egg::{
-    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
-};
+use egg::{Analysis, AstSize, CostFunction, FromOp, Language, RecExpr, Rewrite, StopReason};
 use hashbrown::{HashMap, HashSet};
 use log::info;
 use num::BigUint;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 
-use eggshell::cli::{Cli, SampleStrategy, TrsName};
+use eggshell::cli::{BaselineArgs, Cli, SampleStrategy, TrsName};
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::sampling::{DataEntry, EqsatStats, MetaData, SampleData};
@@ -57,6 +55,7 @@ fn main() {
                 eqsat_conf,
                 sample_conf,
                 folder,
+                start_time.timestamp(),
                 Halide::full_rules().as_slice(),
                 &cli,
             );
@@ -67,6 +66,7 @@ fn main() {
                 eqsat_conf,
                 sample_conf,
                 folder,
+                start_time.timestamp(),
                 Rise::full_rules().as_slice(),
                 &cli,
             );
@@ -89,6 +89,7 @@ fn run<R: TermRewriteSystem>(
     eqsat_conf: EqsatConf,
     sample_conf: SampleConf,
     folder: String,
+    timestamp: i64,
     rules: &[Rewrite<R::Language, R::Analysis>],
     cli: &Cli,
 ) {
@@ -106,7 +107,7 @@ fn run<R: TermRewriteSystem>(
     info!("Starting eqsat on expression {}...", cli.expr_id());
 
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules);
+    let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules);
 
     info!("Finished Eqsat {}!", cli.expr_id());
     info!("Starting sampling...");
@@ -116,10 +117,10 @@ fn run<R: TermRewriteSystem>(
     let samples: Vec<_> = eqsat_results
         .iter()
         .enumerate()
-        .flat_map(|(eqsat_round, eqsat_result)| {
-            info!("Running sampling of round {eqsat_round}...");
+        .flat_map(|(eqsat_generation, eqsat_result)| {
+            info!("Running sampling of generation {eqsat_generation}...");
             let s = sample_eqsat_result(cli, &start_expr, eqsat_result, &sample_conf, &mut rng);
-            info!("Finished sampling of round {eqsat_round}!");
+            info!("Finished sampling of generation {eqsat_generation}!");
             s
         })
         .collect();
@@ -131,9 +132,28 @@ fn run<R: TermRewriteSystem>(
         cli.eclass_samples()
     );
 
+    let max_generation = eqsat_results.len();
+    let generations = find_generations(&samples, &mut eqsat_results);
+    drop(eqsat_results);
+
+    let baselines = cli.baseline_args().map(|baselin_args| {
+        mk_baselines(
+            &samples,
+            &eqsat_conf,
+            baselin_args,
+            rules,
+            &mut rng,
+            &generations,
+            max_generation,
+        )
+    });
+
     info!("Generating associated data for {}...", cli.expr_id());
-    let (random_goals, sample_data) =
-        mk_sample_data(samples, eqsat_results, &eqsat_conf, cli, rules, &mut rng);
+    let sample_data = samples
+        .into_iter()
+        .enumerate()
+        .map(|(idx, sample)| SampleData::new(sample, generations[idx]))
+        .collect();
     info!("Finished generating sample data for {}!", cli.expr_id());
 
     info!("Finished work on expr {}!", cli.expr_id());
@@ -141,12 +161,12 @@ fn run<R: TermRewriteSystem>(
     let data = DataEntry::new(
         start_expr,
         sample_data,
-        random_goals,
+        baselines,
         MetaData::new(
             cli.uuid().to_owned(),
             folder.to_owned(),
             cli.to_owned(),
-            Local::now().timestamp(),
+            timestamp,
             sample_conf,
             eqsat_conf,
         ),
@@ -180,7 +200,7 @@ where
     loop {
         let result = eqsat.run(rules);
         iter_count += 1;
-        info!("Iteration {iter_count} finished.");
+        info!("Iteration {iter_count} stopped.");
 
         assert!(result.egraph().clean);
         match result.report().stop_reason {
@@ -243,14 +263,10 @@ where
     }
 }
 
-fn mk_sample_data<L, N>(
-    samples: Vec<RecExpr<L>>,
-    mut eqsat_results: Vec<EqsatResult<L, N>>,
-    eqsat_conf: &EqsatConf,
-    cli: &Cli,
-    rules: &[Rewrite<L, N>],
-    rng: &mut ChaCha12Rng,
-) -> (Vec<usize>, Vec<SampleData<L>>)
+fn find_generations<L, N>(
+    samples: &[RecExpr<L>],
+    eqsat_results: &mut [EqsatResult<L, N>],
+) -> Vec<usize>
 where
     L: Language + Display + Clone + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
@@ -258,42 +274,41 @@ where
 {
     let generations = samples
         .iter()
-        .map(|sample| find_generation(sample, &mut eqsat_results.iter_mut().map(|r| r.egraph())))
+        .map(|sample| {
+            eqsat_results
+                .iter_mut()
+                .map(|r| r.egraph())
+                .position(|egraph| egraph.lookup_expr(sample).is_some())
+                .expect("Must be in at least one of the egraphs")
+                + 1
+        })
         .collect::<Vec<_>>();
-
-    let goal_gen = eqsat_results.len();
-    drop(eqsat_results);
-    info!("Taking goals from generation {goal_gen}");
-    let random_goals = random_indices_eq(&generations, goal_gen, cli.random_goals(), rng);
-    let guide_gen = goal_gen / 2;
-    info!("Taking guides from generation {guide_gen}");
-    let random_guides = random_indices_eq(&generations, guide_gen, cli.random_goals(), rng);
-
-    info!("Running goal-guide baselines...");
-    let mut baselines = mk_baselines(eqsat_conf, &samples, &random_guides, &random_goals, rules);
-    info!("Goal-guide baselines run!");
-
-    let sample_data = samples
-        .into_iter()
-        .enumerate()
-        .map(|(idx, sample)| SampleData::new(sample, generations[idx], baselines.remove(&idx)))
-        .collect();
-    (random_goals, sample_data)
+    generations
 }
 
 fn mk_baselines<L, N>(
-    eqsat_conf: &EqsatConf,
     samples: &[RecExpr<L>],
-    random_guides: &[usize],
-    random_goals: &[usize],
+    eqsat_conf: &EqsatConf,
+    baseline_args: &BaselineArgs,
     rules: &[Rewrite<L, N>],
+    rng: &mut ChaCha12Rng,
+    generations: &[usize],
+    goal_gen: usize,
 ) -> HashMap<usize, HashMap<usize, EqsatStats>>
 where
-    L: Language + Display,
+    L: Language + Display + Clone + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Clone + Serialize,
+    N::Data: Serialize + Clone,
 {
-    random_guides
+    info!("Taking goals from generation {goal_gen}");
+    let random_goals = random_indices_eq(generations, goal_gen, baseline_args.random_goals(), rng);
+    let guide_gen = goal_gen / 2;
+    info!("Taking guides from generation {guide_gen}");
+    let random_guides =
+        random_indices_eq(generations, guide_gen, baseline_args.random_goals(), rng);
+
+    info!("Running goal-guide baselines...");
+    let baselines = random_guides
         .iter()
         .map(|guide_idx| {
             let baseline = random_goals
@@ -305,6 +320,7 @@ where
                     let starting_exprs = StartMaterial::RecExprs(vec![guide, goal]);
                     let mut conf = eqsat_conf.to_owned();
                     conf.root_check = true;
+                    conf.iter_limit = 100;
                     let result = Eqsat::new(starting_exprs).with_conf(conf).run(rules);
                     let baseline = result.into();
                     info!("Baseline run!");
@@ -313,7 +329,9 @@ where
                 .collect();
             (*guide_idx, baseline)
         })
-        .collect()
+        .collect();
+    info!("Goal-guide baselines run!");
+    baselines
 }
 
 fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12Rng) -> Vec<usize> {
@@ -352,13 +370,3 @@ fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12R
 //         None
 //     }
 // }
-
-fn find_generation<'a, L: Language + 'a, N: Analysis<L> + 'a>(
-    sample: &RecExpr<L>,
-    egraphs: &mut impl ExactSizeIterator<Item = &'a EGraph<L, N>>,
-) -> usize {
-    egraphs
-        .position(|egraph| egraph.lookup_expr(sample).is_some())
-        .expect("Must be in at least one of the egraphs")
-        + 1
-}
