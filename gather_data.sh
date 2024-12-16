@@ -20,13 +20,14 @@ for i in $(seq $START $END); do
         --time-limit 120 \
         --uuid $uuid \
         --trs rise \
-        --expr-id $i &>$logfile # --random-guide-generation 3 \
+        --expr-id $i \
+        no-baseline \
+        &>$logfile # --random-guide-generation 3 \
 
     echo "Finished $i"
 done
 
 # --profile=release-with-debug for profiling
-
-# sample_with_baseline \
+# sample-with-baseline \
 # --random-guides 5000 \
 # --random-goals 5 \

@@ -13,7 +13,7 @@ use num::BigUint;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
 
-use eggshell::cli::{BaselineArgs, Cli, SampleStrategy, TrsName};
+use eggshell::cli::{BaselineArgs, BaselineCmd, Cli, SampleStrategy, TrsName};
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::sampling::{DataEntry, EqsatStats, MetaData, SampleData};
@@ -75,10 +75,10 @@ fn main() {
 
     let runtime = Local::now() - start_time;
     info!(
-        "Runtime: {}:{}:{}",
+        "Runtime: {:0>2}:{:0>2}:{:0>2}",
         runtime.num_hours(),
-        runtime.num_minutes(),
-        runtime.num_seconds()
+        runtime.num_minutes() % 60,
+        runtime.num_seconds() % 60
     );
 
     info!("EXPR {} DONE!", cli.expr_id());
@@ -136,17 +136,19 @@ fn run<R: TermRewriteSystem>(
     let generations = find_generations(&samples, &mut eqsat_results);
     drop(eqsat_results);
 
-    let baselines = cli.baseline().map(|baselin_args| {
-        mk_baselines(
+    let baselines = if let BaselineCmd::WithBaseline(args) = cli.baseline() {
+        Some(mk_baselines(
             &samples,
             &eqsat_conf,
-            baselin_args,
+            args,
             rules,
             &mut rng,
             &generations,
             max_generation,
-        )
-    });
+        ))
+    } else {
+        None
+    };
 
     info!("Generating associated data for {}...", cli.expr_id());
     let sample_data = samples

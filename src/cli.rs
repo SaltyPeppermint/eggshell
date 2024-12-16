@@ -151,11 +151,8 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn baseline(&self) -> Option<&BaselineArgs> {
-        match &self.baseline {
-            BaselineCmd::WithBaseline(args) => Some(args),
-            BaselineCmd::NoBaseline => None,
-        }
+    pub fn baseline(&self) -> &BaselineCmd {
+        &self.baseline
     }
 }
 
