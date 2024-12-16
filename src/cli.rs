@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::error::ErrorKind;
-use clap::{Args, Error, Parser};
+use clap::{Args, Error, Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -36,9 +36,6 @@ pub struct Cli {
     #[arg(long, default_value_t = false)]
     with_explanations: bool,
 
-    // /// Calculate and save explanations
-    // #[arg(long, default_value_t = false)]
-    // with_baselines: bool,
     /// Node limit for egraph in seconds
     #[arg(long)]
     node_limit: Option<usize>,
@@ -59,18 +56,24 @@ pub struct Cli {
     #[arg(long)]
     trs: TrsName,
 
-    #[command(flatten)]
-    baseline_args: Option<BaselineArgs>,
+    #[command(subcommand)]
+    baseline: BaselineCmd,
+}
+
+#[derive(Debug, Subcommand, Serialize, Deserialize, PartialEq, Eq, Clone)]
+pub enum BaselineCmd {
+    WithBaseline(BaselineArgs),
+    NoBaseline,
 }
 
 #[derive(Debug, Args, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct BaselineArgs {
     /// Number of random goals to pick
-    #[arg(long, default_value_t = 1, group = "baselines")]
+    #[arg(long, default_value_t = 1)]
     random_goals: usize,
 
     /// Number of random guides to pick
-    #[arg(long, group = "baselines")]
+    #[arg(long)]
     random_guides: usize,
 }
 
@@ -148,8 +151,11 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn baseline_args(&self) -> Option<&BaselineArgs> {
-        self.baseline_args.as_ref()
+    pub fn baseline(&self) -> Option<&BaselineArgs> {
+        match &self.baseline {
+            BaselineCmd::WithBaseline(args) => Some(args),
+            BaselineCmd::NoBaseline => None,
+        }
     }
 }
 

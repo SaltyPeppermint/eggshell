@@ -129,14 +129,14 @@ fn run<R: TermRewriteSystem>(
     info!(
         "Took {} unique samples while aiming for {}.",
         samples.len(),
-        cli.eclass_samples()
+        cli.eclass_samples() * eqsat_results.len()
     );
 
     let max_generation = eqsat_results.len();
     let generations = find_generations(&samples, &mut eqsat_results);
     drop(eqsat_results);
 
-    let baselines = cli.baseline_args().map(|baselin_args| {
+    let baselines = cli.baseline().map(|baselin_args| {
         mk_baselines(
             &samples,
             &eqsat_conf,

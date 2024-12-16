@@ -3,7 +3,7 @@
 set -e
 
 START=0
-END=0
+END=1
 N_SAMPLES=20000
 uuid=$(uuidgen)
 
@@ -14,11 +14,9 @@ for i in $(seq $START $END); do
     echo "Logfile: $logfile"
 
     RUST_LOG=info cargo run --profile=release-with-debug -- \
-        --file data/rise/guided_eqsat.csv \
+        --file data/rise/start_and_goal.csv \
         --eclass-samples $N_SAMPLES \
         --memory-limit 1000000000 \
-        --random-guides 5000 \
-        --random-goals 5 \
         --time-limit 120 \
         --uuid $uuid \
         --trs rise \
@@ -28,3 +26,7 @@ for i in $(seq $START $END); do
 done
 
 # --profile=release-with-debug for profiling
+
+# sample_with_baseline \
+# --random-guides 5000 \
+# --random-goals 5 \
