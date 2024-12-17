@@ -73,6 +73,11 @@ macro_rules! monomorphize {
                             $crate::features::FeatureError::NonLeaf(self.name()),
                         ))?
                     }
+                    $crate::features::Feature::IgnoredSymbol => {
+                        Err($crate::error::EggshellError::<Lang>::from(
+                            $crate::features::FeatureError::IgnoredSymbol(self.name()),
+                        ))?
+                    }
                 }
             }
 
@@ -82,6 +87,11 @@ macro_rules! monomorphize {
                     $crate::features::Feature::Leaf(_) => {
                         Err($crate::error::EggshellError::<Lang>::from(
                             $crate::features::FeatureError::Leaf(self.name()),
+                        ))?
+                    }
+                    $crate::features::Feature::IgnoredSymbol => {
+                        Err($crate::error::EggshellError::<Lang>::from(
+                            $crate::features::FeatureError::IgnoredSymbol(self.name()),
                         ))?
                     }
                 }
@@ -106,10 +116,14 @@ macro_rules! monomorphize {
         impl PyFeaturizer {
             /// Parse from string
             #[new]
-            pub fn new(variable_names: Vec<String>) -> Self {
-                PyFeaturizer(<Lang as $crate::features::AsFeatures>::featurizer(
-                    variable_names,
-                ))
+            #[pyo3(signature = (variable_names, ignore_unknown=false))]
+            pub fn new(variable_names: Vec<String>, ignore_unknown: bool) -> Self {
+                let mut featurizer =
+                    <Lang as $crate::features::AsFeatures>::featurizer(variable_names);
+                if ignore_unknown {
+                    featurizer.set_ignore_unknown(true);
+                }
+                PyFeaturizer(featurizer)
             }
 
             pub fn feature_names_simple(&self) -> Vec<String> {
@@ -126,10 +140,10 @@ macro_rules! monomorphize {
         #[pyo3::pyfunction]
         pub fn many_featurize_simple<'py>(
             py: pyo3::Python<'py>,
-            ss: Vec<String>,
+            expression_strings: Vec<String>,
             featurizer: &PyFeaturizer,
         ) -> pyo3::PyResult<pyo3::Bound<'py, numpy::PyArray2<f64>>> {
-            let rust_vec = ss
+            let rust_vec = expression_strings
                 .par_iter()
                 .map(|s| {
                     let raw_sketch = s

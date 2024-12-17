@@ -8,6 +8,7 @@ use thiserror::Error;
 pub enum Feature {
     NonLeaf(usize),
     Leaf(Vec<f64>),
+    IgnoredSymbol,
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
@@ -22,6 +23,7 @@ pub enum SymbolType<'a> {
 pub struct Featurizer<L: AsFeatures> {
     symbols: Vec<L>,
     leaves: usize,
+    ignore_unknown: bool,
 }
 
 impl<L: AsFeatures> Featurizer<L> {
@@ -31,7 +33,15 @@ impl<L: AsFeatures> Featurizer<L> {
 
         symbols.sort_by_key(|b| std::cmp::Reverse(b.children().len()));
         let leaves = symbols.iter().filter(|s| s.children().is_empty()).count();
-        Featurizer { symbols, leaves }
+        Featurizer {
+            symbols,
+            leaves,
+            ignore_unknown: false,
+        }
+    }
+
+    pub fn set_ignore_unknown(&mut self, ignore_unknown: bool) {
+        self.ignore_unknown = ignore_unknown;
     }
 
     pub fn into_meta_lang<M: AsFeatures, F: Fn(L) -> M>(self, meta_wrapper: F) -> Featurizer<M> {
@@ -76,6 +86,10 @@ impl<L: AsFeatures> Featurizer<L> {
     }
 
     pub fn features(&self, symbol: &L) -> Result<Feature, FeatureError> {
+        if self.ignore_unknown && self.symbol_position(symbol).is_none() {
+            return Ok(Feature::IgnoredSymbol);
+        }
+
         if !symbol.children().is_empty() {
             return Ok(Feature::NonLeaf(
                 self.symbol_position(symbol)
@@ -126,6 +140,8 @@ pub trait AsFeatures: Language + Display {
 pub enum FeatureError {
     #[error("Symbol not in language: {0}")]
     UnknownSymbol(String),
+    #[error("Ignored Symbol has no features: {0}")]
+    IgnoredSymbol(String),
     #[error("Non Leaf Node has no feature! {0}")]
     NonLeaf(String),
     #[error("Leaf has no network id: {0}")]
