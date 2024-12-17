@@ -42,6 +42,7 @@ pub struct MetaData {
     timestamp: i64,
     sample_conf: SampleConf,
     eqsat_conf: EqsatConf,
+    rules: Vec<String>,
 }
 
 impl MetaData {
@@ -53,6 +54,7 @@ impl MetaData {
         timestamp: i64,
         sample_conf: SampleConf,
         eqsat_conf: EqsatConf,
+        rules: Vec<String>,
     ) -> Self {
         Self {
             uuid,
@@ -61,6 +63,7 @@ impl MetaData {
             timestamp,
             sample_conf,
             eqsat_conf,
+            rules,
         }
     }
 }

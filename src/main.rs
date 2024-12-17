@@ -56,7 +56,7 @@ fn main() {
                 sample_conf,
                 folder,
                 start_time.timestamp(),
-                Halide::full_rules().as_slice(),
+                Halide::full_rules(),
                 &cli,
             );
         }
@@ -67,7 +67,7 @@ fn main() {
                 sample_conf,
                 folder,
                 start_time.timestamp(),
-                Rise::full_rules().as_slice(),
+                Rise::full_rules(),
                 &cli,
             );
         }
@@ -90,7 +90,7 @@ fn run<R: TermRewriteSystem>(
     sample_conf: SampleConf,
     folder: String,
     timestamp: i64,
-    rules: &[Rewrite<R::Language, R::Analysis>],
+    rules: Vec<Rewrite<R::Language, R::Analysis>>,
     cli: &Cli,
 ) {
     let entry = exprs
@@ -107,7 +107,7 @@ fn run<R: TermRewriteSystem>(
     info!("Starting eqsat on expression {}...", cli.expr_id());
 
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules);
+    let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules.as_slice());
 
     info!("Finished Eqsat {}!", cli.expr_id());
     info!("Starting sampling...");
@@ -141,7 +141,7 @@ fn run<R: TermRewriteSystem>(
             &samples,
             &eqsat_conf,
             args,
-            rules,
+            rules.as_slice(),
             &mut rng,
             &generations,
             max_generation,
@@ -171,6 +171,7 @@ fn run<R: TermRewriteSystem>(
             timestamp,
             sample_conf,
             eqsat_conf,
+            rules.into_iter().map(|r| format!("{r:?}")).collect(),
         ),
     );
 

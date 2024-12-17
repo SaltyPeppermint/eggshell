@@ -53,16 +53,26 @@ macro_rules! monomorphize {
                 <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(&self.0)
             }
 
-            pub fn count_symbols(&self, featurizer: &PyFeaturizer) -> Vec<usize> {
-                self.0.count_symbols(&featurizer.0)
+            pub fn count_symbols(&self, featurizer: &PyFeaturizer) -> pyo3::PyResult<Vec<usize>> {
+                let x = self
+                    .0
+                    .count_symbols(&featurizer.0)
+                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
+                Ok(x)
             }
 
             #[expect(clippy::cast_precision_loss)]
-            pub fn feature_vec_simple(&self, featurizer: &PyFeaturizer) -> Vec<f64> {
-                let mut features = self.0.count_symbols(&featurizer.0);
+            pub fn feature_vec_simple(
+                &self,
+                featurizer: &PyFeaturizer,
+            ) -> pyo3::PyResult<Vec<f64>> {
+                let mut features = self
+                    .0
+                    .count_symbols(&featurizer.0)
+                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
                 features.push(self.size());
                 features.push(self.depth());
-                features.into_iter().map(|v| v as f64).collect()
+                Ok(features.into_iter().map(|v| v as f64).collect())
             }
 
             pub fn feature_vec_ml(&self) -> pyo3::PyResult<Vec<f64>> {
@@ -150,7 +160,7 @@ macro_rules! monomorphize {
                         .parse::<egg::RecExpr<Lang>>()
                         .map_err(|e| $crate::error::EggshellError::from(e))?;
                     let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)?;
-                    let mut features = raw_ast.count_symbols(&featurizer.0);
+                    let mut features = raw_ast.count_symbols(&featurizer.0)?;
                     features.push(
                         <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::size(
                             &raw_ast,

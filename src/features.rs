@@ -44,6 +44,10 @@ impl<L: AsFeatures> Featurizer<L> {
         self.ignore_unknown = ignore_unknown;
     }
 
+    pub fn ignore_unknown(&self) -> bool {
+        self.ignore_unknown
+    }
+
     pub fn into_meta_lang<M: AsFeatures, F: Fn(L) -> M>(self, meta_wrapper: F) -> Featurizer<M> {
         let i = self
             .symbols
@@ -53,7 +57,7 @@ impl<L: AsFeatures> Featurizer<L> {
         Featurizer::new(i, vec![])
     }
 
-    fn symbol_position(&self, symbol: &L) -> Option<usize> {
+    pub fn symbol_position(&self, symbol: &L) -> Option<usize> {
         match symbol.symbol_type() {
             SymbolType::Constant(_) => self
                 .symbols

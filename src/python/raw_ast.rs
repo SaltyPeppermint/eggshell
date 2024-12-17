@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 use egg::RecExpr;
 
-use crate::features::{AsFeatures, Feature, FeatureError, Featurizer, SymbolType};
+use crate::features::{AsFeatures, Feature, FeatureError, Featurizer};
 use crate::utils::Tree;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,30 +38,27 @@ impl<L: AsFeatures> RawAst<L> {
         &self.node
     }
 
-    fn count_symbol(&self, symbol: &L) -> usize {
-        usize::from(match self.node.symbol_type() {
-            SymbolType::Constant(_) => self.node.discriminant() == symbol.discriminant(),
-            SymbolType::Variable(name) => {
-                if let SymbolType::Variable(other_name) = symbol.symbol_type() {
-                    name == other_name && self.node.discriminant() == symbol.discriminant()
-                } else {
-                    false
-                }
+    pub fn count_symbols(&self, featurizer: &Featurizer<L>) -> Result<Vec<usize>, FeatureError> {
+        fn rec<L: AsFeatures>(
+            node: &RawAst<L>,
+            featurizer: &Featurizer<L>,
+            f: &mut Vec<usize>,
+        ) -> Result<(), FeatureError> {
+            if let Some(p) = featurizer.symbol_position(&node.node) {
+                f[p] += 1;
+            } else if !featurizer.ignore_unknown() {
+                return Err(FeatureError::UnknownSymbol(node.to_string()));
+            };
+            for c in node.children() {
+                rec(c, featurizer, f)?;
             }
-            SymbolType::Operator | SymbolType::MetaSymbol => symbol.matches(&self.node),
-        }) + self
-            .children
-            .iter()
-            .map(|c| c.count_symbol(symbol))
-            .sum::<usize>()
-    }
+            Ok(())
+        }
 
-    pub fn count_symbols(&self, featurizer: &Featurizer<L>) -> Vec<usize> {
-        featurizer
-            .symbols()
-            .iter()
-            .map(|symbol| self.count_symbol(symbol))
-            .collect()
+        let symbols = featurizer.symbols();
+        let mut f = vec![0usize; symbols.len()];
+        rec(self, featurizer, &mut f)?;
+        Ok(f)
     }
 
     pub fn is_leaf(&self) -> bool {

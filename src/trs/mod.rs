@@ -41,7 +41,8 @@ pub trait TermRewriteSystem: Serialize + Debug + Clone {
         + Debug
         + Default
         + Send
-        + Sync;
+        + Sync
+        + 'static;
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
