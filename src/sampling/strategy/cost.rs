@@ -206,4 +206,26 @@ mod tests {
 
         assert_eq!(n_samples, 38);
     }
+
+    #[test]
+    fn halide_sample_float() {
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse()
+            .unwrap();
+        let sample_conf = SampleConf::default();
+        let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
+
+        let rules = Halide::full_rules();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
+
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+
+        let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
+
+        assert_eq!(n_samples, 38);
+    }
 }

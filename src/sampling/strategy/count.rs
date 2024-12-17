@@ -19,7 +19,7 @@ use super::Strategy;
 
 /// Buggy budget consideration
 #[derive(Debug)]
-pub struct CountWeighted<'a, C, L, N>
+pub struct CountWeightedGreedy<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -41,7 +41,7 @@ where
     limit: usize,
 }
 
-impl<'a, C, L, N> CountWeighted<'a, C, L, N>
+impl<'a, C, L, N> CountWeightedGreedy<'a, C, L, N>
 where
     L: Language + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -82,7 +82,7 @@ where
         info!("Ast size oneshot analysis finsished!");
 
         info!("Strategy read to start sampling!");
-        CountWeighted {
+        CountWeightedGreedy {
             egraph,
             size_counts,
             ast_sizes,
@@ -129,7 +129,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountWeighted<'a, C, L, N>
+impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedGreedy<'a, C, L, N>
 where
     L: Language + Display + Debug + Sync + Send,
     L::Discriminant: Debug + Sync,
@@ -612,6 +612,70 @@ mod tests {
     use super::*;
 
     #[test]
+    fn simple_sample_uniform() {
+        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::default();
+
+        let rules = Simple::full_rules();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
+
+        let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy
+            .sample_eclass(&mut rng, &sample_conf, root_id)
+            .unwrap();
+
+        assert_eq!(samples.len(), 5);
+    }
+
+    #[test]
+    fn simple_sample_uniform_float() {
+        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::default();
+
+        let rules = Simple::full_rules();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
+
+        let strategy = CountWeightedUniformly::<f64, _, _>::new_with_limit(eqsat.egraph(), 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy
+            .sample_eclass(&mut rng, &sample_conf, root_id)
+            .unwrap();
+
+        assert_eq!(samples.len(), 4);
+    }
+
+    #[test]
+    fn simple_greedy() {
+        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
+        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
+        let eqsat_conf = EqsatConf::default();
+
+        let rules = Simple::full_rules();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
+            .with_conf(eqsat_conf.clone())
+            .run(rules.as_slice());
+        let root_id = eqsat.roots()[0];
+
+        let strategy =
+            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let samples = strategy
+            .sample_eclass(&mut rng, &sample_conf, root_id)
+            .unwrap();
+
+        assert_eq!(samples.len(), 8);
+    }
+
+    #[test]
     fn simple_sample_lut() {
         let term = "(* (+ a b) 1)";
         let start_expr = term.parse::<RecExpr<_>>().unwrap();
@@ -637,29 +701,30 @@ mod tests {
     }
 
     #[test]
-    fn simple_sample() {
-        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
+    fn halide_sample_uniform() {
+        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+            .parse::<RecExpr<_>>()
+            .unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConf::default();
+        let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
-        let rules = Simple::full_rules();
+        let rules = Halide::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
             .with_conf(eqsat_conf.clone())
             .run(rules.as_slice());
         let root_id = eqsat.roots()[0];
 
-        let strategy =
-            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 5);
+        let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 32);
         let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
         let samples = strategy
             .sample_eclass(&mut rng, &sample_conf, root_id)
             .unwrap();
 
-        assert_eq!(samples.len(), 8);
+        assert_eq!(samples.len(), 10);
     }
 
     #[test]
-    fn halide_sample() {
+    fn halide_sample_greedy() {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();
@@ -673,7 +738,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy =
-            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 32);
+            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 32);
         let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
         let samples = strategy
             .sample_eclass(&mut rng, &sample_conf, root_id)
@@ -683,7 +748,7 @@ mod tests {
     }
 
     #[test]
-    fn halide_low_limit() {
+    fn halide_low_limit_greedy() {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();
@@ -697,7 +762,7 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy =
-            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 2);
+            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 2);
         let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
 
         assert_eq!(
@@ -707,7 +772,7 @@ mod tests {
     }
 
     #[test]
-    fn halide_lut_low_limit() {
+    fn halide_low_limit_lut() {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();

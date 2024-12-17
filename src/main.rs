@@ -18,7 +18,9 @@ use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::sampling::{DataEntry, EqsatStats, MetaData, SampleData};
 use eggshell::io::structs::Entry;
-use eggshell::sampling::strategy::{CostWeighted, CountWeighted, CountWeightedUniformly, Strategy};
+use eggshell::sampling::strategy::{
+    CostWeighted, CountWeightedGreedy, CountWeightedUniformly, Strategy,
+};
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
@@ -254,7 +256,7 @@ where
         }
         SampleStrategy::CountWeighted => {
             let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
-            CountWeighted::<BigUint, _, _>::new_with_limit(eqsat.egraph(), start_expr, limit)
+            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), start_expr, limit)
                 .sample_eclass(rng, sample_conf, root_id)
                 .unwrap()
         }
