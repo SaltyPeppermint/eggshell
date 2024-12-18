@@ -20,7 +20,7 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
         &mut self,
         egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &impl Fn(Id) -> &'a Self::Data,
+        analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
         Self::Data: 'a,
@@ -46,7 +46,7 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
                 if u_node.all(|id| data.contains_key(&id)) {
                     // No egraph.find since since analysis_pending only contains canonical ids
                     let eclass = &egraph[current_id];
-                    let node_data = analysis.make(egraph, &u_node, &|id| &data[&id]);
+                    let node_data = analysis.make(egraph, &u_node, data);
                     if let Some(existing) = data.get_mut(&current_id) {
                         let DidMerge(may_not_be_existing, _) = analysis.merge(existing, node_data);
                         if may_not_be_existing {

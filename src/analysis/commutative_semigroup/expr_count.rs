@@ -51,7 +51,7 @@ where
         &self,
         _egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &(impl Fn(egg::Id) -> &'a Self::Data + Sync),
+        analysis_of: &HashMap<egg::Id, Self::Data>,
     ) -> Self::Data
     where
         Self::Data: 'a,
@@ -72,8 +72,8 @@ where
             // If we have not reached the bottom of the recursion, call rec for all the children
             // with increased size (since a child adds a node) and multiplied count to account for all
             // the possible new combinations.
-            // If we have reached the bottom, we add (or init) the count to entry corresponding to the current
-            // the recursion depth (which is the size)
+            // If we have reached the end of the recursion, we add (or init) the count to the entry
+            // for the corresponding size
             if let Some((head, tail)) = remaining.split_first() {
                 for (s, c) in *head {
                     rec(
@@ -105,7 +105,7 @@ where
         let children_counts = enode
             .children()
             .par_iter()
-            .map(|c_id| analysis_of(*c_id))
+            .map(|c_id| &analysis_of[c_id])
             .collect::<Vec<_>>();
         let mut counts = HashMap::new();
 

@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use egg::{Analysis, CostFunction, DidMerge, EGraph, Id, Language};
+use hashbrown::HashMap;
 
 use super::SemiLatticeAnalysis;
 use crate::utils::ExprHashCons;
@@ -40,16 +41,16 @@ where
         &mut self,
         _egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &impl Fn(Id) -> &'b Self::Data,
+        analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
         Self::Data: 'b,
         Self: 'b,
     {
-        let expr_node = enode.clone().map_children(|c| (*analysis_of)(c).1);
+        let expr_node = enode.clone().map_children(|c| analysis_of[&c].1);
         let expr = self.exprs.add(expr_node);
         (
-            self.cost_fn.cost(enode, |c| (*analysis_of)(c).0.clone()),
+            self.cost_fn.cost(enode, |c| analysis_of[&c].0.clone()),
             expr,
         )
     }

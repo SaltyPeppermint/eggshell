@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 
 use egg::{Analysis, AstSize, DidMerge, EGraph, Id, Language};
+use hashbrown::HashMap;
 
 use super::SemiLatticeAnalysis;
 
@@ -11,12 +12,12 @@ impl<L: Language, N: Analysis<L>> SemiLatticeAnalysis<L, N> for AstSize {
         &mut self,
         _egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &impl Fn(Id) -> &'a Self::Data,
+        analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
         Self::Data: 'a,
     {
-        enode.fold(1usize, |size, id| size + analysis_of(id))
+        enode.fold(1usize, |size, id| size + analysis_of[&id])
     }
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {

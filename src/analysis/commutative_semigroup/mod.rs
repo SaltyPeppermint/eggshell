@@ -24,7 +24,7 @@ where
         &self,
         egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &(impl Fn(egg::Id) -> &'a Self::Data + Sync),
+        analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
         Self::Data: 'a,
@@ -56,7 +56,7 @@ where
                     let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
                     // If all the childs eclass_children have data, we can calculate it!
                     if u_node.all(|child_id| data.contains_key(&child_id)) {
-                        Some(analysis.make(egraph, &u_node, &|child_id| &data[&child_id]))
+                        Some(analysis.make(egraph, &u_node, data))
                     } else {
                         None
                     }
