@@ -15,7 +15,7 @@ use super::SampleError;
 use super::{choices::ChoiceList, SampleConf};
 
 pub use cost::CostWeighted;
-pub use count::{CountLutWeighted, CountWeightedGreedy, CountWeightedUniformly};
+pub use count::{CountWeightedGreedy, CountWeightedUniformly};
 
 pub trait Strategy<'a, L, N>: Debug + Send + Sync
 where

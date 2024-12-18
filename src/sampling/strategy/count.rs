@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 use std::iter::{Product, Sum};
-use std::ops::{AddAssign, Mul};
+use std::ops::AddAssign;
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
@@ -311,7 +311,7 @@ where
         debug!("Choices: {:?}", choices);
         // We need to know what is the minimum size required to fill the rest of the open positions
         let min_to_fill_other_open = choices
-            .other_open_positions()
+            .other_open_slots()
             .map(|id| self.ast_sizes[&id])
             .sum::<usize>();
         debug!("Required to fill rest: {min_to_fill_other_open}");
@@ -319,7 +319,7 @@ where
         // Also subtract the reserv budget needed for the other open positions
         let budget = self
             .limit
-            .checked_sub(choices.n_chosen_positions() + min_to_fill_other_open)
+            .checked_sub(choices.n_chosen() + min_to_fill_other_open)
             .unwrap();
         debug!("Budget available: {budget}");
         debug!("Current EClass Counts {:?}", self.size_counts[&eclass.id]);
@@ -358,180 +358,6 @@ where
     fn extractable(&self, id: Id) -> Result<(), SampleError> {
         if self.size_counts[&id].is_empty() {
             Err(SampleError::LimitError(self.limit))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn egraph(&self) -> &'a EGraph<L, N> {
-        self.egraph
-    }
-}
-
-/// Don't trust this, not really tested
-#[derive(Debug)]
-pub struct CountLutWeighted<'a, C, L, N>
-where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Debug + Sync,
-    C: Counter
-        + Sum<C>
-        + Product<C>
-        + for<'x> AddAssign<&'x C>
-        + for<'x> Mul<&'x C, Output = C>
-        + SampleUniform
-        + PartialOrd
-        + Default,
-{
-    egraph: &'a EGraph<L, N>,
-    size_counts: HashMap<Id, HashMap<usize, C>>,
-    interesting_sizes: HashMap<usize, C>,
-    ast_sizes: HashMap<Id, usize>,
-    start_size: usize,
-    limit: usize,
-}
-
-impl<'a, C, L, N> CountLutWeighted<'a, C, L, N>
-where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Debug + Sync,
-    C: Counter
-        + Sum<C>
-        + Product<C>
-        + SampleUniform
-        + PartialOrd
-        + Default
-        + for<'x> AddAssign<&'x C>
-        + for<'x> Mul<&'x C, Output = C>,
-{
-    /// Creates a new [`CountLutWeighted<C, L, N>`].
-    ///
-    /// Terms are weighted according to their value in the hashtable.
-    ///
-    /// The analysis depth limit will be set to the largest term size in the table.
-    ///
-    ///
-    /// # Panics
-    ///
-    /// Panics if given an empty Hashset of term sizes.
-    pub fn new(
-        egraph: &'a EGraph<L, N>,
-        start_expr: &RecExpr<L>,
-        interesting_sizes: HashMap<usize, C>,
-    ) -> Self {
-        let start_size = AstSize.cost_rec(start_expr);
-        let mut size_counts = HashMap::new();
-        let limit = *interesting_sizes
-            .keys()
-            .max()
-            .expect("At least one term size of interest");
-
-        // Make one big size counts analysis for all eclasses
-        info!("Starting size count oneshot analysis...");
-        ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
-        info!("Size count oneshot analysis finsished!");
-
-        // Filter out data with uninteresting expression sizes
-        info!("Filtering out uninteresting expression sizes...");
-        for class_data in size_counts.values_mut() {
-            class_data.retain(|k, _| interesting_sizes.contains_key(k));
-        }
-        info!("Filtering done!");
-
-        let mut ast_sizes = HashMap::new();
-        // Make one big ast size analysis for all eclasses
-        info!("Starting ast size oneshot analysis...");
-        AstSize.one_shot_analysis(egraph, &mut ast_sizes);
-        info!("Ast size oneshot analysis finsished!");
-
-        info!("Strategy read to start sampling!");
-        CountLutWeighted {
-            egraph,
-            size_counts,
-            interesting_sizes,
-            ast_sizes,
-            start_size,
-            limit,
-        }
-    }
-
-    fn pick_by_lut<'c>(
-        &self,
-        rng: &mut ChaCha12Rng,
-        eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
-        budget: usize,
-    ) -> &'c L {
-        eclass
-            .nodes
-            .choose_weighted(rng, |node| -> C {
-                node.children()
-                    .iter()
-                    .map(|child_id| &self.size_counts[child_id])
-                    .map(|m| {
-                        m.iter()
-                            .map(|(k, v)| self.interesting_sizes[k].clone() * v)
-                            .sum::<C>()
-                    })
-                    .product::<C>()
-            })
-            .or_else(|e| match e {
-                // If all weights are zero, we are don't have
-                // any data about the options to pick we are reasoning about.
-                // If we have exhausted our budget we need to pick according
-                // to AstSize now to "close out" the expr as fast as possible
-                // to prevent it from growing even more.
-                // Otherwise, go random.
-                WeightedError::AllWeightsZero => {
-                    if budget == 0 {
-                        Ok(pick_by_ast_size::<L, N>(&self.ast_sizes, eclass))
-                    } else {
-                        Ok(eclass.nodes.choose(rng).expect("EClass cant be empty"))
-                    }
-                }
-                _ => Err(e),
-            })
-            .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
-    }
-}
-
-impl<'a, C, L, N> Strategy<'a, L, N> for CountLutWeighted<'a, C, L, N>
-where
-    L: Language + Display + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Debug + Sync,
-    C: Counter
-        + Sum<C>
-        + Product<C>
-        + for<'x> AddAssign<&'x C>
-        + for<'x> Mul<&'x C, Output = C>
-        + SampleUniform
-        + PartialOrd
-        + Default,
-{
-    fn pick<'c: 'a>(
-        &self,
-        rng: &mut ChaCha12Rng,
-        eclass: &'c EClass<L, N::Data>,
-        choices: &ChoiceList<L>,
-    ) -> &'c L {
-        if choices.len() <= self.start_size {
-            let budget = self.limit.saturating_sub(choices.len());
-            self.pick_by_lut(rng, eclass, budget)
-        } else {
-            pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
-        }
-    }
-
-    fn extractable(&self, id: Id) -> Result<(), SampleError> {
-        if self.size_counts[&id].is_empty() {
-            Err(SampleError::LimitError(
-                *self.interesting_sizes.keys().max().unwrap_or(&0),
-            ))
         } else {
             Ok(())
         }
@@ -676,31 +502,6 @@ mod tests {
     }
 
     #[test]
-    fn simple_sample_lut() {
-        let term = "(* (+ a b) 1)";
-        let start_expr = term.parse::<RecExpr<_>>().unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConf::default();
-
-        let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
-
-        let strategy = CountLutWeighted::<BigUint, _, _>::new(
-            eqsat.egraph(),
-            &start_expr,
-            HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (17, 1u32.into())]),
-        );
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
-
-        let n_samples = samples.iter().map(|(_, exprs)| exprs.len()).sum::<usize>();
-
-        assert_eq!(n_samples, 8);
-    }
-
-    #[test]
     fn halide_sample_uniform() {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
@@ -768,33 +569,6 @@ mod tests {
         assert_eq!(
             strategy.sample_eclass(&mut rng, &sample_conf, root_id),
             Err(SampleError::LimitError(2))
-        );
-    }
-
-    #[test]
-    fn halide_low_limit_lut() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse::<RecExpr<_>>()
-            .unwrap();
-        let sample_conf = SampleConf::default();
-        let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
-
-        let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.clone()]))
-            .with_conf(eqsat_conf.clone())
-            .run(rules.as_slice());
-        let root_id = eqsat.roots()[0];
-
-        let strategy = CountLutWeighted::<BigUint, _, _>::new(
-            eqsat.egraph(),
-            &start_expr,
-            HashMap::from([(1, 1u32.into()), (2, 2u32.into()), (3, 1u32.into())]),
-        );
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-
-        assert_eq!(
-            strategy.sample_eclass(&mut rng, &sample_conf, root_id),
-            Err(SampleError::LimitError(3))
         );
     }
 
