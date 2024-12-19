@@ -1,16 +1,16 @@
 use std::fmt::{Debug, Display};
 use std::iter::{Product, Sum};
-use std::ops::AddAssign;
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use log::{debug, info, log_enabled, Level};
+use num_traits::{NumAssignRef, NumRef};
 use rand::distributions::uniform::SampleUniform;
 use rand::distributions::WeightedError;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
-use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
+use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
 use crate::sampling::choices::ChoiceList;
 use crate::sampling::SampleError;
@@ -25,10 +25,13 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
+        + Send
+        + Sync
         + Product<C>
-        + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
         + SampleUniform
         + PartialOrd
         + Default,
@@ -47,10 +50,14 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
-        + Product<C>
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
         + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
+        + Product<C>
+        + Send
+        + Sync
         + SampleUniform
         + PartialOrd
         + Default,
@@ -135,11 +142,16 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
-        + Product<C>
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
         + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
+        + Product<C>
+        + Send
+        + Sync
         + SampleUniform
+        + PartialEq
         + PartialOrd
         + Default,
 {
@@ -176,11 +188,18 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
-        + Product<C>
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
         + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
+        + Sum<C>
+        + for<'x> Product<&'x C>
+        + Product<C>
+        + Send
+        + Sync
         + SampleUniform
+        + PartialEq
         + PartialOrd
         + Default,
 {
@@ -196,13 +215,18 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
-        + Product<C>
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
+        + for<'x> Sum<&'x C>
         + Sum<C>
         + for<'x> Product<&'x C>
-        + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
+        + Product<C>
+        + Send
+        + Sync
         + SampleUniform
+        + PartialEq
         + PartialOrd
         + Default,
 {
@@ -224,7 +248,7 @@ where
         ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
         info!("Size count oneshot analysis finsished!");
 
-        // let mut max: C = 0u32.into();
+        // let mut max: C = C::zero();
         // for (_id, counts) in &size_counts {
         //     for (_size, count) in counts {
         //         if count > &max {
@@ -278,7 +302,7 @@ where
                     .product::<Option<C>>()
                     // If for a combination any child has no expression, the combination is impossible
                     // and we need to default to 0 as it does not contribute to the count
-                    .unwrap_or_else(|| 0u32.into());
+                    .unwrap_or_else(|| C::zero());
                 combination_count
             })
             .sum::<C>()
@@ -291,13 +315,18 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Counter
-        + Product<C>
+    C: Debug
+        + Clone
+        + NumRef
+        + NumAssignRef
+        + for<'x> Sum<&'x C>
         + Sum<C>
         + for<'x> Product<&'x C>
-        + for<'x> Sum<&'x C>
-        + for<'x> AddAssign<&'x C>
+        + Product<C>
+        + Send
+        + Sync
         + SampleUniform
+        + PartialEq
         + PartialOrd
         + Default,
 {

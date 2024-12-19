@@ -1,28 +1,11 @@
 use std::fmt::Debug;
-use std::ops::AddAssign;
-use std::ops::Mul;
 
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
-use num::BigUint;
-use rayon::prelude::*;
+use num_traits::NumAssignRef;
+use num_traits::NumRef;
 
 use super::CommutativeSemigroupAnalysis;
-
-pub trait Counter:
-    Debug
-    + Clone
-    + PartialEq
-    + From<u32>
-    + for<'x> Mul<&'x Self, Output = Self>
-    + AddAssign
-    + Send
-    + Sync
-{
-}
-
-impl Counter for f64 {}
-impl Counter for BigUint {}
 
 #[derive(Debug)]
 pub struct ExprCount {
@@ -42,7 +25,7 @@ where
     L::Discriminant: Debug + Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Debug + Sync,
-    C: Counter,
+    C: Debug + Clone + NumRef + NumAssignRef + Send + Sync,
 {
     // Size and number of programs of that size
     type Data = HashMap<usize, C>;
@@ -57,60 +40,95 @@ where
         Self::Data: 'a,
         C: 'a,
     {
-        fn rec<CC: Counter>(
-            remaining: &[&HashMap<usize, CC>],
-            size: usize,
-            count: CC,
-            counts: &mut HashMap<usize, CC>,
-            limit: usize,
-        ) {
-            // If we have reached the term size limit, stop the recursion
-            if size > limit {
-                return;
-            }
+        // fn rec<
+        //     CC: Debug
+        //         + Clone
+        //         + PartialEq
+        //         + From<u32>
+        //         + for<'x> Mul<&'x CC, Output = CC>
+        //         + for<'x> AddAssign<&'x CC>
+        //         + Send
+        //         + Sync,
+        // >(
+        //     remaining: &[&HashMap<usize, CC>],
+        //     size: usize,
+        //     count: CC,
+        //     counts: &mut HashMap<usize, CC>,
+        //     limit: usize,
+        // ) {
+        //     // If we have reached the term size limit, stop the recursion
+        //     if size > limit {
+        //         return;
+        //     }
 
-            // If we have not reached the bottom of the recursion, call rec for all the children
-            // with increased size (since a child adds a node) and multiplied count to account for all
-            // the possible new combinations.
-            // If we have reached the end of the recursion, we add (or init) the count to the entry
-            // for the corresponding size
-            if let Some((head, tail)) = remaining.split_first() {
-                for (s, c) in *head {
-                    rec(
-                        tail,
-                        size + s, //size.checked_add(*s).expect("Add failed in rec"),
-                        count.clone() * c, //count.checked_mul(*c).expect("Mul failed in rec"),
-                        counts,
-                        limit,
-                    );
-                }
-            } else {
-                // counts
-                //     .entry(size)
-                //     .and_modify(|c| {
-                //         *c += count;
-                //     })
-                //     .or_insert(count);
-                match counts.get_mut(&size) {
-                    Some(c) => *c += count, // .checked_add(count).expect("Add failed in else"),
-                    None => {
-                        counts.insert(size, count);
-                    }
-                }
-            }
-        }
+        //     // If we have not reached the bottom of the recursion, call rec for all the children
+        //     // with increased size (since a child adds a node) and multiplied count to account for all
+        //     // the possible new combinations.
+        //     // If we have reached the end of the recursion, we add (or init) the count to the entry
+        //     // for the corresponding size
+        //     if let Some((head, tail)) = remaining.split_first() {
+        //         for (s, c) in *head {
+        //             rec(
+        //                 tail,
+        //                 size + s, //size.checked_add(*s).expect("Add failed in rec"),
+        //                 count.clone() * c, //count.checked_mul(*c).expect("Mul failed in rec"),
+        //                 counts,
+        //                 limit,
+        //             );
+        //         }
+        //     } else {
+        //         counts
+        //             .entry(size)
+        //             .and_modify(|c| {
+        //                 *c += &count;
+        //             })
+        //             .or_insert(count);
+        //         // match counts.get_mut(&size) {
+        //         //     Some(c) => *c += count, // .checked_add(count).expect("Add failed in else"),
+        //         //     None => {
+        //         //         counts.insert(size, count);
+        //         //     }
+        //         // }
+        //     }
+        // }
+
         // We start with the initial analysis of all the children since we need to know those
         // so we can simply add their sizes / multiply their counts for this node.
         // Thankfully this is cached via `analysis_of`
-        let children_counts = enode
-            .children()
-            .par_iter()
-            .map(|c_id| &analysis_of[c_id])
-            .collect::<Vec<_>>();
-        let mut counts = HashMap::new();
 
-        rec(&children_counts, 1, 1u32.into(), &mut counts, self.limit);
-        counts
+        // let children_counts = enode
+        //     .children()
+        //     .iter()
+        //     .map(|c_id| &analysis_of[c_id])
+        //     .collect::<Vec<_>>();
+        // let mut counts = HashMap::new();
+        // rec(&children_counts, 1, 1u32.into(), &mut counts, self.limit);
+        // counts
+
+        let mut tmp = Vec::new();
+
+        enode.children().iter().map(|c_id| &analysis_of[c_id]).fold(
+            HashMap::from([(1, C::one())]),
+            |mut acc, child_data| {
+                tmp.extend(acc.drain());
+
+                for (acc_size, acc_count) in &tmp {
+                    for (child_size, child_count) in child_data {
+                        let combined_size = acc_size + child_size;
+                        if combined_size > self.limit {
+                            continue;
+                        }
+                        let combined_count = acc_count.to_owned() * child_count;
+                        acc.entry(combined_size)
+                            .and_modify(|c| *c += &combined_count)
+                            .or_insert(combined_count);
+                    }
+                }
+
+                tmp.clear();
+                acc
+            },
+        )
     }
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
@@ -119,17 +137,11 @@ where
         }
 
         for (size, count) in b {
-            // a.entry(size)
-            //     .and_modify(|c| {
-            //         *c += count;
-            //     })
-            //     .or_insert(count);
-            match a.get_mut(&size) {
-                Some(c) => *c += count, //  .checked_add(count).expect("Add failed in merge"),
-                None => {
-                    a.insert(size, count);
-                }
-            }
+            a.entry(size)
+                .and_modify(|c| {
+                    *c += &count;
+                })
+                .or_insert(count);
         }
         DidMerge(true, false)
     }
@@ -168,7 +180,7 @@ mod tests {
 
         let root_data = &data[&egraph.find(apb)];
 
-        assert_eq!(root_data[&5], 1u32.into());
+        assert_eq!(root_data[&5], 1usize.into());
     }
 
     #[test]
@@ -187,7 +199,7 @@ mod tests {
         ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
 
         let root_data = &data[&egraph.find(apb)];
-        assert_eq!(root_data[&5], 16u32.into());
+        assert_eq!(root_data[&5], 16usize.into());
     }
 
     #[test]
@@ -209,6 +221,6 @@ mod tests {
 
         let root_data = &data[&egraph.find(root)];
 
-        assert_eq!(root_data[&16], 40512u32.into());
+        assert_eq!(root_data[&16], 40512usize.into());
     }
 }
