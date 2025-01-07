@@ -76,10 +76,9 @@ where
         // let limit = start_size + (start_size / 2);
         info!("Using limit {limit}");
 
-        let mut size_counts = HashMap::new();
         // Make one big size count analysis for all eclasses
         info!("Starting size count oneshot analysis...");
-        ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
+        let size_counts = ExprCount::new(limit).one_shot_analysis(egraph);
         info!("Size count oneshot analysis finsished!");
 
         let mut ast_sizes = HashMap::new();
@@ -242,10 +241,9 @@ where
         // let limit = start_size + (start_size / 2);
         info!("Using limit {limit}");
 
-        let mut size_counts = HashMap::new();
         // Make one big size count analysis for all eclasses
         info!("Starting size count oneshot analysis...");
-        ExprCount::new(limit).one_shot_analysis(egraph, &mut size_counts);
+        let size_counts = ExprCount::new(limit).one_shot_analysis(egraph);
         info!("Size count oneshot analysis finsished!");
 
         // let mut max: C = C::zero();

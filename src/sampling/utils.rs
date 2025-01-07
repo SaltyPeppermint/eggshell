@@ -13,7 +13,7 @@ pub struct SampleConf {
     pub loop_limit: usize,
     #[builder(default = 1024)]
     pub rng_seed: u64,
-    #[builder(default = 1000)]
+    #[builder(default = 100)]
     pub batch_size: usize,
 }
 

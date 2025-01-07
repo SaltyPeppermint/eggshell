@@ -1,5 +1,8 @@
 use std::fmt::Debug;
+use std::sync::Arc;
+use std::sync::RwLock;
 
+use egg::Id;
 use egg::{Analysis, DidMerge, EGraph, Language};
 use hashbrown::HashMap;
 use num_traits::NumAssignRef;
@@ -7,7 +10,7 @@ use num_traits::NumRef;
 
 use super::CommutativeSemigroupAnalysis;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct ExprCount {
     limit: usize,
 }
@@ -34,7 +37,7 @@ where
         &self,
         _egraph: &EGraph<L, N>,
         enode: &L,
-        analysis_of: &HashMap<egg::Id, Self::Data>,
+        analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
     ) -> Self::Data
     where
         Self::Data: 'a,
@@ -105,15 +108,23 @@ where
         // rec(&children_counts, 1, 1u32.into(), &mut counts, self.limit);
         // counts
 
+        let mut children_data = Vec::new();
+        {
+            let a_o = analysis_of.read().unwrap();
+            for child_id in enode.children() {
+                children_data.push(a_o[child_id].clone());
+            }
+        }
+
         let mut tmp = Vec::new();
 
-        enode.children().iter().map(|c_id| &analysis_of[c_id]).fold(
-            HashMap::from([(1, C::one())]),
-            |mut acc, child_data| {
+        children_data
+            .into_iter()
+            .fold(HashMap::from([(1, C::one())]), |mut acc, child_data| {
                 tmp.extend(acc.drain());
 
                 for (acc_size, acc_count) in &tmp {
-                    for (child_size, child_count) in child_data {
+                    for (child_size, child_count) in &child_data {
                         let combined_size = acc_size + child_size;
                         if combined_size > self.limit {
                             continue;
@@ -127,8 +138,30 @@ where
 
                 tmp.clear();
                 acc
-            },
-        )
+            })
+        // enode
+        //     .children()
+        //     .iter()
+        //     .map(|child_id| analysis_of.read().unwrap()[child_id].clone())
+        //     .fold(HashMap::from([(1, C::one())]), |mut acc, child_data| {
+        //         tmp.extend(acc.drain());
+
+        //         for (acc_size, acc_count) in &tmp {
+        //             for (child_size, child_count) in &child_data {
+        //                 let combined_size = acc_size + child_size;
+        //                 if combined_size > self.limit {
+        //                     continue;
+        //                 }
+        //                 let combined_count = acc_count.to_owned() * child_count;
+        //                 acc.entry(combined_size)
+        //                     .and_modify(|c| *c += &combined_count)
+        //                     .or_insert(combined_count);
+        //             }
+        //         }
+
+        //         tmp.clear();
+        //         acc
+        //     })
     }
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
@@ -175,10 +208,8 @@ mod tests {
         egraph.union(a, apb);
         egraph.rebuild();
 
-        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
-        ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
-
-        let root_data = &data[&egraph.find(apb)];
+        let data = ExprCount::new(10).one_shot_analysis(&egraph);
+        let root_data: &HashMap<usize, BigUint> = &data[&egraph.find(apb)];
 
         assert_eq!(root_data[&5], 1usize.into());
     }
@@ -195,10 +226,9 @@ mod tests {
         egraph.union(b, apb);
         egraph.rebuild();
 
-        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
-        ExprCount::new(10).one_shot_analysis(&egraph, &mut data);
+        let data = ExprCount::new(10).one_shot_analysis(&egraph);
 
-        let root_data = &data[&egraph.find(apb)];
+        let root_data: &HashMap<usize, BigUint> = &data[&egraph.find(apb)];
         assert_eq!(root_data[&5], 16usize.into());
     }
 
@@ -216,10 +246,9 @@ mod tests {
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 
-        let mut data = HashMap::<_, HashMap<_, BigUint>>::new();
-        ExprCount::new(16).one_shot_analysis(egraph, &mut data);
+        let data = ExprCount::new(16).one_shot_analysis(egraph);
 
-        let root_data = &data[&egraph.find(root)];
+        let root_data: &HashMap<usize, BigUint> = &data[&egraph.find(root)];
 
         assert_eq!(root_data[&16], 40512usize.into());
     }

@@ -120,9 +120,9 @@ fn run<R: TermRewriteSystem>(
         .iter()
         .enumerate()
         .flat_map(|(eqsat_generation, eqsat_result)| {
-            info!("Running sampling of generation {eqsat_generation}...");
+            info!("Running sampling of generation {}...", eqsat_generation + 1);
             let s = sample_eqsat_result(cli, &start_expr, eqsat_result, &sample_conf, &mut rng);
-            info!("Finished sampling of generation {eqsat_generation}!");
+            info!("Finished sampling of generation {}!", eqsat_generation + 1);
             s
         })
         .collect();
