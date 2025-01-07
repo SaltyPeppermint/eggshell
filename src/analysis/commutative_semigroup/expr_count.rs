@@ -2,11 +2,9 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use egg::Id;
-use egg::{Analysis, DidMerge, EGraph, Language};
+use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
-use num_traits::NumAssignRef;
-use num_traits::NumRef;
+use num_traits::{NumAssignRef, NumRef};
 
 use super::CommutativeSemigroupAnalysis;
 

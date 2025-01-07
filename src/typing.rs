@@ -2,7 +2,6 @@ use std::fmt::Display;
 
 use egg::{Id, Language, RecExpr};
 use hashbrown::HashMap;
-use petgraph::{graph::NodeIndex, Graph};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use serde::Serialize;
 use thiserror::Error;
@@ -185,38 +184,6 @@ pub fn collect_expr_types<L: Typeable>(
     Ok(map)
 }
 
-/// Turn a [`RecExpr`] with a [`HashMap`] of its [`Typeable::Type`]
-/// into a Dot compatible [`Graph`]
-#[must_use]
-pub fn dot_typed_ast<L: Typeable>(
-    root_id: Id,
-    expr: &RecExpr<L>,
-    map: &HashMap<Id, L::Type>,
-) -> Graph<String, ()> {
-    let mut graph = Graph::<String, ()>::new();
-    let root = &expr[root_id];
-    let root_string = format!("(ROOT) {}: {}", root, map[&root_id]);
-    let root_nidx = graph.add_node(root_string);
-    let children = root.children();
-    build_dot_graph(children, expr, map, root_nidx, &mut graph);
-    graph
-}
-
-fn build_dot_graph<L: Typeable>(
-    children: &[Id],
-    expr: &RecExpr<L>,
-    map: &HashMap<Id, L::Type>,
-    parent_nidx: NodeIndex,
-    graph: &mut Graph<String, ()>,
-) {
-    for child_id in children {
-        let child_node = &expr[*child_id];
-        let node_string = format!("({}) {}: {}", child_node, child_id, map[child_id]);
-        let child_nidx = graph.add_node(node_string);
-        graph.add_edge(parent_nidx, child_nidx, ());
-        build_dot_graph(child_node.children(), expr, map, child_nidx, graph);
-    }
-}
 pub trait Type:
     Clone + Copy + Serialize + PartialEq + Eq + PartialOrd + std::hash::Hash + Display
 {

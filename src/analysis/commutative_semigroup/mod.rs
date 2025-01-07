@@ -1,10 +1,8 @@
 mod expr_count;
 
-use std::{
-    fmt::Debug,
-    sync::{Arc, Mutex, RwLock},
-    thread,
-};
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
 
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;

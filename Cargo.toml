@@ -20,18 +20,19 @@ bon = "3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 csv = "1"
-egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit" , features = ["serde-1"] }
+egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = [
+    "serde-1",
+] }
 env_logger = "0.11"
 hashbrown = { version = "0.15", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
-indicatif = "0.17"
 log = "0.4"
 memory-stats = "1.2"
 num = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2.19"
 numpy = "0.23"
 ordered-float = { version = "4", features = ["serde"] }
-petgraph = "0.6"
+# petgraph = "0.6"
 pyo3 = { version = "0.23", features = ["hashbrown"] }
 rand = "0.8"
 rand_chacha = "0.3"
@@ -41,7 +42,6 @@ serde_json = "1"
 smallvec = { version = "1", features = ["const_generics", "serde"] }
 symbolic_expressions = "5"
 thiserror = "2"
-uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
