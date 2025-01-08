@@ -40,7 +40,7 @@
 mod analysis;
 mod error;
 mod features;
-mod python;
+pub mod python;
 mod utils;
 
 pub mod cli;

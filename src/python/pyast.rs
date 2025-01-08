@@ -1,67 +1,88 @@
 /// Macro to generate a manuaol monomorphization via a wrapper cause
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
-    ($type: ty) => {
-        type Lang = <$type as $crate::trs::TermRewriteSystem>::Language;
+    ($type: ty, $module_name: tt) => {
+        use pyo3::prelude::*;
+        use pyo3_stub_gen::derive::*;
+        use rayon::prelude::*;
 
-        #[pyo3::pyclass]
+        use $crate::error::EggshellError;
+        use $crate::features::{AsFeatures, Feature, FeatureError, Featurizer};
+        use $crate::python::raw_ast::RawAst;
+        use $crate::trs::TermRewriteSystem;
+        use $crate::utils::Tree;
+
+        type Lang = <$type as TermRewriteSystem>::Language;
+
+        #[gen_stub_pyclass]
+        #[pyclass(module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyAst($crate::python::raw_ast::RawAst<Lang>);
+        pub struct PyAst(RawAst<Lang>);
 
-        #[pyo3::pymethods]
+        #[gen_stub_pymethods]
+        #[pymethods]
         impl PyAst {
             /// Parse from string
+            #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: &str, featurizer: &PyFeaturizer) -> pyo3::PyResult<Self> {
                 let raw_sketch = s_expr_str
                     .parse::<egg::RecExpr<Lang>>()
-                    .map_err(|e| $crate::error::EggshellError::from(e))?;
-                let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)
-                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| EggshellError::from(e))?;
+                let raw_ast = RawAst::new(&raw_sketch, &featurizer.0)
+                    .map_err(|e| EggshellError::<Lang>::from(e))?;
                 Ok(Self(raw_ast))
             }
 
+            #[must_use]
             fn __str__(&self) -> String {
                 self.0.to_string()
             }
 
+            #[must_use]
             pub fn __repr__(&self) -> String {
                 format!("{self:?}")
             }
 
             #[getter(name)]
+            #[must_use]
             pub fn name(&self) -> String {
                 self.0.node().to_string()
             }
 
             #[getter(is_leaf)]
+            #[must_use]
             pub fn is_leaf(&self) -> bool {
                 self.0.is_leaf()
             }
 
             #[getter(arity)]
+            #[must_use]
             pub fn arity(&self) -> usize {
                 self.0.arity()
             }
 
+            #[must_use]
             pub fn size(&self) -> usize {
-                <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::size(&self.0)
+                self.0.size()
             }
 
+            #[must_use]
             pub fn depth(&self) -> usize {
-                <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(&self.0)
+                self.0.depth()
             }
 
+            #[expect(clippy::missing_errors_doc)]
             pub fn count_symbols(&self, featurizer: &PyFeaturizer) -> pyo3::PyResult<Vec<usize>> {
                 let x = self
                     .0
                     .count_symbols(&featurizer.0)
-                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| EggshellError::<Lang>::from(e))?;
                 Ok(x)
             }
 
-            #[expect(clippy::cast_precision_loss)]
+            #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
             pub fn feature_vec_simple(
                 &self,
                 featurizer: &PyFeaturizer,
@@ -69,44 +90,39 @@ macro_rules! monomorphize {
                 let mut features = self
                     .0
                     .count_symbols(&featurizer.0)
-                    .map_err(|e| $crate::error::EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| EggshellError::<Lang>::from(e))?;
                 features.push(self.size());
                 features.push(self.depth());
                 Ok(features.into_iter().map(|v| v as f64).collect())
             }
 
+            #[expect(clippy::missing_errors_doc)]
             pub fn feature_vec_ml(&self) -> pyo3::PyResult<Vec<f64>> {
                 match self.0.features() {
-                    $crate::features::Feature::Leaf(f) => Ok(f.to_owned()),
-                    $crate::features::Feature::NonLeaf(_) => {
-                        Err($crate::error::EggshellError::<Lang>::from(
-                            $crate::features::FeatureError::NonLeaf(self.name()),
-                        ))?
-                    }
-                    $crate::features::Feature::IgnoredSymbol => {
-                        Err($crate::error::EggshellError::<Lang>::from(
-                            $crate::features::FeatureError::IgnoredSymbol(self.name()),
-                        ))?
-                    }
+                    Feature::Leaf(f) => Ok(f.to_owned()),
+                    Feature::NonLeaf(_) => Err(EggshellError::<Lang>::from(
+                        FeatureError::NonLeaf(self.name()),
+                    ))?,
+                    Feature::IgnoredSymbol => Err(EggshellError::<Lang>::from(
+                        FeatureError::IgnoredSymbol(self.name()),
+                    ))?,
                 }
             }
 
+            #[expect(clippy::missing_errors_doc)]
             pub fn node_id(&self) -> pyo3::PyResult<usize> {
                 match self.0.features() {
-                    $crate::features::Feature::NonLeaf(id) => Ok(*id),
-                    $crate::features::Feature::Leaf(_) => {
-                        Err($crate::error::EggshellError::<Lang>::from(
-                            $crate::features::FeatureError::Leaf(self.name()),
-                        ))?
+                    Feature::NonLeaf(id) => Ok(*id),
+                    Feature::Leaf(_) => {
+                        Err(EggshellError::<Lang>::from(FeatureError::Leaf(self.name())))?
                     }
-                    $crate::features::Feature::IgnoredSymbol => {
-                        Err($crate::error::EggshellError::<Lang>::from(
-                            $crate::features::FeatureError::IgnoredSymbol(self.name()),
-                        ))?
-                    }
+                    Feature::IgnoredSymbol => Err(EggshellError::<Lang>::from(
+                        FeatureError::IgnoredSymbol(self.name()),
+                    ))?,
                 }
             }
 
+            #[must_use]
             pub fn invert_flatten(&self) -> Vec<Self> {
                 self.0
                     .flatten()
@@ -117,25 +133,28 @@ macro_rules! monomorphize {
             }
         }
 
-        #[pyo3::pyclass]
+        #[gen_stub_pyclass]
+        #[pyclass(module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyFeaturizer($crate::features::Featurizer<Lang>);
+        pub struct PyFeaturizer(Featurizer<Lang>);
 
-        #[pyo3::pymethods]
+        #[gen_stub_pymethods]
+        #[pymethods]
         impl PyFeaturizer {
             /// Parse from string
             #[new]
             #[pyo3(signature = (variable_names, ignore_unknown=false))]
+            #[must_use]
             pub fn new(variable_names: Vec<String>, ignore_unknown: bool) -> Self {
-                let mut featurizer =
-                    <Lang as $crate::features::AsFeatures>::featurizer(variable_names);
+                let mut featurizer = Lang::featurizer(variable_names);
                 if ignore_unknown {
                     featurizer.set_ignore_unknown(true);
                 }
                 PyFeaturizer(featurizer)
             }
 
+            #[must_use]
             pub fn feature_names_simple(&self) -> Vec<String> {
                 let mut symbol_names = self.0.symbol_names();
                 symbol_names.push(String::from("SIZE"));
@@ -144,10 +163,9 @@ macro_rules! monomorphize {
             }
         }
 
-        use rayon::prelude::*;
-
-        #[expect(clippy::cast_precision_loss)]
-        #[pyo3::pyfunction]
+        #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
         pub fn many_featurize_simple<'py>(
             py: pyo3::Python<'py>,
             expression_strings: Vec<String>,
@@ -158,22 +176,14 @@ macro_rules! monomorphize {
                 .map(|s| {
                     let raw_sketch = s
                         .parse::<egg::RecExpr<Lang>>()
-                        .map_err(|e| $crate::error::EggshellError::from(e))?;
-                    let raw_ast = $crate::python::raw_ast::RawAst::new(&raw_sketch, &featurizer.0)?;
+                        .map_err(|e| EggshellError::from(e))?;
+                    let raw_ast = RawAst::new(&raw_sketch, &featurizer.0)?;
                     let mut features = raw_ast.count_symbols(&featurizer.0)?;
-                    features.push(
-                        <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::size(
-                            &raw_ast,
-                        ),
-                    );
-                    features.push(
-                        <$crate::python::raw_ast::RawAst<Lang> as $crate::utils::Tree>::depth(
-                            &raw_ast,
-                        ),
-                    );
+                    features.push(raw_ast.size());
+                    features.push(raw_ast.depth());
                     Ok(features.into_iter().map(|v| v as f64).collect())
                 })
-                .collect::<Result<Vec<_>, $crate::error::EggshellError<_>>>()?;
+                .collect::<Result<Vec<_>, EggshellError<_>>>()?;
 
             Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
         }
@@ -197,17 +207,20 @@ macro_rules! monomorphize {
 }
 
 pub mod simple {
-    monomorphize!(crate::trs::Simple);
+    monomorphize!(crate::trs::Simple, "eggshell.simple");
 }
 
 pub mod arithmetic {
-    monomorphize!(crate::trs::Arithmetic);
+    monomorphize!(crate::trs::Arithmetic, "eggshell.arithmetic");
 }
 
 pub mod halide {
-    monomorphize!(crate::trs::Halide);
+    monomorphize!(crate::trs::Halide, "eggshell.halide");
 }
 
 pub mod rise {
-    monomorphize!(crate::trs::Rise);
+    monomorphize!(crate::trs::Rise, "eggshell.rise");
 }
+
+use pyo3_stub_gen::define_stub_info_gatherer;
+define_stub_info_gatherer!(stub_info);
