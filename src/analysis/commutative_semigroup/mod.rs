@@ -144,7 +144,6 @@ pub trait Counter:
     + for<'x> Product<&'x Self>
     + Product<Self>
     + SampleUniform
-    + PartialEq
     + PartialOrd
     + Default
 {
@@ -162,7 +161,6 @@ impl<
             + for<'x> Product<&'x Self>
             + Product<Self>
             + SampleUniform
-            + PartialEq
             + PartialOrd
             + Default,
     > Counter for T
