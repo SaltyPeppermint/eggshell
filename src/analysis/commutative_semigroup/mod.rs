@@ -1,6 +1,10 @@
 mod expr_count;
 
 use std::fmt::Debug;
+use std::iter::{Product, Sum};
+
+use num_traits::{NumAssignRef, NumRef};
+use rand::distributions::uniform::SampleUniform;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
@@ -14,10 +18,10 @@ pub use expr_count::ExprCount;
 
 pub trait CommutativeSemigroupAnalysis<C, L, N>: Sized + Debug + Sync + Send
 where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
-    N::Data: Debug + Sync,
+    N::Data: Sync,
 {
     type Data: PartialEq + Debug + Sync + Send;
 
@@ -40,8 +44,8 @@ where
             data: &Arc<RwLock<HashMap<Id, B::Data>>>,
             analysis_pending: &Arc<Mutex<UniqueQueue<Id>>>,
         ) where
-            L: Language + Debug + Sync + Send,
-            L::Discriminant: Debug + Sync,
+            L: Language + Sync + Send,
+            L::Discriminant: Sync,
             N: Analysis<L> + Debug + Sync,
             N::Data: Debug + Sync,
             B: CommutativeSemigroupAnalysis<CC, L, N> + Sync + Send,
@@ -125,4 +129,42 @@ where
         debug_assert!(egraph.classes().all(|eclass| data.contains_key(&eclass.id)));
         data
     }
+}
+
+pub trait Counter:
+    Debug
+    + Clone
+    + Send
+    + Sync
+    + Debug
+    + NumRef
+    + NumAssignRef
+    + for<'x> Sum<&'x Self>
+    + Sum<Self>
+    + for<'x> Product<&'x Self>
+    + Product<Self>
+    + SampleUniform
+    + PartialEq
+    + PartialOrd
+    + Default
+{
+}
+impl<
+        T: Debug
+            + Clone
+            + Send
+            + Sync
+            + Debug
+            + NumRef
+            + NumAssignRef
+            + for<'x> Sum<&'x Self>
+            + Sum<Self>
+            + for<'x> Product<&'x Self>
+            + Product<Self>
+            + SampleUniform
+            + PartialEq
+            + PartialOrd
+            + Default,
+    > Counter for T
+{
 }

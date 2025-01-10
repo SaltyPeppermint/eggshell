@@ -27,7 +27,7 @@ impl From<TypingError> for PyErr {
     }
 }
 
-pub trait Typeable: Language + Display {
+pub trait Typeable: Language {
     type Type: Type;
 
     /// Returns the typing information associated with that specific type
@@ -184,9 +184,7 @@ pub fn collect_expr_types<L: Typeable>(
     Ok(map)
 }
 
-pub trait Type:
-    Clone + Copy + Serialize + PartialEq + Eq + PartialOrd + std::hash::Hash + Display
-{
+pub trait Type: Clone + Copy + Serialize + Eq + PartialOrd + Display {
     /// Returns the top type of that type system
     fn top() -> Self;
     /// Returns the bottom type of that type system
@@ -210,7 +208,7 @@ pub trait Type:
     }
 }
 
-#[derive(Debug, Clone, std::hash::Hash, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TypingInfo<T: Type> {
     return_constraint: T,
     child_constraint: T,

@@ -26,7 +26,7 @@ where
 
 impl<'a, L, N, CF> CostWeighted<'a, L, N, CF>
 where
-    L: Language + Debug,
+    L: Language,
     N: Analysis<L> + Debug,
     CF: CostFunction<L> + Debug,
     CF::Cost: Into<usize> + Debug,
@@ -43,12 +43,12 @@ where
 
 impl<'a, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, L, N, CF>
 where
-    L: Language + Display + Debug + Send + Sync,
+    L: Language + Display + Send + Sync,
     L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
     CF: CostFunction<L> + Debug + Send + Sync,
-    CF::Cost: Into<usize> + Debug + Send + Sync,
+    CF::Cost: Into<usize> + Send + Sync,
 {
     fn pick<'c: 'a>(
         &self,

@@ -4,9 +4,9 @@ use std::sync::RwLock;
 
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
-use num_traits::{NumAssignRef, NumRef};
 
 use super::CommutativeSemigroupAnalysis;
+use super::Counter;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ExprCount {
@@ -22,11 +22,11 @@ impl ExprCount {
 
 impl<C, L, N> CommutativeSemigroupAnalysis<C, L, N> for ExprCount
 where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
-    N::Data: Debug + Sync,
-    C: Debug + Clone + NumRef + NumAssignRef + Send + Sync,
+    N::Data: Sync,
+    C: Counter,
 {
     // Size and number of programs of that size
     type Data = HashMap<usize, C>;

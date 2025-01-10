@@ -173,7 +173,7 @@ fn run<R: TermRewriteSystem>(
             timestamp,
             sample_conf,
             eqsat_conf,
-            rules.into_iter().map(|r| format!("{r:?}")).collect(),
+            rules.into_iter().map(|r| r.name.to_string()).collect(),
         ),
     );
 
@@ -273,7 +273,7 @@ fn find_generations<L, N>(
     eqsat_results: &mut [EqsatResult<L, N>],
 ) -> Vec<usize>
 where
-    L: Language + Display + Clone + FromOp,
+    L: Language + Display + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {
@@ -301,7 +301,7 @@ fn mk_baselines<L, N>(
     goal_gen: usize,
 ) -> HashMap<usize, HashMap<usize, EqsatStats>>
 where
-    L: Language + Display + Clone + FromOp,
+    L: Language + Display + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {

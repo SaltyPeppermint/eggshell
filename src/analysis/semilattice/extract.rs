@@ -11,7 +11,6 @@ pub struct ExtractAnalysis<'a, L, CF>
 where
     L: Language,
     CF: CostFunction<L> + Debug,
-    CF::Cost: Debug,
 {
     pub(crate) exprs: &'a mut ExprHashCons<L>,
     pub(crate) cost_fn: &'a mut CF,
@@ -21,7 +20,6 @@ impl<'a, L, CF> ExtractAnalysis<'a, L, CF>
 where
     L: Language,
     CF: CostFunction<L> + Debug,
-    CF::Cost: Debug,
 {
     pub(crate) fn new(exprs: &'a mut ExprHashCons<L>, cost_fn: &'a mut CF) -> Self {
         Self { exprs, cost_fn }

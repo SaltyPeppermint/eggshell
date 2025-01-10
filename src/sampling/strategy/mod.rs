@@ -19,9 +19,9 @@ pub use count::{CountWeightedGreedy, CountWeightedUniformly};
 
 pub trait Strategy<'a, L, N>: Debug + Send + Sync
 where
-    L: Language + Display + Debug + Send + Sync + std::hash::Hash + 'a,
+    L: Language + Display + Send + Sync + 'a,
     N: Analysis<L> + Debug + 'a,
-    N::Data: Debug + Sync,
+    N::Data: Sync,
 {
     fn pick<'c: 'a>(
         &self,

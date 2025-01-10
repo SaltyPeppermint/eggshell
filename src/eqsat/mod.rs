@@ -29,20 +29,6 @@ where
     start_material: StartMaterial<L, N>,
 }
 
-#[derive(Clone, Debug)]
-pub enum StartMaterial<L, N>
-where
-    L: Language + Display,
-    N: Analysis<L> + Clone,
-    N::Data: Clone,
-{
-    RecExprs(Vec<RecExpr<L>>),
-    EGraph {
-        egraph: Box<EGraph<L, N>>,
-        roots: Vec<Id>,
-    },
-}
-
 impl<L, N> Eqsat<L, N>
 where
     L: Language + Display,
@@ -129,20 +115,16 @@ where
 
         if self.conf.root_check {
             info!("Installing root_check hook");
-            runner = runner.with_hook(hooks::craft_root_check_hook());
+            runner = runner.with_hook(hooks::root_check_hook());
         }
 
         if self.conf.memory_log {
             info!("Installing memory display hook");
-            runner = runner.with_hook(hooks::craft_memory_hook());
+            runner = runner.with_hook(hooks::memory_hook());
         }
 
         // TODO ADD CONFIG OPTION
         runner = runner.with_scheduler(SimpleScheduler);
-
-        if self.conf.root_check {
-            runner = runner.with_hook(hooks::craft_root_check_hook());
-        }
 
         let egraph_roots = match self.start_material {
             StartMaterial::RecExprs(vec) => {
@@ -230,7 +212,7 @@ where
     ) -> (CF::Cost, RecExpr<L>)
     where
         CF: CostFunction<L> + Debug,
-        CF::Cost: Ord + Debug,
+        CF::Cost: Ord,
     {
         extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
@@ -265,10 +247,24 @@ where
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum StartMaterial<L, N>
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Clone,
+{
+    RecExprs(Vec<RecExpr<L>>),
+    EGraph {
+        egraph: Box<EGraph<L, N>>,
+        roots: Vec<Id>,
+    },
+}
+
 impl<L, N> From<EqsatResult<L, N>> for StartMaterial<L, N>
 where
     L: Language + Display,
-    N: Analysis<L> + Clone,
+    N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {
     fn from(eqsat_result: EqsatResult<L, N>) -> Self {

@@ -2,7 +2,7 @@ use egg::{Analysis, Language, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
 
-pub fn craft_root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language,
     N: Analysis<L> + Default,
@@ -18,7 +18,7 @@ where
 }
 
 #[expect(clippy::cast_precision_loss)]
-pub fn craft_memory_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub fn memory_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language,
     N: Analysis<L> + Default,

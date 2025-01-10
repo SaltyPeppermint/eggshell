@@ -9,7 +9,7 @@ use serde::Serialize;
 use super::SampleError;
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct ChoiceList<L: Language + Send + Sync> {
+pub struct ChoiceList<L: Language> {
     slots: Vec<Slot<L>>,
     // We need something other than hashbrown or std HashSet cause
     // they DO NOT produce stable iterators between program runs
@@ -17,7 +17,7 @@ pub struct ChoiceList<L: Language + Send + Sync> {
     next_to_fill: Option<usize>,
 }
 
-impl<L: Language + Send + Sync> ChoiceList<L> {
+impl<L: Language> ChoiceList<L> {
     // Returns position of next open
     pub fn select_next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
         if let Some(next_position) = self.open_slots.iter().choose(rng) {
@@ -137,7 +137,7 @@ impl<L: Language + Send + Sync> ChoiceList<L> {
     }
 }
 
-impl<L: Language + Send + Sync> From<Id> for ChoiceList<L> {
+impl<L: Language> From<Id> for ChoiceList<L> {
     fn from(id: Id) -> Self {
         ChoiceList {
             slots: vec![Slot {
@@ -151,7 +151,7 @@ impl<L: Language + Send + Sync> From<Id> for ChoiceList<L> {
     }
 }
 
-impl<L: Language + Send + Sync> IntoIterator for ChoiceList<L> {
+impl<L: Language> IntoIterator for ChoiceList<L> {
     type Item = Slot<L>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -160,7 +160,7 @@ impl<L: Language + Send + Sync> IntoIterator for ChoiceList<L> {
     }
 }
 
-impl<L: Language + Send + Sync> TryFrom<ChoiceList<L>> for RecExpr<L> {
+impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
     type Error = super::SampleError;
 
     fn try_from(choice_list: ChoiceList<L>) -> Result<Self, Self::Error> {
@@ -186,13 +186,13 @@ impl<L: Language + Send + Sync> TryFrom<ChoiceList<L>> for RecExpr<L> {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Slot<L: Language + Send + Sync> {
+pub struct Slot<L: Language> {
     eclass_id: Id,
     parent: Option<usize>,
     pick: Pick<L>,
 }
 
-impl<L: Language + Send + Sync> Slot<L> {
+impl<L: Language> Slot<L> {
     pub fn eclass_id(&self) -> Id {
         self.eclass_id
     }
@@ -213,7 +213,7 @@ impl<L: Language + Send + Sync> Slot<L> {
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Pick<L: Language + Send + Sync> {
+pub enum Pick<L: Language> {
     Open,
     Picked(L),
 }

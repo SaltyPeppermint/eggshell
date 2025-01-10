@@ -40,14 +40,13 @@
 mod analysis;
 mod error;
 mod features;
-pub mod python;
 mod utils;
 
 pub mod cli;
 pub mod eqsat;
 pub mod io;
+pub mod python;
 pub mod sampling;
 pub mod sketch;
 pub mod trs;
-pub mod typing;
-
+pub mod typing; //should maybe be private

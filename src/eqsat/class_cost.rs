@@ -4,18 +4,46 @@ use std::fmt::Debug;
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 
-pub struct LutCost<'a, L: Language, N: Analysis<L>> {
+pub trait ClassCostFunction<L: Language> {
+    /// The `Cost` type. It only requires `PartialOrd` so you can use
+    /// floating point types, but failed comparisons (`NaN`s) will
+    /// result in a panic.
+    type Cost: PartialOrd + Debug + Clone;
+
+    /// Calculates the cost of an enode whose children are `Cost`s.
+    ///
+    /// For this to work properly, your cost function should be
+    /// _monotonic_, i.e. `cost` should return a `Cost` greater than
+    /// any of the child costs of the given enode.
+    fn cost<C>(&self, class_id: Id, enode: &L, costs: C) -> Self::Cost
+    where
+        C: Fn(Id) -> Self::Cost;
+}
+
+pub struct LutCost<'a, L, N>
+where
+    L: Language,
+    N: Analysis<L>,
+{
     table: HashMap<(Id, usize), f64>,
     egraph: &'a EGraph<L, N>,
 }
 
-impl<'a, L: Language, N: Analysis<L>> LutCost<'a, L, N> {
+impl<'a, L, N> LutCost<'a, L, N>
+where
+    L: Language,
+    N: Analysis<L>,
+{
     pub fn new(table: HashMap<(Id, usize), f64>, egraph: &'a EGraph<L, N>) -> Self {
         Self { table, egraph }
     }
 }
 
-impl<L: Language, N: Analysis<L>> ClassCostFunction<L> for LutCost<'_, L, N> {
+impl<L, N> ClassCostFunction<L> for LutCost<'_, L, N>
+where
+    L: Language,
+    N: Analysis<L>,
+{
     type Cost = f64;
 
     fn cost<C>(&self, class_id: Id, enode: &L, costs: C) -> Self::Cost
@@ -35,24 +63,13 @@ impl<L: Language, N: Analysis<L>> ClassCostFunction<L> for LutCost<'_, L, N> {
     }
 }
 
-pub trait ClassCostFunction<L: Language> {
-    /// The `Cost` type. It only requires `PartialOrd` so you can use
-    /// floating point types, but failed comparisons (`NaN`s) will
-    /// result in a panic.
-    type Cost: PartialOrd + Debug + Clone;
-
-    /// Calculates the cost of an enode whose children are `Cost`s.
-    ///
-    /// For this to work properly, your cost function should be
-    /// _monotonic_, i.e. `cost` should return a `Cost` greater than
-    /// any of the child costs of the given enode.
-    fn cost<C>(&self, class_id: Id, enode: &L, costs: C) -> Self::Cost
-    where
-        C: Fn(Id) -> Self::Cost;
-}
-
 #[derive(Debug)]
-pub struct ClassExtractor<'a, CF: ClassCostFunction<L>, L: Language, N: Analysis<L>> {
+pub struct ClassExtractor<'a, CF, L, N>
+where
+    CF: ClassCostFunction<L>,
+    L: Language,
+    N: Analysis<L>,
+{
     cost_function: CF,
     costs: HashMap<Id, (CF::Cost, L)>,
     egraph: &'a EGraph<L, N>,

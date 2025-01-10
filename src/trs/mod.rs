@@ -3,7 +3,7 @@ mod halide;
 mod rise;
 mod simple;
 
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 use thiserror::Error;
 
@@ -25,24 +25,20 @@ use crate::features::AsFeatures;
 /// a [`Analysis`] (can be a simplie as `()`) and one or more `Rulesets` to choose from.
 /// The [`TermRewriteSystem::full_rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
 /// by your ruleset class.
-pub trait TermRewriteSystem: Serialize + Debug + Clone {
-    type Language: Language<Discriminant: Debug + Send + Sync>
-        + Display
+pub trait TermRewriteSystem {
+    type Language: Language<Discriminant: Send + Sync>
         + Serialize
         + FromOp
-        + Debug
         + Send
         + Sync
-        + AsFeatures
-        + 'static;
-    type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Debug + Send + Sync>
+        + AsFeatures;
+    type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Send + Sync>
         + Clone
         + Serialize
         + Debug
         + Default
         + Send
-        + Sync
-        + 'static;
+        + Sync;
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
@@ -67,9 +63,3 @@ impl From<TrsError> for PyErr {
         TrsException::new_err(err.to_string())
     }
 }
-
-// pub type TrsEqsat<R> =
-//     Eqsat<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;
-
-// pub type TrsEqsatResult<R> =
-//     EqsatResult<<R as TermRewriteSystem>::Language, <R as TermRewriteSystem>::Analysis>;

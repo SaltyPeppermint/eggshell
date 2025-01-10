@@ -1,16 +1,13 @@
 use std::fmt::{Debug, Display};
-use std::iter::{Product, Sum};
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
 use log::{debug, info, log_enabled, Level};
-use num_traits::{NumAssignRef, NumRef};
-use rand::distributions::uniform::SampleUniform;
 use rand::distributions::WeightedError;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
-use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, ExprCount};
+use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
 use crate::sampling::choices::ChoiceList;
 use crate::sampling::SampleError;
@@ -21,20 +18,11 @@ use super::Strategy;
 #[derive(Debug)]
 pub struct CountWeightedGreedy<'a, C, L, N>
 where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + Send
-        + Sync
-        + Product<C>
-        + SampleUniform
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     egraph: &'a EGraph<L, N>,
     size_counts: HashMap<Id, HashMap<usize, C>>,
@@ -46,21 +34,11 @@ where
 
 impl<'a, C, L, N> CountWeightedGreedy<'a, C, L, N>
 where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + for<'x> Sum<&'x C>
-        + Product<C>
-        + Send
-        + Sync
-        + SampleUniform
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     /// Creates a new [`CountWeighted<C, L, N>`].
     ///
@@ -137,22 +115,11 @@ where
 
 impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedGreedy<'a, C, L, N>
 where
-    L: Language + Display + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Display + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + for<'x> Sum<&'x C>
-        + Product<C>
-        + Send
-        + Sync
-        + SampleUniform
-        + PartialEq
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     fn pick<'c: 'a>(
         &self,
@@ -183,24 +150,11 @@ where
 #[derive(Debug)]
 pub struct CountWeightedUniformly<'a, C, L, N>
 where
-    L: Language + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + for<'x> Sum<&'x C>
-        + Sum<C>
-        + for<'x> Product<&'x C>
-        + Product<C>
-        + Send
-        + Sync
-        + SampleUniform
-        + PartialEq
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     egraph: &'a EGraph<L, N>,
     size_counts: HashMap<Id, HashMap<usize, C>>,
@@ -210,24 +164,11 @@ where
 
 impl<'a, C, L, N> CountWeightedUniformly<'a, C, L, N>
 where
-    L: Language + Display + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Display + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + for<'x> Sum<&'x C>
-        + Sum<C>
-        + for<'x> Product<&'x C>
-        + Product<C>
-        + Send
-        + Sync
-        + SampleUniform
-        + PartialEq
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     /// Creates a new [`CountWeightedUniformly<C, L, N>`].
     ///
@@ -309,24 +250,11 @@ where
 
 impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, C, L, N>
 where
-    L: Language + Display + Debug + Sync + Send,
-    L::Discriminant: Debug + Sync,
+    L: Language + Display + Sync + Send,
+    L::Discriminant: Sync,
     N: Analysis<L> + Debug + Sync,
     N::Data: Sync,
-    C: Debug
-        + Clone
-        + NumRef
-        + NumAssignRef
-        + for<'x> Sum<&'x C>
-        + Sum<C>
-        + for<'x> Product<&'x C>
-        + Product<C>
-        + Send
-        + Sync
-        + SampleUniform
-        + PartialEq
-        + PartialOrd
-        + Default,
+    C: Counter,
 {
     fn pick<'c: 'a>(
         &self,
