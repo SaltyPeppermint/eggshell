@@ -29,7 +29,7 @@ impl<L: AsFeatures> RawAst<L> {
                 features: featurizer.features(node)?,
             })
         }
-        let root = expr.as_ref().last().unwrap();
+        let root = &expr[expr.root()];
         let raw_ast = rec(root, expr, featurizer)?;
         Ok(raw_ast)
     }

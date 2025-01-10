@@ -137,29 +137,6 @@ where
                 tmp.clear();
                 acc
             })
-        // enode
-        //     .children()
-        //     .iter()
-        //     .map(|child_id| analysis_of.read().unwrap()[child_id].clone())
-        //     .fold(HashMap::from([(1, C::one())]), |mut acc, child_data| {
-        //         tmp.extend(acc.drain());
-
-        //         for (acc_size, acc_count) in &tmp {
-        //             for (child_size, child_count) in &child_data {
-        //                 let combined_size = acc_size + child_size;
-        //                 if combined_size > self.limit {
-        //                     continue;
-        //                 }
-        //                 let combined_count = acc_count.to_owned() * child_count;
-        //                 acc.entry(combined_size)
-        //                     .and_modify(|c| *c += &combined_count)
-        //                     .or_insert(combined_count);
-        //             }
-        //         }
-
-        //         tmp.clear();
-        //         acc
-        //     })
     }
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge {

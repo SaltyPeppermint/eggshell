@@ -140,11 +140,7 @@ fn collect_child_coherence<L: Typeable>(
 ///
 /// Panics on an empty [`RecExpr`]
 pub fn typecheck_expr<L: Typeable>(expr: &RecExpr<L>) -> Result<L::Type, TypingError> {
-    let root = expr
-        .as_ref()
-        .last()
-        .expect("Can't typecheck an empty recexpr");
-    root.type_node(expr)
+    expr[expr.root()].type_node(expr)
 }
 
 /// Checks if the [`RecExpr`] is properly typed and
@@ -174,11 +170,7 @@ pub fn typecheck_node<L: Typeable>(expr: &RecExpr<L>, node_id: Id) -> Result<L::
 pub fn collect_expr_types<L: Typeable>(
     expr: &RecExpr<L>,
 ) -> Result<HashMap<Id, L::Type>, TypingError> {
-    let root = expr
-        .as_ref()
-        .last()
-        .expect("Can't typecheck an empty recexpr");
-
+    let root = &expr[expr.root()];
     let mut map = HashMap::new();
     root.collect_node_types(Id::from(expr.as_ref().len() - 1), &mut map, expr)?;
     Ok(map)

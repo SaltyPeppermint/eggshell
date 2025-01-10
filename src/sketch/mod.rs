@@ -4,7 +4,6 @@
 pub mod extract;
 mod full_sketch;
 mod partial_sketch;
-mod utils;
 
 use std::fmt::Display;
 

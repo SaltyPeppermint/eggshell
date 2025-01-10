@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 
-use super::utils;
 use super::{Sketch, SketchNode};
 use crate::analysis::semilattice::{
     ExtractAnalysis, SatisfiesContainsAnalysis, SemiLatticeAnalysis,
@@ -31,7 +30,6 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
         sketch: &Sketch<L>,
         sketch_id: Id,
         egraph: &EGraph<L, A>,
-        classes_by_op: &HashMap<L::Discriminant, HashSet<Id>>,
         memo: &mut HashMap<Id, HashSet<Id>>,
     ) -> HashSet<Id> {
         if let Some(value) = memo.get(&sketch_id) {
@@ -54,17 +52,13 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                 let children_matches = sketch_node
                     .children()
                     .iter()
-                    .map(|child_sketch_id| {
-                        rec(sketch, *child_sketch_id, egraph, classes_by_op, memo)
-                    })
+                    .map(|child_sketch_id| rec(sketch, *child_sketch_id, egraph, memo))
                     .collect::<Vec<_>>();
 
                 // Get all eclasses that contain the note required by the sketch and iterate over these classes.
                 // No egraph.find since classes_by_op only contain hashsets of canonical ids
-                if let Some(potential_ids) = classes_by_op.get(&sketch_node.discriminant()) {
+                if let Some(potential_ids) = egraph.classes_for_op(&sketch_node.discriminant()) {
                     potential_ids
-                        .iter()
-                        .copied()
                         .filter(|&id| {
                             // Get the eclass corresponding to the id
                             let eclass = &egraph[id];
@@ -91,7 +85,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                 }
             }
             SketchNode::Contains(inner_sketch_id) => {
-                let contained_matched = rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo);
+                let contained_matched = rec(sketch, *inner_sketch_id, egraph, memo);
 
                 // No egraph.find since we are only ever returning canonical ids
                 let mut data = egraph
@@ -110,9 +104,9 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
             }
             SketchNode::Or(inner_sketch_ids) => {
                 // No egraph.find since we are only ever returning canonical ids
-                let matches = inner_sketch_ids.iter().map(|inner_sketch_id| {
-                    rec(sketch, *inner_sketch_id, egraph, classes_by_op, memo)
-                });
+                let matches = inner_sketch_ids
+                    .iter()
+                    .map(|inner_sketch_id| rec(sketch, *inner_sketch_id, egraph, memo));
                 matches
                     .reduce(|a, b| a.union(&b).copied().collect())
                     .expect("empty or sketch")
@@ -127,8 +121,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
     let mut memo = HashMap::<Id, HashSet<Id>>::default();
     // let sketch_nodes = s.as_ref();
     let sketch_root = Id::from(sketch.as_ref().len() - 1);
-    let classes_by_op = utils::classes_by_op(egraph);
-    rec(sketch, sketch_root, egraph, &classes_by_op, &mut memo)
+    rec(sketch, sketch_root, egraph, &mut memo)
 }
 
 /// More recursive, immutable version of `super::mutable::eclass_extract`.
