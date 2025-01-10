@@ -2,7 +2,7 @@
 // Thank you very much for that!
 
 use std::fmt::{Display, Formatter};
-use std::mem::Discriminant;
+use std::mem::{discriminant, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
@@ -24,13 +24,23 @@ pub enum PartialSketchNode<L: Language> {
     Finished(SketchNode<L>),
 }
 
+#[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
+pub enum PartialSketchNodeDiscriminant<L: Language> {
+    This(Discriminant<PartialSketchNode<L>>),
+    Inner(Discriminant<SketchNode<L>>),
+}
+
 impl<L: Language> Language for PartialSketchNode<L> {
-    type Discriminant = (Discriminant<Self>, Discriminant<SketchNode<L>>);
+    type Discriminant = PartialSketchNodeDiscriminant<L>;
 
     fn discriminant(&self) -> Self::Discriminant {
-        panic!("Comparing sketches to each other does not make sense!")
+        match self {
+            PartialSketchNode::Open | PartialSketchNode::Active => {
+                PartialSketchNodeDiscriminant::This(discriminant(self))
+            }
+            PartialSketchNode::Finished(x) => PartialSketchNodeDiscriminant::Inner(discriminant(x)),
+        }
     }
-
     fn matches(&self, _other: &Self) -> bool {
         panic!("Comparing sketches to each other does not make sense!")
     }
