@@ -13,7 +13,7 @@ for i in $(seq $START $END); do
     logfile=logs/$i-$(date +%H:%M:%S).log
     echo "Logfile: $logfile"
 
-    RUST_LOG=info cargo run --profile=release-with-debug -- \
+    RUST_LOG=info cargo run --release -- \
         --file data/rise/start_and_goal.csv \
         --eclass-samples $N_SAMPLES \
         --memory-limit 1000000000 \
