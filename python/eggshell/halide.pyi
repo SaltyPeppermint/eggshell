@@ -50,6 +50,9 @@ class PyFeaturizer:
 def eqsat_check(start:PyAst,goals:typing.Sequence[PyAst]) -> str:
     ...
 
+def many_eqsat_check(starts:typing.Sequence[PyAst],goals:typing.Sequence[typing.Sequence[PyAst]]) -> list[str]:
+    ...
+
 def many_featurize_simple(expression_strings:typing.Sequence[str],featurizer:PyFeaturizer) -> numpy.typing.NDArray[numpy.float64]:
     ...
 

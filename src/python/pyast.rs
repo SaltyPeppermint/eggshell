@@ -200,6 +200,17 @@ macro_rules! monomorphize {
             serde_json::to_string(&eqsat_result).unwrap()
         }
 
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn many_eqsat_check(starts: Vec<PyAst>, goals: Vec<Vec<PyAst>>) -> Vec<String> {
+            starts
+                .into_iter()
+                .zip(goals.into_iter())
+                .map(|(start, goals)| eqsat_check(start, goals))
+                .collect()
+        }
+
         pub(crate) fn add_mod(
             m: &pyo3::Bound<'_, pyo3::prelude::PyModule>,
             module_name: &str,
