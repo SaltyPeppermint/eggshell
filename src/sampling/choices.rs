@@ -114,7 +114,7 @@ impl<L: Language> ChoiceList<L> {
         self.open_slots
             .iter()
             // The next_to_fill position is not included if it exists
-            .filter(|p| self.next_to_fill.map_or(true, |x| x != **p))
+            .filter(|p| self.next_to_fill != Some(**p))
             .map(|p| self.slots[*p].eclass_id())
     }
 

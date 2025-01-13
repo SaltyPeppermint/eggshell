@@ -7,6 +7,7 @@ use std::mem::{discriminant, Discriminant};
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 
+use super::full_sketch::SNDiscr;
 use super::{SketchNode, SketchParseError};
 use crate::features::{AsFeatures, SymbolType};
 use crate::typing::{Type, Typeable, TypingInfo};
@@ -25,20 +26,18 @@ pub enum PartialSketchNode<L: Language> {
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
-pub enum PartialSketchNodeDiscriminant<L: Language> {
+pub enum PSNDiscr<L: Language> {
     This(Discriminant<PartialSketchNode<L>>),
-    Inner(Discriminant<SketchNode<L>>),
+    Inner(SNDiscr<L>),
 }
 
 impl<L: Language> Language for PartialSketchNode<L> {
-    type Discriminant = PartialSketchNodeDiscriminant<L>;
+    type Discriminant = PSNDiscr<L>;
 
     fn discriminant(&self) -> Self::Discriminant {
         match self {
-            PartialSketchNode::Open | PartialSketchNode::Active => {
-                PartialSketchNodeDiscriminant::This(discriminant(self))
-            }
-            PartialSketchNode::Finished(x) => PartialSketchNodeDiscriminant::Inner(discriminant(x)),
+            PartialSketchNode::Finished(x) => PSNDiscr::Inner(x.discriminant()),
+            _ => PSNDiscr::This(discriminant(self)),
         }
     }
     fn matches(&self, _other: &Self) -> bool {

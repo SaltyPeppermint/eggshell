@@ -35,20 +35,18 @@ pub enum SketchNode<L: Language> {
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
-pub enum SketchNodeDiscriminant<L: Language> {
+pub enum SNDiscr<L: Language> {
     This(Discriminant<SketchNode<L>>),
     Inner(Discriminant<L>),
 }
 
 impl<L: Language> Language for SketchNode<L> {
-    type Discriminant = SketchNodeDiscriminant<L>;
+    type Discriminant = SNDiscr<L>;
 
     fn discriminant(&self) -> Self::Discriminant {
         match self {
-            SketchNode::Any | SketchNode::Contains(_) | SketchNode::Or(_) => {
-                SketchNodeDiscriminant::This(discriminant(self))
-            }
-            SketchNode::Node(x) => SketchNodeDiscriminant::Inner(discriminant(x)),
+            SketchNode::Node(x) => SNDiscr::Inner(discriminant(x)),
+            _ => SNDiscr::This(discriminant(self)),
         }
     }
 
