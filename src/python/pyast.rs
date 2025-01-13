@@ -2,23 +2,30 @@
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty, $module_name: tt) => {
+        use egg::RecExpr;
         use pyo3::prelude::*;
         use pyo3_stub_gen::derive::*;
         use rayon::prelude::*;
 
+        use $crate::eqsat::conf::EqsatConf;
+        use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::error::EggshellError;
         use $crate::features::{AsFeatures, Feature, FeatureError, Featurizer};
         use $crate::python::raw_ast::RawAst;
         use $crate::trs::TermRewriteSystem;
         use $crate::utils::Tree;
 
-        type Lang = <$type as TermRewriteSystem>::Language;
+        type L = <$type as TermRewriteSystem>::Language;
+        // type N = <$type as TermRewriteSystem>::Analysis;
 
         #[gen_stub_pyclass]
         #[pyclass(module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyAst(RawAst<Lang>);
+        pub struct PyAst {
+            raw_ast: RawAst<L>,
+            rec_expr: RecExpr<L>,
+        }
 
         #[gen_stub_pymethods]
         #[pymethods]
@@ -27,17 +34,17 @@ macro_rules! monomorphize {
             #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: &str, featurizer: &PyFeaturizer) -> pyo3::PyResult<Self> {
-                let raw_sketch = s_expr_str
-                    .parse::<egg::RecExpr<Lang>>()
+                let rec_expr = s_expr_str
+                    .parse::<egg::RecExpr<L>>()
                     .map_err(|e| EggshellError::from(e))?;
-                let raw_ast = RawAst::new(&raw_sketch, &featurizer.0)
-                    .map_err(|e| EggshellError::<Lang>::from(e))?;
-                Ok(Self(raw_ast))
+                let raw_ast = RawAst::new(&rec_expr, &featurizer.0)
+                    .map_err(|e| EggshellError::<L>::from(e))?;
+                Ok(Self { raw_ast, rec_expr })
             }
 
             #[must_use]
             fn __str__(&self) -> String {
-                self.0.to_string()
+                self.rec_expr.to_string()
             }
 
             #[must_use]
@@ -48,37 +55,37 @@ macro_rules! monomorphize {
             #[getter(name)]
             #[must_use]
             pub fn name(&self) -> String {
-                self.0.node().to_string()
+                self.raw_ast.node().to_string()
             }
 
             #[getter(is_leaf)]
             #[must_use]
             pub fn is_leaf(&self) -> bool {
-                self.0.is_leaf()
+                self.raw_ast.is_leaf()
             }
 
             #[getter(arity)]
             #[must_use]
             pub fn arity(&self) -> usize {
-                self.0.arity()
+                self.raw_ast.arity()
             }
 
             #[must_use]
             pub fn size(&self) -> usize {
-                self.0.size()
+                self.raw_ast.size()
             }
 
             #[must_use]
             pub fn depth(&self) -> usize {
-                self.0.depth()
+                self.raw_ast.depth()
             }
 
             #[expect(clippy::missing_errors_doc)]
             pub fn count_symbols(&self, featurizer: &PyFeaturizer) -> pyo3::PyResult<Vec<usize>> {
                 let x = self
-                    .0
+                    .raw_ast
                     .count_symbols(&featurizer.0)
-                    .map_err(|e| EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| EggshellError::<L>::from(e))?;
                 Ok(x)
             }
 
@@ -88,9 +95,9 @@ macro_rules! monomorphize {
                 featurizer: &PyFeaturizer,
             ) -> pyo3::PyResult<Vec<f64>> {
                 let mut features = self
-                    .0
+                    .raw_ast
                     .count_symbols(&featurizer.0)
-                    .map_err(|e| EggshellError::<Lang>::from(e))?;
+                    .map_err(|e| EggshellError::<L>::from(e))?;
                 features.push(self.size());
                 features.push(self.depth());
                 Ok(features.into_iter().map(|v| v as f64).collect())
@@ -98,12 +105,12 @@ macro_rules! monomorphize {
 
             #[expect(clippy::missing_errors_doc)]
             pub fn feature_vec_ml(&self) -> pyo3::PyResult<Vec<f64>> {
-                match self.0.features() {
+                match self.raw_ast.features() {
                     Feature::Leaf(f) => Ok(f.to_owned()),
-                    Feature::NonLeaf(_) => Err(EggshellError::<Lang>::from(
-                        FeatureError::NonLeaf(self.name()),
-                    ))?,
-                    Feature::IgnoredSymbol => Err(EggshellError::<Lang>::from(
+                    Feature::NonLeaf(_) => {
+                        Err(EggshellError::<L>::from(FeatureError::NonLeaf(self.name())))?
+                    }
+                    Feature::IgnoredSymbol => Err(EggshellError::<L>::from(
                         FeatureError::IgnoredSymbol(self.name()),
                     ))?,
                 }
@@ -111,25 +118,15 @@ macro_rules! monomorphize {
 
             #[expect(clippy::missing_errors_doc)]
             pub fn node_id(&self) -> pyo3::PyResult<usize> {
-                match self.0.features() {
+                match self.raw_ast.features() {
                     Feature::NonLeaf(id) => Ok(*id),
                     Feature::Leaf(_) => {
-                        Err(EggshellError::<Lang>::from(FeatureError::Leaf(self.name())))?
+                        Err(EggshellError::<L>::from(FeatureError::Leaf(self.name())))?
                     }
-                    Feature::IgnoredSymbol => Err(EggshellError::<Lang>::from(
+                    Feature::IgnoredSymbol => Err(EggshellError::<L>::from(
                         FeatureError::IgnoredSymbol(self.name()),
                     ))?,
                 }
-            }
-
-            #[must_use]
-            pub fn invert_flatten(&self) -> Vec<Self> {
-                self.0
-                    .flatten()
-                    .into_iter()
-                    .map(|c| Self(c.to_owned()))
-                    .rev()
-                    .collect()
             }
         }
 
@@ -137,7 +134,7 @@ macro_rules! monomorphize {
         #[pyclass(module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyFeaturizer(Featurizer<Lang>);
+        pub struct PyFeaturizer(Featurizer<L>);
 
         #[gen_stub_pymethods]
         #[pymethods]
@@ -147,7 +144,7 @@ macro_rules! monomorphize {
             #[pyo3(signature = (variable_names, ignore_unknown=false))]
             #[must_use]
             pub fn new(variable_names: Vec<String>, ignore_unknown: bool) -> Self {
-                let mut featurizer = Lang::featurizer(variable_names);
+                let mut featurizer = L::featurizer(variable_names);
                 if ignore_unknown {
                     featurizer.set_ignore_unknown(true);
                 }
@@ -175,7 +172,7 @@ macro_rules! monomorphize {
                 .par_iter()
                 .map(|s| {
                     let raw_sketch = s
-                        .parse::<egg::RecExpr<Lang>>()
+                        .parse::<egg::RecExpr<L>>()
                         .map_err(|e| EggshellError::from(e))?;
                     let raw_ast = RawAst::new(&raw_sketch, &featurizer.0)?;
                     let mut features = raw_ast.count_symbols(&featurizer.0)?;
@@ -188,6 +185,21 @@ macro_rules! monomorphize {
             Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
         }
 
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn eqsat_check(start: PyAst, goals: Vec<PyAst>) -> String {
+            let conf = EqsatConf::builder().root_check(true).build();
+            let start_material = StartMaterial::RecExprs(vec![start.rec_expr]);
+            let goals = goals.into_iter().map(|x| x.rec_expr).collect();
+            let rules = <$type as TermRewriteSystem>::full_rules();
+            let eqsat_result = Eqsat::new(start_material)
+                .with_conf(conf)
+                .with_goals(goals)
+                .run(&rules);
+            serde_json::to_string(&eqsat_result).unwrap()
+        }
+
         pub(crate) fn add_mod(
             m: &pyo3::Bound<'_, pyo3::prelude::PyModule>,
             module_name: &str,
@@ -198,6 +210,7 @@ macro_rules! monomorphize {
             module.add_class::<PyAst>()?;
             module.add_class::<PyFeaturizer>()?;
 
+            module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_featurize_simple, m)?)?;
 
             m.add_submodule(&module)?;

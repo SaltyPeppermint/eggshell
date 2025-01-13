@@ -1,6 +1,7 @@
 mod class_cost;
-mod conf;
 mod hooks;
+
+pub mod conf;
 
 use std::fmt::{Debug, Display};
 
@@ -27,11 +28,12 @@ where
 {
     conf: EqsatConf,
     start_material: StartMaterial<L, N>,
+    goals: Vec<RecExpr<L>>,
 }
 
 impl<L, N> Eqsat<L, N>
 where
-    L: Language + Display,
+    L: Language + Display + 'static,
     N: Analysis<L> + Clone + Default + Debug + Default,
     N::Data: Serialize + Clone,
 {
@@ -51,6 +53,7 @@ where
     pub fn new(start_material: StartMaterial<L, N>) -> Self {
         Self {
             conf: EqsatConf::default(),
+            goals: vec![],
             start_material,
         }
     }
@@ -74,6 +77,13 @@ where
     #[must_use]
     pub fn with_conf(mut self, conf: EqsatConf) -> Self {
         self.conf = conf;
+        self
+    }
+
+    /// With the following goals to check.
+    #[must_use]
+    pub fn with_goals(mut self, goals: Vec<RecExpr<L>>) -> Self {
+        self.goals = goals;
         self
     }
 
@@ -121,6 +131,11 @@ where
         if self.conf.memory_log {
             info!("Installing memory display hook");
             runner = runner.with_hook(hooks::memory_hook());
+        }
+
+        if !self.goals.is_empty() {
+            info!("Installing goals check hook");
+            runner = runner.with_hook(hooks::goals_check_hook(self.goals));
         }
 
         // TODO ADD CONFIG OPTION

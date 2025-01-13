@@ -37,9 +37,6 @@ class PyAst:
     def node_id(self) -> int:
         ...
 
-    def invert_flatten(self) -> list[PyAst]:
-        ...
-
 
 class PyFeaturizer:
     r"""
@@ -49,6 +46,9 @@ class PyFeaturizer:
     def feature_names_simple(self) -> list[str]:
         ...
 
+
+def eqsat_check(start:PyAst,goals:typing.Sequence[PyAst]) -> str:
+    ...
 
 def many_featurize_simple(expression_strings:typing.Sequence[str],featurizer:PyFeaturizer) -> numpy.typing.NDArray[numpy.float64]:
     ...

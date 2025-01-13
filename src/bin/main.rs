@@ -188,7 +188,7 @@ fn run_eqsats<L, N>(
     rules: &[Rewrite<L, N>],
 ) -> Vec<EqsatResult<L, N>>
 where
-    L: Language + Display + Serialize,
+    L: Language + Display + Serialize + 'static,
     N: Analysis<L> + Clone + Serialize + Default + Debug,
     N::Data: Serialize + Clone,
 {
@@ -297,7 +297,7 @@ fn mk_baselines<L, N>(
     goal_gen: usize,
 ) -> HashMap<usize, HashMap<usize, EqsatStats>>
 where
-    L: Language + Display + FromOp,
+    L: Language + Display + FromOp + 'static,
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {

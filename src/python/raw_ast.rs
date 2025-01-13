@@ -73,21 +73,21 @@ impl<L: AsFeatures> RawAst<L> {
         &self.features
     }
 
-    pub fn flatten(&self) -> Vec<&RawAst<L>> {
-        fn rec<'a, IL: AsFeatures + Display>(
-            raw_ast: &'a RawAst<IL>,
-            flat: &mut Vec<&'a RawAst<IL>>,
-        ) {
-            flat.push(raw_ast);
-            for c in raw_ast.children() {
-                rec(c, flat);
-            }
-        }
-        let mut flat = Vec::new();
-        rec(self, &mut flat);
-        flat.reverse();
-        flat
-    }
+    // pub fn flatten(&self) -> Vec<&RawAst<L>> {
+    //     fn rec<'a, IL: AsFeatures + Display>(
+    //         raw_ast: &'a RawAst<IL>,
+    //         flat: &mut Vec<&'a RawAst<IL>>,
+    //     ) {
+    //         flat.push(raw_ast);
+    //         for c in raw_ast.children() {
+    //             rec(c, flat);
+    //         }
+    //     }
+    //     let mut flat = Vec::new();
+    //     rec(self, &mut flat);
+    //     flat.reverse();
+    //     flat
+    // }
 }
 
 impl<L: AsFeatures> Tree for RawAst<L> {
@@ -143,29 +143,29 @@ mod tests {
         );
     }
 
-    #[test]
-    fn invert_simple() {
-        let expr = "(* (+ a b) 1)"
-            .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
-            .unwrap();
-        let featurizer =
-            <Simple as TermRewriteSystem>::Language::featurizer(vec!["a".into(), "b".into()]);
-        let raw_ast = RawAst::new(&expr, &featurizer).unwrap();
-        let inverted_flattened = raw_ast.flatten();
+    // #[test]
+    // fn invert_simple() {
+    //     let expr = "(* (+ a b) 1)"
+    //         .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
+    //         .unwrap();
+    //     let featurizer =
+    //         <Simple as TermRewriteSystem>::Language::featurizer(vec!["a".into(), "b".into()]);
+    //     let raw_ast = RawAst::new(&expr, &featurizer).unwrap();
+    //     let inverted_flattened = raw_ast.flatten();
 
-        assert_eq!(
-            inverted_flattened[0],
-            &RawAst {
-                node: "1"
-                    .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
-                    .unwrap()
-                    .as_ref()[0]
-                    .clone(),
-                children: Box::new([]),
-                features: Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0])
-            }
-        );
-    }
+    //     assert_eq!(
+    //         inverted_flattened[0],
+    //         &RawAst {
+    //             node: "1"
+    //                 .parse::<RecExpr<<Simple as TermRewriteSystem>::Language>>()
+    //                 .unwrap()
+    //                 .as_ref()[0]
+    //                 .clone(),
+    //             children: Box::new([]),
+    //             features: Feature::Leaf(vec![1.0, 0.0, 0.0, 1.0])
+    //         }
+    //     );
+    // }
 
     #[test]
     fn halide_expr() {

@@ -31,7 +31,8 @@ pub trait TermRewriteSystem {
         + FromOp
         + Send
         + Sync
-        + AsFeatures;
+        + AsFeatures
+        + 'static;
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Send + Sync>
         + Clone
         + Serialize
