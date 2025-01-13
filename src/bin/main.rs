@@ -100,18 +100,14 @@ fn run<R: TermRewriteSystem>(
         .nth(cli.expr_id())
         .expect("Must be in the file!");
 
-    info!(
-        "Starting work on expression {}: {}...",
-        cli.expr_id(),
-        entry.expr
-    );
+    info!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
 
-    info!("Starting eqsat on expression {}...", cli.expr_id());
+    info!("Starting Eqsat...");
 
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
     let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules.as_slice());
 
-    info!("Finished Eqsat {}!", cli.expr_id());
+    info!("Finished Eqsat!");
     info!("Starting sampling...");
 
     let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
@@ -127,7 +123,7 @@ fn run<R: TermRewriteSystem>(
         })
         .collect();
 
-    info!("Finished sampling {}!", cli.expr_id());
+    info!("Finished sampling!");
     info!(
         "Took {} unique samples while aiming for {}.",
         samples.len(),
@@ -152,13 +148,13 @@ fn run<R: TermRewriteSystem>(
         None
     };
 
-    info!("Generating associated data for {}...", cli.expr_id());
+    info!("Generating associated data...");
     let sample_data = samples
         .into_iter()
         .enumerate()
         .map(|(idx, sample)| SampleData::new(sample, generations[idx]))
         .collect();
-    info!("Finished generating sample data for {}!", cli.expr_id());
+    info!("Finished generating associated data!");
 
     info!("Finished work on expr {}!", cli.expr_id());
 
