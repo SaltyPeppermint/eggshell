@@ -7,11 +7,8 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use super::TermRewriteSystem;
-use crate::{
-    features::{AsFeatures, Featurizer, SymbolType},
-    typing::{Type, Typeable, TypingInfo},
-};
+use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
+use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -42,9 +39,9 @@ define_language! {
     }
 }
 
-impl AsFeatures for Math {
-    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
-        Featurizer::new(
+impl MetaInfo for Math {
+    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
+        LanguageManager::new(
             vec![
                 Math::Diff([0.into(), 0.into()]),
                 Math::Integral([0.into(), 0.into()]),

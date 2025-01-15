@@ -4,11 +4,8 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::TermRewriteSystem;
-use crate::{
-    features::{AsFeatures, Featurizer, SymbolType},
-    typing::{Type, Typeable, TypingInfo},
-};
+use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
+use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -24,9 +21,9 @@ define_language! {
     }
 }
 
-impl AsFeatures for SimpleLang {
-    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
-        Featurizer::new(
+impl MetaInfo for SimpleLang {
+    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
+        LanguageManager::new(
             vec![
                 SimpleLang::Num(0),
                 SimpleLang::Add([0.into(), 0.into()]),

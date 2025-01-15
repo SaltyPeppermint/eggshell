@@ -9,7 +9,7 @@ use serde::Serialize;
 use super::SampleError;
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]
-pub struct ChoiceList<L: Language> {
+pub struct PartialRecExpr<L: Language> {
     slots: Vec<Slot<L>>,
     // We need something other than hashbrown or std HashSet cause
     // they DO NOT produce stable iterators between program runs
@@ -17,7 +17,7 @@ pub struct ChoiceList<L: Language> {
     next_to_fill: Option<usize>,
 }
 
-impl<L: Language> ChoiceList<L> {
+impl<L: Language> PartialRecExpr<L> {
     // Returns position of next open
     pub fn select_next_open<R: Rng>(&mut self, rng: &mut R) -> Option<Id> {
         if let Some(next_position) = self.open_slots.iter().choose(rng) {
@@ -137,9 +137,9 @@ impl<L: Language> ChoiceList<L> {
     }
 }
 
-impl<L: Language> From<Id> for ChoiceList<L> {
+impl<L: Language> From<Id> for PartialRecExpr<L> {
     fn from(id: Id) -> Self {
-        ChoiceList {
+        PartialRecExpr {
             slots: vec![Slot {
                 eclass_id: id,
                 parent: None,
@@ -151,7 +151,7 @@ impl<L: Language> From<Id> for ChoiceList<L> {
     }
 }
 
-impl<L: Language> IntoIterator for ChoiceList<L> {
+impl<L: Language> IntoIterator for PartialRecExpr<L> {
     type Item = Slot<L>;
     type IntoIter = std::vec::IntoIter<Self::Item>;
 
@@ -160,15 +160,15 @@ impl<L: Language> IntoIterator for ChoiceList<L> {
     }
 }
 
-impl<L: Language> TryFrom<ChoiceList<L>> for RecExpr<L> {
+impl<L: Language> TryFrom<PartialRecExpr<L>> for RecExpr<L> {
     type Error = super::SampleError;
 
-    fn try_from(choice_list: ChoiceList<L>) -> Result<Self, Self::Error> {
+    fn try_from(partial_rec_expr: PartialRecExpr<L>) -> Result<Self, Self::Error> {
         // let mut expr = RecExpr::default();
-        let len_1 = choice_list.slots.len() - 1;
+        let len_1 = partial_rec_expr.slots.len() - 1;
 
         // Reversing so we get a sensible insertion order for RecExpr
-        let rec_expr = choice_list
+        let rec_expr = partial_rec_expr
             .slots
             .into_iter()
             .rev()

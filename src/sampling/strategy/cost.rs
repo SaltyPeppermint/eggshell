@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
-use crate::sampling::choices::ChoiceList;
+use crate::sampling::choices::PartialRecExpr;
 use crate::sampling::SampleError;
 
 use super::Strategy;
@@ -54,9 +54,9 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
-        choices: &ChoiceList<L>,
+        partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
-        if choices.len() > self.limit {
+        if partial_rec_expr.len() > self.limit {
             eclass
                 .nodes
                 .choose(rng)

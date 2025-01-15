@@ -9,7 +9,7 @@ use rand_chacha::ChaCha12Rng;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
-use crate::sampling::choices::ChoiceList;
+use crate::sampling::choices::PartialRecExpr;
 use crate::sampling::SampleError;
 
 use super::Strategy;
@@ -125,9 +125,9 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
-        choices: &ChoiceList<L>,
+        partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
-        if choices.len() <= self.start_size {
+        if partial_rec_expr.len() <= self.start_size {
             self.pick_by_size_counts(rng, eclass)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
@@ -260,12 +260,12 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
-        choices: &ChoiceList<L>,
+        partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
         debug!("Current EClass {:?}", eclass);
-        debug!("Choices: {:?}", choices);
+        debug!("Choices: {:?}", partial_rec_expr);
         // We need to know what is the minimum size required to fill the rest of the open positions
-        let min_to_fill_other_open = choices
+        let min_to_fill_other_open = partial_rec_expr
             .other_open_slots()
             .map(|id| self.ast_sizes[&id])
             .sum::<usize>();
@@ -274,7 +274,7 @@ where
         // Also subtract the reserv budget needed for the other open positions
         let budget = self
             .limit
-            .checked_sub(choices.n_chosen() + min_to_fill_other_open)
+            .checked_sub(partial_rec_expr.n_chosen() + min_to_fill_other_open)
             .unwrap();
         debug!("Budget available: {budget}");
         debug!("Current EClass Counts {:?}", self.size_counts[&eclass.id]);

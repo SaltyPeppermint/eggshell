@@ -75,17 +75,23 @@ where
     }
 }
 
-pub(crate) trait Tree: Sized {
-    fn children(&self) -> &[Self];
+// pub(crate) trait Tree: Sized {
+//     fn children(&self) -> &[Self];
 
-    fn size(&self) -> usize {
-        1 + self.children().iter().map(|c| c.size()).sum::<usize>()
-    }
+//     fn size(&self) -> usize {
+//         1 + self.children().iter().map(|c| c.size()).sum::<usize>()
+//     }
 
-    fn depth(&self) -> usize {
-        1 + self.children().iter().map(|c| c.depth()).max().unwrap_or(0)
-    }
-}
+//     fn depth(&self) -> usize {
+//         1 + self.children().iter().map(|c| c.depth()).max().unwrap_or(0)
+//     }
+// }
+
+// impl<L: Language> Tree for RecExpr<L> {
+//     fn children(&self) -> &[Self] {
+//         self.children()
+//     }
+// }
 
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions

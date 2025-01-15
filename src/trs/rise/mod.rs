@@ -5,9 +5,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 
-use crate::features::{AsFeatures, Featurizer, SymbolType};
-
-use super::TermRewriteSystem;
+use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -34,9 +32,9 @@ define_language! {
     }
 }
 
-impl AsFeatures for RiseLang {
-    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
-        Featurizer::new(
+impl MetaInfo for RiseLang {
+    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
+        LanguageManager::new(
             vec![
                 RiseLang::Var(0.into()),
                 RiseLang::App([0.into(), 0.into()]),

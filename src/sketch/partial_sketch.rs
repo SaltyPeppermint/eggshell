@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::full_sketch::SNDiscr;
 use super::{SketchNode, SketchParseError};
-use crate::features::{AsFeatures, SymbolType};
+use crate::trs::{LanguageManager, MetaInfo, SymbolType};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -72,10 +72,9 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
     }
 }
 
-impl<L: Language + AsFeatures> AsFeatures for PartialSketchNode<L> {
-    fn featurizer(variable_names: Vec<String>) -> crate::features::Featurizer<Self> {
-        SketchNode::<L>::featurizer(variable_names)
-            .into_meta_lang(|l| PartialSketchNode::Finished(l))
+impl<L: Language + MetaInfo> MetaInfo for PartialSketchNode<L> {
+    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
+        SketchNode::<L>::manager(variable_names).into_meta_lang(|l| PartialSketchNode::Finished(l))
     }
 
     fn symbol_type(&self) -> SymbolType {

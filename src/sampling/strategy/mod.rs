@@ -11,8 +11,8 @@ use rand::seq::IteratorRandom;
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 
-use super::SampleError;
-use super::{choices::ChoiceList, SampleConf};
+use super::choices::PartialRecExpr;
+use super::{SampleConf, SampleError};
 
 pub use cost::CostWeighted;
 pub use count::{CountWeightedGreedy, CountWeightedUniformly};
@@ -27,7 +27,7 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
-        choices: &ChoiceList<L>,
+        partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L;
 
     fn egraph(&self) -> &'a EGraph<L, N>;
@@ -46,17 +46,22 @@ where
         let canonical_root_id = egraph.find(root_eclass.id);
         self.extractable(canonical_root_id)?;
 
-        let mut choices = ChoiceList::from(canonical_root_id);
+        let mut partial_rec_expr = PartialRecExpr::from(canonical_root_id);
 
-        while let Some(id) = choices.select_next_open(rng) {
+        while let Some(id) = partial_rec_expr.select_next_open(rng) {
             let eclass = &egraph[id];
-            let pick = self.pick(rng, eclass, &choices);
-            choices.fill_next(pick)?;
-            if choices.len() > 10000 && choices.len() % 100 == 0 {
-                warn!("Building very large sample with {} entries!", choices.len());
+            let pick = self.pick(rng, eclass, &partial_rec_expr);
+            partial_rec_expr.fill_next(pick)?;
+            if partial_rec_expr.len() > 10000 && partial_rec_expr.len() % 100 == 0 {
+                warn!(
+                    "Building very large sample with {} entries!",
+                    partial_rec_expr.len()
+                );
             }
         }
-        let expr: RecExpr<L> = choices.try_into().expect("No open choices should be left");
+        let expr: RecExpr<L> = partial_rec_expr
+            .try_into()
+            .expect("No open choices should be left");
         debug!(
             "Sampled expression of size {}: {} ",
             expr.as_ref().len(),

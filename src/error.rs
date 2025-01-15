@@ -16,8 +16,6 @@ pub enum EggshellError<L: Display> {
     #[error(transparent)]
     Sample(#[from] crate::sampling::SampleError),
     #[error(transparent)]
-    Feature(#[from] crate::features::FeatureError),
-    #[error(transparent)]
     RecExprParse(#[from] egg::RecExprParseError<L>),
     #[error(transparent)]
     FromOp(#[from] egg::FromOpError),

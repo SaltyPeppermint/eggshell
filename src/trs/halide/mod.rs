@@ -7,11 +7,8 @@ use std::fmt::Display;
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::{TermRewriteSystem, TrsError};
-use crate::{
-    features::{AsFeatures, Featurizer, SymbolType},
-    typing::{Type, Typeable, TypingInfo},
-};
+use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem, TrsError};
+use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -44,9 +41,9 @@ define_language! {
     }
 }
 
-impl AsFeatures for HalideLang {
-    fn featurizer(variable_names: Vec<String>) -> Featurizer<Self> {
-        Featurizer::new(
+impl MetaInfo for HalideLang {
+    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
+        LanguageManager::new(
             vec![
                 HalideLang::Add([0.into(), 0.into()]),
                 HalideLang::Sub([0.into(), 0.into()]),
