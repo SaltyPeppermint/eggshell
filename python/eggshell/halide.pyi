@@ -69,9 +69,9 @@ class PyRecExpr:
         ...
 
 
-def eqsat_check(start:PyRecExpr,goal:PyRecExpr) -> tuple[int, str, str]:
+def eqsat_check(start:PyRecExpr,goal:PyRecExpr,iter_limit:int) -> tuple[int, str, str]:
     ...
 
-def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr) -> list[tuple[int, str, str]]:
+def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr,iter_limit:int) -> list[tuple[int, str, str]]:
     ...
 
