@@ -358,9 +358,8 @@ mod tests {
     fn eqsat_solved_true() {
         let false_expr = vec!["( == 0 0 )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::Full);
-        let conf = EqsatConf::default();
 
-        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), conf).run(&rules);
+        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), &rules).run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
@@ -370,9 +369,8 @@ mod tests {
     fn eqsat_solved_false() {
         let false_expr = vec!["( == 1 0 )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::Full);
-        let conf = EqsatConf::default();
 
-        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), conf).run(&rules);
+        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), &rules).run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
@@ -388,8 +386,8 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
-        let _ = eqsat.run(&rules);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), &rules).with_conf(conf);
+        let _ = eqsat.run();
     }
 
     #[test]
@@ -400,8 +398,8 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
-        let _ = eqsat.run(&rules);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), &rules).with_conf(conf);
+        let _ = eqsat.run();
     }
 
     #[test]
@@ -411,8 +409,8 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
-        let _ = eqsat.run(&rules);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), &rules).with_conf(conf);
+        let _ = eqsat.run();
     }
 
     #[test]

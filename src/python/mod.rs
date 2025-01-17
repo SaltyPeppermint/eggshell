@@ -255,9 +255,10 @@ macro_rules! monomorphize {
                 .build();
             let start_material = StartMaterial::RecExprs(vec![start.0]);
             let rules = <$type as TermRewriteSystem>::full_rules();
-            let eqsat_result = Eqsat::new(start_material, conf)
+            let eqsat_result = Eqsat::new(start_material, &rules)
+                .with_conf(conf)
                 .with_goals(vec![goal.0.clone()])
-                .run(&rules);
+                .run();
             let generation = eqsat_result.iterations().len();
             let stop_reason = serde_json::to_string(&eqsat_result.report().stop_reason).unwrap();
             let report_json = serde_json::to_string(&eqsat_result).unwrap();

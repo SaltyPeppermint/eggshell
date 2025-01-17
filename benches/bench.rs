@@ -6,7 +6,7 @@ use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
 use rand::SeedableRng;
 
-use eggshell::eqsat::{Eqsat, EqsatConf, StartMaterial};
+use eggshell::eqsat::{Eqsat, StartMaterial};
 use eggshell::sampling::strategy;
 use eggshell::sampling::strategy::Strategy;
 use eggshell::sampling::SampleConf;
@@ -26,19 +26,6 @@ fn extraction(c: &mut Criterion) {
     egraph.union(root_a, root_b);
     egraph.rebuild();
 
-    // c.bench_function("default extract", |b| {
-    //     b.iter(|| extract::mutable::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
-    // });
-    // c.bench_function("recursive for_each extract", |b| {
-    //     b.iter(|| {
-    //         extract::recursive::for_each_eclass_extract(
-    //             bb(&sketch),
-    //             AstSize,
-    //             bb(&egraph),
-    //             bb(root_a),
-    //         )
-    //     })
-    // });
     c.bench_function("recursive map extract", |b| {
         b.iter(|| extract::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
     });
@@ -47,9 +34,8 @@ fn extraction(c: &mut Criterion) {
 fn sampling(c: &mut Criterion) {
     let start_expr = "(+ c (* (+ a b) 1))".parse().unwrap();
     let sample_conf = SampleConf::default();
-    let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
-    let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), eqsat_conf).run(&rules);
+    let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), &rules).run();
 
     let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
     let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);

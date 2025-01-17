@@ -38,7 +38,8 @@ pub trait TermRewriteSystem {
         + Debug
         + Default
         + Send
-        + Sync;
+        + Sync
+        + 'static;
 
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }

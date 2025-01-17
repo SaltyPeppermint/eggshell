@@ -20,58 +20,42 @@ pub use conf::{EqsatConf, EqsatConfBuilder};
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug)]
-pub struct Eqsat<L, N>
+pub struct Eqsat<'a, L, N>
 where
-    L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
+    L: Language + Display + 'static,
+    N: Analysis<L> + Clone + Default + Debug + 'static,
     N::Data: Clone,
 {
     conf: EqsatConf,
     start_material: StartMaterial<L, N>,
     goals: Vec<RecExpr<L>>,
+    rules: &'a [Rewrite<L, N>],
 }
 
-impl<L, N> Eqsat<L, N>
+impl<'a, L, N> Eqsat<'a, L, N>
 where
     L: Language + Display + 'static,
-    N: Analysis<L> + Clone + Default + Debug + Default,
+    N: Analysis<L> + Clone + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    #[must_use]
-    pub fn runner_args(&self) -> &EqsatConf {
-        &self.conf
-    }
-
     /// Create a new Equality Saturation
-    /// Is generic over a given [`Trs`]
     ///
-    /// # Errors
-    ///
-    /// Will return an error if the starting expression is not parsable in the
-    /// [`Trs::Language`].
     #[must_use]
-    pub fn new(start_material: StartMaterial<L, N>, conf: EqsatConf) -> Self {
+    pub fn new(start_material: StartMaterial<L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
         Self {
-            conf,
+            conf: EqsatConf::default(),
             goals: vec![],
             start_material,
+            rules,
         }
     }
 
-    // /// Create a new Equality Saturation with a given egraph
-    // /// Is generic over a given [`Trs`]
-    // ///
-    // /// # Errors
-    // ///
-    // /// Will return an error if the starting expr is not parsable in the
-    // /// [`Trs::Language`].
-    // #[must_use]
-    // pub fn new(start_exprs: Vec<RecExpr<R::Language>>) -> Self {
-    //     Self {
-    //         conf: EqsatConf::default(),
-    //         start_exprs,
-    //     }
-    // }
+    /// With the following conf.
+    #[must_use]
+    pub fn with_conf(mut self, conf: EqsatConf) -> Self {
+        self.conf = conf;
+        self
+    }
 
     /// With the following goals to check.
     #[must_use]
@@ -84,11 +68,7 @@ where
     /// (most often true or false) with the given ruleset
     #[expect(clippy::missing_panics_doc)]
     #[must_use]
-    pub fn run(
-        self,
-        // start_exprs: &[RecExpr<R::Language>],
-        rules: &[Rewrite<L, N>],
-    ) -> EqsatResult<L, N> {
+    pub fn run(self) -> EqsatResult<L, N> {
         match &self.start_material {
             StartMaterial::RecExprs(exprs) => {
                 let expr_strs = exprs
@@ -147,7 +127,7 @@ where
             }
         };
 
-        runner = runner.run(rules);
+        runner = runner.run(self.rules);
 
         let report = runner.report();
 

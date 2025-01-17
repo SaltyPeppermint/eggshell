@@ -14,8 +14,8 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(true_expr));
-        let result = eqsat.run(&rules);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(true_expr), &rules);
+        let result = eqsat.run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(
@@ -30,8 +30,8 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(false_expr));
-        let result = eqsat.run(&rules);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(false_expr), &rules);
+        let result = eqsat.run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(

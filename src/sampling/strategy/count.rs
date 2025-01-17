@@ -396,14 +396,13 @@ mod tests {
     fn simple_sample_uniform() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 5);
@@ -419,14 +418,13 @@ mod tests {
     fn simple_sample_uniform_float() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new_with_limit(eqsat.egraph(), 5);
@@ -442,14 +440,13 @@ mod tests {
     fn simple_greedy() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
         let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
-        let eqsat_conf = EqsatConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy =
@@ -473,9 +470,10 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .with_conf(eqsat_conf)
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 32);
@@ -498,9 +496,10 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .with_conf(eqsat_conf)
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy =
@@ -524,9 +523,10 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
             StartMaterial::RecExprs(vec![start_expr.clone()]),
-            eqsat_conf,
+            rules.as_slice(),
         )
-        .run(rules.as_slice());
+        .with_conf(eqsat_conf)
+        .run();
         let root_id = eqsat.roots()[0];
 
         let strategy =

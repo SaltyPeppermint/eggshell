@@ -218,18 +218,16 @@ fn run_eqsats<L, N>(
 ) -> Vec<EqsatResult<L, N>>
 where
     L: Language + Display + Serialize + 'static,
-    N: Analysis<L> + Clone + Serialize + Default + Debug,
+    N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    let mut eqsat = Eqsat::new(
-        StartMaterial::RecExprs(vec![start_expr.to_owned()]),
-        eqsat_conf.to_owned(),
-    );
+    let mut eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.to_owned()]), rules)
+        .with_conf(eqsat_conf.to_owned());
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
 
     loop {
-        let result = eqsat.run(rules);
+        let result = eqsat.run();
         iter_count += 1;
         info!("Iteration {iter_count} stopped.");
 
@@ -237,7 +235,7 @@ where
         match result.report().stop_reason {
             StopReason::IterationLimit(_) => {
                 eqsat_results.push(result.clone());
-                eqsat = Eqsat::new(result.into(), eqsat_conf.to_owned());
+                eqsat = Eqsat::new(result.into(), rules).with_conf(eqsat_conf.to_owned());
             }
             _ => {
                 info!("Limits reached after {} full iterations!", iter_count - 1);
@@ -328,7 +326,7 @@ fn mk_baselines<L, N>(
 ) -> HashMap<usize, HashMap<usize, EqsatStats>>
 where
     L: Language + Display + FromOp + 'static,
-    N: Analysis<L> + Clone + Default + Debug,
+    N: Analysis<L> + Clone + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
     info!("Taking goals from generation {goal_gen}");
@@ -352,7 +350,7 @@ where
                     let mut conf = eqsat_conf.to_owned();
                     conf.root_check = true;
                     conf.iter_limit = 100;
-                    let result = Eqsat::new(starting_exprs, conf).run(rules);
+                    let result = Eqsat::new(starting_exprs, rules).with_conf(conf).run();
                     let baseline = result.into();
                     info!("Baseline run!");
                     (*goal_idx, baseline)
