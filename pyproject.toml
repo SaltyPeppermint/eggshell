@@ -17,7 +17,6 @@ classifiers = [
   "Topic :: Software Development :: Compilers",
   "Development Status :: 2 - Pre-Alpha",
 ]
-dynamic = ["version"]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

@@ -39,7 +39,7 @@ macro_rules! monomorphize {
         // type N = <$type as TermRewriteSystem>::Analysis;
 
         #[gen_stub_pyclass]
-        #[pyclass(module = $module_name)]
+        #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct PyRecExpr(RecExpr<L>);
@@ -71,6 +71,15 @@ macro_rules! monomorphize {
             #[must_use]
             pub fn __repr__(&self) -> String {
                 format!("{self:?}")
+            }
+
+            #[must_use]
+            pub fn children_of(&self, node: &PyNode) -> Vec<PyNode> {
+                node.0
+                    .children()
+                    .iter()
+                    .map(|c_id| PyNode(self.0[*c_id].to_owned()))
+                    .collect()
             }
 
             #[must_use]
@@ -113,7 +122,7 @@ macro_rules! monomorphize {
         }
 
         #[gen_stub_pyclass]
-        #[pyclass(module = $module_name)]
+        #[pyclass(frozen, module = $module_name,)]
         #[derive(Debug, Clone, PartialEq)]
         pub struct PyNode(L);
 
@@ -172,7 +181,7 @@ macro_rules! monomorphize {
         }
 
         #[gen_stub_pyclass]
-        #[pyclass(module = $module_name)]
+        #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct PyLanguageManager(LanguageManager<L>);
@@ -203,10 +212,10 @@ macro_rules! monomorphize {
             #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
             pub fn featurize_simple<'py>(
                 &self,
-                py: pyo3::Python<'py>,
+                py: Python<'py>,
                 expr: &PyRecExpr,
                 lang_manager: &PyLanguageManager,
-            ) -> pyo3::PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+            ) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
                 let mut features = expr
                     .0
                     .count_symbols(&lang_manager.0)
@@ -220,10 +229,10 @@ macro_rules! monomorphize {
             #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
             pub fn many_featurize_simple<'py>(
                 &self,
-                py: pyo3::Python<'py>,
+                py: Python<'py>,
                 exprs: Vec<PyRecExpr>,
                 lang_manager: &PyLanguageManager,
-            ) -> pyo3::PyResult<Bound<'py, numpy::PyArray2<f64>>> {
+            ) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
                 let rust_vec = exprs
                     .par_iter()
                     .map(|expr| {
