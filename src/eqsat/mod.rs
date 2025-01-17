@@ -50,9 +50,9 @@ where
     /// Will return an error if the starting expression is not parsable in the
     /// [`Trs::Language`].
     #[must_use]
-    pub fn new(start_material: StartMaterial<L, N>) -> Self {
+    pub fn new(start_material: StartMaterial<L, N>, conf: EqsatConf) -> Self {
         Self {
-            conf: EqsatConf::default(),
+            conf,
             goals: vec![],
             start_material,
         }
@@ -72,13 +72,6 @@ where
     //         start_exprs,
     //     }
     // }
-
-    /// With the runner parameters.
-    #[must_use]
-    pub fn with_conf(mut self, conf: EqsatConf) -> Self {
-        self.conf = conf;
-        self
-    }
 
     /// With the following goals to check.
     #[must_use]

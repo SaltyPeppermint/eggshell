@@ -33,7 +33,7 @@ pub struct Cli {
     strategy: SampleStrategy,
 
     /// Calculate and save explanations
-    #[arg(long, default_value_t = false)]
+    #[arg(long, default_value_t = true)]
     with_explanations: bool,
 
     /// Node limit for egraph in seconds

@@ -2,7 +2,7 @@ use egg::{Analysis, Language, RecExpr, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
 
-pub fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub const fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language,
     N: Analysis<L> + Default,
@@ -17,7 +17,7 @@ where
     }
 }
 
-pub fn goals_check_hook<L, N>(
+pub const fn goals_check_hook<L, N>(
     goals: Vec<RecExpr<L>>,
 ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where

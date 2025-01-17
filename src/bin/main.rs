@@ -3,12 +3,15 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::thread::available_parallelism;
 
 use chrono::Local;
 use clap::Parser;
-use egg::{Analysis, AstSize, CostFunction, FromOp, Language, RecExpr, Rewrite, StopReason};
+use egg::{
+    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
+};
 use hashbrown::{HashMap, HashSet};
-use log::info;
+use log::{debug, info};
 use num::BigUint;
 use rand::seq::IteratorRandom;
 use rand::SeedableRng;
@@ -24,6 +27,7 @@ use eggshell::sampling::strategy::{
 use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
+use rayon::prelude::*;
 use serde::Serialize;
 
 fn main() {
@@ -132,7 +136,6 @@ fn run<R: TermRewriteSystem>(
 
     let max_generation = eqsat_results.len();
     let generations = find_generations(&samples, &mut eqsat_results);
-    drop(eqsat_results);
 
     let baselines = if let BaselineCmd::WithBaseline(args) = cli.baseline() {
         Some(mk_baselines(
@@ -148,11 +151,37 @@ fn run<R: TermRewriteSystem>(
         None
     };
 
+    info!("Generating explanations...");
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(available_parallelism().unwrap().into()) // Adjust if memory issues
+        .build()
+        .unwrap();
+    let explenations: Vec<Option<_>> = pool.install(|| {
+        samples
+            .par_iter()
+            .zip(generations.par_iter())
+            .map_with(
+                eqsat_results,
+                |thread_local_eqsat_results, (sample, generation)| {
+                    mk_explanation(
+                        cli,
+                        thread_local_eqsat_results[*generation - 1].egraph_mut(),
+                        &start_expr,
+                        sample,
+                    )
+                },
+            )
+            .collect()
+    });
+
+    info!("Finished generating explanations!");
+
     info!("Generating associated data...");
     let sample_data = samples
         .into_iter()
+        .zip(explenations)
         .enumerate()
-        .map(|(idx, sample)| SampleData::new(sample, generations[idx]))
+        .map(|(idx, (sample, explenation))| SampleData::new(sample, generations[idx], explenation))
         .collect();
     info!("Finished generating associated data!");
 
@@ -192,9 +221,10 @@ where
     N: Analysis<L> + Clone + Serialize + Default + Debug,
     N::Data: Serialize + Clone,
 {
-    let mut eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr.to_owned()]))
-        .with_conf(eqsat_conf.to_owned());
-
+    let mut eqsat = Eqsat::new(
+        StartMaterial::RecExprs(vec![start_expr.to_owned()]),
+        eqsat_conf.to_owned(),
+    );
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
 
@@ -207,7 +237,7 @@ where
         match result.report().stop_reason {
             StopReason::IterationLimit(_) => {
                 eqsat_results.push(result.clone());
-                eqsat = Eqsat::new(result.into()).with_conf(eqsat_conf.to_owned());
+                eqsat = Eqsat::new(result.into(), eqsat_conf.to_owned());
             }
             _ => {
                 info!("Limits reached after {} full iterations!", iter_count - 1);
@@ -322,7 +352,7 @@ where
                     let mut conf = eqsat_conf.to_owned();
                     conf.root_check = true;
                     conf.iter_limit = 100;
-                    let result = Eqsat::new(starting_exprs).with_conf(conf).run(rules);
+                    let result = Eqsat::new(starting_exprs, conf).run(rules);
                     let baseline = result.into();
                     info!("Baseline run!");
                     (*goal_idx, baseline)
@@ -350,24 +380,24 @@ fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12R
         .choose_multiple(rng, n)
 }
 
-// fn mk_explanation<L, N>(
-//     sample: &RecExpr<L>,
-//     cli: &Cli,
-//     egraph: &mut EGraph<L, N>,
-//     start_expr: &RecExpr<L>,
-// ) -> Option<String>
-// where
-//     L: Language + Display + FromOp,
-//     N: Analysis<L>,
-// {
-//     if cli.with_explanations() {
-//         info!("Constructing explanation of \"{start_expr} == {sample}\"...");
-//         let expl = egraph
-//             .explain_equivalence(start_expr, sample)
-//             .get_flat_string();
-//         info!("Explanation constructed!");
-//         Some(expl)
-//     } else {
-//         None
-//     }
-// }
+fn mk_explanation<L, N>(
+    cli: &Cli,
+    egraph: &mut EGraph<L, N>,
+    start_expr: &RecExpr<L>,
+    target_expr: &RecExpr<L>,
+) -> Option<String>
+where
+    L: Language + Display + FromOp,
+    N: Analysis<L>,
+{
+    if cli.with_explanations() {
+        debug!("Constructing explanation of \"{start_expr} == {target_expr}\"...");
+        let expl = egraph
+            .explain_equivalence(start_expr, target_expr)
+            .get_flat_string();
+        debug!("Explanation constructed!");
+        Some(expl)
+    } else {
+        None
+    }
+}

@@ -358,8 +358,9 @@ mod tests {
     fn eqsat_solved_true() {
         let false_expr = vec!["( == 0 0 )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::Full);
+        let conf = EqsatConf::default();
 
-        let result = Eqsat::new(StartMaterial::RecExprs(false_expr)).run(&rules);
+        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), conf).run(&rules);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
@@ -369,8 +370,9 @@ mod tests {
     fn eqsat_solved_false() {
         let false_expr = vec!["( == 1 0 )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::Full);
+        let conf = EqsatConf::default();
 
-        let result = Eqsat::new(StartMaterial::RecExprs(false_expr)).run(&rules);
+        let result = Eqsat::new(StartMaterial::RecExprs(false_expr), conf).run(&rules);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
@@ -384,9 +386,9 @@ mod tests {
                 .unwrap(),
         ];
         let rules = Halide::rules(HalideRuleset::BugRules);
+        let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr))
-            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
         let _ = eqsat.run(&rules);
     }
 
@@ -396,9 +398,9 @@ mod tests {
             .parse()
             .unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
+        let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr))
-            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
         let _ = eqsat.run(&rules);
     }
 
@@ -407,9 +409,9 @@ mod tests {
     fn expl_3() {
         let expr = vec!["( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
+        let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr))
-            .with_conf(EqsatConf::builder().explanation(true).iter_limit(3).build());
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(expr), conf);
         let _ = eqsat.run(&rules);
     }
 

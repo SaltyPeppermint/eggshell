@@ -49,9 +49,7 @@ fn sampling(c: &mut Criterion) {
     let sample_conf = SampleConf::default();
     let eqsat_conf = EqsatConf::default();
     let rules = Simple::full_rules();
-    let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]))
-        .with_conf(eqsat_conf.clone())
-        .run(&rules);
+    let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), eqsat_conf).run(&rules);
 
     let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
     let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);

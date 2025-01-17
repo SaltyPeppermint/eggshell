@@ -255,8 +255,7 @@ macro_rules! monomorphize {
                 .build();
             let start_material = StartMaterial::RecExprs(vec![start.0]);
             let rules = <$type as TermRewriteSystem>::full_rules();
-            let eqsat_result = Eqsat::new(start_material)
-                .with_conf(conf)
+            let eqsat_result = Eqsat::new(start_material, conf)
                 .with_goals(vec![goal.0.clone()])
                 .run(&rules);
             let generation = eqsat_result.iterations().len();

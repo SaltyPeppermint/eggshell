@@ -72,12 +72,17 @@ impl MetaData {
 pub struct SampleData<L: Language + Display> {
     sample: RecExpr<L>,
     generation: usize,
+    explanation: Option<String>,
 }
 
 impl<L: Language + Display> SampleData<L> {
     #[must_use]
-    pub fn new(sample: RecExpr<L>, generation: usize) -> Self {
-        Self { sample, generation }
+    pub fn new(sample: RecExpr<L>, generation: usize, explanation: Option<String>) -> Self {
+        Self {
+            sample,
+            generation,
+            explanation,
+        }
     }
 }
 
