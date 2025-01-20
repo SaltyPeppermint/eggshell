@@ -61,7 +61,7 @@ where
         AstSize.one_shot_analysis(egraph, &mut ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
-        info!("Strategy read to start sampling!");
+        info!("Sampler ready to start sampling!");
         CountWeightedGreedy {
             egraph,
             size_counts,
@@ -209,7 +209,7 @@ where
         AstSize.one_shot_analysis(egraph, &mut min_ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
-        info!("Strategy read to start sampling!");
+        info!("Sampler read to start sampling!");
         CountWeightedUniformly {
             egraph,
             size_counts,

@@ -103,7 +103,7 @@ fn run<R: TermRewriteSystem>(
     info!("Starting Eqsat...");
 
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat_results = run_eqsats(&start_expr, &eqsat_conf, rules.as_slice());
+    let mut eqsat_results = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
 
     info!("Finished Eqsat!");
     info!("Starting sampling...");
@@ -115,7 +115,7 @@ fn run<R: TermRewriteSystem>(
         .enumerate()
         .flat_map(|(eqsat_generation, eqsat_result)| {
             info!("Running sampling of generation {}...", eqsat_generation + 1);
-            let s = sample_eqsat_result(
+            let s = sample(
                 cli,
                 &start_expr,
                 eqsat_result,
@@ -135,10 +135,10 @@ fn run<R: TermRewriteSystem>(
     );
 
     let max_generation = eqsat_results.len();
-    let generations = find_generations(&samples, &mut eqsat_results);
+    let generations = generations(&samples, &mut eqsat_results);
 
     let baselines = if let BaselineCmd::WithBaseline(args) = cli.baseline() {
-        Some(mk_baselines(
+        Some(baselines(
             &samples,
             &eqsat_conf,
             args,
@@ -163,7 +163,7 @@ fn run<R: TermRewriteSystem>(
             .map_with(
                 eqsat_results,
                 |thread_local_eqsat_results, (sample, generation)| {
-                    mk_explanation(
+                    explanation(
                         cli,
                         thread_local_eqsat_results[*generation - 1].egraph_mut(),
                         &start_expr,
@@ -210,7 +210,7 @@ fn run<R: TermRewriteSystem>(
     // });
 }
 
-fn run_eqsats<L, N>(
+fn eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
     rules: &[Rewrite<L, N>],
@@ -255,7 +255,7 @@ where
 
 /// Inner sample logic.
 /// Samples guranteed to be unique.
-fn sample_eqsat_result<L, N>(
+fn sample<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
     eqsat: &EqsatResult<L, N>,
@@ -282,17 +282,25 @@ where
         SampleStrategy::CountWeightedSizeAdjusted => {
             let samples_per_size = usize::div_ceil(n_samples, min_size);
             let sampler = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), max_size);
-            (min_size..max_size)
-                .map(|limit| {
-                    sampler
-                        .sample_eclass(rng, samples_per_size, root_id, limit, parallelism)
-                        .unwrap()
+            let samples = (min_size..max_size)
+                .into_par_iter()
+                .enumerate()
+                .map_with(ChaCha12Rng::from_rng(rng).unwrap(), {
+                    |l_rng, (thread_idx, limit)| {
+                        debug!("Sampling for size {limit}...");
+                        l_rng.set_stream(thread_idx as u64);
+                        sampler
+                            .sample_eclass(l_rng, samples_per_size, root_id, limit, parallelism / 8)
+                            .unwrap()
+                    }
                 })
-                .reduce(|mut a, b| {
+                .reduce(HashSet::new, |mut a, b| {
                     a.extend(b);
                     a
-                })
-                .unwrap()
+                });
+
+            info!("Sampled {} expressions in total!", samples.len());
+            samples
         }
         SampleStrategy::CountWeightedGreedy => {
             CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), max_size)
@@ -305,10 +313,7 @@ where
     }
 }
 
-fn find_generations<L, N>(
-    samples: &[RecExpr<L>],
-    eqsat_results: &mut [EqsatResult<L, N>],
-) -> Vec<usize>
+fn generations<L, N>(samples: &[RecExpr<L>], eqsat_results: &mut [EqsatResult<L, N>]) -> Vec<usize>
 where
     L: Language + Display + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
@@ -328,7 +333,7 @@ where
     generations
 }
 
-fn mk_baselines<L, N>(
+fn baselines<L, N>(
     samples: &[RecExpr<L>],
     eqsat_conf: &EqsatConf,
     baseline_args: &BaselineArgs,
@@ -391,7 +396,7 @@ fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12R
         .choose_multiple(rng, n)
 }
 
-fn mk_explanation<L, N>(
+fn explanation<L, N>(
     cli: &Cli,
     egraph: &mut EGraph<L, N>,
     start_expr: &RecExpr<L>,
