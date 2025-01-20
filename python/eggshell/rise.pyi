@@ -53,6 +53,9 @@ class PyRecExpr:
     def __repr__(self) -> str:
         ...
 
+    def children_of(self, node:PyNode) -> list[PyNode]:
+        ...
+
     def arity(self, position:int) -> int:
         ...
 
