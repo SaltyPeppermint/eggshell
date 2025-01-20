@@ -2,7 +2,7 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::HashMap;
-use log::{debug, info, log_enabled, Level};
+use log::{debug, info};
 use rand::distributions::WeightedError;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
@@ -49,9 +49,8 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new_with_limit(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>, limit: usize) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>, limit: usize) -> Self {
         let start_size = AstSize.cost_rec(start_expr);
-        // let limit = start_size + (start_size / 2);
         info!("Using limit {limit}");
 
         // Make one big size count analysis for all eclasses
@@ -73,12 +72,6 @@ where
             start_size,
             limit,
         }
-    }
-
-    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>) -> Self {
-        let start_size = AstSize.cost_rec(start_expr);
-        let limit = start_size + (start_size / 2);
-        Self::new_with_limit(egraph, start_expr, limit)
     }
 
     fn pick_by_size_counts<'c>(
@@ -178,24 +171,13 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new_with_limit(egraph: &'a EGraph<L, N>, limit: usize) -> Self {
-        // let limit = start_size + (start_size / 2);
+    pub fn new(egraph: &'a EGraph<L, N>, limit: usize) -> Self {
         info!("Using limit {limit}");
 
         // Make one big size count analysis for all eclasses
         info!("Starting size count oneshot analysis...");
         let size_counts = ExprCount::new(limit).one_shot_analysis(egraph);
         info!("Size count oneshot analysis finsished!");
-
-        // let mut max: C = C::zero();
-        // for (_id, counts) in &size_counts {
-        //     for (_size, count) in counts {
-        //         if count > &max {
-        //             max = count.clone();
-        //         }
-        //     }
-        // }
-        // println!("MAX ENCOUNTERED IS {max:?}");
 
         let mut ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
@@ -210,12 +192,6 @@ where
             ast_sizes,
             limit,
         }
-    }
-
-    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>) -> Self {
-        let start_size = AstSize.cost_rec(start_expr);
-        let limit = start_size + (start_size / 2);
-        Self::new_with_limit(egraph, limit)
     }
 
     fn calc_node_weight<I: Iterator<Item = Vec<usize>>>(
@@ -290,14 +266,7 @@ where
                 // among the children of the node under consideration
                 let arity = node.children().len();
                 let budget_combinations = (0..=budget).flat_map(|i| sum_combinations(i, arity));
-
-                if log_enabled!(Level::Debug) {
-                    let vec = budget_combinations.clone().collect::<Vec<Vec<usize>>>();
-                    debug!("Budget combinations: {vec:?}");
-                }
-
                 let count = self.calc_node_weight(budget_combinations, node);
-
                 (node, count)
             })
             .collect::<HashMap<_, _>>();
@@ -387,7 +356,6 @@ mod tests {
     use rand::SeedableRng;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    use crate::sampling::SampleConf;
     use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     use super::*;
@@ -395,7 +363,6 @@ mod tests {
     #[test]
     fn simple_sample_uniform() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
@@ -405,11 +372,9 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy
-            .sample_eclass(&mut rng, &sample_conf, root_id)
-            .unwrap();
+        let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
 
         assert_eq!(samples.len(), 5);
     }
@@ -417,7 +382,6 @@ mod tests {
     #[test]
     fn simple_sample_uniform_float() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
@@ -427,19 +391,16 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<f64, _, _>::new_with_limit(eqsat.egraph(), 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy
-            .sample_eclass(&mut rng, &sample_conf, root_id)
-            .unwrap();
+        let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
 
-        assert_eq!(samples.len(), 4);
+        assert_eq!(samples.len(), 5);
     }
 
     #[test]
     fn simple_greedy() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
@@ -449,14 +410,11 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy =
-            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy
-            .sample_eclass(&mut rng, &sample_conf, root_id)
-            .unwrap();
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 5);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
 
-        assert_eq!(samples.len(), 8);
+        assert_eq!(samples.len(), 7);
     }
 
     #[test]
@@ -464,7 +422,6 @@ mod tests {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -476,11 +433,9 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), 32);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy
-            .sample_eclass(&mut rng, &sample_conf, root_id)
-            .unwrap();
+        let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
 
         assert_eq!(samples.len(), 10);
     }
@@ -490,7 +445,6 @@ mod tests {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();
-        let sample_conf = SampleConf::builder().samples_per_eclass(10).build();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -502,12 +456,9 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy =
-            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 32);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy
-            .sample_eclass(&mut rng, &sample_conf, root_id)
-            .unwrap();
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 32);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
 
         assert_eq!(samples.len(), 10);
     }
@@ -517,7 +468,6 @@ mod tests {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse::<RecExpr<_>>()
             .unwrap();
-        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
@@ -529,12 +479,11 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy =
-            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), &start_expr, 2);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 2);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
 
         assert_eq!(
-            strategy.sample_eclass(&mut rng, &sample_conf, root_id),
+            strategy.sample_eclass(&mut rng, 1000, 4, root_id),
             Err(SampleError::LimitError(2))
         );
     }

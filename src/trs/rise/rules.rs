@@ -84,20 +84,22 @@ pub fn rules(use_explicit_subs: bool) -> HashMap<Symbol, Rewrite> {
             "(app (app mapSeq ?f) ?x)" => "(app toMem (app (app mapSeq ?f) ?x))"),
         rewrite!("rotate-values-simplified";
             "(app (app slide ?sz) 1)" => "(app rotateValues ?sz)"),
-        // domain-specific
+        // // domain-specific
         // mulT = (lam x (app (app mul (app fst (var x))) (app snd (var x))))
-        rewrite!("separate-dot-hv-simplified";
-            "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-             (app (app zip (app join weights2d)) (app join ?nbh))))" =>
-            { with_fresh_var("?sdhv", "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-                (app (app zip weightsV) (app (app map (lam ?sdhv (app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-                (app (app zip weightsH) (var ?sdhv)))))) ?nbh))))") }),
-        rewrite!("separate-dot-vh-simplified";
-            "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-             (app (app zip (app join weights2d)) (app join ?nbh))))" =>
-            { with_fresh_var("?sdvh", "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-                (app (app zip weightsH) (app (app map (lam ?sdvh (app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
-                (app (app zip weightsV) (var ?sdvh)))))) (app transpose ?nbh)))))") }),
+
+        // // Image processing specific rules
+        // rewrite!("separate-dot-hv-simplified";
+        //     "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //      (app (app zip (app join weights2d)) (app join ?nbh))))" =>
+        //     { with_fresh_var("?sdhv", "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //         (app (app zip weightsV) (app (app map (lam ?sdhv (app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //         (app (app zip weightsH) (var ?sdhv)))))) ?nbh))))") }),
+        // rewrite!("separate-dot-vh-simplified";
+        //     "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //      (app (app zip (app join weights2d)) (app join ?nbh))))" =>
+        //     { with_fresh_var("?sdvh", "(app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //         (app (app zip weightsH) (app (app map (lam ?sdvh (app (app (app reduce add) 0) (app (app map (lam ?x (app (app mul (app fst (var ?x))) (app snd (var ?x)))))
+        //         (app (app zip weightsV) (var ?sdvh)))))) (app transpose ?nbh)))))") }),
     ];
     let extraction_substitution = vec![rewrite!("beta"; "(app (lam ?v ?body) ?e)" =>
             { BetaExtractApplier { v: var("?v"), e: var("?e"), body: var("?body") } })];

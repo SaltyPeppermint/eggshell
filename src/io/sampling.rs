@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::cli::Cli;
 use crate::eqsat::{EqsatConf, EqsatResult};
-use crate::sampling::SampleConf;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct DataEntry<L: Language + Display> {
@@ -40,7 +39,7 @@ pub struct MetaData {
     folder: String,
     cli: Cli,
     timestamp: i64,
-    sample_conf: SampleConf,
+
     eqsat_conf: EqsatConf,
     rules: Vec<String>,
 }
@@ -52,7 +51,7 @@ impl MetaData {
         folder: String,
         cli: Cli,
         timestamp: i64,
-        sample_conf: SampleConf,
+
         eqsat_conf: EqsatConf,
         rules: Vec<String>,
     ) -> Self {
@@ -61,7 +60,7 @@ impl MetaData {
             folder,
             cli,
             timestamp,
-            sample_conf,
+
             eqsat_conf,
             rules,
         }

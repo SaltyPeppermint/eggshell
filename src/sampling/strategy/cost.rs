@@ -112,7 +112,6 @@ mod tests {
     use rand::SeedableRng;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    use crate::sampling::SampleConf;
     use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     use super::*;
@@ -120,14 +119,13 @@ mod tests {
     #[test]
     fn simple_sample() {
         let start_expr = "(* (+ a b) 1)".parse().unwrap();
-        let sample_conf = SampleConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(n_samples, 4);
@@ -136,14 +134,13 @@ mod tests {
     #[test]
     fn stringified_sample_len() {
         let start_expr = "(* (+ a b) 1)".parse().unwrap();
-        let sample_conf = SampleConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
@@ -163,14 +160,13 @@ mod tests {
             "(* (+ a b) 1)".parse().unwrap(),
             "(+ (+ x 0) (* y 1))".parse().unwrap(),
         ];
-        let sample_conf = SampleConf::default();
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(start_exprs), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(n_samples, 8);
@@ -181,7 +177,6 @@ mod tests {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse()
             .unwrap();
-        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -189,13 +184,13 @@ mod tests {
             .with_conf(eqsat_conf)
             .run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 2);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_egraph(&mut rng, 10, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 37);
+        assert_eq!(n_samples, 59);
     }
 
     #[test]
@@ -203,7 +198,6 @@ mod tests {
         let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
             .parse()
             .unwrap();
-        let sample_conf = SampleConf::default();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -211,12 +205,12 @@ mod tests {
             .with_conf(eqsat_conf)
             .run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
-        let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-        let samples = strategy.sample_egraph(&mut rng, &sample_conf).unwrap();
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_egraph(&mut rng, 10, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 37);
+        assert_eq!(n_samples, 44);
     }
 }

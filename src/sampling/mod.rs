@@ -1,6 +1,5 @@
 mod choices;
 pub mod strategy;
-mod utils;
 
 use std::fmt::{Debug, Display};
 
@@ -10,8 +9,6 @@ use serde::Serialize;
 use thiserror::Error;
 
 use crate::eqsat::EqsatConf;
-
-pub use utils::{SampleConf, SampleConfBuilder};
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SampleError {
@@ -27,6 +24,5 @@ pub enum SampleError {
 pub struct Sample<L: Language + Display + Send + Sync> {
     start_exprs: RecExpr<L>,
     samples: HashMap<Id, HashSet<RecExpr<L>>>,
-    sample_conf: SampleConf,
     eqsat_conf: EqsatConf,
 }

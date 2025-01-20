@@ -12,7 +12,7 @@ use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 
 use super::choices::PartialRecExpr;
-use super::{SampleConf, SampleError};
+use super::SampleError;
 
 pub use cost::CostWeighted;
 pub use count::{CountWeightedGreedy, CountWeightedUniformly};
@@ -74,12 +74,13 @@ where
     fn sample_eclass(
         &self,
         rng: &mut ChaCha12Rng,
-        conf: &SampleConf,
+        n_samples: usize,
+        parallelism: usize,
         root: Id,
     ) -> Result<HashSet<RecExpr<L>>, SampleError> {
         let root_eclass = &self.egraph()[root];
 
-        let ranges = batch_ranges(conf);
+        let ranges = batch_ranges(n_samples, parallelism);
         info!("Running sampling in {} batches", ranges.len());
 
         let counter = AtomicUsize::new(0);
@@ -116,15 +117,16 @@ where
     fn sample_egraph(
         &self,
         rng: &mut ChaCha12Rng,
-        conf: &SampleConf,
+        n_samples: usize,
+        parallelism: usize,
     ) -> Result<HashMap<Id, HashSet<RecExpr<L>>>, SampleError> {
         self.egraph()
             .classes()
-            .choose_multiple(rng, conf.samples_per_egraph)
+            .choose_multiple(rng, n_samples)
             .into_iter()
             .enumerate()
             .map(|(i, eclass)| {
-                let samples = self.sample_eclass(rng, conf, eclass.id)?;
+                let samples = self.sample_eclass(rng, n_samples, parallelism, eclass.id)?;
                 info!("Sampled {i} expressions from eclass {}", eclass.id);
                 Ok((eclass.id, samples))
             })
@@ -132,16 +134,18 @@ where
     }
 }
 
-fn batch_ranges(conf: &SampleConf) -> Vec<(usize, usize)> {
+fn batch_ranges(total_samples: usize, parallelism: usize) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
     let mut range_start = 0;
+    let batch_size = (total_samples + 1) / parallelism;
 
-    while range_start + conf.batch_size < conf.samples_per_eclass {
-        ranges.push((range_start, range_start + conf.batch_size));
-        range_start += conf.batch_size;
+    for i in 0..parallelism - 1 {
+        let range_end = (i + 1) * batch_size;
+        ranges.push((range_start, range_end));
+        range_start = range_end;
     }
 
-    ranges.push((range_start, conf.samples_per_eclass));
+    ranges.push((range_start, total_samples));
     ranges
 }
 
@@ -151,13 +155,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn batch_ranges_small() {
-        let sample_conf = SampleConf::builder()
-            .samples_per_eclass(2500)
-            .batch_size(1000)
-            .build();
+    fn batch_ranges_bit_over() {
+        let ranges = batch_ranges(2001, 4);
+        assert_eq!(
+            ranges,
+            vec![(0, 500), (500, 1000), (1000, 1500), (1500, 2001)]
+        );
+    }
 
-        let ranges = batch_ranges(&sample_conf);
-        assert_eq!(ranges, vec![(0, 1000), (1000, 2000), (2000, 2500)]);
+    #[test]
+    fn batch_ranges_exact() {
+        let ranges = batch_ranges(2000, 4);
+        assert_eq!(
+            ranges,
+            vec![(0, 500), (500, 1000), (1000, 1500), (1500, 2000)]
+        );
     }
 }

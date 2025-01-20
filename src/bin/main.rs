@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display};
 use std::fs;
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::thread::available_parallelism;
 
 use chrono::Local;
 use clap::Parser;
@@ -24,7 +23,6 @@ use eggshell::io::structs::Entry;
 use eggshell::sampling::strategy::{
     CostWeighted, CountWeightedGreedy, CountWeightedUniformly, Strategy,
 };
-use eggshell::sampling::SampleConf;
 use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
@@ -36,7 +34,6 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let sample_conf = (&cli).into();
     let eqsat_conf = (&cli).into();
 
     let folder = format!(
@@ -59,7 +56,6 @@ fn main() {
             run::<Halide>(
                 exprs,
                 eqsat_conf,
-                sample_conf,
                 folder,
                 start_time.timestamp(),
                 Halide::full_rules(),
@@ -70,7 +66,6 @@ fn main() {
             run::<Rise>(
                 exprs,
                 eqsat_conf,
-                sample_conf,
                 folder,
                 start_time.timestamp(),
                 Rise::full_rules(),
@@ -93,7 +88,6 @@ fn main() {
 fn run<R: TermRewriteSystem>(
     exprs: Vec<Entry>,
     eqsat_conf: EqsatConf,
-    sample_conf: SampleConf,
     folder: String,
     timestamp: i64,
     rules: Vec<Rewrite<R::Language, R::Analysis>>,
@@ -114,14 +108,20 @@ fn run<R: TermRewriteSystem>(
     info!("Finished Eqsat!");
     info!("Starting sampling...");
 
-    let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
+    let mut rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
 
     let samples: Vec<_> = eqsat_results
         .iter()
         .enumerate()
         .flat_map(|(eqsat_generation, eqsat_result)| {
             info!("Running sampling of generation {}...", eqsat_generation + 1);
-            let s = sample_eqsat_result(cli, &start_expr, eqsat_result, &sample_conf, &mut rng);
+            let s = sample_eqsat_result(
+                cli,
+                &start_expr,
+                eqsat_result,
+                cli.eclass_samples(),
+                &mut rng,
+            );
             info!("Finished sampling of generation {}!", eqsat_generation + 1);
             s
         })
@@ -153,7 +153,7 @@ fn run<R: TermRewriteSystem>(
 
     info!("Generating explanations...");
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(available_parallelism().unwrap().into()) // Adjust if memory issues
+        .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
         .build()
         .unwrap();
     let explenations: Vec<Option<_>> = pool.install(|| {
@@ -196,7 +196,6 @@ fn run<R: TermRewriteSystem>(
             folder.to_owned(),
             cli.to_owned(),
             timestamp,
-            sample_conf,
             eqsat_conf,
             rules.into_iter().map(|r| r.name.to_string()).collect(),
         ),
@@ -260,7 +259,7 @@ fn sample_eqsat_result<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
     eqsat: &EqsatResult<L, N>,
-    sample_conf: &SampleConf,
+    n_samples: usize,
     rng: &mut ChaCha12Rng,
 ) -> HashSet<RecExpr<L>>
 where
@@ -270,25 +269,37 @@ where
     N::Data: Serialize + Clone + Sync,
 {
     let root_id = eqsat.roots()[0];
+    let parallelism = std::thread::available_parallelism().unwrap().into();
+    let min_size = AstSize.cost_rec(start_expr);
 
     match &cli.strategy() {
         SampleStrategy::CountWeightedUniformly => {
-            let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
-            CountWeightedUniformly::<BigUint, _, _>::new_with_limit(eqsat.egraph(), limit)
-                .sample_eclass(rng, sample_conf, root_id)
+            CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), min_size * 2)
+                .sample_eclass(rng, n_samples, parallelism, root_id)
                 .unwrap()
         }
-        SampleStrategy::CountWeighted => {
-            let limit = (AstSize.cost_rec(start_expr) as f64 * 2.0) as usize;
-            CountWeightedGreedy::<BigUint, _, _>::new_with_limit(eqsat.egraph(), start_expr, limit)
-                .sample_eclass(rng, sample_conf, root_id)
+        SampleStrategy::CountWeightedSizeAdjusted => {
+            let samples_per_size = usize::div_ceil(n_samples, min_size);
+            (min_size..min_size * 2)
+                .map(|limit| {
+                    CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), limit)
+                        .sample_eclass(rng, samples_per_size, parallelism, root_id)
+                        .unwrap()
+                })
+                .reduce(|mut a, b| {
+                    a.extend(b);
+                    a
+                })
                 .unwrap()
         }
-        SampleStrategy::CostWeighted => {
-            CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit)
-                .sample_eclass(rng, sample_conf, root_id)
+        SampleStrategy::CountWeightedGreedy => {
+            CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), start_expr, min_size * 2)
+                .sample_eclass(rng, n_samples, parallelism, root_id)
                 .unwrap()
         }
+        SampleStrategy::CostWeighted => CostWeighted::new(eqsat.egraph(), AstSize, min_size * 2)
+            .sample_eclass(rng, n_samples, parallelism, root_id)
+            .unwrap(),
     }
 }
 

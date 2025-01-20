@@ -29,7 +29,7 @@ pub struct Cli {
     sample_batch_size: Option<usize>,
 
     /// Sampling strategy
-    #[arg(long, default_value_t = SampleStrategy::CountWeightedUniformly)]
+    #[arg(long, default_value_t = SampleStrategy::CountWeightedSizeAdjusted)]
     strategy: SampleStrategy,
 
     /// Calculate and save explanations
@@ -116,7 +116,7 @@ impl Cli {
     }
 
     #[must_use]
-    pub(crate) fn rng_seed(&self) -> u64 {
+    pub fn rng_seed(&self) -> u64 {
         self.rng_seed
     }
 
@@ -146,11 +146,6 @@ impl Cli {
     }
 
     #[must_use]
-    pub(crate) fn sample_batch_size(&self) -> Option<usize> {
-        self.sample_batch_size
-    }
-
-    #[must_use]
     pub fn baseline(&self) -> &BaselineCmd {
         &self.baseline
     }
@@ -159,7 +154,8 @@ impl Cli {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum SampleStrategy {
     CountWeightedUniformly,
-    CountWeighted,
+    CountWeightedSizeAdjusted,
+    CountWeightedGreedy,
     CostWeighted,
 }
 
@@ -167,7 +163,8 @@ impl Display for SampleStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SampleStrategy::CountWeightedUniformly => write!(f, "CountWeightedUniformly"),
-            SampleStrategy::CountWeighted => write!(f, "CountWeighted"),
+            SampleStrategy::CountWeightedSizeAdjusted => write!(f, "CountWeightedSizeAdjusted"),
+            SampleStrategy::CountWeightedGreedy => write!(f, "CountWeightedGreedy"),
             SampleStrategy::CostWeighted => write!(f, "CostWeighted"),
         }
     }
@@ -179,7 +176,8 @@ impl FromStr for SampleStrategy {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().replace('_', "").as_str() {
             "countweighteduniformly" => Ok(Self::CountWeightedUniformly),
-            "countweighted" => Ok(Self::CountWeighted),
+            "countweightedsizeadjusted" => Ok(Self::CountWeightedSizeAdjusted),
+            "countweightedgreedy" => Ok(Self::CountWeightedGreedy),
             "costweighted" => Ok(Self::CostWeighted),
             _ => Err(Error::new(ErrorKind::InvalidValue)),
         }

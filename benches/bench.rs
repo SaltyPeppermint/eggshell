@@ -9,7 +9,6 @@ use rand::SeedableRng;
 use eggshell::eqsat::{Eqsat, StartMaterial};
 use eggshell::sampling::strategy;
 use eggshell::sampling::strategy::Strategy;
-use eggshell::sampling::SampleConf;
 use eggshell::sketch::extract;
 use eggshell::sketch::Sketch;
 use eggshell::trs::{Simple, TermRewriteSystem};
@@ -33,15 +32,14 @@ fn extraction(c: &mut Criterion) {
 
 fn sampling(c: &mut Criterion) {
     let start_expr = "(+ c (* (+ a b) 1))".parse().unwrap();
-    let sample_conf = SampleConf::default();
     let rules = Simple::full_rules();
     let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), &rules).run();
 
-    let mut rng = ChaCha12Rng::seed_from_u64(sample_conf.rng_seed);
-    let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize, sample_conf.loop_limit);
+    let mut rng = ChaCha12Rng::seed_from_u64(1024);
+    let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize, 4);
 
     c.bench_function("sample simple", |b| {
-        b.iter(|| strategy.sample_egraph(&mut rng, &sample_conf))
+        b.iter(|| strategy.sample_egraph(&mut rng, 1000, 4))
     });
 }
 
