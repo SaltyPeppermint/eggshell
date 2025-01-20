@@ -27,30 +27,31 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
+        size_limit: usize,
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L;
 
     fn egraph(&self) -> &'a EGraph<L, N>;
 
-    #[expect(clippy::missing_errors_doc)]
-    fn extractable(&self, id: Id) -> Result<(), SampleError>;
+    fn extractable(&self, id: Id, size_limit: usize) -> bool;
+
+    fn analysis_depth(&self) -> Option<usize>;
 
     #[expect(clippy::missing_errors_doc)]
     fn sample_expr(
         &self,
         rng: &mut ChaCha12Rng,
         root_eclass: &EClass<L, N::Data>,
+        size_limit: usize,
     ) -> Result<RecExpr<L>, SampleError> {
         let egraph = self.egraph();
-
         let canonical_root_id = egraph.find(root_eclass.id);
-        self.extractable(canonical_root_id)?;
 
         let mut partial_rec_expr = PartialRecExpr::from(canonical_root_id);
 
         while let Some(id) = partial_rec_expr.select_next_open(rng) {
             let eclass = &egraph[id];
-            let pick = self.pick(rng, eclass, &partial_rec_expr);
+            let pick = self.pick(rng, eclass, size_limit, &partial_rec_expr);
             partial_rec_expr.fill_next(pick)?;
             if partial_rec_expr.len() > 10000 && partial_rec_expr.len() % 100 == 0 {
                 warn!(
@@ -75,13 +76,17 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         n_samples: usize,
-        parallelism: usize,
         root: Id,
+        size_limit: usize,
+        parallelism: usize,
     ) -> Result<HashSet<RecExpr<L>>, SampleError> {
         let root_eclass = &self.egraph()[root];
 
         let ranges = batch_ranges(n_samples, parallelism);
         info!("Running sampling in {} batches", ranges.len());
+        if !self.extractable(root, size_limit) {
+            return Err(SampleError::SizeLimit(size_limit));
+        };
 
         let counter = AtomicUsize::new(0);
 
@@ -93,7 +98,7 @@ where
                 inner_rng.set_stream((range_id + 1) as u64);
 
                 let batch_samples = (batch_start..batch_end)
-                    .map(|_| self.sample_expr(&mut inner_rng, root_eclass))
+                    .map(|_| self.sample_expr(&mut inner_rng, root_eclass, size_limit))
                     .collect::<Result<_, _>>()?;
                 let len = batch_end - batch_start;
                 let c = counter.fetch_add(len, Ordering::SeqCst) + len;
@@ -118,6 +123,7 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         n_samples: usize,
+        size_limit: usize,
         parallelism: usize,
     ) -> Result<HashMap<Id, HashSet<RecExpr<L>>>, SampleError> {
         self.egraph()
@@ -126,7 +132,8 @@ where
             .into_iter()
             .enumerate()
             .map(|(i, eclass)| {
-                let samples = self.sample_eclass(rng, n_samples, parallelism, eclass.id)?;
+                let samples =
+                    self.sample_eclass(rng, n_samples, eclass.id, size_limit, parallelism)?;
                 info!("Sampled {i} expressions from eclass {}", eclass.id);
                 Ok((eclass.id, samples))
             })

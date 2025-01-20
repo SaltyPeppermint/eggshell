@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Id, Language, RecExpr};
+use egg::{Analysis, AstSize, EClass, EGraph, Id, Language};
 use hashbrown::HashMap;
 use log::{debug, info};
 use rand::distributions::WeightedError;
@@ -10,7 +10,6 @@ use rand_chacha::ChaCha12Rng;
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
 use crate::sampling::choices::PartialRecExpr;
-use crate::sampling::SampleError;
 
 use super::Strategy;
 
@@ -28,8 +27,7 @@ where
     size_counts: HashMap<Id, HashMap<usize, C>>,
     // flattened_size_counts: HashMap<Id, C>,
     ast_sizes: HashMap<Id, usize>,
-    start_size: usize,
-    limit: usize,
+    analysis_depth: usize,
 }
 
 impl<'a, C, L, N> CountWeightedGreedy<'a, C, L, N>
@@ -49,13 +47,12 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new(egraph: &'a EGraph<L, N>, start_expr: &RecExpr<L>, limit: usize) -> Self {
-        let start_size = AstSize.cost_rec(start_expr);
-        info!("Using limit {limit}");
+    pub fn new(egraph: &'a EGraph<L, N>, analysis_depth: usize) -> Self {
+        info!("Using analysis_depth {analysis_depth}");
 
         // Make one big size count analysis for all eclasses
         info!("Starting size count oneshot analysis...");
-        let size_counts = ExprCount::new(limit).one_shot_analysis(egraph);
+        let size_counts = ExprCount::new(analysis_depth).one_shot_analysis(egraph);
         info!("Size count oneshot analysis finsished!");
 
         let mut ast_sizes = HashMap::new();
@@ -69,8 +66,7 @@ where
             egraph,
             size_counts,
             ast_sizes,
-            start_size,
-            limit,
+            analysis_depth,
         }
     }
 
@@ -118,26 +114,54 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
+        size_limit: usize,
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
-        if partial_rec_expr.len() <= self.start_size {
+        if partial_rec_expr.len() <= size_limit {
             self.pick_by_size_counts(rng, eclass)
         } else {
             pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
         }
     }
 
-    fn extractable(&self, id: Id) -> Result<(), SampleError> {
-        if self.size_counts[&id].is_empty() {
-            Err(SampleError::LimitError(self.limit))
-        } else {
-            Ok(())
-        }
+    fn extractable(&self, id: Id, size_limit: usize) -> bool {
+        let canonical_id = self.egraph.find(id);
+        self.size_counts
+            .get(&canonical_id)
+            .is_some_and(|eclass_size_counts| {
+                eclass_size_counts
+                    .iter()
+                    .any(|(size, _)| size <= &size_limit)
+            })
+    }
+
+    fn analysis_depth(&self) -> Option<usize> {
+        Some(self.analysis_depth)
     }
 
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
+}
+
+fn pick_by_ast_size<'a, L: Language, N: Analysis<L>>(
+    ast_sizes: &HashMap<Id, usize>,
+    eclass: &'a EClass<L, <N as Analysis<L>>::Data>,
+) -> &'a L {
+    eclass
+        .nodes
+        .iter()
+        .map(|node| {
+            let cost = node
+                .children()
+                .iter()
+                .map(|child_id| ast_sizes[child_id])
+                .sum::<usize>();
+            (node, cost)
+        })
+        .min_by(|a, b| a.1.cmp(&b.1))
+        .expect("EClasses can't have 0 members")
+        .0
 }
 
 #[derive(Debug)]
@@ -151,8 +175,8 @@ where
 {
     egraph: &'a EGraph<L, N>,
     size_counts: HashMap<Id, HashMap<usize, C>>,
-    ast_sizes: HashMap<Id, usize>,
-    limit: usize,
+    min_ast_sizes: HashMap<Id, usize>,
+    analysis_depth: usize,
 }
 
 impl<'a, C, L, N> CountWeightedUniformly<'a, C, L, N>
@@ -171,26 +195,26 @@ where
     /// # Panics
     ///
     /// Panics if given an empty Hashset of term sizes.
-    pub fn new(egraph: &'a EGraph<L, N>, limit: usize) -> Self {
-        info!("Using limit {limit}");
+    pub fn new(egraph: &'a EGraph<L, N>, analysis_depth: usize) -> Self {
+        info!("Using analysis_depth {analysis_depth}");
 
         // Make one big size count analysis for all eclasses
         info!("Starting size count oneshot analysis...");
-        let size_counts = ExprCount::new(limit).one_shot_analysis(egraph);
+        let size_counts = ExprCount::new(analysis_depth).one_shot_analysis(egraph);
         info!("Size count oneshot analysis finsished!");
 
-        let mut ast_sizes = HashMap::new();
+        let mut min_ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
         info!("Starting ast size oneshot analysis...");
-        AstSize.one_shot_analysis(egraph, &mut ast_sizes);
+        AstSize.one_shot_analysis(egraph, &mut min_ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
         info!("Strategy read to start sampling!");
         CountWeightedUniformly {
             egraph,
             size_counts,
-            ast_sizes,
-            limit,
+            min_ast_sizes,
+            analysis_depth,
         }
     }
 
@@ -236,6 +260,7 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
+        size_limit: usize,
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
         debug!("Current EClass {:?}", eclass);
@@ -243,15 +268,17 @@ where
         // We need to know what is the minimum size required to fill the rest of the open positions
         let min_to_fill_other_open = partial_rec_expr
             .other_open_slots()
-            .map(|id| self.ast_sizes[&id])
+            .map(|id| self.min_ast_sizes[&id])
             .sum::<usize>();
         debug!("Required to fill rest: {min_to_fill_other_open}");
         // Budget for the children is one less because the node itself has size one at least
-        // Also subtract the reserv budget needed for the other open positions
-        let budget = self
-            .limit
+        // We need to substract the minimum to fill the rest of the open positions in the partial AST
+        // so we dont run into a situation where we cant finish the AST
+        let budget = size_limit
             .checked_sub(partial_rec_expr.n_chosen() + min_to_fill_other_open)
             .unwrap();
+
+        debug!("Size limit: {size_limit}");
         debug!("Budget available: {budget}");
         debug!("Current EClass Counts {:?}", self.size_counts[&eclass.id]);
         // There has to be at least budget 1 left or something went horribly wrong
@@ -279,37 +306,25 @@ where
             .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
     }
 
-    fn extractable(&self, id: Id) -> Result<(), SampleError> {
-        if self.size_counts[&id].is_empty() {
-            Err(SampleError::LimitError(self.limit))
-        } else {
-            Ok(())
-        }
+    fn extractable(&self, id: Id, size_limit: usize) -> bool {
+        let canonical_id = self.egraph.find(id);
+        // debug_assert!(canonical_id == id);
+        self.size_counts
+            .get(&canonical_id)
+            .is_some_and(|eclass_size_counts| {
+                eclass_size_counts
+                    .iter()
+                    .any(|(size, _)| size <= &size_limit)
+            })
+    }
+
+    fn analysis_depth(&self) -> Option<usize> {
+        Some(self.analysis_depth)
     }
 
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
-}
-
-fn pick_by_ast_size<'a, L: Language, N: Analysis<L>>(
-    ast_sizes: &HashMap<Id, usize>,
-    eclass: &'a EClass<L, <N as Analysis<L>>::Data>,
-) -> &'a L {
-    eclass
-        .nodes
-        .iter()
-        .map(|node| {
-            let cost = node
-                .children()
-                .iter()
-                .map(|child_id| ast_sizes[child_id])
-                .sum::<usize>();
-            (node, cost)
-        })
-        .min_by(|a, b| a.1.cmp(&b.1))
-        .expect("EClasses can't have 0 members")
-        .0
 }
 
 /// Returns the number of ways you can write `num` as the sum of `n` positive natural numbers
@@ -352,10 +367,12 @@ fn sum_combinations(num: usize, n: usize) -> Vec<Vec<usize>> {
 
 #[cfg(test)]
 mod tests {
+    use egg::RecExpr;
     use num::BigUint;
     use rand::SeedableRng;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::sampling::SampleError;
     use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     use super::*;
@@ -374,7 +391,9 @@ mod tests {
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
+        let samples = strategy
+            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .unwrap();
 
         assert_eq!(samples.len(), 5);
     }
@@ -393,7 +412,9 @@ mod tests {
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
+        let samples = strategy
+            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .unwrap();
 
         assert_eq!(samples.len(), 5);
     }
@@ -410,9 +431,11 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 5);
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
+        let samples = strategy
+            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .unwrap();
 
         assert_eq!(samples.len(), 7);
     }
@@ -435,7 +458,9 @@ mod tests {
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
+        let samples = strategy
+            .sample_eclass(&mut rng, 10, root_id, 32, 4)
+            .unwrap();
 
         assert_eq!(samples.len(), 10);
     }
@@ -456,9 +481,11 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 32);
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 32);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&mut rng, 10, 4, root_id).unwrap();
+        let samples = strategy
+            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .unwrap();
 
         assert_eq!(samples.len(), 10);
     }
@@ -479,12 +506,12 @@ mod tests {
         .run();
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), &start_expr, 2);
+        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 2);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
 
         assert_eq!(
-            strategy.sample_eclass(&mut rng, 1000, 4, root_id),
-            Err(SampleError::LimitError(2))
+            strategy.sample_eclass(&mut rng, 1000, root_id, start_expr.len(), 4),
+            Err(SampleError::SizeLimit(13))
         );
     }
 

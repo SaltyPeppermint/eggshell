@@ -1,12 +1,11 @@
 use std::fmt::{Debug, Display};
 
-use egg::{Analysis, CostFunction, EClass, EGraph, Extractor, Id, Language};
+use egg::{Analysis, AstSize, CostFunction, EClass, EGraph, Extractor, Id, Language};
 use hashbrown::HashMap;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
 use crate::sampling::choices::PartialRecExpr;
-use crate::sampling::SampleError;
 
 use super::Strategy;
 
@@ -21,7 +20,6 @@ where
 {
     egraph: &'a EGraph<L, N>,
     extractor: Extractor<'a, CF, L, N>,
-    limit: usize,
 }
 
 impl<'a, L, N, CF> CostWeighted<'a, L, N, CF>
@@ -32,11 +30,10 @@ where
     CF::Cost: Into<usize> + Debug,
 {
     /// Creates a new [`CostWeighted<'a, 'b, L, N, CF>`].
-    pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF, limit: usize) -> Self {
+    pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF) -> Self {
         CostWeighted {
             egraph,
             extractor: Extractor::new(egraph, cost_fn),
-            limit,
         }
     }
 }
@@ -54,9 +51,10 @@ where
         &self,
         rng: &mut ChaCha12Rng,
         eclass: &'c EClass<L, N::Data>,
+        size_limit: usize,
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
-        if partial_rec_expr.len() > self.limit {
+        if partial_rec_expr.len() > size_limit {
             eclass
                 .nodes
                 .choose(rng)
@@ -72,8 +70,12 @@ where
         }
     }
 
-    fn extractable(&self, _id: Id) -> Result<(), SampleError> {
-        Ok(())
+    fn extractable(&self, id: Id, size_limit: usize) -> bool {
+        Extractor::new(self.egraph, AstSize).find_best_cost(id) <= size_limit
+    }
+
+    fn analysis_depth(&self) -> Option<usize> {
+        None
     }
 
     fn egraph(&self) -> &'a EGraph<L, N> {
@@ -123,9 +125,9 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(n_samples, 4);
@@ -138,13 +140,13 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
         let mut n_samples = 0;
         let mut stringified = HashSet::new();
-        for (_, exprs) in &samples {
+        for (_, exprs) in samples {
             for expr in exprs {
                 n_samples += 1;
                 stringified.insert(format!("{expr}"));
@@ -164,9 +166,9 @@ mod tests {
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(StartMaterial::RecExprs(start_exprs), rules.as_slice()).run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_egraph(&mut rng, 1000, 4).unwrap();
+        let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
         assert_eq!(n_samples, 8);
@@ -184,13 +186,13 @@ mod tests {
             .with_conf(eqsat_conf)
             .run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 2);
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_egraph(&mut rng, 10, 4).unwrap();
+        let samples = strategy.sample_egraph(&mut rng, 1000, 64, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 59);
+        assert_eq!(n_samples, 81);
     }
 
     #[test]
@@ -205,12 +207,12 @@ mod tests {
             .with_conf(eqsat_conf)
             .run();
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize, 4);
+        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_egraph(&mut rng, 10, 4).unwrap();
+        let samples = strategy.sample_egraph(&mut rng, 1000, 64, 4).unwrap();
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 44);
+        assert_eq!(n_samples, 81);
     }
 }

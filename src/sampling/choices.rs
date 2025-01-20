@@ -33,7 +33,7 @@ impl<L: Language> PartialRecExpr<L> {
 
     pub fn fill_next(&mut self, pick: &L) -> Result<(), SampleError> {
         // Check if there is an open position to be filled
-        let position = self.next_to_fill.ok_or(SampleError::ChoiceError)?;
+        let position = self.next_to_fill.ok_or(SampleError::UnfinishedChoice)?;
         debug_assert!(matches!(self.slots[position].pick, Pick::Open));
 
         let mut owned_pick = pick.to_owned();
@@ -173,7 +173,7 @@ impl<L: Language> TryFrom<PartialRecExpr<L>> for RecExpr<L> {
             .into_iter()
             .rev()
             .map(|choice| {
-                let mut pick = choice.pick().ok_or(super::SampleError::ChoiceError)?;
+                let mut pick = choice.pick().ok_or(super::SampleError::UnfinishedChoice)?;
                 for id in pick.children_mut() {
                     *id = (len_1 - usize::from(*id)).into();
                 }

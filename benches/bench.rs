@@ -36,10 +36,10 @@ fn sampling(c: &mut Criterion) {
     let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), &rules).run();
 
     let mut rng = ChaCha12Rng::seed_from_u64(1024);
-    let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize, 4);
+    let strategy = strategy::CostWeighted::new(eqsat.egraph(), AstSize);
 
     c.bench_function("sample simple", |b| {
-        b.iter(|| strategy.sample_egraph(&mut rng, 1000, 4))
+        b.iter(|| strategy.sample_egraph(&mut rng, 1000, 4, 4))
     });
 }
 

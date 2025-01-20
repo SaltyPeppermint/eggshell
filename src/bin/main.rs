@@ -271,19 +271,20 @@ where
     let root_id = eqsat.roots()[0];
     let parallelism = std::thread::available_parallelism().unwrap().into();
     let min_size = AstSize.cost_rec(start_expr);
+    let max_size = min_size * 2;
 
     match &cli.strategy() {
         SampleStrategy::CountWeightedUniformly => {
-            CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), min_size * 2)
-                .sample_eclass(rng, n_samples, parallelism, root_id)
+            CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), max_size)
+                .sample_eclass(rng, n_samples, root_id, max_size, parallelism)
                 .unwrap()
         }
         SampleStrategy::CountWeightedSizeAdjusted => {
             let samples_per_size = usize::div_ceil(n_samples, min_size);
-            (min_size..min_size * 2)
+            (min_size..max_size)
                 .map(|limit| {
-                    CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), limit)
-                        .sample_eclass(rng, samples_per_size, parallelism, root_id)
+                    CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), max_size)
+                        .sample_eclass(rng, samples_per_size, root_id, limit, parallelism)
                         .unwrap()
                 })
                 .reduce(|mut a, b| {
@@ -293,12 +294,12 @@ where
                 .unwrap()
         }
         SampleStrategy::CountWeightedGreedy => {
-            CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), start_expr, min_size * 2)
-                .sample_eclass(rng, n_samples, parallelism, root_id)
+            CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), max_size)
+                .sample_eclass(rng, n_samples, root_id, start_expr.len(), parallelism)
                 .unwrap()
         }
-        SampleStrategy::CostWeighted => CostWeighted::new(eqsat.egraph(), AstSize, min_size * 2)
-            .sample_eclass(rng, n_samples, parallelism, root_id)
+        SampleStrategy::CostWeighted => CostWeighted::new(eqsat.egraph(), AstSize)
+            .sample_eclass(rng, n_samples, root_id, max_size, parallelism)
             .unwrap(),
     }
 }
