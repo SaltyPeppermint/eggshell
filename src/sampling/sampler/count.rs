@@ -11,7 +11,7 @@ use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Count
 use crate::analysis::semilattice::SemiLatticeAnalysis;
 use crate::sampling::choices::PartialRecExpr;
 
-use super::Strategy;
+use super::Sampler;
 
 /// Buggy budget consideration
 #[derive(Debug)]
@@ -102,7 +102,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedGreedy<'a, C, L, N>
+impl<'a, C, L, N> Sampler<'a, L, N> for CountWeightedGreedy<'a, C, L, N>
 where
     L: Language + Display + Sync + Send,
     L::Discriminant: Sync,
@@ -248,7 +248,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Strategy<'a, L, N> for CountWeightedUniformly<'a, C, L, N>
+impl<'a, C, L, N> Sampler<'a, L, N> for CountWeightedUniformly<'a, C, L, N>
 where
     L: Language + Display + Sync + Send,
     L::Discriminant: Sync,

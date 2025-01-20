@@ -17,7 +17,7 @@ use super::SampleError;
 pub use cost::CostWeighted;
 pub use count::{CountWeightedGreedy, CountWeightedUniformly};
 
-pub trait Strategy<'a, L, N>: Debug + Send + Sync
+pub trait Sampler<'a, L, N>: Debug + Send + Sync
 where
     L: Language + Display + Send + Sync + 'a,
     N: Analysis<L> + Debug + 'a,

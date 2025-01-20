@@ -1,5 +1,5 @@
 mod choices;
-pub mod strategy;
+pub mod sampler;
 
 use std::fmt::{Debug, Display};
 

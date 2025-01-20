@@ -7,7 +7,7 @@ use rand_chacha::ChaCha12Rng;
 
 use crate::sampling::choices::PartialRecExpr;
 
-use super::Strategy;
+use super::Sampler;
 
 /// Not well tested, do not use!
 #[derive(Debug)]
@@ -38,7 +38,7 @@ where
     }
 }
 
-impl<'a, L, N, CF> Strategy<'a, L, N> for CostWeighted<'a, L, N, CF>
+impl<'a, L, N, CF> Sampler<'a, L, N> for CostWeighted<'a, L, N, CF>
 where
     L: Language + Display + Send + Sync,
     L::Discriminant: Sync,
