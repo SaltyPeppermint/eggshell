@@ -33,7 +33,7 @@ fn extraction(c: &mut Criterion) {
 fn sampling(c: &mut Criterion) {
     let start_expr = "(+ c (* (+ a b) 1))".parse().unwrap();
     let rules = Simple::full_rules();
-    let eqsat = Eqsat::new(StartMaterial::RecExprs(Box::new([&start_expr])), &rules).run();
+    let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), &rules).run();
 
     let mut rng = ChaCha12Rng::seed_from_u64(1024);
     let strategy = sampler::CostWeighted::new(eqsat.egraph(), AstSize);

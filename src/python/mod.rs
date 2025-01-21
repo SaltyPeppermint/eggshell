@@ -262,7 +262,8 @@ macro_rules! monomorphize {
                 .root_check(true)
                 .iter_limit(iter_limit)
                 .build();
-            let start_material = StartMaterial::RecExprs(Box::new([&start.0]));
+            let start_expr = &[&start.0];
+            let start_material = StartMaterial::RecExprs(start_expr);
             let rules = <$type as TermRewriteSystem>::full_rules();
             let eqsat_result = Eqsat::new(start_material, &rules)
                 .with_conf(conf)

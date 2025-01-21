@@ -116,7 +116,7 @@ where
 
         let egraph_roots = match self.start_material {
             StartMaterial::RecExprs(vec) => {
-                for expr in &vec {
+                for expr in vec {
                     runner = runner.with_expr(expr);
                 }
                 None
@@ -242,7 +242,7 @@ where
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Clone,
 {
-    RecExprs(Box<[&'a RecExpr<L>]>),
+    RecExprs(&'a [&'a RecExpr<L>]),
     EGraph {
         egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,

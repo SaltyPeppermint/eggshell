@@ -359,7 +359,7 @@ mod tests {
         let true_expr = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new(StartMaterial::RecExprs(Box::new([&true_expr])), &rules).run();
+        let result = Eqsat::new(StartMaterial::RecExprs(&[&true_expr]), &rules).run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
@@ -370,7 +370,7 @@ mod tests {
         let false_expr = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new(StartMaterial::RecExprs(Box::new([&false_expr])), &rules).run();
+        let result = Eqsat::new(StartMaterial::RecExprs(&[&false_expr]), &rules).run();
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
@@ -378,36 +378,38 @@ mod tests {
 
     #[test]
     fn expl_1() {
-        let expr = "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
-            .parse()
-            .unwrap();
+        let expr = [
+            &"( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
+                .parse()
+                .unwrap(),
+        ];
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(Box::new([&expr])), &rules).with_conf(conf);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&expr), &rules).with_conf(conf);
         let _ = eqsat.run();
     }
 
     #[test]
     fn expl_2() {
-        let expr = "( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
+        let expr = [&"( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
             .parse()
-            .unwrap();
+            .unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(Box::new([&expr])), &rules).with_conf(conf);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&expr), &rules).with_conf(conf);
         let _ = eqsat.run();
     }
 
     #[test]
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn expl_3() {
-        let expr = "( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap();
+        let expr = [&"( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap()];
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(Box::new([&expr])), &rules).with_conf(conf);
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&expr), &rules).with_conf(conf);
         let _ = eqsat.run();
     }
 

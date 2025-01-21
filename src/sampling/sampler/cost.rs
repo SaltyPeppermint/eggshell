@@ -123,11 +123,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(Box::new([&start_expr])),
-            rules.as_slice(),
-        )
-        .run();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -142,11 +138,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(Box::new([&start_expr])),
-            rules.as_slice(),
-        )
-        .run();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -168,10 +160,13 @@ mod tests {
     fn multi_seed_sample() {
         let start_expr_a = "(* (+ a b) 1)".parse().unwrap();
         let start_expr_b = "(+ (+ x 0) (* y 1))".parse().unwrap();
-        let start_exprs = Box::new([&start_expr_a, &start_expr_b]);
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(start_exprs), rules.as_slice()).run();
+        let eqsat = Eqsat::new(
+            StartMaterial::RecExprs(&[&start_expr_a, &start_expr_b]),
+            rules.as_slice(),
+        )
+        .run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -189,12 +184,9 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(Box::new([&start_expr])),
-            rules.as_slice(),
-        )
-        .with_conf(eqsat_conf)
-        .run();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+            .with_conf(eqsat_conf)
+            .run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -213,12 +205,9 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(Box::new([&start_expr])),
-            rules.as_slice(),
-        )
-        .with_conf(eqsat_conf)
-        .run();
+        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+            .with_conf(eqsat_conf)
+            .run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);

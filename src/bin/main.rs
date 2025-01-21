@@ -220,8 +220,9 @@ where
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    let mut eqsat = Eqsat::new(StartMaterial::RecExprs(Box::new([start_expr])), rules)
-        .with_conf(eqsat_conf.to_owned());
+    let exprs = [start_expr];
+    let mut eqsat =
+        Eqsat::new(StartMaterial::RecExprs(&exprs), rules).with_conf(eqsat_conf.to_owned());
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
 
@@ -364,7 +365,8 @@ where
                     let goal = samples[*goal_idx].to_owned();
                     let guide = samples[*guide_idx].to_owned();
                     info!("Running baseline for \"{goal}\" with guide \"{guide}\"...");
-                    let starting_exprs = StartMaterial::RecExprs(Box::new([&guide, &goal]));
+                    let exprs = [&guide, &goal];
+                    let starting_exprs = StartMaterial::RecExprs(&exprs);
                     let mut conf = eqsat_conf.to_owned();
                     conf.root_check = true;
                     conf.iter_limit = 100;
