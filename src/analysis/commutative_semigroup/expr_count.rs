@@ -215,9 +215,12 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(vec![start_expr]), rules.as_slice())
-            .with_conf(eqsat_conf)
-            .run();
+        let eqsat = Eqsat::new(
+            StartMaterial::RecExprs(Box::new([&start_expr])),
+            rules.as_slice(),
+        )
+        .with_conf(eqsat_conf)
+        .run();
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 

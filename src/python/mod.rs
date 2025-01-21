@@ -254,7 +254,7 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[must_use]
         pub fn eqsat_check(
-            start: PyRecExpr,
+            start: &PyRecExpr,
             goal: &PyRecExpr,
             iter_limit: usize,
         ) -> (usize, String, String) {
@@ -262,7 +262,7 @@ macro_rules! monomorphize {
                 .root_check(true)
                 .iter_limit(iter_limit)
                 .build();
-            let start_material = StartMaterial::RecExprs(vec![start.0]);
+            let start_material = StartMaterial::RecExprs(Box::new([&start.0]));
             let rules = <$type as TermRewriteSystem>::full_rules();
             let eqsat_result = Eqsat::new(start_material, &rules)
                 .with_conf(conf)
@@ -284,7 +284,7 @@ macro_rules! monomorphize {
         ) -> Vec<(usize, String, String)> {
             starts
                 .into_iter()
-                .map(|start| eqsat_check(start, goal, iter_limit))
+                .map(|start| eqsat_check(&start, goal, iter_limit))
                 .collect()
         }
 

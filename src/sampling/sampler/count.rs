@@ -383,7 +383,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .run();
@@ -404,7 +404,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .run();
@@ -425,7 +425,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .run();
@@ -449,7 +449,7 @@ mod tests {
 
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .with_conf(eqsat_conf)
@@ -474,7 +474,7 @@ mod tests {
 
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .with_conf(eqsat_conf)
@@ -499,7 +499,7 @@ mod tests {
 
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(vec![start_expr.clone()]),
+            StartMaterial::RecExprs(Box::new([&start_expr])),
             rules.as_slice(),
         )
         .with_conf(eqsat_conf)

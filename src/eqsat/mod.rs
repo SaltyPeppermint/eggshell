@@ -27,7 +27,7 @@ where
     N::Data: Clone,
 {
     conf: EqsatConf,
-    start_material: StartMaterial<L, N>,
+    start_material: StartMaterial<'a, L, N>,
     goals: Vec<RecExpr<L>>,
     rules: &'a [Rewrite<L, N>],
 }
@@ -41,7 +41,7 @@ where
     /// Create a new Equality Saturation
     ///
     #[must_use]
-    pub fn new(start_material: StartMaterial<L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
+    pub fn new(start_material: StartMaterial<'a, L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
         Self {
             conf: EqsatConf::default(),
             goals: vec![],
@@ -236,20 +236,20 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub enum StartMaterial<L, N>
+pub enum StartMaterial<'a, L, N>
 where
     L: Language + Display,
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Clone,
 {
-    RecExprs(Vec<RecExpr<L>>),
+    RecExprs(Box<[&'a RecExpr<L>]>),
     EGraph {
         egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,
     },
 }
 
-impl<L, N> From<EqsatResult<L, N>> for StartMaterial<L, N>
+impl<L, N> From<EqsatResult<L, N>> for StartMaterial<'_, L, N>
 where
     L: Language + Display,
     N: Analysis<L> + Clone + Default + Debug,
