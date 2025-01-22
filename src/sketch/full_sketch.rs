@@ -5,7 +5,7 @@ use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 
 use super::SketchParseError;
-use crate::trs::{LanguageManager, MetaInfo, SymbolType};
+use crate::trs::{MetaInfo, SymbolType};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -89,15 +89,19 @@ impl<L: Typeable> Typeable for SketchNode<L> {
 }
 
 impl<L: Language + MetaInfo> MetaInfo for SketchNode<L> {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        L::manager(variable_names).into_meta_lang(|l| SketchNode::Node(l))
-    }
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             SketchNode::Node(l) => l.symbol_type(),
-            _ => SymbolType::MetaSymbol,
+            SketchNode::Any => SymbolType::MetaSymbol(1 + L::operators().len()),
+            SketchNode::Contains(_) => SymbolType::MetaSymbol(2 + L::operators().len()),
+            SketchNode::Or(_) => SymbolType::MetaSymbol(3 + L::operators().len()),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        let mut x = L::operators();
+        x.extend(["?", "contains", "or"]);
+        x
     }
 
     fn into_symbol(name: String) -> Self {

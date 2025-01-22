@@ -1,57 +1,53 @@
 use egg::{Id, Language, RecExpr};
 
-use crate::trs::{LanguageManager, MetaInfo, SymbolType, TrsError};
+use crate::trs::{MetaInfo, SymbolType, TrsError};
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Feature {
-    NonLeaf(usize),
-    Leaf(Vec<f64>),
-    IgnoredSymbol,
-}
-
-pub fn feature_vec_len<L: MetaInfo>(lang_manager: &LanguageManager<L>) -> usize {
-    // All the leaves plus one for the constant type value
-    lang_manager.leaves() + 1
-}
-
-pub fn features<L: MetaInfo>(
+pub fn features<L: MetaInfo, S: AsRef<str>>(
     symbol: &L,
-    lang_manager: &LanguageManager<L>,
-) -> Result<Feature, TrsError> {
-    if lang_manager.ignore_unknown() && lang_manager.symbol_position(symbol).is_none() {
-        return Ok(Feature::IgnoredSymbol);
+    variable_names: &[S],
+    ignore_unknown: bool,
+) -> Result<Option<Vec<f64>>, TrsError> {
+    if ignore_unknown && matches!(symbol.symbol_type(), SymbolType::Variable(_)) {
+        return Ok(None);
     }
 
-    if !symbol.children().is_empty() {
-        return Ok(Feature::NonLeaf(
-            lang_manager
-                .symbol_position(symbol)
-                .ok_or(TrsError::UnknownSymbol(symbol.to_string()))?,
-        ));
-    }
-    let symbol_idx = lang_manager
-        .symbol_position(symbol)
-        .ok_or(TrsError::UnknownSymbol(symbol.to_string()))?
-        - lang_manager.non_leaves();
-
-    let mut features = vec![0.0; feature_vec_len(lang_manager)];
+    let mut features = vec![0.0; feature_vec_len::<L, S>(variable_names)];
 
     match symbol.symbol_type() {
-        SymbolType::Operator | SymbolType::MetaSymbol | SymbolType::Variable(_) => {
-            features[symbol_idx] = 1.0;
+        SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => {
+            features[idx] = 1.0;
         }
         SymbolType::Constant(value) => {
-            features[symbol_idx] = 1.0;
-            let last_position = features.len() - 1;
-            features[last_position] = value;
+            let constant_idx = L::operators().len() + 1;
+            let const_value_idx = L::operators().len() + 2;
+            features[constant_idx] = 1.0;
+            features[const_value_idx] = value;
+        }
+
+        SymbolType::Variable(name) => {
+            if let Some(variable_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
+                features[L::operators().len() + 3 + variable_idx] = 1.0;
+            } else {
+                return Err(TrsError::UnknownSymbol(name.to_owned()));
+            }
         }
     }
-    Ok(Feature::Leaf(features))
+    Ok(Some(features))
+}
+
+fn feature_vec_len<L: MetaInfo, S>(variable_names: &[S]) -> usize {
+    // All the leaves
+    // plus two for the constant type and its value
+    // plus n for the variable names
+    L::operators().len() + 2 + variable_names.len()
 }
 
 pub trait AsFeatures<L: MetaInfo> {
-    fn count_symbols(&self, lang_manager: &LanguageManager<L>) -> Result<Vec<usize>, TrsError>;
-
+    fn count_symbols<S: AsRef<str>>(
+        &self,
+        variable_names: &[S],
+        ignore_unknown: bool,
+    ) -> Result<Vec<usize>, TrsError>;
     fn arity(&self, position: usize) -> usize;
 
     fn size(&self) -> usize;
@@ -60,30 +56,48 @@ pub trait AsFeatures<L: MetaInfo> {
 }
 
 impl<L: MetaInfo> AsFeatures<L> for RecExpr<L> {
-    fn count_symbols(&self, lang_manager: &LanguageManager<L>) -> Result<Vec<usize>, TrsError> {
-        fn rec<L: MetaInfo>(
+    fn count_symbols<S: AsRef<str>>(
+        &self,
+        variable_names: &[S],
+        ignore_unknown: bool,
+    ) -> Result<Vec<usize>, TrsError> {
+        fn rec<L: MetaInfo, S: AsRef<str>>(
             rec_expr: &RecExpr<L>,
             node: &L,
-            lang_manager: &LanguageManager<L>,
+            variable_names: &[S],
+            ignore_unknown: bool,
             f: &mut Vec<usize>,
         ) -> Result<(), TrsError> {
-            if let Some(p) = lang_manager.symbol_position(node) {
-                f[p] += 1;
-            } else if !lang_manager.ignore_unknown() {
-                return Err(TrsError::UnknownSymbol(node.to_string()));
-            };
+            match node.symbol_type() {
+                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => f[idx] += 1,
+                SymbolType::Constant(_) => f[L::operators().len() + 1] += 1,
+                SymbolType::Variable(name) => {
+                    if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
+                        f[L::operators().len() + 2 + var_idx] += 1;
+                    } else if !ignore_unknown {
+                        return Err(TrsError::UnknownSymbol(name.to_owned()));
+                    }
+                }
+            }
             for c_id in node.children() {
-                rec(rec_expr, &rec_expr[*c_id], lang_manager, f)?;
+                rec(
+                    rec_expr,
+                    &rec_expr[*c_id],
+                    variable_names,
+                    ignore_unknown,
+                    f,
+                )?;
             }
             Ok(())
         }
 
-        let symbols = lang_manager.symbols();
         let root = self.root();
-        let mut f = vec![0usize; symbols.len()];
-        rec(self, &self[root], lang_manager, &mut f)?;
+        // All operators, one for const, and variable_names
+        let mut f = vec![0usize; L::operators().len() + 1 + variable_names.len()];
+        rec(self, &self[root], variable_names, ignore_unknown, &mut f)?;
         Ok(f)
     }
+
     fn arity(&self, position: usize) -> usize {
         self[Id::from(position)].children().len()
     }
@@ -102,7 +116,6 @@ impl<L: MetaInfo> AsFeatures<L> for RecExpr<L> {
                 .max()
                 .unwrap_or(0)
         }
-        let root = self.root();
-        rec(self, root)
+        rec(self, self.root())
     }
 }

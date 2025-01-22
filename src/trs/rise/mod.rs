@@ -5,7 +5,7 @@ use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 
-use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -27,27 +27,27 @@ define_language! {
 
         ">>" = Then([Id; 2]),
 
-        // // Rise builtins
-        // "toMem"= ToMem,
-        // "iterateStream"= IterateStream,
-        // "map" = Map,
-        // "mapSeq" = MapSeq,
+        // Rise builtins
+        "toMem"= ToMem,
+        "iterateStream"= IterateStream,
+        "map" = Map,
+        "mapSeq" = MapSeq,
 
-        // "split" = Split,
-        // "join"= Join,
+        "split" = Split,
+        "join"= Join,
 
-        // "transpose" = Transpose,
+        "transpose" = Transpose,
 
-        // "rotateValues" = RotateValues,
-        // "slide" = Slide,
+        "rotateValues" = RotateValues,
+        "slide" = Slide,
 
-        // "reduce" = Reduce,
-        // "reduceSeqUnroll" = ReduceSeqUnroll,
+        "reduce" = Reduce,
+        "reduceSeqUnroll" = ReduceSeqUnroll,
 
-        // "zip" = Zip,
+        "zip" = Zip,
 
-        // "fst" = Fst,
-        // "snd" = Snd,
+        "fst" = Fst,
+        "snd" = Snd,
 
         Number(i32),
 
@@ -57,28 +57,54 @@ define_language! {
 }
 
 impl MetaInfo for RiseLang {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        LanguageManager::new(
-            vec![
-                RiseLang::Var(0.into()),
-                RiseLang::App([0.into(), 0.into()]),
-                RiseLang::Lambda([0.into(), 0.into()]),
-                RiseLang::Let([0.into(), 0.into(), 0.into()]),
-                RiseLang::Then([0.into(), 0.into()]),
-                RiseLang::Number(0),
-                // We do not include symbols!
-                // RiseLang::Symbol(Symbol::new("")),
-            ],
-            variable_names,
-        )
-    }
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
             RiseLang::Number(value) => SymbolType::Constant((*value).into()),
-            _ => SymbolType::Operator,
+            RiseLang::Var(_) => SymbolType::Operator(0),
+            RiseLang::App(_) => SymbolType::Operator(1),
+            RiseLang::Lambda(_) => SymbolType::Operator(2),
+            RiseLang::Let(_) => SymbolType::Operator(3),
+            RiseLang::Then(_) => SymbolType::Operator(4),
+            RiseLang::ToMem => SymbolType::Operator(5),
+            RiseLang::IterateStream => SymbolType::Operator(6),
+            RiseLang::Map => SymbolType::Operator(7),
+            RiseLang::MapSeq => SymbolType::Operator(8),
+            RiseLang::Split => SymbolType::Operator(9),
+            RiseLang::Join => SymbolType::Operator(10),
+            RiseLang::Transpose => SymbolType::Operator(11),
+            RiseLang::RotateValues => SymbolType::Operator(12),
+            RiseLang::Slide => SymbolType::Operator(13),
+            RiseLang::Reduce => SymbolType::Operator(14),
+            RiseLang::ReduceSeqUnroll => SymbolType::Operator(15),
+            RiseLang::Zip => SymbolType::Operator(16),
+            RiseLang::Fst => SymbolType::Operator(17),
+            RiseLang::Snd => SymbolType::Operator(18),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        vec![
+            "var",
+            "app",
+            "lam",
+            "let",
+            ">>",
+            "toMem",
+            "iterateStream",
+            "map",
+            "mapSeq",
+            "split",
+            "join",
+            "transpose",
+            "rotateValues",
+            "slide",
+            "reduce",
+            "reduceSeqUnroll",
+            "zip",
+            "fst",
+            "snd",
+        ]
     }
 
     fn into_symbol(name: String) -> Self {

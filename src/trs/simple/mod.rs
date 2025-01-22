@@ -4,7 +4,7 @@ use std::fmt::Display;
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolType, TermRewriteSystem};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
@@ -22,25 +22,17 @@ define_language! {
 }
 
 impl MetaInfo for SimpleLang {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        LanguageManager::new(
-            vec![
-                SimpleLang::Num(0),
-                SimpleLang::Add([0.into(), 0.into()]),
-                SimpleLang::Mul([0.into(), 0.into()]),
-                // We do not include symbols!
-                // SimpleLang::Symbol(Symbol::new("")),
-            ],
-            variable_names,
-        )
-    }
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
             SimpleLang::Num(value) => SymbolType::Constant((*value).into()),
-            _ => SymbolType::Operator,
+            SimpleLang::Add(_) => SymbolType::Operator(0),
+            SimpleLang::Mul(_) => SymbolType::Operator(1),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        vec!["+", "*"]
     }
 
     fn into_symbol(name: String) -> Self {

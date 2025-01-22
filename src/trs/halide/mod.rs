@@ -7,7 +7,7 @@ use std::fmt::Display;
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem, TrsError};
+use super::{MetaInfo, SymbolType, TermRewriteSystem, TrsError};
 use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -42,42 +42,36 @@ define_language! {
 }
 
 impl MetaInfo for HalideLang {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        LanguageManager::new(
-            vec![
-                HalideLang::Add([0.into(), 0.into()]),
-                HalideLang::Sub([0.into(), 0.into()]),
-                HalideLang::Mul([0.into(), 0.into()]),
-                HalideLang::Div([0.into(), 0.into()]),
-                HalideLang::Mod([0.into(), 0.into()]),
-                HalideLang::Max([0.into(), 0.into()]),
-                HalideLang::Min([0.into(), 0.into()]),
-                HalideLang::Lt([0.into(), 0.into()]),
-                HalideLang::Gt([0.into(), 0.into()]),
-                HalideLang::Not(0.into()),
-                HalideLang::Let([0.into(), 0.into()]),
-                HalideLang::Get([0.into(), 0.into()]),
-                HalideLang::Eq([0.into(), 0.into()]),
-                HalideLang::IEq([0.into(), 0.into()]),
-                HalideLang::Or([0.into(), 0.into()]),
-                HalideLang::And([0.into(), 0.into()]),
-                HalideLang::Bool(true),
-                HalideLang::Number(0),
-                // We do not include symbols!
-                // HalideLang::Symbol(Symbol::new("")),
-            ],
-            variable_names,
-        )
-    }
-
     #[expect(clippy::cast_precision_loss)]
     fn symbol_type(&self) -> SymbolType {
         match self {
             HalideLang::Bool(value) => SymbolType::Constant(if *value { 1.0 } else { 0.0 }),
             HalideLang::Number(value) => SymbolType::Constant(*value as f64),
             HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            _ => SymbolType::Operator,
+            HalideLang::Add(_) => SymbolType::Operator(0),
+            HalideLang::Sub(_) => SymbolType::Operator(1),
+            HalideLang::Mul(_) => SymbolType::Operator(2),
+            HalideLang::Div(_) => SymbolType::Operator(3),
+            HalideLang::Mod(_) => SymbolType::Operator(4),
+            HalideLang::Max(_) => SymbolType::Operator(5),
+            HalideLang::Min(_) => SymbolType::Operator(6),
+            HalideLang::Lt(_) => SymbolType::Operator(7),
+            HalideLang::Gt(_) => SymbolType::Operator(8),
+            HalideLang::Not(_) => SymbolType::Operator(9),
+            HalideLang::Let(_) => SymbolType::Operator(10),
+            HalideLang::Get(_) => SymbolType::Operator(11),
+            HalideLang::Eq(_) => SymbolType::Operator(12),
+            HalideLang::IEq(_) => SymbolType::Operator(13),
+            HalideLang::Or(_) => SymbolType::Operator(14),
+            HalideLang::And(_) => SymbolType::Operator(15),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        vec![
+            "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
+            "&&",
+        ]
     }
 
     fn into_symbol(name: String) -> Self {

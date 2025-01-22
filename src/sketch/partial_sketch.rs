@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::full_sketch::SNDiscr;
 use super::{SketchNode, SketchParseError};
-use crate::trs::{LanguageManager, MetaInfo, SymbolType};
+use crate::trs::{MetaInfo, SymbolType};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -73,15 +73,18 @@ impl<L: Typeable> Typeable for PartialSketchNode<L> {
 }
 
 impl<L: Language + MetaInfo> MetaInfo for PartialSketchNode<L> {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        SketchNode::<L>::manager(variable_names).into_meta_lang(|l| PartialSketchNode::Finished(l))
-    }
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             PartialSketchNode::Finished(l) => l.symbol_type(),
-            _ => SymbolType::MetaSymbol,
+            PartialSketchNode::Open => SymbolType::MetaSymbol(1 + L::operators().len()),
+            PartialSketchNode::Active => SymbolType::MetaSymbol(2 + L::operators().len()),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        let mut x = L::operators();
+        x.extend(["[open]", "[active]"]);
+        x
     }
 
     fn into_symbol(name: String) -> Self {

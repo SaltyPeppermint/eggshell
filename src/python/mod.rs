@@ -32,8 +32,8 @@ macro_rules! monomorphize {
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::error::EggshellError;
-        use $crate::features::{features, AsFeatures, Feature};
-        use $crate::trs::{LanguageManager, MetaInfo, TermRewriteSystem, TrsError};
+        use $crate::features::AsFeatures;
+        use $crate::trs::{MetaInfo, TermRewriteSystem, TrsError};
 
         type L = <$type as TermRewriteSystem>::Language;
         // type N = <$type as TermRewriteSystem>::Analysis;
@@ -98,26 +98,41 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::missing_errors_doc)]
-            pub fn count_symbols(&self, lang_manager: &PyLanguageManager) -> PyResult<Vec<usize>> {
+            pub fn count_symbols(
+                &self,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<Vec<usize>> {
                 let x = self
                     .0
-                    .count_symbols(&lang_manager.0)
+                    .count_symbols(&variable_names, ignore_unknown)
                     .map_err(|e| EggshellError::<L>::from(e))?;
                 Ok(x)
             }
 
             #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-            pub fn feature_vec_simple(
+            pub fn featurize_simple<'py>(
                 &self,
-                lang_manager: &PyLanguageManager,
-            ) -> PyResult<Vec<f64>> {
+                py: Python<'py>,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
                 let mut features = self
                     .0
-                    .count_symbols(&lang_manager.0)
+                    .count_symbols(&variable_names, ignore_unknown)
                     .map_err(|e| EggshellError::<L>::from(e))?;
-                features.push(self.size());
-                features.push(self.depth());
-                Ok(features.into_iter().map(|v| v as f64).collect())
+                features.push(self.0.size());
+                features.push(self.0.depth());
+                let rust_vec = features.into_iter().map(|v| v as f64).collect();
+                Ok(numpy::PyArray::from_vec(py, rust_vec))
+            }
+
+            #[must_use]
+            pub fn feature_names_simple(&self) -> Vec<&str> {
+                let mut symbol_names = L::operators();
+                symbol_names.push("SIZE");
+                symbol_names.push("DEPTH");
+                symbol_names
             }
         }
 
@@ -154,100 +169,43 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::missing_errors_doc)]
-            pub fn leaf_feature(&self, lang_manager: &PyLanguageManager) -> PyResult<Vec<f64>> {
-                match features(&self.0, &lang_manager.0).map_err(|e| EggshellError::<L>::from(e))? {
-                    Feature::Leaf(f) => Ok(f.to_owned()),
-                    Feature::NonLeaf(_) => Err(EggshellError::<L>::from(
-                        TrsError::UnexpectedNonLeaf(self.name()),
-                    ))?,
-                    Feature::IgnoredSymbol => Err(EggshellError::<L>::from(
-                        TrsError::IgnoredSymbol(self.name()),
-                    ))?,
-                }
-            }
-
-            #[expect(clippy::missing_errors_doc)]
-            pub fn non_leaf_id(&self, lang_manager: &PyLanguageManager) -> PyResult<usize> {
-                match features(&self.0, &lang_manager.0).map_err(|e| EggshellError::<L>::from(e))? {
-                    Feature::NonLeaf(id) => Ok(id),
-                    Feature::Leaf(_) => Err(EggshellError::<L>::from(TrsError::UnexpectedLeaf(
-                        self.name(),
-                    )))?,
-                    Feature::IgnoredSymbol => Err(EggshellError::<L>::from(
-                        TrsError::IgnoredSymbol(self.name()),
-                    ))?,
-                }
+            pub fn features(
+                &self,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<Vec<f64>> {
+                let f = $crate::features::features(&self.0, &variable_names, ignore_unknown)
+                    .map_err(|e| EggshellError::<L>::from(e))?
+                    .ok_or_else(|| {
+                        EggshellError::<L>::from(TrsError::IgnoredSymbol(self.name()))
+                    })?;
+                Ok(f)
             }
         }
 
-        #[gen_stub_pyclass]
-        #[pyclass(frozen, module = $module_name)]
-        #[derive(Debug, Clone, PartialEq)]
-        /// Wrapper type for Python
-        pub struct PyLanguageManager(LanguageManager<L>);
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
+        pub fn many_featurize_simple(
+            py: Python<'_>,
+            exprs: Vec<PyRecExpr>,
+            variable_names: Vec<String>,
+            ignore_unknown: bool,
+        ) -> PyResult<Bound<'_, numpy::PyArray2<f64>>> {
+            let rust_vec = exprs
+                .par_iter()
+                .map(|expr| {
+                    let mut features = expr
+                        .0
+                        .count_symbols(&variable_names, ignore_unknown)
+                        .map_err(|e| EggshellError::<L>::from(e))?;
+                    features.push(expr.0.size());
+                    features.push(expr.0.depth());
+                    Ok(features.into_iter().map(|v| v as f64).collect())
+                })
+                .collect::<Result<Vec<_>, EggshellError<_>>>()?;
 
-        #[gen_stub_pymethods]
-        #[pymethods]
-        impl PyLanguageManager {
-            /// Parse from string
-            #[new]
-            #[pyo3(signature = (variable_names, ignore_unknown=false))]
-            #[must_use]
-            pub fn new(variable_names: Vec<String>, ignore_unknown: bool) -> Self {
-                let mut lang_manager = L::manager(variable_names);
-                if ignore_unknown {
-                    lang_manager.set_ignore_unknown(true);
-                }
-                PyLanguageManager(lang_manager)
-            }
-
-            #[must_use]
-            pub fn feature_names_simple(&self) -> Vec<String> {
-                let mut symbol_names = self.0.symbol_names();
-                symbol_names.push(String::from("SIZE"));
-                symbol_names.push(String::from("DEPTH"));
-                symbol_names
-            }
-
-            #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-            pub fn featurize_simple<'py>(
-                &self,
-                py: Python<'py>,
-                expr: &PyRecExpr,
-                lang_manager: &PyLanguageManager,
-            ) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
-                let mut features = expr
-                    .0
-                    .count_symbols(&lang_manager.0)
-                    .map_err(|e| EggshellError::<L>::from(e))?;
-                features.push(expr.0.size());
-                features.push(expr.0.depth());
-                let rust_vec = features.into_iter().map(|v| v as f64).collect();
-                Ok(numpy::PyArray::from_vec(py, rust_vec))
-            }
-
-            #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-            pub fn many_featurize_simple<'py>(
-                &self,
-                py: Python<'py>,
-                exprs: Vec<PyRecExpr>,
-                lang_manager: &PyLanguageManager,
-            ) -> PyResult<Bound<'py, numpy::PyArray2<f64>>> {
-                let rust_vec = exprs
-                    .par_iter()
-                    .map(|expr| {
-                        let mut features = expr
-                            .0
-                            .count_symbols(&lang_manager.0)
-                            .map_err(|e| EggshellError::<L>::from(e))?;
-                        features.push(expr.0.size());
-                        features.push(expr.0.depth());
-                        Ok(features.into_iter().map(|v| v as f64).collect())
-                    })
-                    .collect::<Result<Vec<_>, EggshellError<_>>>()?;
-
-                Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
-            }
+            Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -297,8 +255,8 @@ macro_rules! monomorphize {
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<PyRecExpr>()?;
-            module.add_class::<PyLanguageManager>()?;
 
+            module.add_function(pyo3::wrap_pyfunction!(many_featurize_simple, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
 

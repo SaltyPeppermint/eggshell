@@ -7,7 +7,7 @@ use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use super::{LanguageManager, MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolType, TermRewriteSystem};
 use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -40,34 +40,28 @@ define_language! {
 }
 
 impl MetaInfo for Math {
-    fn manager(variable_names: Vec<String>) -> LanguageManager<Self> {
-        LanguageManager::new(
-            vec![
-                Math::Diff([0.into(), 0.into()]),
-                Math::Integral([0.into(), 0.into()]),
-                Math::Add([0.into(), 0.into()]),
-                Math::Sub([0.into(), 0.into()]),
-                Math::Mul([0.into(), 0.into()]),
-                Math::Div([0.into(), 0.into()]),
-                Math::Pow([0.into(), 0.into()]),
-                Math::Ln(0.into()),
-                Math::Sqrt(0.into()),
-                Math::Sin(0.into()),
-                Math::Cos(0.into()),
-                Math::Constant(Constant::new(0.0).unwrap()),
-                // We do not include symbols!
-                // Math::Symbol(Symbol::new("")),
-            ],
-            variable_names,
-        )
-    }
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             Math::Constant(value) => SymbolType::Constant((*value).into()),
             Math::Symbol(name) => SymbolType::Variable(name.as_str()),
-            _ => SymbolType::Operator,
+            Math::Diff(_) => SymbolType::Operator(0),
+            Math::Integral(_) => SymbolType::Operator(1),
+            Math::Add(_) => SymbolType::Operator(2),
+            Math::Sub(_) => SymbolType::Operator(3),
+            Math::Mul(_) => SymbolType::Operator(4),
+            Math::Div(_) => SymbolType::Operator(5),
+            Math::Pow(_) => SymbolType::Operator(6),
+            Math::Ln(_) => SymbolType::Operator(7),
+            Math::Sqrt(_) => SymbolType::Operator(8),
+            Math::Sin(_) => SymbolType::Operator(9),
+            Math::Cos(_) => SymbolType::Operator(10),
         }
+    }
+
+    fn operators() -> Vec<&'static str> {
+        vec![
+            "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
+        ]
     }
 
     fn into_symbol(name: String) -> Self {
