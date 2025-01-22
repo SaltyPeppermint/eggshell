@@ -11,7 +11,10 @@ pub fn features<L: MetaInfo, S: AsRef<str>>(
         return Ok(None);
     }
 
-    let mut features = vec![0.0; feature_vec_len::<L, S>(variable_names)];
+    // All the leaves
+    // plus two for the constant type and its value
+    // plus n for the variable names
+    let mut features = vec![0.0; L::operators().len() + 2 + variable_names.len()];
 
     match symbol.symbol_type() {
         SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => {
@@ -33,13 +36,6 @@ pub fn features<L: MetaInfo, S: AsRef<str>>(
         }
     }
     Ok(Some(features))
-}
-
-fn feature_vec_len<L: MetaInfo, S>(variable_names: &[S]) -> usize {
-    // All the leaves
-    // plus two for the constant type and its value
-    // plus n for the variable names
-    L::operators().len() + 2 + variable_names.len()
 }
 
 pub trait AsFeatures<L: MetaInfo> {
@@ -70,10 +66,12 @@ impl<L: MetaInfo> AsFeatures<L> for RecExpr<L> {
         ) -> Result<(), TrsError> {
             match node.symbol_type() {
                 SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => f[idx] += 1,
-                SymbolType::Constant(_) => f[L::operators().len() + 1] += 1,
+                // right behind the operators len for the constant type
+                SymbolType::Constant(_) => f[L::operators().len()] += 1,
                 SymbolType::Variable(name) => {
                     if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
-                        f[L::operators().len() + 2 + var_idx] += 1;
+                        // 1 since we count as all the same
+                        f[L::operators().len() + var_idx] += 1;
                     } else if !ignore_unknown {
                         return Err(TrsError::UnknownSymbol(name.to_owned()));
                     }

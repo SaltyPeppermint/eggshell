@@ -57,7 +57,7 @@ class PyRecExpr:
 def eqsat_check(start:PyRecExpr,goal:PyRecExpr,iter_limit:int) -> tuple[int, str, str]:
     ...
 
-def feature_names_simple() -> list[str]:
+def feature_names_simple(var_names:typing.Sequence[str]) -> list[str]:
     ...
 
 def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr,iter_limit:int) -> list[tuple[int, str, str]]:

@@ -203,11 +203,14 @@ macro_rules! monomorphize {
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
-        pub fn feature_names_simple() -> Vec<String> {
-            let mut symbol_names = L::operators();
-            symbol_names.push("SIZE");
-            symbol_names.push("DEPTH");
-            symbol_names.into_iter().map(|c| c.to_owned()).collect()
+        pub fn feature_names_simple(var_names: Vec<String>) -> Vec<String> {
+            let mut symbol_names: Vec<String> =
+                L::operators().into_iter().map(|c| c.to_owned()).collect();
+            symbol_names.push("CONSTANT".to_owned());
+            symbol_names.extend(var_names);
+            symbol_names.push("SIZE".to_owned());
+            symbol_names.push("DEPTH".to_owned());
+            symbol_names
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
