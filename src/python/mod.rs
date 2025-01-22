@@ -126,14 +126,6 @@ macro_rules! monomorphize {
                 let rust_vec = features.into_iter().map(|v| v as f64).collect();
                 Ok(numpy::PyArray::from_vec(py, rust_vec))
             }
-
-            #[must_use]
-            pub fn feature_names_simple(&self) -> Vec<&str> {
-                let mut symbol_names = L::operators();
-                symbol_names.push("SIZE");
-                symbol_names.push("DEPTH");
-                symbol_names
-            }
         }
 
         #[gen_stub_pyclass]
@@ -211,6 +203,16 @@ macro_rules! monomorphize {
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
+        pub fn feature_names_simple() -> Vec<String> {
+            let mut symbol_names = L::operators();
+            symbol_names.push("SIZE");
+            symbol_names.push("DEPTH");
+            symbol_names.into_iter().map(|c| c.to_owned()).collect()
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
         pub fn eqsat_check(
             start: &PyRecExpr,
             goal: &PyRecExpr,
@@ -257,6 +259,7 @@ macro_rules! monomorphize {
             module.add_class::<PyRecExpr>()?;
 
             module.add_function(pyo3::wrap_pyfunction!(many_featurize_simple, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(feature_names_simple, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
 

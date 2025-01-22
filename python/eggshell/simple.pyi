@@ -5,21 +5,6 @@ import numpy
 import numpy.typing
 import typing
 
-class PyLanguageManager:
-    r"""
-    Wrapper type for Python
-    """
-    def __new__(cls,variable_names,ignore_unknown = ...): ...
-    def feature_names_simple(self) -> list[str]:
-        ...
-
-    def featurize_simple(self, expr:PyRecExpr, lang_manager:PyLanguageManager) -> numpy.typing.NDArray[numpy.float64]:
-        ...
-
-    def many_featurize_simple(self, exprs:typing.Sequence[PyRecExpr], lang_manager:PyLanguageManager) -> numpy.typing.NDArray[numpy.float64]:
-        ...
-
-
 class PyNode:
     def __new__(cls,node_name:str, children:typing.Sequence[int]): ...
     def name(self) -> str:
@@ -31,10 +16,7 @@ class PyNode:
     def children(self) -> list[int]:
         ...
 
-    def leaf_feature(self, lang_manager:PyLanguageManager) -> list[float]:
-        ...
-
-    def non_leaf_id(self, lang_manager:PyLanguageManager) -> int:
+    def features(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[float]:
         ...
 
 
@@ -65,16 +47,22 @@ class PyRecExpr:
     def depth(self) -> int:
         ...
 
-    def count_symbols(self, lang_manager:PyLanguageManager) -> list[int]:
+    def count_symbols(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[int]:
         ...
 
-    def feature_vec_simple(self, lang_manager:PyLanguageManager) -> list[float]:
+    def featurize_simple(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> numpy.typing.NDArray[numpy.float64]:
         ...
 
 
 def eqsat_check(start:PyRecExpr,goal:PyRecExpr,iter_limit:int) -> tuple[int, str, str]:
     ...
 
+def feature_names_simple() -> list[str]:
+    ...
+
 def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr,iter_limit:int) -> list[tuple[int, str, str]]:
+    ...
+
+def many_featurize_simple(exprs:typing.Sequence[PyRecExpr],variable_names:typing.Sequence[str],ignore_unknown:bool) -> numpy.typing.NDArray[numpy.float64]:
     ...
 
