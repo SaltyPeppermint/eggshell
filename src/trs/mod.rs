@@ -1,15 +1,16 @@
-mod arithmetic;
-mod halide;
-mod rise;
-mod simple;
+pub mod arithmetic;
+pub mod halide;
+pub mod rise;
+pub mod simple;
 
 use std::fmt::{Debug, Display};
 
+use egg::{Analysis, FromOp, Language, Rewrite};
+use serde::Serialize;
+use strum::{IntoEnumIterator, VariantArray};
 use thiserror::Error;
 
-use egg::{Analysis, FromOp, Language, Rewrite};
 use pyo3::{create_exception, exceptions::PyException, PyErr};
-use serde::Serialize;
 
 // use crate::typing::{Type, Typeable};
 
@@ -46,17 +47,46 @@ pub trait TermRewriteSystem {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SymbolType<'a> {
     Operator(usize),
-    Constant(f64),
+    NumericValue(f64),
     Variable(&'a str),
     MetaSymbol(usize),
 }
 
-pub trait MetaInfo: Language + Display {
+pub trait MetaInfo: Display + Language {
+    type EnumDiscriminant: Clone
+        + Copy
+        + Debug
+        + PartialEq
+        + Eq
+        + Display
+        + for<'a> From<&'a Self>
+        + Into<&'static str>
+        + VariantArray
+        + IntoEnumIterator
+        + 'static;
+
+    const NON_OPERATORS: &'static [Self::EnumDiscriminant];
+
     fn symbol_type(&self) -> SymbolType;
 
-    fn operators() -> Vec<&'static str>;
+    #[must_use]
+    fn operator_id(&self) -> Option<usize> {
+        Self::EnumDiscriminant::iter()
+            .filter(|x| !Self::NON_OPERATORS.contains(x))
+            .position(|x| x == self.into())
+    }
 
-    fn into_symbol(name: String) -> Self;
+    fn n_operators() -> usize {
+        Self::EnumDiscriminant::VARIANTS.len() - Self::NON_OPERATORS.len()
+    }
+
+    #[must_use]
+    fn operator_names() -> Vec<&'static str> {
+        Self::EnumDiscriminant::iter()
+            .filter(|x| !Self::NON_OPERATORS.contains(x))
+            .map(|x| x.into())
+            .collect()
+    }
 }
 
 #[derive(Debug, Error)]

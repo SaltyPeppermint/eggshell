@@ -5,15 +5,16 @@ pub mod extract;
 mod full_sketch;
 mod partial_sketch;
 
+use std::fmt::Debug;
 use std::fmt::Display;
 
 use pyo3::{create_exception, exceptions::PyException, PyErr};
 use thiserror::Error;
 
 pub use full_sketch::Sketch;
-pub use full_sketch::SketchNode;
+pub use full_sketch::SketchLang;
 pub use partial_sketch::PartialSketch;
-pub use partial_sketch::PartialSketchNode;
+pub use partial_sketch::PartialSketchLang;
 
 #[derive(Debug, Error)]
 pub enum SketchParseError<E: Display> {

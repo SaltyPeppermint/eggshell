@@ -204,8 +204,10 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[must_use]
         pub fn feature_names_simple(var_names: Vec<String>) -> Vec<String> {
-            let mut symbol_names: Vec<String> =
-                L::operators().into_iter().map(|c| c.to_owned()).collect();
+            let mut symbol_names: Vec<String> = L::operator_names()
+                .into_iter()
+                .map(|c| c.to_owned())
+                .collect();
             symbol_names.push("CONSTANT".to_owned());
             symbol_names.extend(var_names);
             symbol_names.push("SIZE".to_owned());

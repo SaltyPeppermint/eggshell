@@ -75,6 +75,22 @@ where
     }
 }
 
+// // HELPER TO CUT OFF N LAST ELEMENTS OF A SLICE
+// pub(crate) const fn cutoff_slice<T>(slice: &[T], cutoff: usize) -> &[T] {
+//     let mut slice = slice;
+//     let max_len = slice.len() - cutoff;
+//     loop {
+//         if slice.len() == max_len {
+//             return slice;
+//         }
+
+//         slice = match slice {
+//             [rest @ .., _last] => rest,
+//             _ => panic!("Index out of bounds"),
+//         }
+//     }
+// }
+
 // pub(crate) trait Tree: Sized {
 //     fn children(&self) -> &[Self];
 

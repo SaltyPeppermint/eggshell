@@ -1,14 +1,15 @@
 mod rules;
 
-use std::cmp::Ordering;
-use std::fmt::Display;
+// use std::cmp::Ordering;
+// use std::fmt::Display;
 
 use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
+use strum::{Display, EnumDiscriminants, EnumIter, IntoStaticStr, VariantArray};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
-use crate::typing::{Type, Typeable, TypingInfo};
+// use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -18,7 +19,8 @@ pub type Constant = NotNan<f64>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
     pub enum Math {
         "d" = Diff([Id; 2]),
         "i" = Integral([Id; 2]),
@@ -40,9 +42,13 @@ define_language! {
 }
 
 impl MetaInfo for Math {
+    type EnumDiscriminant = MathDiscriminants;
+    const NON_OPERATORS: &'static [Self::EnumDiscriminant] =
+        &[MathDiscriminants::Constant, MathDiscriminants::Symbol];
+
     fn symbol_type(&self) -> SymbolType {
         match self {
-            Math::Constant(value) => SymbolType::Constant((*value).into()),
+            Math::Constant(value) => SymbolType::NumericValue((*value).into()),
             Math::Symbol(name) => SymbolType::Variable(name.as_str()),
             Math::Diff(_) => SymbolType::Operator(0),
             Math::Integral(_) => SymbolType::Operator(1),
@@ -58,60 +64,58 @@ impl MetaInfo for Math {
         }
     }
 
-    fn operators() -> Vec<&'static str> {
-        vec![
-            "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
-        ]
-    }
+    // const OPERATORS: &'static [&'static str] = cutoff_slice(MathDiscriminants::VARIANTS, 2);
 
-    fn into_symbol(name: String) -> Self {
-        Math::Symbol(name.into())
-    }
+    // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
+    //     let mut o = MathDiscriminants::VARIANTS.to_vec();
+    //     o.truncate(o.len() - 2);
+    //     o
+    // }
 }
 
-impl Typeable for Math {
-    type Type = ArithmaticType;
+// impl Typeable for Math {
+//     type Type = ArithmaticType;
 
-    fn type_info(&self) -> TypingInfo<Self::Type> {
-        TypingInfo::new(Self::Type::Top, Self::Type::Top)
-    }
-}
+//     fn type_info(&self) -> TypingInfo<Self::Type> {
+//         TypingInfo::new(Self::Type::Top, Self::Type::Top)
+//     }
+// }
 
-#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-pub enum ArithmaticType {
-    Top,
-    Bottom,
-}
+// #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
+// pub enum ArithmaticType {
+//     Top,
+//     Bottom,
+// }
 
-impl Display for ArithmaticType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Top => write!(f, "Top (Float)"),
-            Self::Bottom => write!(f, "Bottom"),
-        }
-    }
-}
+// impl Display for ArithmaticType {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match self {
+//             Self::Top => write!(f, "Top (Float)"),
+//             Self::Bottom => write!(f, "Bottom"),
+//         }
+//     }
+// }
 
-impl PartialOrd for ArithmaticType {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match (self, other) {
-            // Bottom Type is smaller than everything else
-            (Self::Top, Self::Bottom) => Some(Ordering::Greater),
-            (Self::Bottom, Self::Top) => Some(Ordering::Less),
-            (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
-        }
-    }
-}
+// impl PartialOrd for ArithmaticType {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         match (self, other) {
+//             // Bottom Type is smaller than everything else
+//             (Self::Top, Self::Bottom) => Some(Ordering::Greater),
+//             (Self::Bottom, Self::Top) => Some(Ordering::Less),
+//             (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
+//         }
+//     }
+// }
 
-impl Type for ArithmaticType {
-    fn top() -> Self {
-        Self::Top
-    }
+// impl Type for ArithmaticType {
+//     fn top() -> Self {
+//         Self::Top
+//     }
 
-    fn bottom() -> Self {
-        Self::Bottom
-    }
-}
+//     fn bottom() -> Self {
+//         Self::Bottom
+//     }
+// }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;

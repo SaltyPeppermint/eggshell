@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 
-use super::{Sketch, SketchNode};
+use super::{Sketch, SketchLang};
 use crate::analysis::semilattice::{
     ExtractAnalysis, SatisfiesContainsAnalysis, SemiLatticeAnalysis,
 };
@@ -38,14 +38,14 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
 
         let result = match &sketch[sketch_id] {
             // All nodes in the egraph fulfill the Any sketch
-            SketchNode::Any => egraph
+            SketchLang::Any => egraph
                 .classes()
                 .map(|eclass| {
                     // No egraph.find since we are taking the id directly from the eclass
                     eclass.id
                 })
                 .collect(),
-            SketchNode::Node(sketch_node) => {
+            SketchLang::Node(sketch_node) => {
                 // Get all nodes fullfilling the children of the current sketch_node
                 // (Themselves sketches)
                 // No egraph.find since we are only ever returning canonical ids
@@ -84,7 +84,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     HashSet::new()
                 }
             }
-            SketchNode::Contains(inner_sketch_id) => {
+            SketchLang::Contains(inner_sketch_id) => {
                 let contained_matched = rec(sketch, *inner_sketch_id, egraph, memo);
 
                 // No egraph.find since we are only ever returning canonical ids
@@ -102,7 +102,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
                     .filter_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
                     .collect()
             }
-            SketchNode::Or(inner_sketch_ids) => {
+            SketchLang::Or(inner_sketch_ids) => {
                 // No egraph.find since we are only ever returning canonical ids
                 let matches = inner_sketch_ids
                     .iter()
@@ -173,10 +173,10 @@ where
         let result = match &sketch[sketch_id] {
             // If the sketch says any, all the nodes in the eclass fulfill the sketch and
             // are valide solutions.
-            SketchNode::Any => extracted.get(&egraph_id).cloned(),
+            SketchLang::Any => extracted.get(&egraph_id).cloned(),
             // if we have a specific node in the sketch, we need to check if there is such
             // a node in the current eclass under investigation and then check the children.
-            SketchNode::Node(sketch_node) => {
+            SketchLang::Node(sketch_node) => {
                 // Get the eclass from the egraph we are currently checking
                 let eclass = &egraph[egraph_id];
 
@@ -233,7 +233,7 @@ where
                     // We want to return the cheapest of the candidates valid
                     .min_by(|x, y| x.0.cmp(&y.0))
             }
-            SketchNode::Contains(inner_sketch_id) => {
+            SketchLang::Contains(inner_sketch_id) => {
                 // avoid cycles
                 // If we have visited the contains once, we do not need to
                 // visit it again as the cost in our setup only goes up
@@ -328,7 +328,7 @@ where
             }
             // Rather simple: We check if either the fst or snd of the or pair fulfills
             // the sketch and we take the cheaper one
-            SketchNode::Or(inner_sketch_ids) => inner_sketch_ids
+            SketchLang::Or(inner_sketch_ids) => inner_sketch_ids
                 .iter()
                 .filter_map(|inner_sketch_id| {
                     rec(
