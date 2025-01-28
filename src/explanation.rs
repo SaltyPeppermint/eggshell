@@ -4,7 +4,21 @@ use egg::{Analysis, EGraph, Explanation, FlatTerm, FromOp, Language, RecExpr};
 use log::debug;
 use serde::Serialize;
 
-use crate::io::sampling::ExplanationData;
+#[derive(Serialize, Clone, Debug)]
+pub struct ExplanationData<L: Language + FromOp + Display> {
+    flat_string: String,
+    explanation_chain: Vec<IntermediateTerms<L>>,
+}
+
+impl<L: Language + FromOp + Display> ExplanationData<L> {
+    #[must_use]
+    pub fn new(flat_string: String, explanation_chain: Vec<IntermediateTerms<L>>) -> Self {
+        Self {
+            flat_string,
+            explanation_chain,
+        }
+    }
+}
 
 pub fn explain_equivalence<L: Language + FromOp + Display, N: Analysis<L>>(
     egraph: &mut EGraph<L, N>,
@@ -32,24 +46,22 @@ fn explanation_chain<L: Language + FromOp + Display>(
     flat_expl
         .iter()
         .map(|flat_term| {
-            let mut applied_rules = vec![];
-            find_used_rules(&mut applied_rules, flat_term);
+            let rec_expr = flat_term.get_recexpr();
+            let mut applied_rules = Vec::new();
+            rec_applied_rules(&mut applied_rules, flat_term);
             IntermediateTerms {
-                rec_expr: flat_term.get_recexpr(),
+                rec_expr,
                 applied_rules,
             }
         })
         .collect()
 }
 
-fn find_used_rules<L: Language + FromOp + Display>(
-    found_expl: &mut Vec<String>,
-    flat_term: &FlatTerm<L>,
-) {
-    if let Some(rule) = flat_term.forward_rule {
-        found_expl.push(rule.to_string());
-    }
-    for child in &flat_term.children {
-        find_used_rules(found_expl, child);
+fn rec_applied_rules<L: Language>(rules: &mut Vec<String>, expl: &FlatTerm<L>) {
+    if let Some(rule) = expl.forward_rule {
+        rules.push(rule.to_string());
+    };
+    for child in &expl.children {
+        rec_applied_rules(rules, child);
     }
 }

@@ -146,11 +146,11 @@ where
 
 fn batch_ranges(total_samples: usize, parallelism: usize) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
-    let mut range_start = 0;
     let batch_size = (total_samples + 1) / parallelism;
+    let mut range_start = 0;
 
-    for i in 0..parallelism - 1 {
-        let range_end = (i + 1) * batch_size;
+    while range_start < total_samples {
+        let range_end = range_start + batch_size;
         ranges.push((range_start, range_end));
         range_start = range_end;
     }

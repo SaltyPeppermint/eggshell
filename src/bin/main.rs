@@ -7,7 +7,7 @@ use std::io::{BufWriter, Write};
 use chrono::Local;
 use clap::Parser;
 use egg::{Analysis, AstSize, CostFunction, FromOp, Language, RecExpr, Rewrite, StopReason};
-use eggshell::explanation;
+use eggshell::explanation::{self, ExplanationData};
 use hashbrown::{HashMap, HashSet};
 use log::{debug, info};
 use num::BigUint;
@@ -17,7 +17,6 @@ use rand::SeedableRng;
 use eggshell::cli::{BaselineArgs, BaselineCmd, Cli, SampleStrategy, TrsName};
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
-use eggshell::io::sampling::{DataEntry, EqsatStats, MetaData, SampleData};
 use eggshell::io::structs::Entry;
 use eggshell::sampling::sampler::{
     CostWeighted, CountWeightedGreedy, CountWeightedUniformly, Sampler,
@@ -25,7 +24,7 @@ use eggshell::sampling::sampler::{
 use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 fn main() {
     env_logger::init();
@@ -96,17 +95,14 @@ fn run<R: TermRewriteSystem>(
         .into_iter()
         .nth(cli.expr_id())
         .expect("Must be in the file!");
-
     info!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
 
     info!("Starting Eqsat...");
-
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
     let mut eqsat_results = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-
     info!("Finished Eqsat!");
-    info!("Starting sampling...");
 
+    info!("Starting sampling...");
     let mut rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
 
     let samples: Vec<_> = eqsat_results
@@ -125,7 +121,6 @@ fn run<R: TermRewriteSystem>(
             s
         })
         .collect();
-
     info!("Finished sampling!");
     info!(
         "Took {} unique samples while aiming for {}.",
@@ -135,7 +130,6 @@ fn run<R: TermRewriteSystem>(
 
     let max_generation = eqsat_results.len();
     let generations = generations(&samples, &mut eqsat_results);
-
     let baselines = if let BaselineCmd::WithBaseline(args) = cli.baseline() {
         Some(baselines(
             &samples,
@@ -151,62 +145,70 @@ fn run<R: TermRewriteSystem>(
     };
 
     info!("Generating explanations...");
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(8) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
-        .build()
-        .unwrap();
-    // All explanations work on the last egraph
     let last_egraph = eqsat_results.last().unwrap().egraph().clone();
     drop(eqsat_results);
-    let explanations = pool.install(|| {
-        samples
-            .par_iter()
-            .map_with(last_egraph, |thread_local_eqsat_results, sample| {
-                cli.with_explanations().then(|| {
-                    explanation::explain_equivalence(
-                        thread_local_eqsat_results,
-                        &start_expr,
-                        sample,
-                    )
-                })
+    let explanations = samples
+        .par_iter()
+        .map_with(last_egraph, |thread_local_eqsat_results, sample| {
+            cli.with_explanations().then(|| {
+                explanation::explain_equivalence(thread_local_eqsat_results, &start_expr, sample)
             })
-            .collect::<Vec<_>>()
-    });
-
+        })
+        .collect::<Vec<_>>();
     info!("Finished generating explanations!");
+
+    // let pool = rayon::ThreadPoolBuilder::new()
+    //     .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
+    //     .build()
+    //     .unwrap();
+    // All explanations work on the last egraph
+    // let explanations = pool.install(|| {
+    //     samples
+    //         .par_iter()
+    //         .map_with(last_egraph, |thread_local_eqsat_results, sample| {
+    //             cli.with_explanations().then(|| {
+    //                 explanation::explain_equivalence(
+    //                     thread_local_eqsat_results,
+    //                     &start_expr,
+    //                     sample,
+    //                 )
+    //             })
+    //         })
+    //         .collect::<Vec<_>>()
+    // });
 
     info!("Generating associated data...");
     let sample_data = samples
         .into_iter()
         .zip(explanations)
         .enumerate()
-        .map(|(idx, (sample, explanation))| SampleData::new(sample, generations[idx], explanation))
+        .map(|(idx, (sample, explanation))| SampleData {
+            sample,
+            generation: generations[idx],
+            explanation,
+        })
         .collect();
     info!("Finished generating associated data!");
 
     info!("Finished work on expr {}!", cli.expr_id());
-
-    let data = DataEntry::new(
+    let data = DataEntry {
         start_expr,
         sample_data,
         baselines,
-        MetaData::new(
-            cli.uuid().to_owned(),
-            folder.to_owned(),
-            cli.to_owned(),
+        metadata: MetaData {
+            uuid: cli.uuid().to_owned(),
+            folder: folder.to_owned(),
+            cli: cli.to_owned(),
             timestamp,
             eqsat_conf,
-            rules.into_iter().map(|r| r.name.to_string()).collect(),
-        ),
-    );
-
+            rules: rules.into_iter().map(|r| r.name.to_string()).collect(),
+        },
+    };
     let mut f = BufWriter::new(File::create(format!("{folder}/{}.json", cli.expr_id())).unwrap());
     serde_json::to_writer(&mut f, &data).unwrap();
     f.flush().unwrap();
 
     info!("Results for expr {} written to disk!", cli.expr_id());
-
-    // });
 }
 
 fn eqsat<L, N>(
@@ -418,3 +420,52 @@ fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12R
 //         None
 //     }
 // }
+
+#[derive(Serialize, Clone, Debug)]
+pub struct DataEntry<L: Language + FromOp + Display> {
+    start_expr: RecExpr<L>,
+    sample_data: Vec<SampleData<L>>,
+    baselines: Option<HashMap<usize, HashMap<usize, EqsatStats>>>,
+    metadata: MetaData,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
+pub struct MetaData {
+    uuid: String,
+    folder: String,
+    cli: Cli,
+    timestamp: i64,
+    eqsat_conf: EqsatConf,
+    rules: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct SampleData<L: Language + FromOp + Display> {
+    sample: RecExpr<L>,
+    generation: usize,
+    explanation: Option<ExplanationData<L>>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct EqsatStats {
+    stop_reason: StopReason,
+    total_time: f64,
+    total_nodes: usize,
+    total_iters: usize,
+}
+
+impl<L, N> From<EqsatResult<L, N>> for EqsatStats
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone,
+    N::Data: Serialize + Clone,
+{
+    fn from(result: EqsatResult<L, N>) -> Self {
+        EqsatStats {
+            stop_reason: result.report().stop_reason.clone(),
+            total_time: result.report().total_time,
+            total_nodes: result.report().egraph_nodes,
+            total_iters: result.report().iterations,
+        }
+    }
+}
