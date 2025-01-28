@@ -146,16 +146,20 @@ where
 
 fn batch_ranges(total_samples: usize, parallelism: usize) -> Vec<(usize, usize)> {
     let mut ranges = Vec::new();
-    let batch_size = (total_samples + 1) / parallelism;
+    let batch_size = (total_samples) / parallelism;
     let mut range_start = 0;
 
-    while range_start < total_samples {
+    loop {
         let range_end = range_start + batch_size;
+        if range_end >= total_samples {
+            ranges.push((range_start, total_samples));
+            break;
+        }
         ranges.push((range_start, range_end));
         range_start = range_end;
     }
 
-    ranges.push((range_start, total_samples));
+    // ranges.push((range_start, total_samples));
     ranges
 }
 
@@ -165,11 +169,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn batch_ranges_bit_over() {
+    fn batch_ranges_one_over() {
         let ranges = batch_ranges(2001, 4);
         assert_eq!(
             ranges,
-            vec![(0, 500), (500, 1000), (1000, 1500), (1500, 2001)]
+            vec![
+                (0, 500),
+                (500, 1000),
+                (1000, 1500),
+                (1500, 2000),
+                (2000, 2001)
+            ]
+        );
+    }
+
+    #[test]
+    fn batch_ranges_one_below() {
+        let ranges = batch_ranges(1999, 4);
+        assert_eq!(
+            ranges,
+            vec![
+                (0, 499),
+                (499, 998),
+                (998, 1497),
+                (1497, 1996),
+                (1996, 1999)
+            ]
         );
     }
 

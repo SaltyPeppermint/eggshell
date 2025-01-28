@@ -391,7 +391,7 @@ mod tests {
             .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
-        assert_eq!(samples.len(), 5);
+        assert_eq!(samples.len(), 6);
     }
 
     #[test]
@@ -425,7 +425,7 @@ mod tests {
             .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
-        assert_eq!(samples.len(), 7);
+        assert_eq!(samples.len(), 8);
     }
 
     #[test]
