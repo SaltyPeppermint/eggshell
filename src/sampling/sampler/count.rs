@@ -209,7 +209,7 @@ where
         AstSize.one_shot_analysis(egraph, &mut min_ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
-        info!("Sampler read to start sampling!");
+        info!("Sampler ready to start sampling!");
         CountWeightedUniformly {
             egraph,
             size_counts,
