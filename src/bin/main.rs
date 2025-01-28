@@ -6,9 +6,8 @@ use std::io::{BufWriter, Write};
 
 use chrono::Local;
 use clap::Parser;
-use egg::{
-    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
-};
+use egg::{Analysis, AstSize, CostFunction, FromOp, Language, RecExpr, Rewrite, StopReason};
+use eggshell::explanation;
 use hashbrown::{HashMap, HashSet};
 use log::{debug, info};
 use num::BigUint;
@@ -153,25 +152,25 @@ fn run<R: TermRewriteSystem>(
 
     info!("Generating explanations...");
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
+        .num_threads(8) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
         .build()
         .unwrap();
-    let explenations: Vec<Option<_>> = pool.install(|| {
+    // All explanations work on the last egraph
+    let last_egraph = eqsat_results.last().unwrap().egraph().clone();
+    drop(eqsat_results);
+    let explanations = pool.install(|| {
         samples
             .par_iter()
-            .zip(generations.par_iter())
-            .map_with(
-                eqsat_results,
-                |thread_local_eqsat_results, (sample, generation)| {
-                    explanation(
-                        cli,
-                        thread_local_eqsat_results[*generation - 1].egraph_mut(),
+            .map_with(last_egraph, |thread_local_eqsat_results, sample| {
+                cli.with_explanations().then(|| {
+                    explanation::explain_equivalence(
+                        thread_local_eqsat_results,
                         &start_expr,
                         sample,
                     )
-                },
-            )
-            .collect()
+                })
+            })
+            .collect::<Vec<_>>()
     });
 
     info!("Finished generating explanations!");
@@ -179,9 +178,9 @@ fn run<R: TermRewriteSystem>(
     info!("Generating associated data...");
     let sample_data = samples
         .into_iter()
-        .zip(explenations)
+        .zip(explanations)
         .enumerate()
-        .map(|(idx, (sample, explenation))| SampleData::new(sample, generations[idx], explenation))
+        .map(|(idx, (sample, explanation))| SampleData::new(sample, generations[idx], explanation))
         .collect();
     info!("Finished generating associated data!");
 
@@ -398,24 +397,24 @@ fn random_indices_eq<T: PartialEq>(ts: &[T], t: T, n: usize, rng: &mut ChaCha12R
         .choose_multiple(rng, n)
 }
 
-fn explanation<L, N>(
-    cli: &Cli,
-    egraph: &mut EGraph<L, N>,
-    start_expr: &RecExpr<L>,
-    target_expr: &RecExpr<L>,
-) -> Option<String>
-where
-    L: Language + Display + FromOp,
-    N: Analysis<L>,
-{
-    if cli.with_explanations() {
-        debug!("Constructing explanation of \"{start_expr} == {target_expr}\"...");
-        let expl = egraph
-            .explain_equivalence(start_expr, target_expr)
-            .get_flat_string();
-        debug!("Explanation constructed!");
-        Some(expl)
-    } else {
-        None
-    }
-}
+// fn explanation<L, N>(
+//     cli: &Cli,
+//     egraph: &mut EGraph<L, N>,
+//     start_expr: &RecExpr<L>,
+//     target_expr: &RecExpr<L>,
+// ) -> Option<String>
+// where
+//     L: Language + Display + FromOp,
+//     N: Analysis<L>,
+// {
+//     if cli.with_explanations() {
+//         debug!("Constructing explanation of \"{start_expr} == {target_expr}\"...");
+//         let mut expl = egraph.explain_equivalence(start_expr, target_expr);
+//         let expl_chain = explanation::explanation_chain(&mut expl);
+//         let flat_string = expl.get_flat_string();
+//         debug!("Explanation constructed!");
+//         Some(flat_string)
+//     } else {
+//         None
+//     }
+// }

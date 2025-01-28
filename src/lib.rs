@@ -44,6 +44,7 @@ mod utils;
 
 pub mod cli;
 pub mod eqsat;
+pub mod explanation;
 pub mod io;
 pub mod python;
 pub mod sampling;

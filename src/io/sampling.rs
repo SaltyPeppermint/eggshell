@@ -1,21 +1,22 @@
 use std::fmt::Display;
 
-use egg::{Analysis, Language, RecExpr, StopReason};
+use egg::{Analysis, FromOp, Language, RecExpr, StopReason};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::cli::Cli;
 use crate::eqsat::{EqsatConf, EqsatResult};
+use crate::explanation::IntermediateTerms;
 
 #[derive(Serialize, Clone, Debug)]
-pub struct DataEntry<L: Language + Display> {
+pub struct DataEntry<L: Language + FromOp + Display> {
     start_expr: RecExpr<L>,
     sample_data: Vec<SampleData<L>>,
     baselines: Option<HashMap<usize, HashMap<usize, EqsatStats>>>,
     metadata: MetaData,
 }
 
-impl<L: Language + Display> DataEntry<L> {
+impl<L: Language + FromOp + Display> DataEntry<L> {
     #[must_use]
     pub fn new(
         start_expr: RecExpr<L>,
@@ -68,19 +69,39 @@ impl MetaData {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct SampleData<L: Language + Display> {
+pub struct SampleData<L: Language + FromOp + Display> {
     sample: RecExpr<L>,
     generation: usize,
-    explanation: Option<String>,
+    explanation: Option<ExplanationData<L>>,
 }
 
-impl<L: Language + Display> SampleData<L> {
+impl<L: Language + FromOp + Display> SampleData<L> {
     #[must_use]
-    pub fn new(sample: RecExpr<L>, generation: usize, explanation: Option<String>) -> Self {
+    pub fn new(
+        sample: RecExpr<L>,
+        generation: usize,
+        explanation: Option<ExplanationData<L>>,
+    ) -> Self {
         Self {
             sample,
             generation,
             explanation,
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ExplanationData<L: Language + FromOp + Display> {
+    flat_string: String,
+    explanation_chain: Vec<IntermediateTerms<L>>,
+}
+
+impl<L: Language + FromOp + Display> ExplanationData<L> {
+    #[must_use]
+    pub fn new(flat_string: String, explanation_chain: Vec<IntermediateTerms<L>>) -> Self {
+        Self {
+            flat_string,
+            explanation_chain,
         }
     }
 }
