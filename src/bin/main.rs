@@ -8,7 +8,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use chrono::Local;
 use clap::Parser;
-use egg::{Analysis, AstSize, CostFunction, FromOp, Language, RecExpr, Rewrite, StopReason};
+use egg::{
+    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
+};
 use eggshell::explanation::{self, ExplanationData};
 use hashbrown::HashSet;
 use log::{debug, info};
@@ -121,6 +123,8 @@ fn run<R: TermRewriteSystem>(
 
     // let max_generation = eqsat_results.len();
     let samples_with_gen = with_generations(samples, &mut eqsat_results);
+    let last_egraph = eqsat_results.last().unwrap().egraph().to_owned();
+    drop(eqsat_results);
 
     run_batch(
         eqsat_conf,
@@ -129,30 +133,10 @@ fn run<R: TermRewriteSystem>(
         rules,
         cli,
         start_expr,
-        eqsat_results,
+        &last_egraph,
         samples_with_gen,
     );
     info!("Work on expr {} done!", cli.expr_id());
-
-    // let pool = rayon::ThreadPoolBuilder::new()
-    //     .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
-    //     .build()
-    //     .unwrap();
-    // All explanations work on the last egraph
-    // let explanations = pool.install(|| {
-    //     samples
-    //         .par_iter()
-    //         .map_with(last_egraph, |thread_local_eqsat_results, sample| {
-    //             cli.with_explanations().then(|| {
-    //                 explanation::explain_equivalence(
-    //                     thread_local_eqsat_results,
-    //                     &start_expr,
-    //                     sample,
-    //                 )
-    //             })
-    //         })
-    //         .collect::<Vec<_>>()
-    // });
 }
 
 #[expect(clippy::too_many_arguments)]
@@ -163,7 +147,7 @@ fn run_batch<L, N>(
     rules: Vec<Rewrite<L, N>>,
     cli: &Cli,
     start_expr: RecExpr<L>,
-    eqsat_results: Vec<EqsatResult<L, N>>,
+    last_egraph: &EGraph<L, N>,
     samples_with_gen: Vec<(RecExpr<L>, usize)>,
 ) where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize,
@@ -171,13 +155,11 @@ fn run_batch<L, N>(
     N: Analysis<L> + Clone + Debug + Send + Sync,
     N::Data: Serialize + Clone + Sync + Send,
 {
-    let last_egraph = eqsat_results.last().unwrap().egraph().clone();
-    drop(eqsat_results);
     let expl_counter = AtomicUsize::new(0);
-    let batch_size = 1000;
+    const BATCH_SIZE: usize = 1000;
 
-    info!("Working in batches of size {batch_size}...");
-    for (batch_id, sample_batch) in samples_with_gen.chunks(1000).enumerate() {
+    info!("Working in batches of size {BATCH_SIZE}...");
+    for (batch_id, sample_batch) in samples_with_gen.chunks(BATCH_SIZE).enumerate() {
         info!("Starting work on batch {}...", batch_id);
         info!("Generating explanations...");
         let sample_data = sample_batch
