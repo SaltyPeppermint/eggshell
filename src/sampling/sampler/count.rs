@@ -386,9 +386,9 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
         assert_eq!(samples.len(), 6);
@@ -403,9 +403,9 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
         assert_eq!(samples.len(), 5);
@@ -420,9 +420,9 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
         assert_eq!(samples.len(), 8);
@@ -442,10 +442,8 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy
-            .sample_eclass(&mut rng, 10, root_id, 32, 4)
-            .unwrap();
+        let rng = ChaCha12Rng::seed_from_u64(1024);
+        let samples = strategy.sample_eclass(&rng, 10, root_id, 32, 4).unwrap();
 
         assert_eq!(samples.len(), 10);
     }
@@ -464,9 +462,9 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 32);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&mut rng, 10, root_id, start_expr.len(), 4)
+            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
         assert_eq!(samples.len(), 10);
@@ -486,10 +484,10 @@ mod tests {
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 2);
-        let mut rng = ChaCha12Rng::seed_from_u64(1024);
+        let rng = ChaCha12Rng::seed_from_u64(1024);
 
         assert_eq!(
-            strategy.sample_eclass(&mut rng, 1000, root_id, start_expr.len(), 4),
+            strategy.sample_eclass(&rng, 1000, root_id, start_expr.len(), 4),
             Err(SampleError::SizeLimit(13))
         );
     }

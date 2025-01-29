@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::error::ErrorKind;
-use clap::{Args, Error, Parser, Subcommand};
+use clap::{Error, Parser};
 use serde::{Deserialize, Serialize};
 
 #[derive(Parser, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
@@ -55,38 +55,6 @@ pub struct Cli {
     /// Trs of the input
     #[arg(long)]
     trs: TrsName,
-
-    #[command(subcommand)]
-    baseline: BaselineCmd,
-}
-
-#[derive(Debug, Subcommand, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub enum BaselineCmd {
-    WithBaseline(BaselineArgs),
-    NoBaseline,
-}
-
-#[derive(Debug, Args, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct BaselineArgs {
-    /// Number of random goals to pick
-    #[arg(long, default_value_t = 1)]
-    random_goals: usize,
-
-    /// Number of random guides to pick
-    #[arg(long)]
-    random_guides: usize,
-}
-
-impl BaselineArgs {
-    #[must_use]
-    pub fn random_goals(&self) -> usize {
-        self.random_goals
-    }
-
-    #[must_use]
-    pub fn random_guides(&self) -> usize {
-        self.random_guides
-    }
 }
 
 impl Cli {
@@ -143,11 +111,6 @@ impl Cli {
     #[must_use]
     pub(crate) fn memory_limit(&self) -> Option<usize> {
         self.memory_limit
-    }
-
-    #[must_use]
-    pub fn baseline(&self) -> &BaselineCmd {
-        &self.baseline
     }
 }
 

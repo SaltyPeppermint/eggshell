@@ -1,8 +1,10 @@
 mod cost;
 mod count;
 
-use std::fmt::{Debug, Display};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
@@ -74,7 +76,7 @@ where
     #[expect(clippy::missing_errors_doc)]
     fn sample_eclass(
         &self,
-        rng: &mut ChaCha12Rng,
+        rng: &ChaCha12Rng,
         n_samples: usize,
         root: Id,
         size_limit: usize,
@@ -88,27 +90,15 @@ where
             return Err(SampleError::SizeLimit(size_limit));
         };
 
-        let counter = AtomicUsize::new(0);
-
         let samples = ranges
             .into_par_iter() // into_par_iter_here
             .enumerate()
-            .map(|(range_id, (batch_start, batch_end))| {
+            .map(|(range_id, range)| {
                 let mut inner_rng = rng.clone();
                 inner_rng.set_stream((range_id + 1) as u64);
-
-                let batch_samples = (batch_start..batch_end)
+                range
                     .map(|_| self.sample_expr(&mut inner_rng, root_eclass, size_limit))
-                    .collect::<Result<_, _>>()?;
-                let len = batch_end - batch_start;
-                let c = counter.fetch_add(len, Ordering::SeqCst) + len;
-                debug!("Finished sampling batch {}", range_id + 1);
-                debug!(
-                    "Sampled {c} expressions from eclass {} in batch {range_id}",
-                    root_eclass.id
-                );
-
-                Ok(batch_samples)
+                    .collect::<Result<_, _>>()
             })
             .try_reduce(HashSet::new, |mut a, b| {
                 a.extend(b);
@@ -144,22 +134,20 @@ where
     }
 }
 
-fn batch_ranges(total_samples: usize, parallelism: usize) -> Vec<(usize, usize)> {
+fn batch_ranges(total_samples: usize, parallelism: usize) -> Vec<Range<usize>> {
     let mut ranges = Vec::new();
-    let batch_size = (total_samples) / parallelism;
+    let batch_size = total_samples / parallelism;
     let mut range_start = 0;
 
     loop {
         let range_end = range_start + batch_size;
         if range_end >= total_samples {
-            ranges.push((range_start, total_samples));
+            ranges.push(range_start..total_samples);
             break;
         }
-        ranges.push((range_start, range_end));
+        ranges.push(range_start..range_end);
         range_start = range_end;
     }
-
-    // ranges.push((range_start, total_samples));
     ranges
 }
 
@@ -169,41 +157,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn batch_ranges_one_over() {
+    fn batch_ranges_2001() {
         let ranges = batch_ranges(2001, 4);
         assert_eq!(
             ranges,
             vec![
-                (0, 500),
-                (500, 1000),
-                (1000, 1500),
-                (1500, 2000),
-                (2000, 2001)
+                (0..500),
+                (500..1000),
+                (1000..1500),
+                (1500..2000),
+                (2000..2001)
             ]
         );
     }
 
     #[test]
-    fn batch_ranges_one_below() {
+    fn batch_ranges_1999() {
         let ranges = batch_ranges(1999, 4);
         assert_eq!(
             ranges,
             vec![
-                (0, 499),
-                (499, 998),
-                (998, 1497),
-                (1497, 1996),
-                (1996, 1999)
+                (0..499),
+                (499..998),
+                (998..1497),
+                (1497..1996),
+                (1996..1999)
             ]
         );
     }
 
     #[test]
-    fn batch_ranges_exact() {
+    fn batch_ranges_2000() {
         let ranges = batch_ranges(2000, 4);
         assert_eq!(
             ranges,
-            vec![(0, 500), (500, 1000), (1000, 1500), (1500, 2000)]
+            vec![(0..500), (500..1000), (1000..1500), (1500..2000)]
+        );
+    }
+
+    #[test]
+    fn batch_ranges_20000() {
+        let ranges = batch_ranges(20000, 4);
+        assert_eq!(
+            ranges,
+            vec![0..5000, 5000..10000, 10000..15000, 15000..20000]
         );
     }
 }

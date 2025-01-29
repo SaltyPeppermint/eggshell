@@ -21,7 +21,6 @@ for i in $(seq $START $END); do
         --uuid $uuid \
         --trs rise \
         --expr-id $i \
-        no-baseline \
         &>$logfile # --random-guide-generation 3 \
 
     echo "Finished $i"
