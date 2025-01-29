@@ -193,7 +193,7 @@ fn run_batch<L, N>(
                         );
                         let c = expl_counter.fetch_add(1, Ordering::AcqRel);
                         if (c + 1) % 100 == 0 {
-                            info!("Generated explanation {}...", c);
+                            info!("Generated explanation {}...", c + 1);
                         }
                         expl
                     });
@@ -212,6 +212,12 @@ fn run_batch<L, N>(
         let batch_file: PathBuf = term_folder
             .join(batch_id.to_string())
             .with_extension("json");
+
+        info!(
+            "Writing batch to disk at {}...",
+            batch_file.to_string_lossy()
+        );
+
         let data = DataEntry {
             start_expr: start_expr.clone(),
             sample_data,
