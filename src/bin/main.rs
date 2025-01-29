@@ -120,37 +120,86 @@ fn run<R: TermRewriteSystem>(
     );
 
     // let max_generation = eqsat_results.len();
-    let generations = generations(&samples, &mut eqsat_results);
+    let samples_with_gen = with_generations(samples, &mut eqsat_results);
 
+    run_batch(
+        eqsat_conf,
+        term_folder,
+        timestamp,
+        rules,
+        cli,
+        start_expr,
+        eqsat_results,
+        samples_with_gen,
+    );
+    info!("Work on expr {} done!", cli.expr_id());
+
+    // let pool = rayon::ThreadPoolBuilder::new()
+    //     .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
+    //     .build()
+    //     .unwrap();
+    // All explanations work on the last egraph
+    // let explanations = pool.install(|| {
+    //     samples
+    //         .par_iter()
+    //         .map_with(last_egraph, |thread_local_eqsat_results, sample| {
+    //             cli.with_explanations().then(|| {
+    //                 explanation::explain_equivalence(
+    //                     thread_local_eqsat_results,
+    //                     &start_expr,
+    //                     sample,
+    //                 )
+    //             })
+    //         })
+    //         .collect::<Vec<_>>()
+    // });
+}
+
+#[expect(clippy::too_many_arguments)]
+fn run_batch<L, N>(
+    eqsat_conf: EqsatConf,
+    term_folder: PathBuf,
+    timestamp: i64,
+    rules: Vec<Rewrite<L, N>>,
+    cli: &Cli,
+    start_expr: RecExpr<L>,
+    eqsat_results: Vec<EqsatResult<L, N>>,
+    samples_with_gen: Vec<(RecExpr<L>, usize)>,
+) where
+    L: Language + Display + FromOp + Clone + Send + Sync + Serialize,
+    L::Discriminant: Sync + Send,
+    N: Analysis<L> + Clone + Debug + Send + Sync,
+    N::Data: Serialize + Clone + Sync + Send,
+{
     let last_egraph = eqsat_results.last().unwrap().egraph().clone();
     drop(eqsat_results);
     let expl_counter = AtomicUsize::new(0);
     let batch_size = 1000;
 
     info!("Working in batches of size {batch_size}...");
-    for (batch_id, sample_batch) in samples.chunks(1000).enumerate() {
+    for (batch_id, sample_batch) in samples_with_gen.chunks(1000).enumerate() {
         info!("Starting work on batch {}...", batch_id);
         info!("Generating explanations...");
         let sample_data = sample_batch
             .par_iter()
-            .enumerate()
             .map_with(
                 last_egraph.clone(),
-                |thread_local_eqsat_results, (idx, sample)| {
+                |thread_local_eqsat_results, (sample, generation)| {
                     let explanation = cli.with_explanations().then(|| {
-                        let c = expl_counter.fetch_add(1, Ordering::AcqRel);
-                        if c % 100 == 0 {
-                            info!("Now generating explanations {}...", c);
-                        }
-                        explanation::explain_equivalence(
+                        let expl = explanation::explain_equivalence(
                             thread_local_eqsat_results,
                             &start_expr,
                             sample,
-                        )
+                        );
+                        let c = expl_counter.fetch_add(1, Ordering::AcqRel);
+                        if (c + 1) % 100 == 0 {
+                            info!("Generated explanation {}...", c);
+                        }
+                        expl
                     });
                     SampleData {
                         sample: sample.to_owned(),
-                        generation: generations[idx + batch_id * batch_size],
+                        generation: *generation,
                         explanation,
                     }
                 },
@@ -160,7 +209,7 @@ fn run<R: TermRewriteSystem>(
 
         info!("Finished work on batch {}!", batch_id);
 
-        let batch_file: PathBuf = experiment_folder
+        let batch_file: PathBuf = term_folder
             .join(batch_id.to_string())
             .with_extension("json");
         let data = DataEntry {
@@ -183,27 +232,6 @@ fn run<R: TermRewriteSystem>(
         drop(data);
         info!("Results for batch {} written to disk!", batch_id);
     }
-    info!("Work on expr {} done!", cli.expr_id());
-
-    // let pool = rayon::ThreadPoolBuilder::new()
-    //     .num_threads(16) // Adjust if memory issues std::thread::available_parallelism::available_parallelism().unwrap().into()
-    //     .build()
-    //     .unwrap();
-    // All explanations work on the last egraph
-    // let explanations = pool.install(|| {
-    //     samples
-    //         .par_iter()
-    //         .map_with(last_egraph, |thread_local_eqsat_results, sample| {
-    //             cli.with_explanations().then(|| {
-    //                 explanation::explain_equivalence(
-    //                     thread_local_eqsat_results,
-    //                     &start_expr,
-    //                     sample,
-    //                 )
-    //             })
-    //         })
-    //         .collect::<Vec<_>>()
-    // });
 }
 
 fn sample_generations<L, N>(
@@ -349,21 +377,25 @@ where
     }
 }
 
-fn generations<L, N>(samples: &[RecExpr<L>], eqsat_results: &mut [EqsatResult<L, N>]) -> Vec<usize>
+fn with_generations<L, N>(
+    samples: Vec<RecExpr<L>>,
+    eqsat_results: &mut [EqsatResult<L, N>],
+) -> Vec<(RecExpr<L>, usize)>
 where
     L: Language + Display + FromOp,
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {
     let generations = samples
-        .iter()
+        .into_iter()
         .map(|sample| {
-            eqsat_results
+            let gen = eqsat_results
                 .iter_mut()
                 .map(|r| r.egraph())
-                .position(|egraph| egraph.lookup_expr(sample).is_some())
+                .position(|egraph| egraph.lookup_expr(&sample).is_some())
                 .expect("Must be in at least one of the egraphs")
-                + 1
+                + 1;
+            (sample, gen)
         })
         .collect::<Vec<_>>();
     generations
