@@ -4,7 +4,7 @@ mod substitute;
 use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -18,7 +18,7 @@ type Rewrite = egg::Rewrite<RiseLang, RiseAnalysis>;
 
 define_language! {
     #[derive(Serialize, Deserialize, EnumDiscriminants)]
-    #[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+    #[strum_discriminants(derive(EnumIter))]
     pub enum RiseLang {
         "var" = Var(Id),
         "app" = App([Id; 2]),
@@ -57,10 +57,6 @@ define_language! {
 }
 
 impl MetaInfo for RiseLang {
-    type EnumDiscriminant = RiseLangDiscriminants;
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] =
-        &[RiseLangDiscriminants::Number, RiseLangDiscriminants::Symbol];
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
@@ -73,6 +69,30 @@ impl MetaInfo for RiseLang {
                 SymbolType::Operator(position)
             }
         }
+    }
+
+    fn operator_names() -> Vec<&'static str> {
+        vec![
+            "var",
+            "app",
+            "lam",
+            "let",
+            ">>",
+            "toMem",
+            "iterateStream",
+            "map",
+            "mapSeq",
+            "split",
+            "join",
+            "transpose",
+            "rotateValues",
+            "slide",
+            "reduce",
+            "reduceSeqUnroll",
+            "zip",
+            "fst",
+            "snd",
+        ]
     }
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {

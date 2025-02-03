@@ -6,7 +6,7 @@ mod rules;
 use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoStaticStr, VariantArray};
+use strum::{EnumDiscriminants, EnumIter};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -20,7 +20,7 @@ pub type Constant = NotNan<f64>;
 
 define_language! {
     #[derive(Serialize, Deserialize, EnumDiscriminants)]
-    #[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+    #[strum_discriminants(derive(EnumIter))]
     pub enum Math {
         "d" = Diff([Id; 2]),
         "i" = Integral([Id; 2]),
@@ -42,10 +42,6 @@ define_language! {
 }
 
 impl MetaInfo for Math {
-    type EnumDiscriminant = MathDiscriminants;
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] =
-        &[MathDiscriminants::Constant, MathDiscriminants::Symbol];
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             Math::Constant(value) => SymbolType::NumericValue((*value).into()),
@@ -62,6 +58,12 @@ impl MetaInfo for Math {
             Math::Sin(_) => SymbolType::Operator(9),
             Math::Cos(_) => SymbolType::Operator(10),
         }
+    }
+
+    fn operator_names() -> Vec<&'static str> {
+        vec![
+            "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
+        ]
     }
 
     // const OPERATORS: &'static [&'static str] = cutoff_slice(MathDiscriminants::VARIANTS, 2);

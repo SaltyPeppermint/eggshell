@@ -6,7 +6,6 @@ use std::mem::{discriminant, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
 
 use super::{SketchLang, SketchParseError};
 use crate::trs::{MetaInfo, SymbolType};
@@ -15,10 +14,7 @@ use crate::trs::{MetaInfo, SymbolType};
 /// Simple alias
 pub type PartialSketch<L> = RecExpr<PartialSketchLang<L>>;
 
-#[derive(
-    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
-)]
-#[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum PartialSketchLang<L: Language> {
     /// Inactive open placeholder that needs to be filled
     Open,
@@ -75,10 +71,6 @@ impl<L: Language> Language for PartialSketchLang<L> {
 // }
 
 impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
-    type EnumDiscriminant = PartialSketchLangDiscriminants;
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] =
-        &[PartialSketchLangDiscriminants::Finished];
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             PartialSketchLang::Finished(l) => l.symbol_type(),
@@ -87,28 +79,19 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
         }
     }
 
-    fn operator_id(&self) -> Option<usize> {
-        match self {
-            PartialSketchLang::Finished(l) => l.operator_id(),
-            PartialSketchLang::Open | PartialSketchLang::Active => Self::EnumDiscriminant::iter()
-                .filter(|x| !Self::NON_OPERATORS.contains(x))
-                .position(|x| x == self.into())
-                .map(|x| x + SketchLang::<L>::n_operators()),
-        }
-    }
-
-    fn n_operators() -> usize {
-        Self::EnumDiscriminant::VARIANTS.len() - Self::NON_OPERATORS.len()
-            + SketchLang::<L>::n_operators()
-    }
+    // fn operator_id(&self) -> Option<usize> {
+    //     match self {
+    //         PartialSketchLang::Finished(l) => l.operator_id(),
+    //         PartialSketchLang::Open | PartialSketchLang::Active => Self::EnumDiscriminant::iter()
+    //             .filter(|x| !Self::NON_OPERATORS.contains(x))
+    //             .position(|x| x == self.into())
+    //             .map(|x| x + SketchLang::<L>::n_operators()),
+    //     }
+    // }
 
     fn operator_names() -> Vec<&'static str> {
-        let outer_ops = Self::EnumDiscriminant::iter()
-            .filter(|x| !Self::NON_OPERATORS.contains(x))
-            .map(std::convert::Into::<&str>::into);
-        let mut operators = SketchLang::<L>::operator_names();
-        operators.extend(outer_ops);
-
+        let mut operators = L::operator_names();
+        operators.extend(vec!["[open]", "[active]"]);
         operators
     }
 }
@@ -174,39 +157,13 @@ mod tests {
     #[test]
     fn operators() {
         let known_operators = vec![
-            "Add", "Sub", "Mul", "Div", "Mod", "Max", "Min", "Lt", "Gt", "Not", "Let", "Get", "Eq",
-            "IEq", "Or", "And", "Any", "Contains", "Or", "Open", "Active",
+            "+", "-", "*", "/", "%", "max", "min", "lt", "gt", "not", "let", "Get", "Eq", "IEq",
+            "Or", "And", "Any", "Contains", "Or", "Open", "Active",
         ];
         assert_eq!(
             PartialSketchLang::<HalideLang>::operator_names(),
             known_operators
         );
-    }
-
-    #[test]
-    fn operator_id_partial_sketch() {
-        let operator: PartialSketchLang<HalideLang> = PartialSketchLang::Open;
-        assert_eq!(operator.operator_id(), Some(19));
-    }
-
-    #[test]
-    fn operator_id_sketch() {
-        let operator: PartialSketchLang<HalideLang> = PartialSketchLang::Finished(SketchLang::Any);
-        assert_eq!(operator.operator_id(), Some(16));
-    }
-
-    #[test]
-    fn operator_id_base() {
-        let operator: PartialSketchLang<HalideLang> =
-            PartialSketchLang::Finished(SketchLang::Node(HalideLang::Add([0.into(), 0.into()])));
-        assert_eq!(operator.operator_id(), Some(0));
-    }
-
-    #[test]
-    fn operator_id_base2() {
-        let operator: PartialSketchLang<HalideLang> =
-            PartialSketchLang::Finished(SketchLang::Node(HalideLang::Max([0.into(), 0.into()])));
-        assert_eq!(operator.operator_id(), Some(5));
     }
 
     // #[test]

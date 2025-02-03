@@ -3,7 +3,6 @@ use std::mem::{discriminant, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
 
 use super::SketchParseError;
 use crate::trs::{MetaInfo, SymbolType};
@@ -12,10 +11,7 @@ use crate::trs::{MetaInfo, SymbolType};
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
 
-#[derive(
-    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
-)]
-#[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum SketchLang<L: Language> {
     /// Any program of the underlying [`Language`].
     ///
@@ -88,9 +84,6 @@ impl<L: Language> Language for SketchLang<L> {
 // }
 
 impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
-    type EnumDiscriminant = SketchLangDiscriminants;
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] = &[SketchLangDiscriminants::Node];
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             SketchLang::Node(l) => l.symbol_type(),
@@ -100,28 +93,9 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
         }
     }
 
-    fn operator_id(&self) -> Option<usize> {
-        match self {
-            SketchLang::Node(l) => l.operator_id(),
-            SketchLang::Any | SketchLang::Contains(_) | SketchLang::Or(_) => {
-                Self::EnumDiscriminant::iter()
-                    .filter(|x| !Self::NON_OPERATORS.contains(x))
-                    .position(|x| x == self.into())
-                    .map(|x| x + L::operator_names().len())
-            }
-        }
-    }
-
-    fn n_operators() -> usize {
-        Self::EnumDiscriminant::VARIANTS.len() - Self::NON_OPERATORS.len() + L::n_operators()
-    }
-
     fn operator_names() -> Vec<&'static str> {
-        let outer_ops = Self::EnumDiscriminant::iter()
-            .filter(|x| !Self::NON_OPERATORS.contains(x))
-            .map(std::convert::Into::<&str>::into);
         let mut operators = L::operator_names();
-        operators.extend(outer_ops);
+        operators.extend(vec!["?", "contains", "or"]);
         operators
     }
 }

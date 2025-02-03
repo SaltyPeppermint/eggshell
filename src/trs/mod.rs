@@ -7,7 +7,6 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use serde::Serialize;
-use strum::{IntoEnumIterator, VariantArray};
 use thiserror::Error;
 
 use pyo3::{create_exception, exceptions::PyException, PyErr};
@@ -53,40 +52,15 @@ pub enum SymbolType<'a> {
 }
 
 pub trait MetaInfo: Display + Language {
-    type EnumDiscriminant: Clone
-        + Copy
-        + Debug
-        + PartialEq
-        + Eq
-        + Display
-        + for<'a> From<&'a Self>
-        + Into<&'static str>
-        + VariantArray
-        + IntoEnumIterator
-        + 'static;
-
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant];
-
     fn symbol_type(&self) -> SymbolType;
 
     #[must_use]
-    fn operator_id(&self) -> Option<usize> {
-        Self::EnumDiscriminant::iter()
-            .filter(|x| !Self::NON_OPERATORS.contains(x))
-            .position(|x| x == self.into())
-    }
-
     fn n_operators() -> usize {
-        Self::EnumDiscriminant::VARIANTS.len() - Self::NON_OPERATORS.len()
+        Self::operator_names().len()
     }
 
     #[must_use]
-    fn operator_names() -> Vec<&'static str> {
-        Self::EnumDiscriminant::iter()
-            .filter(|x| !Self::NON_OPERATORS.contains(x))
-            .map(|x| x.into())
-            .collect()
-    }
+    fn operator_names() -> Vec<&'static str>;
 }
 
 #[derive(Debug, Error)]

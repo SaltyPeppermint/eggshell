@@ -6,7 +6,7 @@ mod rules;
 
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoStaticStr, VariantArray};
+use strum::{EnumDiscriminants, EnumIter};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem, TrsError};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -19,7 +19,7 @@ type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 // Definition of the language used.
 define_language! {
     #[derive(Serialize, Deserialize, EnumDiscriminants)]
-    #[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+    #[strum_discriminants(derive(EnumIter))]
     pub enum HalideLang {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
@@ -44,13 +44,6 @@ define_language! {
 }
 
 impl MetaInfo for HalideLang {
-    type EnumDiscriminant = HalideLangDiscriminants;
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] = &[
-        HalideLangDiscriminants::Bool,
-        HalideLangDiscriminants::Number,
-        HalideLangDiscriminants::Symbol,
-    ];
-
     #[expect(clippy::cast_precision_loss)]
     fn symbol_type(&self) -> SymbolType {
         match self {
@@ -74,6 +67,13 @@ impl MetaInfo for HalideLang {
             HalideLang::Or(_) => SymbolType::Operator(14),
             HalideLang::And(_) => SymbolType::Operator(15),
         }
+    }
+
+    fn operator_names() -> Vec<&'static str> {
+        vec![
+            "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
+            "&&",
+        ]
     }
 
     // const OPERATORS: &'static [&'static str] = cutoff_slice(HalideLangDiscriminants::VARIANTS, 3);

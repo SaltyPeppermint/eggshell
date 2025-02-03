@@ -1,9 +1,5 @@
-// use std::cmp::Ordering;
-// use std::fmt::Display;
-
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumDiscriminants, EnumIter, IntoStaticStr, VariantArray};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -13,8 +9,7 @@ pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants)]
-    #[strum_discriminants(derive(EnumIter, Display, VariantArray, IntoStaticStr))]
+    #[derive(Serialize, Deserialize)]
     pub enum SimpleLang {
         "+" = Add([Id; 2]),
         "*" = Mul([Id; 2]),
@@ -24,13 +19,6 @@ define_language! {
 }
 
 impl MetaInfo for SimpleLang {
-    type EnumDiscriminant = SimpleLangDiscriminants;
-
-    const NON_OPERATORS: &'static [Self::EnumDiscriminant] = &[
-        SimpleLangDiscriminants::Num,
-        SimpleLangDiscriminants::Symbol,
-    ];
-
     fn symbol_type(&self) -> SymbolType {
         match self {
             SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
@@ -40,12 +28,9 @@ impl MetaInfo for SimpleLang {
         }
     }
 
-    // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
-    //     SimpleLangDiscriminants::VARIANTS
-    //         .iter()
-    //         .filter(|x| Self::NON_OPERATORS.contains(*x))
-    //         .collect()
-    // }
+    fn operator_names() -> Vec<&'static str> {
+        vec!["+", "*"]
+    }
 }
 
 // impl Typeable for SimpleLang {
