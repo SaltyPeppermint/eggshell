@@ -1,5 +1,4 @@
 use egg::{FromOp, Id, Language, RecExpr};
-use hashbrown::{HashMap, HashSet};
 use serde::Serialize;
 
 use crate::trs::{MetaInfo, SymbolType, TrsError};
@@ -121,12 +120,12 @@ impl<L: Language + MetaInfo> AsFeatures<L> for RecExpr<L> {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
-pub struct PyTorchData {
+pub struct GraphData {
     nodes: Vec<Vec<f64>>,
     edges: [Vec<usize>; 2],
 }
 
-impl PyTorchData {
+impl GraphData {
     pub fn nodes(&self) -> &[Vec<f64>] {
         &self.nodes
     }
@@ -139,7 +138,7 @@ impl PyTorchData {
         rec_expr: &RecExpr<L>,
         variable_names: &[S],
         ignore_unknown: bool,
-    ) -> Result<PyTorchData, TrsError> {
+    ) -> Result<GraphData, TrsError> {
         fn rec<L: Language + MetaInfo, S: AsRef<str>>(
             rec_expr: &RecExpr<L>,
             node: &L,
@@ -197,7 +196,7 @@ impl PyTorchData {
             &mut nodes,
             &mut edges,
         )?;
-        Ok(PyTorchData { nodes, edges })
+        Ok(GraphData { nodes, edges })
     }
 
     pub fn to_rec_expr<L: MetaInfo + FromOp, S: AsRef<str>>(
@@ -205,7 +204,7 @@ impl PyTorchData {
         variable_names: &[S],
     ) -> RecExpr<L> {
         fn rec<LL: MetaInfo + FromOp, SS: AsRef<str>>(
-            data: &PyTorchData,
+            data: &GraphData,
             variable_names: &[SS],
             node_idx: usize,
             stack: &mut Vec<LL>,
@@ -278,7 +277,7 @@ mod tests {
     fn pytorch_inverse() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
-        let data = PyTorchData::new(&expr, &variable_names, false).unwrap();
+        let data = GraphData::new(&expr, &variable_names, false).unwrap();
         let new_expr: RecExpr<HalideLang> = data.to_rec_expr(&variable_names);
         assert_eq!(expr, new_expr);
         assert_eq!(expr.to_string(), new_expr.to_string());
@@ -288,7 +287,7 @@ mod tests {
     fn pytorch_format() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
-        let data = PyTorchData::new(&expr, &variable_names, false).unwrap();
+        let data = GraphData::new(&expr, &variable_names, false).unwrap();
 
         assert_eq!(
             data.nodes(),

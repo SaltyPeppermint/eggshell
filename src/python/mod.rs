@@ -33,6 +33,7 @@ macro_rules! monomorphize {
         use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::error::EggshellError;
         use $crate::features::AsFeatures;
+        use $crate::features::GraphData;
         use $crate::trs::{MetaInfo, TermRewriteSystem, TrsError};
 
         type L = <$type as TermRewriteSystem>::Language;
@@ -125,6 +126,43 @@ macro_rules! monomorphize {
                 features.push(self.0.depth());
                 let rust_vec = features.into_iter().map(|v| v as f64).collect();
                 Ok(numpy::PyArray::from_vec(py, rust_vec))
+            }
+        }
+
+        #[gen_stub_pyclass]
+        #[pyclass(frozen, module = $module_name,)]
+        #[derive(Debug, Clone, PartialEq)]
+        pub struct PyGraphData(GraphData);
+
+        #[gen_stub_pymethods]
+        #[pymethods]
+        impl PyGraphData {
+            #[must_use]
+            pub fn nodes(&self) -> Vec<Vec<f64>> {
+                self.0.nodes().to_owned()
+            }
+
+            #[must_use]
+            pub fn edges(&self) -> Vec<Vec<usize>> {
+                self.0.edges().to_vec()
+            }
+
+            #[expect(clippy::missing_errors_doc)]
+            #[new]
+            pub fn new(
+                rec_expr: PyRecExpr,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<PyGraphData> {
+                let r = GraphData::new(&rec_expr.0, &variable_names, ignore_unknown)
+                    .map_err(|e| EggshellError::<L>::from(e))
+                    .map(PyGraphData)?;
+                Ok(r)
+            }
+
+            #[must_use]
+            pub fn to_rec_expr(&self, variable_names: Vec<String>) -> PyRecExpr {
+                PyRecExpr(self.0.to_rec_expr(&variable_names))
             }
         }
 

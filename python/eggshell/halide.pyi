@@ -5,6 +5,18 @@ import numpy
 import numpy.typing
 import typing
 
+class PyGraphData:
+    def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str], ignore_unknown:bool): ...
+    def nodes(self) -> list[list[float]]:
+        ...
+
+    def edges(self) -> list[list[int]]:
+        ...
+
+    def to_rec_expr(self, variable_names:typing.Sequence[str]) -> PyRecExpr:
+        ...
+
+
 class PyNode:
     def __new__(cls,node_name:str, children:typing.Sequence[int]): ...
     def name(self) -> str:
