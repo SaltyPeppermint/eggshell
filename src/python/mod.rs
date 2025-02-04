@@ -112,12 +112,11 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-            pub fn featurize_simple<'py>(
+            pub fn featurize_simple(
                 &self,
-                py: Python<'py>,
                 variable_names: Vec<String>,
                 ignore_unknown: bool,
-            ) -> PyResult<Bound<'py, numpy::PyArray1<f64>>> {
+            ) -> PyResult<Vec<f64>> {
                 let mut features = self
                     .0
                     .count_symbols(&variable_names, ignore_unknown)
@@ -125,7 +124,7 @@ macro_rules! monomorphize {
                 features.push(self.0.size());
                 features.push(self.0.depth());
                 let rust_vec = features.into_iter().map(|v| v as f64).collect();
-                Ok(numpy::PyArray::from_vec(py, rust_vec))
+                Ok(rust_vec)
             }
         }
 
@@ -217,11 +216,10 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
         pub fn many_featurize_simple(
-            py: Python<'_>,
             exprs: Vec<PyRecExpr>,
             variable_names: Vec<String>,
             ignore_unknown: bool,
-        ) -> PyResult<Bound<'_, numpy::PyArray2<f64>>> {
+        ) -> PyResult<Vec<Vec<f64>>> {
             let rust_vec = exprs
                 .par_iter()
                 .map(|expr| {
@@ -235,7 +233,7 @@ macro_rules! monomorphize {
                 })
                 .collect::<Result<Vec<_>, EggshellError<_>>>()?;
 
-            Ok(numpy::PyArray::from_vec2(py, &rust_vec).unwrap())
+            Ok(rust_vec)
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
