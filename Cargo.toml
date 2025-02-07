@@ -30,7 +30,7 @@ indexmap = { version = "2", features = ["serde"] }
 log = "0.4"
 memory-stats = "1.2"
 num = { version = "0.4", features = ["serde", "rand"] }
-num-traits = "0.2.19"
+num-traits = "0.2"
 ordered-float = { version = "4", features = ["serde"] }
 pyo3 = { version = "0.23", features = ["hashbrown"] }
 pyo3-stub-gen = "0.6.2"
