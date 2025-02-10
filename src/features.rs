@@ -121,12 +121,12 @@ impl<L: Language + MetaInfo> AsFeatures<L> for RecExpr<L> {
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct GraphData {
-    nodes: Vec<Vec<f64>>,
+    nodes: Vec<usize>,
     edges: [Vec<usize>; 2],
 }
 
 impl GraphData {
-    pub fn nodes(&self) -> &[Vec<f64>] {
+    pub fn nodes(&self) -> &[usize] {
         &self.nodes
     }
 
@@ -137,49 +137,35 @@ impl GraphData {
     pub fn new<S: AsRef<str>, L: MetaInfo>(
         rec_expr: &RecExpr<L>,
         variable_names: &[S],
-        ignore_unknown: bool,
     ) -> Result<GraphData, TrsError> {
         fn rec<L: Language + MetaInfo, S: AsRef<str>>(
             rec_expr: &RecExpr<L>,
             node: &L,
             variable_names: &[S],
-            ignore_unknown: bool,
-            nodes: &mut Vec<Vec<f64>>,
+            nodes: &mut Vec<usize>,
             edges: &mut [Vec<usize>; 2],
         ) -> Result<(), TrsError> {
             // All operators, variable_names, and last two are the constant symbol with its value
-            let mut node_feature = initialize_feature_vector::<L, S>(variable_names);
-            match node.symbol_type() {
-                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => node_feature[idx] = 1.0,
+            let node_id = match node.symbol_type() {
+                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => Ok(idx),
                 // right behind the operators len for the constant type
-                SymbolType::NumericValue(v) => {
-                    let node_feature_len = node_feature.len();
-                    node_feature[node_feature_len - 2] = 1.0;
-                    node_feature[node_feature_len - 1] = v;
-                }
+                SymbolType::NumericValue(_) => Ok(L::operator_names().len() + variable_names.len()),
                 SymbolType::Variable(name) => {
                     if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
                         // 1 since we count as all the same
-                        node_feature[L::operator_names().len() + var_idx] = 1.0;
-                    } else if !ignore_unknown {
-                        return Err(TrsError::UnknownSymbol(name.to_owned()));
+                        Ok(L::operator_names().len() + var_idx)
+                    } else {
+                        Err(TrsError::UnknownSymbol(name.to_owned()))
                     }
                 }
-            };
-            nodes.push(node_feature);
+            }?;
+            nodes.push(node_id);
             let parent_position = nodes.len() - 1;
             for c_id in node.children() {
                 let child_position = nodes.len();
                 edges[0].push(parent_position);
                 edges[1].push(child_position);
-                rec(
-                    rec_expr,
-                    &rec_expr[*c_id],
-                    variable_names,
-                    ignore_unknown,
-                    nodes,
-                    edges,
-                )?;
+                rec(rec_expr, &rec_expr[*c_id], variable_names, nodes, edges)?;
             }
             Ok(())
         }
@@ -192,7 +178,6 @@ impl GraphData {
             rec_expr,
             &rec_expr[root],
             variable_names,
-            ignore_unknown,
             &mut nodes,
             &mut edges,
         )?;
@@ -238,33 +223,20 @@ impl GraphData {
         children: Vec<Id>,
         variable_names: &[S],
     ) -> L {
-        let node_f = &self.nodes[node_idx];
+        let node_id = self.nodes[node_idx];
 
-        let index_of_max = node_f
-            .iter()
-            .take(node_f.len() - 1)
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(i, _)| i)
-            .unwrap();
-
-        // Check if constant
-        if index_of_max == node_f.len() - 2 {
-            return L::from_op(&node_f[node_f.len() - 1].to_string(), vec![]).unwrap();
-        }
-
-        // check if variable
-        if index_of_max >= L::operator_names().len() {
-            let var_idx = index_of_max - L::operator_names().len();
+        // Check if constant.
+        // FIXME: Currently all constants get set to zero, we should fix this at some point
+        if node_id == L::operator_names().len() + variable_names.len() {
+            L::from_op("0", vec![]).unwrap()
+            // check if variable
+        } else if node_id >= L::operator_names().len() {
+            let var_idx = node_id - L::operator_names().len();
             return L::from_op(variable_names[var_idx].as_ref(), children).unwrap();
+        } else {
+            L::from_op(L::operator_names()[node_id], children).unwrap()
         }
-
-        L::from_op(L::operator_names()[index_of_max], children).unwrap()
     }
-}
-
-fn initialize_feature_vector<L: Language + MetaInfo, S>(variable_names: &[S]) -> Vec<f64> {
-    vec![0f64; L::operator_names().len() + variable_names.len() + 2]
 }
 
 #[cfg(test)]
@@ -275,9 +247,9 @@ mod tests {
 
     #[test]
     fn pytorch_inverse() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( < ( * v0 0 ) ( * ( + v0 0 ) 0 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
-        let data = GraphData::new(&expr, &variable_names, false).unwrap();
+        let data = GraphData::new(&expr, &variable_names).unwrap();
         let new_expr: RecExpr<HalideLang> = data.to_rec_expr(&variable_names);
         assert_eq!(expr, new_expr);
         assert_eq!(expr.to_string(), new_expr.to_string());
@@ -285,51 +257,11 @@ mod tests {
 
     #[test]
     fn pytorch_format() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( < ( * v0 0 ) ( * ( + v0 0 ) 0 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
-        let data = GraphData::new(&expr, &variable_names, false).unwrap();
+        let data = GraphData::new(&expr, &variable_names).unwrap();
 
-        assert_eq!(
-            data.nodes(),
-            vec![
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0
-                ],
-                vec![
-                    0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0
-                ],
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    1.0, 0.0, 0.0
-                ],
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 1.0, 35.0
-                ],
-                vec![
-                    0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0
-                ],
-                vec![
-                    1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0
-                ],
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    1.0, 0.0, 0.0
-                ],
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 1.0, 5.0
-                ],
-                vec![
-                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-                    0.0, 1.0, 17.0
-                ]
-            ]
-        );
+        assert_eq!(data.nodes(), vec![7, 2, 16, 17, 2, 0, 16, 17, 17]);
         assert_eq!(
             data.edges(),
             &[vec![0, 1, 1, 0, 4, 5, 5, 4], vec![1, 2, 3, 4, 5, 6, 7, 8]]

@@ -137,7 +137,7 @@ macro_rules! monomorphize {
         #[pymethods]
         impl PyGraphData {
             #[must_use]
-            pub fn nodes(&self) -> Vec<Vec<f64>> {
+            pub fn nodes(&self) -> Vec<usize> {
                 self.0.nodes().to_owned()
             }
 
@@ -148,12 +148,8 @@ macro_rules! monomorphize {
 
             #[expect(clippy::missing_errors_doc)]
             #[new]
-            pub fn new(
-                rec_expr: PyRecExpr,
-                variable_names: Vec<String>,
-                ignore_unknown: bool,
-            ) -> PyResult<PyGraphData> {
-                let r = GraphData::new(&rec_expr.0, &variable_names, ignore_unknown)
+            pub fn new(rec_expr: PyRecExpr, variable_names: Vec<String>) -> PyResult<PyGraphData> {
+                let r = GraphData::new(&rec_expr.0, &variable_names)
                     .map_err(|e| EggshellError::<L>::from(e))
                     .map(PyGraphData)?;
                 Ok(r)

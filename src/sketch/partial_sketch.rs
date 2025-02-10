@@ -90,7 +90,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
     // }
 
     fn operator_names() -> Vec<&'static str> {
-        let mut operators = L::operator_names();
+        let mut operators = SketchLang::<L>::operator_names();
         operators.extend(vec!["[open]", "[active]"]);
         operators
     }
@@ -157,8 +157,8 @@ mod tests {
     #[test]
     fn operators() {
         let known_operators = vec![
-            "+", "-", "*", "/", "%", "max", "min", "lt", "gt", "not", "let", "Get", "Eq", "IEq",
-            "Or", "And", "Any", "Contains", "Or", "Open", "Active",
+            "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
+            "&&", "?", "contains", "or", "[open]", "[active]",
         ];
         assert_eq!(
             PartialSketchLang::<HalideLang>::operator_names(),
