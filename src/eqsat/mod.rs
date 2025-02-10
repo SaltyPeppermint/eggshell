@@ -1,4 +1,3 @@
-mod class_cost;
 mod hooks;
 
 pub mod conf;
@@ -9,12 +8,10 @@ use egg::{
     Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
     Runner, SimpleScheduler,
 };
-use hashbrown::HashMap;
 use log::info;
 use serde::Serialize;
 
 use crate::sketch::{extract, Sketch};
-use class_cost::{ClassExtractor, LutCost};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 
@@ -176,17 +173,6 @@ where
         CF: CostFunction<L>,
     {
         let extractor = Extractor::new(&self.egraph, cost_fn);
-        extractor.find_best(root)
-    }
-
-    /// Extract with a table of costs
-    pub fn table_extract(
-        &self,
-        root: Id,
-        cost_table: HashMap<(Id, usize), f64>,
-    ) -> (f64, RecExpr<L>) {
-        let cost_function = LutCost::new(cost_table, &self.egraph);
-        let extractor = ClassExtractor::new(&self.egraph, cost_function);
         extractor.find_best(root)
     }
 
