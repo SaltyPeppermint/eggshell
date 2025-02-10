@@ -4,8 +4,8 @@
 import typing
 
 class PyGraphData:
-    def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str], ignore_unknown:bool): ...
-    def nodes(self) -> list[list[float]]:
+    def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str]): ...
+    def nodes(self) -> list[int]:
         ...
 
     def edges(self) -> list[list[int]]:
