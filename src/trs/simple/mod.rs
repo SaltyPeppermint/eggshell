@@ -1,7 +1,9 @@
 use egg::{define_language, rewrite, Id, Symbol};
 use serde::{Deserialize, Serialize};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
+
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
@@ -9,8 +11,9 @@ pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize)]
-    pub enum SimpleLang {
+    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[strum_discriminants(derive(EnumIter))]
+        pub enum SimpleLang {
         "+" = Add([Id; 2]),
         "*" = Mul([Id; 2]),
         Num(i32),
@@ -22,15 +25,21 @@ impl MetaInfo for SimpleLang {
     fn symbol_type(&self) -> SymbolType {
         match self {
             SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            SimpleLang::Num(value) => SymbolType::NumericValue((*value).into()),
-            SimpleLang::Add(_) => SymbolType::Operator(0),
-            SimpleLang::Mul(_) => SymbolType::Operator(1),
+            SimpleLang::Num(value) => SymbolType::Constant(0, (*value).into()),
+            _ => {
+                let position = SimpleLangDiscriminants::iter()
+                    .position(|x| x == self.into())
+                    .unwrap();
+                SymbolType::Operator(position + Self::N_CONST_TYPES)
+            }
         }
     }
 
     fn operator_names() -> Vec<&'static str> {
         vec!["+", "*"]
     }
+
+    const N_CONST_TYPES: usize = 1;
 }
 
 // impl Typeable for SimpleLang {

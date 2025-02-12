@@ -3,6 +3,7 @@ use std::mem::{discriminant, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::SketchParseError;
 use crate::trs::{MetaInfo, SymbolType};
@@ -11,7 +12,10 @@ use crate::trs::{MetaInfo, SymbolType};
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
+)]
+#[strum_discriminants(derive(EnumIter))]
 pub enum SketchLang<L: Language> {
     /// Any program of the underlying [`Language`].
     ///
@@ -85,11 +89,13 @@ impl<L: Language> Language for SketchLang<L> {
 
 impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
     fn symbol_type(&self) -> SymbolType {
-        match self {
-            SketchLang::Node(l) => l.symbol_type(),
-            SketchLang::Any => SymbolType::MetaSymbol(1 + L::operator_names().len()),
-            SketchLang::Contains(_) => SymbolType::MetaSymbol(2 + L::operator_names().len()),
-            SketchLang::Or(_) => SymbolType::MetaSymbol(3 + L::operator_names().len()),
+        if let SketchLang::Node(l) = self {
+            l.symbol_type()
+        } else {
+            let position = SketchLangDiscriminants::iter()
+                .position(|x| x == self.into())
+                .unwrap();
+            SymbolType::Operator(position + Self::N_CONST_TYPES)
         }
     }
 
@@ -98,6 +104,8 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
         operators.extend(vec!["?", "contains", "or"]);
         operators
     }
+
+    const N_CONST_TYPES: usize = L::N_CONST_TYPES;
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {

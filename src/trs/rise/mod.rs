@@ -60,13 +60,12 @@ impl MetaInfo for RiseLang {
     fn symbol_type(&self) -> SymbolType {
         match self {
             RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            RiseLang::Number(value) => SymbolType::NumericValue((*value).into()),
-
+            RiseLang::Number(value) => SymbolType::Constant(0, (*value).into()),
             _ => {
                 let position = RiseLangDiscriminants::iter()
                     .position(|x| x == self.into())
                     .unwrap();
-                SymbolType::Operator(position)
+                SymbolType::Operator(position + Self::N_CONST_TYPES)
             }
         }
     }
@@ -94,6 +93,8 @@ impl MetaInfo for RiseLang {
             "snd",
         ]
     }
+
+    const N_CONST_TYPES: usize = 1;
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
     //     let mut o = RiseLangDiscriminants::VARIANTS.to_vec();
@@ -237,21 +238,21 @@ mod tests {
     fn get_var_type() {
         let symbol = RiseLang::Var(Id::from(0));
         let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Operator(0));
+        assert_eq!(symbol_type, SymbolType::Operator(1));
     }
 
     #[test]
     fn get_var_type2() {
         let symbol = RiseLang::Map;
         let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Operator(7));
+        assert_eq!(symbol_type, SymbolType::Operator(8));
     }
 
     #[test]
     fn get_num_type() {
         let symbol = RiseLang::Number(1);
         let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::NumericValue(1.0));
+        assert_eq!(symbol_type, SymbolType::Constant(0, 1.0));
     }
 
     #[test]

@@ -20,21 +20,6 @@ class PyGraphData:
         ...
 
 
-class PyNode:
-    def __new__(cls,node_name:str, children:typing.Sequence[int]): ...
-    def __str__(self) -> str:
-        ...
-
-    def is_leaf(self) -> bool:
-        ...
-
-    def children(self) -> list[int]:
-        ...
-
-    def features(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[float]:
-        ...
-
-
 class PyRecExpr:
     r"""
     Wrapper type for Python
@@ -48,9 +33,6 @@ class PyRecExpr:
         ...
 
     def __repr__(self) -> str:
-        ...
-
-    def children_of(self, node:PyNode) -> list[PyNode]:
         ...
 
     def arity(self, position:int) -> int:

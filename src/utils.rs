@@ -75,40 +75,6 @@ where
     }
 }
 
-// // HELPER TO CUT OFF N LAST ELEMENTS OF A SLICE
-// pub(crate) const fn cutoff_slice<T>(slice: &[T], cutoff: usize) -> &[T] {
-//     let mut slice = slice;
-//     let max_len = slice.len() - cutoff;
-//     loop {
-//         if slice.len() == max_len {
-//             return slice;
-//         }
-
-//         slice = match slice {
-//             [rest @ .., _last] => rest,
-//             _ => panic!("Index out of bounds"),
-//         }
-//     }
-// }
-
-// pub(crate) trait Tree: Sized {
-//     fn children(&self) -> &[Self];
-
-//     fn size(&self) -> usize {
-//         1 + self.children().iter().map(|c| c.size()).sum::<usize>()
-//     }
-
-//     fn depth(&self) -> usize {
-//         1 + self.children().iter().map(|c| c.depth()).max().unwrap_or(0)
-//     }
-// }
-
-// impl<L: Language> Tree for RecExpr<L> {
-//     fn children(&self) -> &[Self] {
-//         self.children()
-//     }
-// }
-
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
 #[derive(Debug, PartialEq, Eq, Clone)]

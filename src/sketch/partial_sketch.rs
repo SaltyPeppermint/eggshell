@@ -6,6 +6,7 @@ use std::mem::{discriminant, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{SketchLang, SketchParseError};
 use crate::trs::{MetaInfo, SymbolType};
@@ -14,7 +15,10 @@ use crate::trs::{MetaInfo, SymbolType};
 /// Simple alias
 pub type PartialSketch<L> = RecExpr<PartialSketchLang<L>>;
 
-#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
+)]
+#[strum_discriminants(derive(EnumIter))]
 pub enum PartialSketchLang<L: Language> {
     /// Inactive open placeholder that needs to be filled
     Open,
@@ -72,28 +76,23 @@ impl<L: Language> Language for PartialSketchLang<L> {
 
 impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
     fn symbol_type(&self) -> SymbolType {
-        match self {
-            PartialSketchLang::Finished(l) => l.symbol_type(),
-            PartialSketchLang::Open => SymbolType::MetaSymbol(1 + L::operator_names().len()),
-            PartialSketchLang::Active => SymbolType::MetaSymbol(2 + L::operator_names().len()),
+        if let PartialSketchLang::Finished(l) = self {
+            l.symbol_type()
+        } else {
+            let position = PartialSketchLangDiscriminants::iter()
+                .position(|x| x == self.into())
+                .unwrap();
+            SymbolType::Operator(position + Self::N_CONST_TYPES)
         }
     }
-
-    // fn operator_id(&self) -> Option<usize> {
-    //     match self {
-    //         PartialSketchLang::Finished(l) => l.operator_id(),
-    //         PartialSketchLang::Open | PartialSketchLang::Active => Self::EnumDiscriminant::iter()
-    //             .filter(|x| !Self::NON_OPERATORS.contains(x))
-    //             .position(|x| x == self.into())
-    //             .map(|x| x + SketchLang::<L>::n_operators()),
-    //     }
-    // }
 
     fn operator_names() -> Vec<&'static str> {
         let mut operators = SketchLang::<L>::operator_names();
         operators.extend(vec!["[open]", "[active]"]);
         operators
     }
+
+    const N_CONST_TYPES: usize = SketchLang::<L>::N_CONST_TYPES;
 }
 
 impl<L: Language + Display> Display for PartialSketchLang<L> {

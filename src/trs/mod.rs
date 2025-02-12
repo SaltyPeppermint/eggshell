@@ -46,7 +46,7 @@ pub trait TermRewriteSystem {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SymbolType<'a> {
     Operator(usize),
-    NumericValue(f64),
+    Constant(usize, f64),
     Variable(&'a str),
     MetaSymbol(usize),
 }
@@ -61,6 +61,8 @@ pub trait MetaInfo: Display + Language {
 
     #[must_use]
     fn operator_names() -> Vec<&'static str>;
+
+    const N_CONST_TYPES: usize;
 }
 
 #[derive(Debug, Error)]

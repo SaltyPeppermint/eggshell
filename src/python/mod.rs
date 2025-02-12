@@ -24,7 +24,7 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty, $module_name: tt) => {
-        use egg::{FromOp, Id, Language, RecExpr};
+        use egg::RecExpr;
         use pyo3::prelude::*;
         use pyo3_stub_gen::derive::*;
         use rayon::prelude::*;
@@ -34,7 +34,7 @@ macro_rules! monomorphize {
         use $crate::error::EggshellError;
         use $crate::features::AsFeatures;
         use $crate::features::GraphData;
-        use $crate::trs::{MetaInfo, TermRewriteSystem, TrsError};
+        use $crate::trs::{MetaInfo, TermRewriteSystem};
 
         type L = <$type as TermRewriteSystem>::Language;
         // type N = <$type as TermRewriteSystem>::Analysis;
@@ -74,14 +74,14 @@ macro_rules! monomorphize {
                 format!("{self:?}")
             }
 
-            #[must_use]
-            pub fn children_of(&self, node: &PyNode) -> Vec<PyNode> {
-                node.0
-                    .children()
-                    .iter()
-                    .map(|c_id| PyNode(self.0[*c_id].to_owned()))
-                    .collect()
-            }
+            // #[must_use]
+            // pub fn children_of(&self, node: &PyNode) -> Vec<PyNode> {
+            //     node.0
+            //         .children()
+            //         .iter()
+            //         .map(|c_id| PyNode(self.0[*c_id].to_owned()))
+            //         .collect()
+            // }
 
             #[must_use]
             pub fn arity(&self, position: usize) -> usize {
@@ -229,52 +229,39 @@ macro_rules! monomorphize {
             }
         }
 
-        #[gen_stub_pyclass]
-        #[pyclass(frozen, module = $module_name,)]
-        #[derive(Debug, Clone, PartialEq)]
-        pub struct PyNode(L);
+        // #[gen_stub_pyclass]
+        // #[pyclass(frozen, module = $module_name,)]
+        // #[derive(Debug, Clone, PartialEq)]
+        // pub struct PyNode(L);
 
-        #[gen_stub_pymethods]
-        #[pymethods]
-        impl PyNode {
-            #[expect(clippy::missing_errors_doc)]
-            #[new]
-            pub fn new(node_name: String, children: Vec<usize>) -> PyResult<Self> {
-                let c_ids = children.into_iter().map(|id| Id::from(id)).collect();
-                let expr =
-                    L::from_op(&node_name, c_ids).map_err(|e| EggshellError::<L>::from(e))?;
-                Ok(PyNode(expr))
-            }
+        // #[gen_stub_pymethods]
+        // #[pymethods]
+        // impl PyNode {
+        //     #[expect(clippy::missing_errors_doc)]
+        //     #[new]
+        //     pub fn new(node_name: String, children: Vec<usize>) -> PyResult<Self> {
+        //         let c_ids = children.into_iter().map(|id| Id::from(id)).collect();
+        //         let expr =
+        //             L::from_op(&node_name, c_ids).map_err(|e| EggshellError::<L>::from(e))?;
+        //         Ok(PyNode(expr))
+        //     }
 
-            #[must_use]
-            pub fn __str__(&self) -> String {
-                self.0.to_string()
-            }
+        //     #[must_use]
+        //     pub fn __str__(&self) -> String {
+        //         self.0.to_string()
+        //     }
 
-            #[must_use]
-            pub fn is_leaf(&self) -> bool {
-                self.0.is_leaf()
-            }
+        //     #[must_use]
+        //     pub fn is_leaf(&self) -> bool {
+        //         self.0.is_leaf()
+        //     }
 
-            #[must_use]
-            pub fn children(&self) -> Vec<usize> {
-                self.0.children().iter().map(|c| (*c).into()).collect()
-            }
+        //     #[must_use]
+        //     pub fn children(&self) -> Vec<usize> {
+        //         self.0.children().iter().map(|c| (*c).into()).collect()
+        //     }
 
-            #[expect(clippy::missing_errors_doc)]
-            pub fn features(
-                &self,
-                variable_names: Vec<String>,
-                ignore_unknown: bool,
-            ) -> PyResult<Vec<f64>> {
-                let f = $crate::features::features(&self.0, &variable_names, ignore_unknown)
-                    .map_err(|e| EggshellError::<L>::from(e))?
-                    .ok_or_else(|| {
-                        EggshellError::<L>::from(TrsError::IgnoredSymbol(self.__str__()))
-                    })?;
-                Ok(f)
-            }
-        }
+        // }
 
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
@@ -324,7 +311,7 @@ macro_rules! monomorphize {
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<PyRecExpr>()?;
             module.add_class::<PyGraphData>()?;
-            module.add_class::<PyNode>()?;
+            // module.add_class::<PyNode>()?;
 
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;

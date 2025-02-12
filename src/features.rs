@@ -3,42 +3,6 @@ use serde::Serialize;
 
 use crate::trs::{MetaInfo, SymbolType, TrsError};
 
-pub fn features<L: MetaInfo, S: AsRef<str>>(
-    symbol: &L,
-    variable_names: &[S],
-    ignore_unknown: bool,
-) -> Result<Option<Vec<f64>>, TrsError> {
-    if ignore_unknown && matches!(symbol.symbol_type(), SymbolType::Variable(_)) {
-        return Ok(None);
-    }
-
-    // All the leaves
-    // plus two for the constant type and its value
-    // plus n for the variable names
-    let mut features = vec![0.0; L::operator_names().len() + 2 + variable_names.len()];
-
-    match symbol.symbol_type() {
-        SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => {
-            features[idx] = 1.0;
-        }
-        SymbolType::NumericValue(value) => {
-            let constant_idx = L::operator_names().len() + 1;
-            let const_value_idx = L::operator_names().len() + 2;
-            features[constant_idx] = 1.0;
-            features[const_value_idx] = value;
-        }
-
-        SymbolType::Variable(name) => {
-            if let Some(variable_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
-                features[L::operator_names().len() + 3 + variable_idx] = 1.0;
-            } else {
-                return Err(TrsError::UnknownSymbol(name.to_owned()));
-            }
-        }
-    }
-    Ok(Some(features))
-}
-
 pub trait AsFeatures<L: MetaInfo> {
     fn count_symbols<S: AsRef<str>>(
         &self,
@@ -68,11 +32,11 @@ impl<L: Language + MetaInfo> AsFeatures<L> for RecExpr<L> {
             match node.symbol_type() {
                 SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => f[idx] += 1,
                 // right behind the operators len for the constant type
-                SymbolType::NumericValue(_) => f[L::operator_names().len()] += 1,
+                SymbolType::Constant(idx, _v) => f[idx] += 1,
                 SymbolType::Variable(name) => {
                     if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
                         // 1 since we count as all the same
-                        f[L::operator_names().len() + var_idx] += 1;
+                        f[L::operator_names().len() + L::N_CONST_TYPES + var_idx] += 1;
                     } else if !ignore_unknown {
                         return Err(TrsError::UnknownSymbol(name.to_owned()));
                     }
@@ -155,13 +119,11 @@ impl GraphData {
             let (node_id, const_value) = match node.symbol_type() {
                 SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => Ok((idx, None)),
                 // right behind the operators len for the constant type
-                SymbolType::NumericValue(v) => {
-                    Ok((L::operator_names().len() + variable_names.len(), Some(v)))
-                }
+                SymbolType::Constant(idx, v) => Ok((idx, Some(v))),
                 SymbolType::Variable(name) => {
                     if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
                         // 1 since we count as all the same
-                        Ok((L::operator_names().len() + var_idx, None))
+                        Ok((L::N_CONST_TYPES + L::operator_names().len() + var_idx, None))
                     } else {
                         Err(TrsError::UnknownSymbol(name.to_owned()))
                     }
@@ -245,24 +207,24 @@ impl GraphData {
         children: Vec<Id>,
         variable_names: &[S],
     ) -> L {
+        // It goes consts | operators | metasymbols | variables
         let node_id = self.nodes[node_idx];
-
-        if node_id == L::operator_names().len() + variable_names.len() {
+        if node_id < L::N_CONST_TYPES {
             // If it is a constant we can safely unwrap and stringify
             let const_value_string = self.const_values[node_idx].unwrap().to_string();
             L::from_op(&const_value_string, vec![]).unwrap()
-            // check if variable
-        } else if node_id >= L::operator_names().len() {
-            let var_idx = node_id - L::operator_names().len();
-            return L::from_op(variable_names[var_idx].as_ref(), children).unwrap();
+        } else if node_id < L::operator_names().len() + L::N_CONST_TYPES {
+            L::from_op(L::operator_names()[node_id - L::N_CONST_TYPES], children).unwrap()
         } else {
-            L::from_op(L::operator_names()[node_id], children).unwrap()
+            // At the end are the variables so if it is lower we can just lookup
+            let var_idx = node_id - L::operator_names().len() - L::N_CONST_TYPES;
+            return L::from_op(variable_names[var_idx].as_ref(), children).unwrap();
         }
     }
 
     pub fn num_node_types<L: MetaInfo, S: AsRef<str>>(variable_names: &[S]) -> usize {
         // Plus 1 for constant!
-        L::operator_names().len() + variable_names.len() + 1
+        L::operator_names().len() + variable_names.len() + L::N_CONST_TYPES
     }
 }
 
@@ -288,7 +250,7 @@ mod tests {
         let variable_names = vec!["v0"];
         let data = GraphData::new(&expr, &variable_names).unwrap();
 
-        assert_eq!(data.nodes(), vec![7, 2, 16, 17, 2, 0, 16, 17, 17]);
+        assert_eq!(data.nodes(), vec![9, 4, 18, 1, 4, 2, 18, 1, 1]);
         assert_eq!(
             data.edges(),
             &[vec![0, 1, 1, 0, 4, 5, 5, 4], vec![1, 2, 3, 4, 5, 6, 7, 8]]

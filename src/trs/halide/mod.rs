@@ -6,7 +6,7 @@ mod rules;
 
 use egg::{define_language, Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem, TrsError};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -47,25 +47,16 @@ impl MetaInfo for HalideLang {
     #[expect(clippy::cast_precision_loss)]
     fn symbol_type(&self) -> SymbolType {
         match self {
-            HalideLang::Bool(value) => SymbolType::NumericValue(if *value { 1.0 } else { 0.0 }),
-            HalideLang::Number(value) => SymbolType::NumericValue(*value as f64),
             HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            HalideLang::Add(_) => SymbolType::Operator(0),
-            HalideLang::Sub(_) => SymbolType::Operator(1),
-            HalideLang::Mul(_) => SymbolType::Operator(2),
-            HalideLang::Div(_) => SymbolType::Operator(3),
-            HalideLang::Mod(_) => SymbolType::Operator(4),
-            HalideLang::Max(_) => SymbolType::Operator(5),
-            HalideLang::Min(_) => SymbolType::Operator(6),
-            HalideLang::Lt(_) => SymbolType::Operator(7),
-            HalideLang::Gt(_) => SymbolType::Operator(8),
-            HalideLang::Not(_) => SymbolType::Operator(9),
-            HalideLang::Let(_) => SymbolType::Operator(10),
-            HalideLang::Get(_) => SymbolType::Operator(11),
-            HalideLang::Eq(_) => SymbolType::Operator(12),
-            HalideLang::IEq(_) => SymbolType::Operator(13),
-            HalideLang::Or(_) => SymbolType::Operator(14),
-            HalideLang::And(_) => SymbolType::Operator(15),
+            HalideLang::Bool(value) => SymbolType::Constant(0, if *value { 1.0 } else { 0.0 }),
+            HalideLang::Number(value) => SymbolType::Constant(1, *value as f64),
+
+            _ => {
+                let position = HalideLangDiscriminants::iter()
+                    .position(|x| x == self.into())
+                    .unwrap();
+                SymbolType::Operator(position + Self::N_CONST_TYPES)
+            }
         }
     }
 
@@ -76,6 +67,7 @@ impl MetaInfo for HalideLang {
         ]
     }
 
+    const N_CONST_TYPES: usize = 2;
     // const OPERATORS: &'static [&'static str] = cutoff_slice(HalideLangDiscriminants::VARIANTS, 3);
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {

@@ -6,7 +6,7 @@ mod rules;
 use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter};
+use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -44,19 +44,14 @@ define_language! {
 impl MetaInfo for Math {
     fn symbol_type(&self) -> SymbolType {
         match self {
-            Math::Constant(value) => SymbolType::NumericValue((*value).into()),
             Math::Symbol(name) => SymbolType::Variable(name.as_str()),
-            Math::Diff(_) => SymbolType::Operator(0),
-            Math::Integral(_) => SymbolType::Operator(1),
-            Math::Add(_) => SymbolType::Operator(2),
-            Math::Sub(_) => SymbolType::Operator(3),
-            Math::Mul(_) => SymbolType::Operator(4),
-            Math::Div(_) => SymbolType::Operator(5),
-            Math::Pow(_) => SymbolType::Operator(6),
-            Math::Ln(_) => SymbolType::Operator(7),
-            Math::Sqrt(_) => SymbolType::Operator(8),
-            Math::Sin(_) => SymbolType::Operator(9),
-            Math::Cos(_) => SymbolType::Operator(10),
+            Math::Constant(value) => SymbolType::Constant(0, (*value).into()),
+            _ => {
+                let position = MathDiscriminants::iter()
+                    .position(|x| x == self.into())
+                    .unwrap();
+                SymbolType::Operator(position + Self::N_CONST_TYPES)
+            }
         }
     }
 
@@ -66,7 +61,7 @@ impl MetaInfo for Math {
         ]
     }
 
-    // const OPERATORS: &'static [&'static str] = cutoff_slice(MathDiscriminants::VARIANTS, 2);
+    const N_CONST_TYPES: usize = 1;
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
     //     let mut o = MathDiscriminants::VARIANTS.to_vec();
