@@ -4,20 +4,25 @@
 import typing
 
 class PyGraphData:
+    nodes: list[int]
+    const_values: list[typing.Optional[float]]
+    edges: list[list[int]]
     def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str]): ...
-    def nodes(self) -> list[int]:
-        ...
-
-    def edges(self) -> list[list[int]]:
+    @staticmethod
+    def batch_new(rec_exprs:typing.Sequence[PyRecExpr], variable_names:typing.Sequence[str]) -> list[PyGraphData]:
         ...
 
     def to_rec_expr(self, variable_names:typing.Sequence[str]) -> PyRecExpr:
         ...
 
+    @staticmethod
+    def num_node_types(variable_names:typing.Sequence[str]) -> int:
+        ...
+
 
 class PyNode:
     def __new__(cls,node_name:str, children:typing.Sequence[int]): ...
-    def name(self) -> str:
+    def __str__(self) -> str:
         ...
 
     def is_leaf(self) -> bool:
@@ -36,7 +41,7 @@ class PyRecExpr:
     """
     def __new__(cls,s_expr_str:str): ...
     @staticmethod
-    def many_new(s_expr_strs:typing.Sequence[str]) -> list[PyRecExpr]:
+    def batch_new(s_expr_strs:typing.Sequence[str]) -> list[PyRecExpr]:
         ...
 
     def __str__(self) -> str:
@@ -60,19 +65,21 @@ class PyRecExpr:
     def count_symbols(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[int]:
         ...
 
-    def featurize_simple(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[float]:
+    def simple_features(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[float]:
+        ...
+
+    @staticmethod
+    def batch_simple_features(exprs:typing.Sequence[PyRecExpr], variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[list[float]]:
+        ...
+
+    @staticmethod
+    def simple_feature_names(var_names:typing.Sequence[str]) -> list[str]:
         ...
 
 
 def eqsat_check(start:PyRecExpr,goal:PyRecExpr,iter_limit:int) -> tuple[int, str, str]:
     ...
 
-def feature_names_simple(var_names:typing.Sequence[str]) -> list[str]:
-    ...
-
 def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr,iter_limit:int) -> list[tuple[int, str, str]]:
-    ...
-
-def many_featurize_simple(exprs:typing.Sequence[PyRecExpr],variable_names:typing.Sequence[str],ignore_unknown:bool) -> list[list[float]]:
     ...
 

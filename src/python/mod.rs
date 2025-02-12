@@ -51,16 +51,16 @@ macro_rules! monomorphize {
             /// Parse from string
             #[expect(clippy::missing_errors_doc)]
             #[new]
-            pub fn new(s_expr_str: &str) -> PyResult<Self> {
+            pub fn new(s_expr_str: &str) -> PyResult<PyRecExpr> {
                 let rec_expr = s_expr_str
                     .parse::<egg::RecExpr<L>>()
                     .map_err(|e| EggshellError::from(e))?;
-                Ok(Self(rec_expr))
+                Ok(PyRecExpr(rec_expr))
             }
 
             #[expect(clippy::missing_errors_doc)]
             #[staticmethod]
-            pub fn many_new(s_expr_strs: Vec<String>) -> PyResult<Vec<Self>> {
+            pub fn batch_new(s_expr_strs: Vec<String>) -> PyResult<Vec<PyRecExpr>> {
                 s_expr_strs.par_iter().map(|s| PyRecExpr::new(s)).collect()
             }
 
@@ -112,7 +112,7 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-            pub fn featurize_simple(
+            pub fn simple_features(
                 &self,
                 variable_names: Vec<String>,
                 ignore_unknown: bool,
@@ -126,26 +126,53 @@ macro_rules! monomorphize {
                 let rust_vec = features.into_iter().map(|v| v as f64).collect();
                 Ok(rust_vec)
             }
+
+            #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
+            #[staticmethod]
+            pub fn batch_simple_features(
+                exprs: Vec<PyRecExpr>,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<Vec<Vec<f64>>> {
+                let rust_vec = exprs
+                    .par_iter()
+                    .map(|expr| {
+                        let mut features = expr
+                            .0
+                            .count_symbols(&variable_names, ignore_unknown)
+                            .map_err(|e| EggshellError::<L>::from(e))?;
+                        features.push(expr.0.size());
+                        features.push(expr.0.depth());
+                        Ok(features.into_iter().map(|v| v as f64).collect())
+                    })
+                    .collect::<Result<Vec<_>, EggshellError<_>>>()?;
+
+                Ok(rust_vec)
+            }
+
+            #[must_use]
+            #[staticmethod]
+            pub fn simple_feature_names(var_names: Vec<String>) -> Vec<String> {
+                let mut symbol_names: Vec<String> = L::operator_names()
+                    .into_iter()
+                    .map(|c| c.to_owned())
+                    .collect();
+                symbol_names.push("CONSTANT".to_owned());
+                symbol_names.extend(var_names);
+                symbol_names.push("SIZE".to_owned());
+                symbol_names.push("DEPTH".to_owned());
+                symbol_names
+            }
         }
 
         #[gen_stub_pyclass]
-        #[pyclass(frozen, module = $module_name,)]
+        #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         pub struct PyGraphData(GraphData);
 
         #[gen_stub_pymethods]
         #[pymethods]
         impl PyGraphData {
-            #[must_use]
-            pub fn nodes(&self) -> Vec<usize> {
-                self.0.nodes().to_owned()
-            }
-
-            #[must_use]
-            pub fn edges(&self) -> Vec<Vec<usize>> {
-                self.0.edges().to_vec()
-            }
-
             #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(rec_expr: PyRecExpr, variable_names: Vec<String>) -> PyResult<PyGraphData> {
@@ -155,9 +182,50 @@ macro_rules! monomorphize {
                 Ok(r)
             }
 
+            #[expect(clippy::missing_errors_doc)]
+            #[staticmethod]
+            pub fn batch_new(
+                rec_exprs: Vec<PyRecExpr>,
+                variable_names: Vec<String>,
+            ) -> PyResult<Vec<PyGraphData>> {
+                rec_exprs
+                    .into_par_iter()
+                    .map(|r| {
+                        let g = GraphData::new(&r.0, &variable_names)
+                            .map_err(|e| EggshellError::<L>::from(e))
+                            .map(PyGraphData)?;
+                        Ok(g)
+                    })
+                    .collect()
+            }
+
+            #[must_use]
+            #[getter]
+            pub fn nodes(&self) -> Vec<usize> {
+                self.0.nodes().to_owned()
+            }
+
+            #[must_use]
+            #[getter]
+            pub fn const_values(&self) -> Vec<Option<f64>> {
+                self.0.const_values().to_vec()
+            }
+
+            #[must_use]
+            #[getter]
+            pub fn edges(&self) -> Vec<Vec<usize>> {
+                self.0.edges().to_vec()
+            }
+
             #[must_use]
             pub fn to_rec_expr(&self, variable_names: Vec<String>) -> PyRecExpr {
                 PyRecExpr(self.0.to_rec_expr(&variable_names))
+            }
+
+            #[must_use]
+            #[staticmethod]
+            pub fn num_node_types(variable_names: Vec<String>) -> usize {
+                GraphData::num_node_types::<L, _>(&variable_names)
             }
         }
 
@@ -179,7 +247,7 @@ macro_rules! monomorphize {
             }
 
             #[must_use]
-            pub fn name(&self) -> String {
+            pub fn __str__(&self) -> String {
                 self.0.to_string()
             }
 
@@ -202,49 +270,10 @@ macro_rules! monomorphize {
                 let f = $crate::features::features(&self.0, &variable_names, ignore_unknown)
                     .map_err(|e| EggshellError::<L>::from(e))?
                     .ok_or_else(|| {
-                        EggshellError::<L>::from(TrsError::IgnoredSymbol(self.name()))
+                        EggshellError::<L>::from(TrsError::IgnoredSymbol(self.__str__()))
                     })?;
                 Ok(f)
             }
-        }
-
-        #[gen_stub_pyfunction(module = $module_name)]
-        #[pyfunction]
-        #[expect(clippy::cast_precision_loss, clippy::missing_errors_doc)]
-        pub fn many_featurize_simple(
-            exprs: Vec<PyRecExpr>,
-            variable_names: Vec<String>,
-            ignore_unknown: bool,
-        ) -> PyResult<Vec<Vec<f64>>> {
-            let rust_vec = exprs
-                .par_iter()
-                .map(|expr| {
-                    let mut features = expr
-                        .0
-                        .count_symbols(&variable_names, ignore_unknown)
-                        .map_err(|e| EggshellError::<L>::from(e))?;
-                    features.push(expr.0.size());
-                    features.push(expr.0.depth());
-                    Ok(features.into_iter().map(|v| v as f64).collect())
-                })
-                .collect::<Result<Vec<_>, EggshellError<_>>>()?;
-
-            Ok(rust_vec)
-        }
-
-        #[gen_stub_pyfunction(module = $module_name)]
-        #[pyfunction]
-        #[must_use]
-        pub fn feature_names_simple(var_names: Vec<String>) -> Vec<String> {
-            let mut symbol_names: Vec<String> = L::operator_names()
-                .into_iter()
-                .map(|c| c.to_owned())
-                .collect();
-            symbol_names.push("CONSTANT".to_owned());
-            symbol_names.extend(var_names);
-            symbol_names.push("SIZE".to_owned());
-            symbol_names.push("DEPTH".to_owned());
-            symbol_names
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -294,9 +323,9 @@ macro_rules! monomorphize {
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<PyRecExpr>()?;
+            module.add_class::<PyGraphData>()?;
+            module.add_class::<PyNode>()?;
 
-            module.add_function(pyo3::wrap_pyfunction!(many_featurize_simple, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(feature_names_simple, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
 

@@ -123,6 +123,7 @@ impl<L: Language + MetaInfo> AsFeatures<L> for RecExpr<L> {
 pub struct GraphData {
     nodes: Vec<usize>,
     edges: [Vec<usize>; 2],
+    const_values: Vec<Option<f64>>,
 }
 
 impl GraphData {
@@ -134,7 +135,11 @@ impl GraphData {
         &self.edges
     }
 
-    pub fn new<S: AsRef<str>, L: MetaInfo>(
+    pub fn const_values(&self) -> &[Option<f64>] {
+        &self.const_values
+    }
+
+    pub fn new<L: MetaInfo, S: AsRef<str>>(
         rec_expr: &RecExpr<L>,
         variable_names: &[S],
     ) -> Result<GraphData, TrsError> {
@@ -143,29 +148,40 @@ impl GraphData {
             node: &L,
             variable_names: &[S],
             nodes: &mut Vec<usize>,
+            const_values: &mut Vec<Option<f64>>,
             edges: &mut [Vec<usize>; 2],
         ) -> Result<(), TrsError> {
             // All operators, variable_names, and last two are the constant symbol with its value
-            let node_id = match node.symbol_type() {
-                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => Ok(idx),
+            let (node_id, const_value) = match node.symbol_type() {
+                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => Ok((idx, None)),
                 // right behind the operators len for the constant type
-                SymbolType::NumericValue(_) => Ok(L::operator_names().len() + variable_names.len()),
+                SymbolType::NumericValue(v) => {
+                    Ok((L::operator_names().len() + variable_names.len(), Some(v)))
+                }
                 SymbolType::Variable(name) => {
                     if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
                         // 1 since we count as all the same
-                        Ok(L::operator_names().len() + var_idx)
+                        Ok((L::operator_names().len() + var_idx, None))
                     } else {
                         Err(TrsError::UnknownSymbol(name.to_owned()))
                     }
                 }
             }?;
             nodes.push(node_id);
+            const_values.push(const_value);
             let parent_position = nodes.len() - 1;
             for c_id in node.children() {
                 let child_position = nodes.len();
                 edges[0].push(parent_position);
                 edges[1].push(child_position);
-                rec(rec_expr, &rec_expr[*c_id], variable_names, nodes, edges)?;
+                rec(
+                    rec_expr,
+                    &rec_expr[*c_id],
+                    variable_names,
+                    nodes,
+                    const_values,
+                    edges,
+                )?;
             }
             Ok(())
         }
@@ -174,14 +190,20 @@ impl GraphData {
         // All operators, one for const, and variable_names
         let mut nodes = Vec::new();
         let mut edges = [Vec::new(), Vec::new()];
+        let mut const_values = Vec::new();
         rec(
             rec_expr,
             &rec_expr[root],
             variable_names,
             &mut nodes,
+            &mut const_values,
             &mut edges,
         )?;
-        Ok(GraphData { nodes, edges })
+        Ok(GraphData {
+            nodes,
+            edges,
+            const_values,
+        })
     }
 
     pub fn to_rec_expr<L: MetaInfo + FromOp, S: AsRef<str>>(
@@ -217,7 +239,7 @@ impl GraphData {
         stack.into()
     }
 
-    fn feature_vec_to_node<L: Language + MetaInfo + FromOp, S: AsRef<str>>(
+    fn feature_vec_to_node<L: MetaInfo + FromOp, S: AsRef<str>>(
         &self,
         node_idx: usize,
         children: Vec<Id>,
@@ -225,10 +247,10 @@ impl GraphData {
     ) -> L {
         let node_id = self.nodes[node_idx];
 
-        // Check if constant.
-        // FIXME: Currently all constants get set to zero, we should fix this at some point
         if node_id == L::operator_names().len() + variable_names.len() {
-            L::from_op("0", vec![]).unwrap()
+            // If it is a constant we can safely unwrap and stringify
+            let const_value_string = self.const_values[node_idx].unwrap().to_string();
+            L::from_op(&const_value_string, vec![]).unwrap()
             // check if variable
         } else if node_id >= L::operator_names().len() {
             let var_idx = node_id - L::operator_names().len();
@@ -237,17 +259,22 @@ impl GraphData {
             L::from_op(L::operator_names()[node_id], children).unwrap()
         }
     }
+
+    pub fn num_node_types<L: MetaInfo, S: AsRef<str>>(variable_names: &[S]) -> usize {
+        // Plus 1 for constant!
+        L::operator_names().len() + variable_names.len() + 1
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::trs::halide::HalideLang;
+    use crate::trs::{halide::HalideLang, rise::RiseLang};
 
     use super::*;
 
     #[test]
     fn pytorch_inverse() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 0 ) ( * ( + v0 0 ) 0 ) )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
         let data = GraphData::new(&expr, &variable_names).unwrap();
         let new_expr: RecExpr<HalideLang> = data.to_rec_expr(&variable_names);
@@ -257,7 +284,7 @@ mod tests {
 
     #[test]
     fn pytorch_format() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 0 ) ( * ( + v0 0 ) 0 ) )".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let variable_names = vec!["v0"];
         let data = GraphData::new(&expr, &variable_names).unwrap();
 
@@ -266,5 +293,14 @@ mod tests {
             data.edges(),
             &[vec![0, 1, 1, 0, 4, 5, 5, 4], vec![1, 2, 3, 4, 5, 6, 7, 8]]
         );
+    }
+
+    #[test]
+    fn rise_num_node_types() {
+        let num_native_symbols = RiseLang::operator_names().len();
+        let variable_names = vec!["v0", "v1"];
+        let num_symbols = GraphData::num_node_types::<RiseLang, _>(&variable_names);
+        // Plus 1 for constant
+        assert_eq!(num_symbols, num_native_symbols + variable_names.len() + 1);
     }
 }
