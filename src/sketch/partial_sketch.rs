@@ -86,13 +86,15 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
         }
     }
 
-    fn operator_names() -> Vec<&'static str> {
-        let mut operators = SketchLang::<L>::operator_names();
+    fn named_symbols() -> Vec<&'static str> {
+        let mut operators = SketchLang::<L>::named_symbols();
         operators.extend(vec!["[open]", "[active]"]);
         operators
     }
 
     const N_CONST_TYPES: usize = SketchLang::<L>::N_CONST_TYPES;
+
+    // const N_META_TYPES: usize = SketchLang::<L>::N_META_TYPES + 2;
 }
 
 impl<L: Language + Display> Display for PartialSketchLang<L> {
@@ -160,7 +162,7 @@ mod tests {
             "&&", "?", "contains", "or", "[open]", "[active]",
         ];
         assert_eq!(
-            PartialSketchLang::<HalideLang>::operator_names(),
+            PartialSketchLang::<HalideLang>::named_symbols(),
             known_operators
         );
     }

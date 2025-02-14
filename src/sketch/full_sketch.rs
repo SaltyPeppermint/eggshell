@@ -99,13 +99,15 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
         }
     }
 
-    fn operator_names() -> Vec<&'static str> {
-        let mut operators = L::operator_names();
+    fn named_symbols() -> Vec<&'static str> {
+        let mut operators = L::named_symbols();
         operators.extend(vec!["?", "contains", "or"]);
         operators
     }
 
     const N_CONST_TYPES: usize = L::N_CONST_TYPES;
+
+    // const N_META_TYPES: usize = L::N_META_TYPES + 3;
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {

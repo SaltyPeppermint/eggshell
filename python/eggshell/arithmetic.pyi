@@ -7,16 +7,17 @@ class PyGraphData:
     nodes: list[int]
     const_values: list[typing.Optional[float]]
     edges: list[list[int]]
-    def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str]): ...
+    ignore_unknown: bool
+    def __new__(cls,rec_expr:PyRecExpr, variable_names:typing.Sequence[str], ignore_unknown:bool): ...
     @staticmethod
-    def batch_new(rec_exprs:typing.Sequence[PyRecExpr], variable_names:typing.Sequence[str]) -> list[PyGraphData]:
+    def batch_new(rec_exprs:typing.Sequence[PyRecExpr], variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[PyGraphData]:
         ...
 
     def to_rec_expr(self, variable_names:typing.Sequence[str]) -> PyRecExpr:
         ...
 
     @staticmethod
-    def num_node_types(variable_names:typing.Sequence[str]) -> int:
+    def num_node_types(variable_names:typing.Sequence[str], ignore_unknown:bool) -> int:
         ...
 
 
@@ -55,7 +56,7 @@ class PyRecExpr:
         ...
 
     @staticmethod
-    def simple_feature_names(var_names:typing.Sequence[str]) -> list[str]:
+    def simple_feature_names(var_names:typing.Sequence[str], ignore_unknown:bool) -> list[str]:
         ...
 
 

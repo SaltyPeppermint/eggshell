@@ -18,6 +18,8 @@ pub use halide::{Halide, HalideRuleset};
 pub use rise::Rise;
 pub use simple::Simple;
 
+use crate::features::FeatureError;
+
 /// Trait that must be implemented by all Trs consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
 /// a [`Analysis`] (can be a simplie as `()`) and one or more `Rulesets` to choose from.
@@ -51,16 +53,42 @@ pub enum SymbolType<'a> {
     MetaSymbol(usize),
 }
 
+impl SymbolType<'_> {
+    #[expect(clippy::missing_errors_doc)]
+    pub fn to_idx<S: AsRef<str>>(
+        self,
+        variable_names: &[S],
+        n_non_vars: usize,
+        ignore_unknown: bool,
+    ) -> Result<(usize, Option<f64>), FeatureError> {
+        match self {
+            SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => Ok((idx, None)),
+            // right behind the operators len for the constant type
+            SymbolType::Constant(idx, v) => Ok((idx, Some(v))),
+            SymbolType::Variable(name) => {
+                if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
+                    // 1 since we count as all the same
+                    Ok((n_non_vars + var_idx, None))
+                } else if ignore_unknown {
+                    Ok((n_non_vars + variable_names.len(), None))
+                } else {
+                    Err(FeatureError::UnknownSymbol(name.to_owned()))
+                }
+            }
+        }
+    }
+}
+
 pub trait MetaInfo: Display + Language {
     fn symbol_type(&self) -> SymbolType;
 
     #[must_use]
-    fn n_operators() -> usize {
-        Self::operator_names().len()
-    }
+    fn named_symbols() -> Vec<&'static str>;
 
     #[must_use]
-    fn operator_names() -> Vec<&'static str>;
+    fn n_non_vars() -> usize {
+        Self::named_symbols().len() + Self::N_CONST_TYPES
+    }
 
     const N_CONST_TYPES: usize;
 }

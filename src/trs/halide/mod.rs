@@ -60,7 +60,7 @@ impl MetaInfo for HalideLang {
         }
     }
 
-    fn operator_names() -> Vec<&'static str> {
+    fn named_symbols() -> Vec<&'static str> {
         vec![
             "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
             "&&",
@@ -68,6 +68,7 @@ impl MetaInfo for HalideLang {
     }
 
     const N_CONST_TYPES: usize = 2;
+
     // const OPERATORS: &'static [&'static str] = cutoff_slice(HalideLangDiscriminants::VARIANTS, 3);
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {

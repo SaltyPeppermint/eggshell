@@ -152,11 +152,17 @@ macro_rules! monomorphize {
 
             #[must_use]
             #[staticmethod]
-            pub fn simple_feature_names(var_names: Vec<String>) -> Vec<String> {
-                let mut symbol_names: Vec<String> = L::operator_names()
+            pub fn simple_feature_names(
+                var_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> Vec<String> {
+                let mut symbol_names: Vec<String> = L::named_symbols()
                     .into_iter()
                     .map(|c| c.to_owned())
                     .collect();
+                if ignore_unknown {
+                    symbol_names.push("IGNORED".to_owned())
+                }
                 symbol_names.push("CONSTANT".to_owned());
                 symbol_names.extend(var_names);
                 symbol_names.push("SIZE".to_owned());
@@ -175,11 +181,15 @@ macro_rules! monomorphize {
         impl PyGraphData {
             #[expect(clippy::missing_errors_doc)]
             #[new]
-            pub fn new(rec_expr: PyRecExpr, variable_names: Vec<String>) -> PyResult<PyGraphData> {
-                let r = GraphData::new(&rec_expr.0, &variable_names)
+            pub fn new(
+                rec_expr: PyRecExpr,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<PyGraphData> {
+                let graph_data = GraphData::new(&rec_expr.0, &variable_names, ignore_unknown)
                     .map_err(|e| EggshellError::<L>::from(e))
                     .map(PyGraphData)?;
-                Ok(r)
+                Ok(graph_data)
             }
 
             #[expect(clippy::missing_errors_doc)]
@@ -187,14 +197,15 @@ macro_rules! monomorphize {
             pub fn batch_new(
                 rec_exprs: Vec<PyRecExpr>,
                 variable_names: Vec<String>,
+                ignore_unknown: bool,
             ) -> PyResult<Vec<PyGraphData>> {
                 rec_exprs
                     .into_par_iter()
                     .map(|r| {
-                        let g = GraphData::new(&r.0, &variable_names)
+                        let graph_data = GraphData::new(&r.0, &variable_names, ignore_unknown)
                             .map_err(|e| EggshellError::<L>::from(e))
                             .map(PyGraphData)?;
-                        Ok(g)
+                        Ok(graph_data)
                     })
                     .collect()
             }
@@ -218,14 +229,24 @@ macro_rules! monomorphize {
             }
 
             #[must_use]
-            pub fn to_rec_expr(&self, variable_names: Vec<String>) -> PyRecExpr {
-                PyRecExpr(self.0.to_rec_expr(&variable_names))
+            #[getter]
+            pub fn ignore_unknown(&self) -> bool {
+                self.0.ignore_unknown()
+            }
+
+            #[expect(clippy::missing_errors_doc)]
+            pub fn to_rec_expr(&self, variable_names: Vec<String>) -> PyResult<PyRecExpr> {
+                let rec_expr = self
+                    .0
+                    .to_rec_expr(&variable_names)
+                    .map_err(|e| EggshellError::<L>::from(e))?;
+                Ok(PyRecExpr(rec_expr))
             }
 
             #[must_use]
             #[staticmethod]
-            pub fn num_node_types(variable_names: Vec<String>) -> usize {
-                GraphData::num_node_types::<L, _>(&variable_names)
+            pub fn num_node_types(variable_names: Vec<String>, ignore_unknown: bool) -> usize {
+                GraphData::num_node_types::<L, _>(&variable_names, ignore_unknown)
             }
         }
 

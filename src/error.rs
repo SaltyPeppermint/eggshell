@@ -14,6 +14,8 @@ pub enum EggshellError<L: Display> {
     #[error(transparent)]
     Trs(#[from] crate::trs::TrsError),
     #[error(transparent)]
+    Feature(#[from] crate::features::FeatureError),
+    #[error(transparent)]
     Sample(#[from] crate::sampling::SampleError),
     #[error(transparent)]
     RecExprParse(#[from] egg::RecExprParseError<L>),
