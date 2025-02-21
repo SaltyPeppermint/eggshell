@@ -1,4 +1,4 @@
-use egg::{rewrite as rw, Id, Subst};
+use egg::{Id, Subst, rewrite as rw};
 
 use crate::trs::arithmetic::Rewrite;
 

@@ -1,6 +1,6 @@
 use egg::{Id, Subst, Var};
 
-use super::{data::HalideData, EGraph};
+use super::{EGraph, data::HalideData};
 
 pub mod add;
 pub mod and;
@@ -93,8 +93,8 @@ pub fn compare_constants(
         let data_1 = egraph[subst[var_1]].data;
         let data_2 = egraph[subst[var_2]].data;
 
-        match (data_1, data_2) {
-            (Some(HalideData::Int(c_1)), Some(HalideData::Int(c_2))) => match comp {
+        if let (Some(HalideData::Int(c_1)), Some(HalideData::Int(c_2))) = (data_1, data_2) {
+            match comp {
                 "<" => c_1 < c_2,
                 "<a" => c_1 < c_2.abs(),
                 "<=" => c_1 <= c_2,
@@ -113,8 +113,9 @@ pub fn compare_constants(
                 "%0<" => (c_2 > 0) && (c_1 % c_2 == 0),
                 "%0>" => (c_2 < 0) && (c_1 % c_2 == 0),
                 _ => false,
-            },
-            _ => false,
+            }
+        } else {
+            false
         }
     }
 }

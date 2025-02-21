@@ -377,13 +377,13 @@ where
     let generations = samples
         .into_iter()
         .map(|sample| {
-            let gen = eqsat_results
+            let generation = eqsat_results
                 .iter_mut()
                 .map(|r| r.egraph())
                 .position(|egraph| egraph.lookup_expr(&sample).is_some())
                 .expect("Must be in at least one of the egraphs")
                 + 1;
-            (sample, gen)
+            (sample, generation)
         })
         .collect::<Vec<_>>();
     generations
