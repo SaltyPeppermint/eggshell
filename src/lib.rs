@@ -38,9 +38,8 @@
 )]
 
 mod analysis;
-mod error;
-mod features;
-mod utils;
+mod typing;
+mod utils; //should maybe be deleted
 
 pub mod cli;
 pub mod eqsat;
@@ -50,4 +49,3 @@ pub mod python;
 pub mod sampling;
 pub mod sketch;
 pub mod trs;
-pub mod typing; //should maybe be private

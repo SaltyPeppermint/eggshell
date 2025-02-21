@@ -1,0 +1,168 @@
+/// Macro to generate a manuaol monomorphization via a wrapper cause
+/// pyo3 can't handle generics.
+macro_rules! monomorphize {
+    ($type: ty, $module_name: tt) => {
+        use egg::{Language, RecExpr};
+        use pyo3::prelude::*;
+        use pyo3_stub_gen::derive::*;
+        use rayon::prelude::*;
+
+        use $crate::eqsat::conf::EqsatConf;
+        use $crate::eqsat::{Eqsat, StartMaterial};
+        use $crate::python::data::TreeData;
+        use $crate::python::err::EggshellError;
+        use $crate::trs::{MetaInfo, TermRewriteSystem};
+
+        type L = <$type as TermRewriteSystem>::Language;
+        // type N = <$type as TermRewriteSystem>::Analysis;
+
+        #[gen_stub_pyclass]
+        #[pyclass(frozen, module = $module_name)]
+        #[derive(Debug, Clone, PartialEq)]
+        /// Wrapper type for Python
+        pub struct PyRecExpr(RecExpr<L>);
+
+        #[gen_stub_pymethods]
+        #[pymethods]
+        impl PyRecExpr {
+            /// Parse from string
+            #[expect(clippy::missing_errors_doc)]
+            #[new]
+            pub fn new(s_expr_str: &str) -> PyResult<PyRecExpr> {
+                let rec_expr = s_expr_str
+                    .parse::<egg::RecExpr<L>>()
+                    .map_err(|e| EggshellError::from(e))?;
+                Ok(PyRecExpr(rec_expr))
+            }
+
+            #[expect(clippy::missing_errors_doc)]
+            #[staticmethod]
+            pub fn batch_new(s_expr_strs: Vec<String>) -> PyResult<Vec<PyRecExpr>> {
+                s_expr_strs.par_iter().map(|s| PyRecExpr::new(s)).collect()
+            }
+
+            #[must_use]
+            fn __str__(&self) -> String {
+                self.0.to_string()
+            }
+
+            #[must_use]
+            pub fn __repr__(&self) -> String {
+                format!("{self:?}")
+            }
+
+            #[must_use]
+            pub fn arity(&self, position: usize) -> usize {
+                self.0[egg::Id::from(position)].children().len()
+            }
+
+            #[expect(clippy::missing_errors_doc)]
+            pub fn to_data(
+                &self,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<TreeData> {
+                let graph_data = TreeData::new(&self.0, &variable_names, ignore_unknown)
+                    .map_err(|e| EggshellError::<L>::from(e))?;
+                Ok(graph_data)
+            }
+
+            #[expect(clippy::missing_errors_doc)]
+            #[staticmethod]
+            pub fn to_data_batch(
+                rec_exprs: Vec<PyRecExpr>,
+                variable_names: Vec<String>,
+                ignore_unknown: bool,
+            ) -> PyResult<Vec<TreeData>> {
+                rec_exprs
+                    .into_par_iter()
+                    .map(|r| {
+                        let graph_data = TreeData::new(&r.0, &variable_names, ignore_unknown)
+                            .map_err(|e| EggshellError::<L>::from(e))?;
+                        Ok(graph_data)
+                    })
+                    .collect()
+            }
+
+            #[staticmethod]
+            #[expect(clippy::missing_errors_doc)]
+            pub fn from_data(
+                tree_data: TreeData,
+                variable_names: Vec<String>,
+            ) -> PyResult<PyRecExpr> {
+                let expr = tree_data
+                    .to_rec_expr(&variable_names)
+                    .map_err(|e| EggshellError::<L>::from(e))?;
+                Ok(PyRecExpr(expr))
+            }
+
+            #[staticmethod]
+            #[must_use]
+            pub fn named_symbols() -> Vec<String> {
+                L::named_symbols()
+                    .into_iter()
+                    .map(|c| c.to_owned())
+                    .collect()
+            }
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn eqsat_check(
+            start: &PyRecExpr,
+            goal: &PyRecExpr,
+            iter_limit: usize,
+        ) -> (usize, String, String) {
+            let conf = EqsatConf::builder()
+                .root_check(true)
+                .iter_limit(iter_limit)
+                .build();
+            let start_expr = &[&start.0];
+            let start_material = StartMaterial::RecExprs(start_expr);
+            let rules = <$type as TermRewriteSystem>::full_rules();
+            let eqsat_result = Eqsat::new(start_material, &rules)
+                .with_conf(conf)
+                .with_goals(vec![goal.0.clone()])
+                .run();
+            let generation = eqsat_result.iterations().len();
+            let stop_reason = serde_json::to_string(&eqsat_result.report().stop_reason).unwrap();
+            let report_json = serde_json::to_string(&eqsat_result).unwrap();
+            (generation, stop_reason, report_json)
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn many_eqsat_check(
+            starts: Vec<PyRecExpr>,
+            goal: &PyRecExpr,
+            iter_limit: usize,
+        ) -> Vec<(usize, String, String)> {
+            starts
+                .into_iter()
+                .map(|start| eqsat_check(&start, goal, iter_limit))
+                .collect()
+        }
+
+        pub(crate) fn add_mod(
+            m: &pyo3::Bound<'_, pyo3::prelude::PyModule>,
+            module_name: &str,
+        ) -> pyo3::PyResult<()> {
+            use pyo3::prelude::PyModuleMethods;
+
+            let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
+            module.add_class::<PyRecExpr>()?;
+            // module.add_class::<PyGraphData>()?;
+            // module.add_class::<PyNode>()?;
+
+            module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
+
+            m.add_submodule(&module)?;
+            Ok(())
+        }
+    };
+}
+
+pub(crate) use monomorphize;

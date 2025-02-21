@@ -1,5 +1,5 @@
 use std::fmt::{Display, Formatter};
-use std::mem::{discriminant, Discriminant};
+use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};

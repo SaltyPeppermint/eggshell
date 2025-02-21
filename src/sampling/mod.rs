@@ -12,14 +12,10 @@ use crate::eqsat::EqsatConf;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum SampleError {
-    #[error("Batchsize impossible: {0}")]
-    ImpossibleBatchSize(usize),
     #[error("Can't convert a non-finished list of choices")]
     UnfinishedChoice,
     #[error("Extraction not possible as this eclass contains no terms of appropriate size {0}!")]
     SizeLimit(usize),
-    #[error("Extraction makes no sense since the analysis does not reach this deep {0}!")]
-    AnalysisDepth(usize),
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, Eq)]

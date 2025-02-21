@@ -1,28 +1,19 @@
 use std::fmt::Display;
 
+use pyo3::PyErr;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
-use pyo3::PyErr;
+
 use thiserror::Error;
+
+use super::data::TreeDataError;
 
 #[derive(Debug, Error)]
 pub enum EggshellError<L: Display> {
-    // #[error(transparent)]
-    // Io(#[from] std::io::Error),
-    // #[error(transparent)]
-    // Csv(#[from] csv::Error),
-    #[error(transparent)]
-    Trs(#[from] crate::trs::TrsError),
-    #[error(transparent)]
-    Feature(#[from] crate::features::FeatureError),
-    #[error(transparent)]
-    Sample(#[from] crate::sampling::SampleError),
     #[error(transparent)]
     RecExprParse(#[from] egg::RecExprParseError<L>),
     #[error(transparent)]
-    FromOp(#[from] egg::FromOpError),
-    #[error("Unknown Error happend!")]
-    Unknown,
+    TreeData(#[from] TreeDataError),
 }
 
 create_exception!(
