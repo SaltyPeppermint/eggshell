@@ -1,7 +1,7 @@
 mod rules;
 mod substitute;
 
-use egg::{define_language, Analysis, DidMerge, Id, Language, RecExpr, Symbol};
+use egg::{Analysis, DidMerge, Id, Language, RecExpr, Symbol, define_language};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
@@ -60,7 +60,7 @@ impl MetaInfo for RiseLang {
     fn symbol_type(&self) -> SymbolType {
         match self {
             RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            RiseLang::Number(value) => SymbolType::Constant(0, (*value).into()),
+            RiseLang::Number(value) => SymbolType::Constant(0, value.to_string()),
             _ => {
                 let position = RiseLangDiscriminants::iter()
                     .position(|x| x == self.into())
@@ -252,7 +252,7 @@ mod tests {
     fn get_num_type() {
         let symbol = RiseLang::Number(1);
         let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Constant(0, 1.0));
+        assert_eq!(symbol_type, SymbolType::Constant(0, "1".to_owned()));
     }
 
     #[test]

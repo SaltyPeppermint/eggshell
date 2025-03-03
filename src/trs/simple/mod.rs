@@ -1,4 +1,4 @@
-use egg::{define_language, rewrite, Id, Symbol};
+use egg::{Id, Symbol, define_language, rewrite};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
@@ -25,7 +25,7 @@ impl MetaInfo for SimpleLang {
     fn symbol_type(&self) -> SymbolType {
         match self {
             SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            SimpleLang::Num(value) => SymbolType::Constant(0, (*value).into()),
+            SimpleLang::Num(value) => SymbolType::Constant(0, value.to_string()),
             _ => {
                 let position = SimpleLangDiscriminants::iter()
                     .position(|x| x == self.into())

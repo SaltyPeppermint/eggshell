@@ -4,7 +4,7 @@ mod rules;
 // use std::cmp::Ordering;
 // use std::fmt::Display;
 
-use egg::{define_language, Analysis, DidMerge, Id, Symbol};
+use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
@@ -44,12 +44,11 @@ define_language! {
 }
 
 impl MetaInfo for HalideLang {
-    #[expect(clippy::cast_precision_loss)]
     fn symbol_type(&self) -> SymbolType {
         match self {
             HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            HalideLang::Bool(value) => SymbolType::Constant(0, if *value { 1.0 } else { 0.0 }),
-            HalideLang::Number(value) => SymbolType::Constant(1, *value as f64),
+            HalideLang::Bool(value) => SymbolType::Constant(0, value.to_string()),
+            HalideLang::Number(value) => SymbolType::Constant(1, value.to_string()),
 
             _ => {
                 let position = HalideLangDiscriminants::iter()

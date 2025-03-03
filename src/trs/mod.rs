@@ -46,7 +46,7 @@ pub trait TermRewriteSystem {
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SymbolType<'a> {
     Operator(usize),
-    Constant(usize, f64),
+    Constant(usize, String),
     Variable(&'a str),
     MetaSymbol(usize),
 }

@@ -3,7 +3,7 @@ mod rules;
 // use std::cmp::Ordering;
 // use std::fmt::Display;
 
-use egg::{define_language, Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
+use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol, define_language};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
@@ -45,7 +45,7 @@ impl MetaInfo for Math {
     fn symbol_type(&self) -> SymbolType {
         match self {
             Math::Symbol(name) => SymbolType::Variable(name.as_str()),
-            Math::Constant(value) => SymbolType::Constant(0, (*value).into()),
+            Math::Constant(value) => SymbolType::Constant(0, value.to_string()),
             _ => {
                 let position = MathDiscriminants::iter()
                     .position(|x| x == self.into())

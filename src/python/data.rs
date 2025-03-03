@@ -33,7 +33,7 @@ pub struct Node {
     #[pyo3(get)]
     depth: usize,
     #[pyo3(get)]
-    const_value: Option<f64>,
+    value: Option<String>,
 }
 
 impl Node {
@@ -45,7 +45,7 @@ impl Node {
         nth_child: usize,
         dfs_order: usize,
         depth: usize,
-        const_value: Option<f64>,
+        value: Option<String>,
     ) -> Self {
         Self {
             id,
@@ -54,7 +54,7 @@ impl Node {
             nth_child,
             dfs_order,
             depth,
-            const_value,
+            value,
         }
     }
 }
@@ -182,7 +182,7 @@ impl TreeData {
             nth_child: usize,
         ) -> Result<usize, TreeDataError> {
             // All operators, variable_names, and last two are the constant symbol with its value
-            let (node_id, const_value) = match node.symbol_type() {
+            let (node_id, value) = match node.symbol_type() {
                 SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => (idx, None),
                 // right behind the operators len for the constant type
                 SymbolType::Constant(idx, v) => (idx, Some(v)),
@@ -206,7 +206,7 @@ impl TreeData {
                 dfs_order: graph_data.nodes.len(),
                 depth,
                 nth_child,
-                const_value,
+                value,
             });
             for (i, c_id) in node.children().iter().enumerate() {
                 let child_idx = rec(
@@ -290,9 +290,8 @@ impl TreeData {
         let node = &self.nodes[node_idx];
 
         if node.id < L::N_CONST_TYPES {
-            // If it is a constant we can safely unwrap and stringify
-            let const_value_string = node.const_value.unwrap().to_string();
-            L::from_op(&const_value_string, vec![]).unwrap()
+            // If it is a constant we can safely unwrap
+            L::from_op(node.value.as_ref().unwrap(), vec![]).unwrap()
         } else if node.id < L::n_non_vars() {
             L::from_op(L::named_symbols()[node.id - L::N_CONST_TYPES], children).unwrap()
         } else {
@@ -334,12 +333,12 @@ mod tests {
                 Node::new(9, "<".to_owned(), 2, 0, 0, 0, None),
                 Node::new(4, "*".to_owned(), 2, 0, 1, 1, None),
                 Node::new(18, "v0".to_owned(), 0, 0, 2, 2, None),
-                Node::new(1, "35".to_owned(), 0, 1, 3, 2, Some(35.0)),
+                Node::new(1, "35".to_owned(), 0, 1, 3, 2, Some("35".to_owned())),
                 Node::new(4, "*".to_owned(), 2, 1, 4, 1, None),
                 Node::new(2, "+".to_owned(), 2, 0, 5, 2, None),
                 Node::new(18, "v0".to_owned(), 0, 0, 6, 3, None),
-                Node::new(1, "5".to_owned(), 0, 1, 7, 3, Some(5.0)),
-                Node::new(1, "17".to_owned(), 0, 1, 8, 2, Some(17.0))
+                Node::new(1, "5".to_owned(), 0, 1, 7, 3, Some("5".to_owned())),
+                Node::new(1, "17".to_owned(), 0, 1, 8, 2, Some("17".to_owned()))
             ]
         );
         assert_eq!(

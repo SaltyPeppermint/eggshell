@@ -14,7 +14,7 @@ class Node:
     nth_child: int
     dfs_order: int
     depth: int
-    const_value: typing.Optional[float]
+    value: typing.Optional[str]
 
 class TreeData:
     ...
