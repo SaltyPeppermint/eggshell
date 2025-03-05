@@ -97,9 +97,9 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         let mut s = vec!["[open]", "[active]"];
-        s.extend(SketchLang::<L>::named_symbols());
+        s.extend(SketchLang::<L>::operators());
         s
     }
 
@@ -171,7 +171,7 @@ mod tests {
             "<", ">", "!", "<=", ">=", "==", "!=", "||", "&&",
         ];
         assert_eq!(
-            PartialSketchLang::<HalideLang>::named_symbols(),
+            PartialSketchLang::<HalideLang>::operators(),
             known_operators
         );
     }

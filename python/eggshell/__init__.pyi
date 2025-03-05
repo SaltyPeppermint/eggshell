@@ -25,7 +25,10 @@ class TreeData:
     def count_symbols(self, n_symbols:int, n_vars:int) -> list[int]:
         ...
 
-    def value_strings(self) -> list[str]:
+    def values(self) -> list[str]:
+        ...
+
+    def names(self) -> list[str]:
         ...
 
     def arity(self, position:int) -> int:

@@ -99,8 +99,13 @@ impl TreeData {
     }
 
     #[must_use]
-    pub fn value_strings(&self) -> Vec<String> {
+    pub fn values(&self) -> Vec<String> {
         self.nodes.iter().filter_map(|n| n.symbol.value()).collect()
+    }
+
+    #[must_use]
+    pub fn names(&self) -> Vec<String> {
+        self.nodes.iter().map(|n| n.name.clone()).collect()
     }
 
     fn arity(&self, position: usize) -> usize {
@@ -175,7 +180,7 @@ impl TreeData {
             // If it is a constant we can safely unwrap
             L::from_op(&v, vec![]).unwrap()
         } else {
-            L::from_op(L::named_symbols()[node.id()], children).unwrap()
+            L::from_op(L::operators()[node.id()], children).unwrap()
         }
     }
 }

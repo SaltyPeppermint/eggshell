@@ -33,14 +33,19 @@ class PyRecExpr:
     def from_data(tree_data:TreeData) -> PyRecExpr:
         ...
 
-    @staticmethod
-    def num_symbols() -> int:
-        ...
-
 
 def eqsat_check(start:PyRecExpr,goal:PyRecExpr,iter_limit:int) -> tuple[int, str, str]:
     ...
 
 def many_eqsat_check(starts:typing.Sequence[PyRecExpr],goal:PyRecExpr,iter_limit:int) -> list[tuple[int, str, str]]:
+    ...
+
+def name_to_id(s:str) -> typing.Optional[int]:
+    ...
+
+def num_symbols() -> int:
+    ...
+
+def operators() -> list[str]:
     ...
 

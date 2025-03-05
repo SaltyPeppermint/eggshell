@@ -59,7 +59,7 @@ impl MetaInfo for HalideLang {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         vec![
             "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
             "&&",

@@ -85,12 +85,27 @@ macro_rules! monomorphize {
                     .map_err(|e| EggshellError::<L>::from(e))?;
                 Ok(PyRecExpr(expr))
             }
+        }
 
-            #[staticmethod]
-            #[must_use]
-            pub fn num_symbols() -> usize {
-                L::NUM_SYMBOLS
-            }
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn operators() -> Vec<String> {
+            L::operators().iter().map(|s| s.to_string()).collect()
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn name_to_id(s: String) -> Option<usize> {
+            L::operators().iter().position(|o| o == &s)
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn num_symbols() -> usize {
+            L::NUM_SYMBOLS
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -143,6 +158,9 @@ macro_rules! monomorphize {
             // module.add_class::<PyGraphData>()?;
             // module.add_class::<PyNode>()?;
 
+            module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
 

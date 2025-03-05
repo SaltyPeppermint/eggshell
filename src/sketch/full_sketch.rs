@@ -109,9 +109,9 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         let mut s = vec!["?", "contains", "or"];
-        s.extend(L::named_symbols());
+        s.extend(L::operators());
         s
     }
 

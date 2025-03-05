@@ -33,7 +33,7 @@ impl MetaInfo for SimpleLang {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         vec!["+", "*"]
     }
 }

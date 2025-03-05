@@ -82,7 +82,7 @@ pub trait MetaInfo: Display + Language + EnumCount {
     fn symbol_info(&self) -> SymbolInfo;
 
     #[must_use]
-    fn named_symbols() -> Vec<&'static str>;
+    fn operators() -> Vec<&'static str>;
 
     const NUM_SYMBOLS: usize = Self::COUNT;
 }

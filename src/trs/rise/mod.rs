@@ -68,7 +68,7 @@ impl MetaInfo for RiseLang {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         vec![
             "var",
             "app",
@@ -216,7 +216,7 @@ mod tests {
             "snd",
         ];
         assert_eq!(
-            RiseLang::named_symbols()
+            RiseLang::operators()
                 .iter()
                 .map(|x| (*x).to_owned())
                 .collect::<Vec<_>>(),

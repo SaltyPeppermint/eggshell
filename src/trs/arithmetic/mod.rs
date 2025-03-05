@@ -53,7 +53,7 @@ impl MetaInfo for Math {
         }
     }
 
-    fn named_symbols() -> Vec<&'static str> {
+    fn operators() -> Vec<&'static str> {
         vec![
             "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
         ]
