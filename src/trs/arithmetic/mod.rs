@@ -8,7 +8,7 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
@@ -42,16 +42,14 @@ define_language! {
 }
 
 impl MetaInfo for Math {
-    fn symbol_type(&self) -> SymbolType {
+    fn symbol_info(&self) -> SymbolInfo {
+        let id = MathDiscriminants::iter()
+            .position(|x| x == self.into())
+            .unwrap();
         match self {
-            Math::Symbol(name) => SymbolType::Variable(name.as_str()),
-            Math::Constant(value) => SymbolType::Constant(0, value.to_string()),
-            _ => {
-                let position = MathDiscriminants::iter()
-                    .position(|x| x == self.into())
-                    .unwrap();
-                SymbolType::Operator(position + Self::N_CONST_TYPES)
-            }
+            Math::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
+            Math::Constant(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
+            _ => SymbolInfo::new(id, SymbolType::Operator),
         }
     }
 
@@ -61,7 +59,7 @@ impl MetaInfo for Math {
         ]
     }
 
-    const N_CONST_TYPES: usize = 1;
+    const NUM_NON_OPERATORS: usize = 2;
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
     //     let mut o = MathDiscriminants::VARIANTS.to_vec();

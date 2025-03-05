@@ -8,7 +8,7 @@ use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolType, TermRewriteSystem, TrsError};
+use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
 // use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
@@ -44,18 +44,18 @@ define_language! {
 }
 
 impl MetaInfo for HalideLang {
-    fn symbol_type(&self) -> SymbolType {
-        match self {
-            HalideLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            HalideLang::Bool(value) => SymbolType::Constant(0, value.to_string()),
-            HalideLang::Number(value) => SymbolType::Constant(1, value.to_string()),
+    fn symbol_info(&self) -> SymbolInfo {
+        let id = HalideLangDiscriminants::iter()
+            .position(|x| x == self.into())
+            .unwrap();
 
-            _ => {
-                let position = HalideLangDiscriminants::iter()
-                    .position(|x| x == self.into())
-                    .unwrap();
-                SymbolType::Operator(position + Self::N_CONST_TYPES)
+        match self {
+            HalideLang::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
+            HalideLang::Bool(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
+            HalideLang::Number(value) => {
+                SymbolInfo::new(id, SymbolType::Constant(value.to_string()))
             }
+            _ => SymbolInfo::new(id, SymbolType::Operator),
         }
     }
 
@@ -66,15 +66,7 @@ impl MetaInfo for HalideLang {
         ]
     }
 
-    const N_CONST_TYPES: usize = 2;
-
-    // const OPERATORS: &'static [&'static str] = cutoff_slice(HalideLangDiscriminants::VARIANTS, 3);
-
-    // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
-    //     let mut o = HalideLangDiscriminants::VARIANTS.to_vec();
-    //     o.truncate(o.len() - 3);
-    //     o
-    // }
+    const NUM_NON_OPERATORS: usize = 3;
 }
 
 // impl Typeable for HalideLang {

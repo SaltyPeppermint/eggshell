@@ -43,26 +43,52 @@ pub trait TermRewriteSystem {
     fn full_rules() -> Vec<Rewrite<Self::Language, Self::Analysis>>;
 }
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
-pub enum SymbolType<'a> {
-    Operator(usize),
-    Constant(usize, String),
-    Variable(&'a str),
-    MetaSymbol(usize),
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize)]
+pub struct SymbolInfo {
+    id: usize,
+    symbol_type: SymbolType,
+}
+
+impl SymbolInfo {
+    #[must_use]
+    pub fn new(id: usize, symbol_type: SymbolType) -> Self {
+        Self { id, symbol_type }
+    }
+
+    #[must_use]
+    pub fn value(&self) -> Option<String> {
+        match &self.symbol_type {
+            SymbolType::Constant(v) | SymbolType::Variable(v) => Some(v.to_owned()),
+            SymbolType::MetaSymbol | SymbolType::Operator => None,
+        }
+    }
+
+    #[must_use]
+    pub fn id(&self) -> usize {
+        self.id
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd, Serialize)]
+pub enum SymbolType {
+    Operator,
+    Constant(String),
+    Variable(String),
+    MetaSymbol,
 }
 
 pub trait MetaInfo: Display + Language {
-    fn symbol_type(&self) -> SymbolType;
+    fn symbol_info(&self) -> SymbolInfo;
 
     #[must_use]
     fn named_symbols() -> Vec<&'static str>;
 
     #[must_use]
-    fn n_non_vars() -> usize {
-        Self::named_symbols().len() + Self::N_CONST_TYPES
+    fn num_symbols() -> usize {
+        Self::named_symbols().len() + Self::NUM_NON_OPERATORS
     }
 
-    const N_CONST_TYPES: usize;
+    const NUM_NON_OPERATORS: usize;
 }
 
 #[derive(Debug, Error)]

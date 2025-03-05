@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::SketchParseError;
-use crate::trs::{MetaInfo, SymbolType};
+use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -88,24 +88,24 @@ impl<L: Language> Language for SketchLang<L> {
 // }
 
 impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
-    fn symbol_type(&self) -> SymbolType {
+    fn symbol_info(&self) -> SymbolInfo {
         if let SketchLang::Node(l) = self {
-            l.symbol_type()
+            l.symbol_info()
         } else {
-            let position = SketchLangDiscriminants::iter()
+            let id = SketchLangDiscriminants::iter()
                 .position(|x| x == self.into())
                 .unwrap();
-            SymbolType::Operator(position + Self::N_CONST_TYPES)
+            SymbolInfo::new(id + L::num_symbols(), SymbolType::MetaSymbol)
         }
     }
 
     fn named_symbols() -> Vec<&'static str> {
-        let mut operators = L::named_symbols();
-        operators.extend(vec!["?", "contains", "or"]);
-        operators
+        let mut s = vec!["?", "contains", "or"];
+        s.extend(L::named_symbols());
+        s
     }
 
-    const N_CONST_TYPES: usize = L::N_CONST_TYPES;
+    const NUM_NON_OPERATORS: usize = L::NUM_NON_OPERATORS;
 
     // const N_META_TYPES: usize = L::N_META_TYPES + 3;
 }

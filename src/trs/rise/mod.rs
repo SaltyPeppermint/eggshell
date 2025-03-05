@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
@@ -57,16 +57,14 @@ define_language! {
 }
 
 impl MetaInfo for RiseLang {
-    fn symbol_type(&self) -> SymbolType {
+    fn symbol_info(&self) -> SymbolInfo {
+        let id = RiseLangDiscriminants::iter()
+            .position(|x| x == self.into())
+            .unwrap();
         match self {
-            RiseLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            RiseLang::Number(value) => SymbolType::Constant(0, value.to_string()),
-            _ => {
-                let position = RiseLangDiscriminants::iter()
-                    .position(|x| x == self.into())
-                    .unwrap();
-                SymbolType::Operator(position + Self::N_CONST_TYPES)
-            }
+            RiseLang::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
+            RiseLang::Number(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
+            _ => SymbolInfo::new(id, SymbolType::Operator),
         }
     }
 
@@ -94,7 +92,7 @@ impl MetaInfo for RiseLang {
         ]
     }
 
-    const N_CONST_TYPES: usize = 1;
+    const NUM_NON_OPERATORS: usize = 2;
 
     // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
     //     let mut o = RiseLangDiscriminants::VARIANTS.to_vec();
@@ -237,28 +235,34 @@ mod tests {
     #[test]
     fn get_var_type() {
         let symbol = RiseLang::Var(Id::from(0));
-        let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Operator(1));
+        let symbol_type = symbol.symbol_info();
+        assert_eq!(symbol_type, SymbolInfo::new(0, SymbolType::Operator));
     }
 
     #[test]
     fn get_var_type2() {
         let symbol = RiseLang::Map;
-        let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Operator(8));
+        let symbol_type = symbol.symbol_info();
+        assert_eq!(symbol_type, SymbolInfo::new(7, SymbolType::Operator));
     }
 
     #[test]
     fn get_num_type() {
         let symbol = RiseLang::Number(1);
-        let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Constant(0, "1".to_owned()));
+        let symbol_type = symbol.symbol_info();
+        assert_eq!(
+            symbol_type,
+            SymbolInfo::new(19, SymbolType::Constant(1.to_string()))
+        );
     }
 
     #[test]
     fn get_symbol_type() {
         let symbol = RiseLang::Symbol("BLA".into());
-        let symbol_type = symbol.symbol_type();
-        assert_eq!(symbol_type, SymbolType::Variable("BLA"));
+        let symbol_type = symbol.symbol_info();
+        assert_eq!(
+            symbol_type,
+            SymbolInfo::new(20, SymbolType::Variable("BLA".into()))
+        );
     }
 }

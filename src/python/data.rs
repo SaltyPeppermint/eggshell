@@ -1,12 +1,12 @@
 use egg::{FromOp, Id, RecExpr};
 use pyo3::prelude::*;
-use pyo3_stub_gen::derive::gen_stub_pyclass;
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use rayon::prelude::*;
 
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::trs::{MetaInfo, SymbolType};
+use crate::trs::{MetaInfo, SymbolInfo};
 
 #[derive(Debug, Error)]
 pub enum TreeDataError {
@@ -21,8 +21,6 @@ pub enum TreeDataError {
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Node {
     #[pyo3(get)]
-    id: usize,
-    #[pyo3(get)]
     name: String,
     #[pyo3(get)]
     arity: usize,
@@ -32,30 +30,32 @@ pub struct Node {
     dfs_order: usize,
     #[pyo3(get)]
     depth: usize,
-    #[pyo3(get)]
-    value: Option<String>,
+    symbol: SymbolInfo,
 }
 
 impl Node {
     #[must_use]
     pub fn new(
-        id: usize,
         name: String,
         arity: usize,
         nth_child: usize,
         dfs_order: usize,
         depth: usize,
-        value: Option<String>,
+        symbol: SymbolInfo,
     ) -> Self {
         Self {
-            id,
             name,
             arity,
             nth_child,
             dfs_order,
             depth,
-            value,
+            symbol,
         }
+    }
+
+    #[must_use]
+    pub fn id(&self) -> usize {
+        self.symbol.id()
     }
 }
 
@@ -63,23 +63,15 @@ impl Node {
 #[pyclass(frozen, module = "eggshell")]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct TreeData {
+    #[pyo3(get)]
     nodes: Vec<Node>,
+    #[pyo3(get)]
     adjacency: Vec<(usize, usize)>,
-    ignore_unknown: bool,
 }
 
+#[gen_stub_pymethods]
 #[pymethods]
 impl TreeData {
-    #[must_use]
-    pub fn nodes(&self) -> Vec<Node> {
-        self.nodes.clone()
-    }
-
-    #[must_use]
-    pub fn adjacency(&self) -> &[(usize, usize)] {
-        &self.adjacency
-    }
-
     #[must_use]
     pub fn transposed_adjacency(&self) -> [Vec<usize>; 2] {
         let (a, b) = self.adjacency.iter().map(|x| x.to_owned()).unzip();
@@ -87,17 +79,17 @@ impl TreeData {
     }
 
     #[must_use]
-    pub fn ignore_unknown(&self) -> bool {
-        self.ignore_unknown
-    }
-
-    #[must_use]
     pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
         let mut f = vec![0; n_symbols + n_vars];
         for n in &self.nodes {
-            f[n.id] += 1;
+            f[n.id()] += 1;
         }
         f
+    }
+
+    #[must_use]
+    pub fn value_strings(&self) -> Vec<String> {
+        self.nodes.iter().filter_map(|n| n.symbol.value()).collect()
     }
 
     fn arity(&self, position: usize) -> usize {
@@ -123,9 +115,6 @@ impl TreeData {
         var_names: Vec<String>,
     ) -> Vec<String> {
         let mut s = symbol_names.clone();
-        if self.ignore_unknown {
-            s.push("IGNORED".to_owned());
-        }
         s.push("CONSTANT".to_owned());
         s.extend(var_names);
         s.push("SIZE".to_owned());
@@ -167,56 +156,42 @@ impl TreeData {
         self.nodes.len() - 1
     }
 
-    #[expect(clippy::missing_errors_doc)]
-    pub fn new<L: MetaInfo + FromOp, S: AsRef<str>>(
-        rec_expr: &RecExpr<L>,
-        variable_names: &[S],
-        ignore_unknown: bool,
-    ) -> Result<TreeData, TreeDataError> {
-        fn rec<L: MetaInfo + FromOp, S: AsRef<str>>(
+    fn feature_vec_to_node<L: MetaInfo + FromOp>(&self, node_idx: usize, children: Vec<Id>) -> L {
+        // Ids go  | operators & metasymbols | consts | variables
+        let node = &self.nodes[node_idx];
+
+        if let Some(v) = node.symbol.value() {
+            // If it is a constant we can safely unwrap
+            L::from_op(&v, vec![]).unwrap()
+        } else {
+            L::from_op(L::named_symbols()[node.id()], children).unwrap()
+        }
+    }
+}
+
+impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
+    type Error = TreeDataError;
+
+    fn try_from(rec_expr: &RecExpr<L>) -> Result<TreeData, TreeDataError> {
+        fn rec<L: MetaInfo + FromOp>(
             rec_expr: &RecExpr<L>,
             node: &L,
-            variable_names: &[S],
             graph_data: &mut TreeData,
             depth: usize,
-            nth_child: usize,
+            nth_node: usize,
         ) -> Result<usize, TreeDataError> {
             // All operators, variable_names, and last two are the constant symbol with its value
-            let (node_id, value) = match node.symbol_type() {
-                SymbolType::Operator(idx) | SymbolType::MetaSymbol(idx) => (idx, None),
-                // right behind the operators len for the constant type
-                SymbolType::Constant(idx, v) => (idx, Some(v)),
-                SymbolType::Variable(name) => {
-                    if let Some(var_idx) = variable_names.iter().position(|x| x.as_ref() == name) {
-                        (L::n_non_vars() + var_idx, None)
-                    } else if graph_data.ignore_unknown {
-                        // Ignored symbol
-                        (L::n_non_vars() + variable_names.len(), None)
-                    } else {
-                        return Err(TreeDataError::UnknownSymbol(name.to_owned()));
-                    }
-                }
-            };
-
             let arity = node.children().len();
-            let parent_idx = graph_data.add_node(Node {
-                id: node_id,
-                name: node.to_string(),
+            let parent_idx = graph_data.add_node(Node::new(
+                node.to_string(),
                 arity,
-                dfs_order: graph_data.nodes.len(),
+                nth_node,
+                graph_data.nodes.len(),
                 depth,
-                nth_child,
-                value,
-            });
-            for (i, c_id) in node.children().iter().enumerate() {
-                let child_idx = rec(
-                    rec_expr,
-                    &rec_expr[*c_id],
-                    variable_names,
-                    graph_data,
-                    depth + 1,
-                    i,
-                )?;
+                node.symbol_info(),
+            ));
+            for (nth_child, c_id) in node.children().iter().enumerate() {
+                let child_idx = rec(rec_expr, &rec_expr[*c_id], graph_data, depth + 1, nth_child)?;
                 graph_data.add_adjacency(parent_idx, child_idx);
             }
             Ok(parent_idx)
@@ -227,78 +202,44 @@ impl TreeData {
         let mut graph_data = TreeData {
             nodes: Vec::new(),
             adjacency: Vec::new(),
-            ignore_unknown,
         };
-        rec(
-            rec_expr,
-            &rec_expr[root],
-            variable_names,
-            &mut graph_data,
-            0,
-            0,
-        )?;
+        rec(rec_expr, &rec_expr[root], &mut graph_data, 0, 0)?;
         graph_data.adjacency.sort_unstable();
         Ok(graph_data)
     }
+}
 
-    #[expect(clippy::missing_panics_doc, clippy::missing_errors_doc)]
-    pub fn to_rec_expr<L: MetaInfo + FromOp, S: AsRef<str>>(
-        &self,
-        variable_names: &[S],
-    ) -> Result<RecExpr<L>, TreeDataError> {
-        fn rec<LL: MetaInfo + FromOp, SS: AsRef<str>>(
+impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
+    type Error = TreeDataError;
+
+    fn try_from(tree_data: &TreeData) -> Result<RecExpr<L>, TreeDataError> {
+        fn rec<LL: MetaInfo + FromOp>(
             data: &TreeData,
-            variable_names: &[SS],
             node_idx: usize,
             stack: &mut Vec<LL>,
         ) -> Result<Id, TreeDataError> {
             let children = data
-                .adjacency()
+                .adjacency
                 .iter()
                 .filter(|(p, _)| *p == node_idx)
                 .map(|(_, c)| *c)
-                .map(|child_idx| rec::<LL, SS>(data, variable_names, child_idx, stack))
+                .map(|child_idx| rec::<LL>(data, child_idx, stack))
                 .collect::<Result<_, _>>()?;
-            let node = data.feature_vec_to_node::<LL, SS>(node_idx, children, variable_names);
+            let node = data.feature_vec_to_node::<LL>(node_idx, children);
             stack.push(node);
             Ok(Id::from(stack.len() - 1))
         }
 
-        if self.ignore_unknown {
-            return Err(TreeDataError::ImpossibleReconstruction);
-        }
-
         // Only one node has nothing pointing to it: The root
-        let (root, _) = self
+        let (root, _) = tree_data
             .adjacency
             .iter()
-            .find(|(p, _)| !self.adjacency.iter().any(|(_, c)| p == c))
+            .find(|(p, _)| !tree_data.adjacency.iter().any(|(_, c)| p == c))
             .unwrap();
 
         let mut stack = vec![];
-        rec(self, variable_names, *root, &mut stack)?;
+        rec(tree_data, *root, &mut stack)?;
         Ok(stack.into())
-    }
-
-    fn feature_vec_to_node<L: MetaInfo + FromOp, S: AsRef<str>>(
-        &self,
-        node_idx: usize,
-        children: Vec<Id>,
-        variable_names: &[S],
-    ) -> L {
-        // Ids go consts | operators & metasymbols | variables
-        let node = &self.nodes[node_idx];
-
-        if node.id < L::N_CONST_TYPES {
-            // If it is a constant we can safely unwrap
-            L::from_op(node.value.as_ref().unwrap(), vec![]).unwrap()
-        } else if node.id < L::n_non_vars() {
-            L::from_op(L::named_symbols()[node.id - L::N_CONST_TYPES], children).unwrap()
-        } else {
-            // At the end are the variables so if it is lower we can just lookup
-            let var_idx = node.id - L::n_non_vars();
-            L::from_op(variable_names[var_idx].as_ref(), children).unwrap()
-        }
     }
 }
 
@@ -306,17 +247,16 @@ impl TreeData {
 mod tests {
     use super::*;
 
-    use crate::trs::halide::HalideLang;
+    use crate::trs::{SymbolType, halide::HalideLang};
 
     use egg::RecExpr;
 
     #[test]
     fn pytorch_inverse() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
-        let variable_names = vec!["v0"];
-        let data = TreeData::new(&expr, &variable_names, false).unwrap();
+        let data: TreeData = (&expr).try_into().unwrap();
 
-        let new_expr: RecExpr<HalideLang> = data.to_rec_expr(&variable_names).unwrap();
+        let new_expr: RecExpr<HalideLang> = (&data).try_into().unwrap();
         assert_eq!(expr, new_expr);
         assert_eq!(expr.to_string(), new_expr.to_string());
     }
@@ -324,21 +264,82 @@ mod tests {
     #[test]
     fn pytorch_format() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
-        let variable_names = vec!["v0"];
-        let data = TreeData::new(&expr, &variable_names, false).unwrap();
-
+        let data: TreeData = (&expr).try_into().unwrap();
         assert_eq!(
-            data.nodes(),
+            data.nodes,
             vec![
-                Node::new(9, "<".to_owned(), 2, 0, 0, 0, None),
-                Node::new(4, "*".to_owned(), 2, 0, 1, 1, None),
-                Node::new(18, "v0".to_owned(), 0, 0, 2, 2, None),
-                Node::new(1, "35".to_owned(), 0, 1, 3, 2, Some("35".to_owned())),
-                Node::new(4, "*".to_owned(), 2, 1, 4, 1, None),
-                Node::new(2, "+".to_owned(), 2, 0, 5, 2, None),
-                Node::new(18, "v0".to_owned(), 0, 0, 6, 3, None),
-                Node::new(1, "5".to_owned(), 0, 1, 7, 3, Some("5".to_owned())),
-                Node::new(1, "17".to_owned(), 0, 1, 8, 2, Some("17".to_owned()))
+                Node {
+                    name: "<".to_owned(),
+                    arity: 2,
+                    nth_child: 0,
+                    dfs_order: 0,
+                    depth: 0,
+                    symbol: SymbolInfo::new(7, SymbolType::Operator)
+                },
+                Node {
+                    name: "*".to_owned(),
+                    arity: 2,
+                    nth_child: 0,
+                    dfs_order: 1,
+                    depth: 1,
+                    symbol: SymbolInfo::new(2, SymbolType::Operator)
+                },
+                Node {
+                    name: "v0".to_owned(),
+                    arity: 0,
+                    nth_child: 0,
+                    dfs_order: 2,
+                    depth: 2,
+                    symbol: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                },
+                Node {
+                    name: "35".to_owned(),
+                    arity: 0,
+                    nth_child: 1,
+                    dfs_order: 3,
+                    depth: 2,
+                    symbol: SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
+                },
+                Node {
+                    name: "*".to_owned(),
+                    arity: 2,
+                    nth_child: 1,
+                    dfs_order: 4,
+                    depth: 1,
+                    symbol: SymbolInfo::new(2, SymbolType::Operator)
+                },
+                Node {
+                    name: "+".to_owned(),
+                    arity: 2,
+                    nth_child: 0,
+                    dfs_order: 5,
+                    depth: 2,
+                    symbol: SymbolInfo::new(0, SymbolType::Operator)
+                },
+                Node {
+                    name: "v0".to_owned(),
+                    arity: 0,
+                    nth_child: 0,
+                    dfs_order: 6,
+                    depth: 3,
+                    symbol: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                },
+                Node {
+                    name: "5".to_owned(),
+                    arity: 0,
+                    nth_child: 1,
+                    dfs_order: 7,
+                    depth: 3,
+                    symbol: SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
+                },
+                Node {
+                    name: "17".to_owned(),
+                    arity: 0,
+                    nth_child: 1,
+                    dfs_order: 8,
+                    depth: 2,
+                    symbol: SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
+                }
             ]
         );
         assert_eq!(
@@ -347,17 +348,15 @@ mod tests {
         );
     }
 
-    #[test]
-    fn unknown_symbol_false() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
-        let variable_names = vec!["v0"];
-        assert!(TreeData::new(&expr, &variable_names, false).is_err());
-    }
+    // #[test]
+    // fn unknown_symbol_false() {
+    //     let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
+    //     assert!(TreeData::new(&expr, false).is_err());
+    // }
 
-    #[test]
-    fn unknown_symbol_true() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
-        let variable_names = vec!["v0"];
-        assert!(TreeData::new(&expr, &variable_names, true).is_ok());
-    }
+    // #[test]
+    // fn unknown_symbol_true() {
+    //     let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
+    //     assert!(TreeData::new(&expr, true).is_ok());
+    // }
 }

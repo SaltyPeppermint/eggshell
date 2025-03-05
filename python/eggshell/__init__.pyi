@@ -8,14 +8,41 @@ from . import rise
 from . import simple
 
 class Node:
-    id: int
     name: str
     arity: int
     nth_child: int
     dfs_order: int
     depth: int
-    value: typing.Optional[str]
 
 class TreeData:
-    ...
+    nodes: list[Node]
+    adjacency: list[tuple[int, int]]
+    def transposed_adjacency(self) -> list[list[int]]:
+        ...
+
+    def count_symbols(self, n_symbols:int, n_vars:int) -> list[int]:
+        ...
+
+    def value_strings(self) -> list[str]:
+        ...
+
+    def arity(self, position:int) -> int:
+        ...
+
+    def depth(self) -> int:
+        ...
+
+    def size(self) -> int:
+        ...
+
+    def simple_feature_names(self, symbol_names:typing.Sequence[str], var_names:typing.Sequence[str]) -> list[str]:
+        ...
+
+    def simple_features(self, n_symbols:int, n_vars:int) -> list[float]:
+        ...
+
+    @staticmethod
+    def batch_simple_features(tree_datas:typing.Sequence[TreeData], n_symbols:int, n_vars:int) -> list[list[float]]:
+        ...
+
 

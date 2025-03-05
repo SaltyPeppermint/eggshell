@@ -22,15 +22,15 @@ class PyRecExpr:
     def arity(self, position:int) -> int:
         ...
 
-    def to_data(self, variable_names:typing.Sequence[str], ignore_unknown:bool) -> TreeData:
+    def to_data(self) -> TreeData:
         ...
 
     @staticmethod
-    def to_data_batch(rec_exprs:typing.Sequence[PyRecExpr], variable_names:typing.Sequence[str], ignore_unknown:bool) -> list[TreeData]:
+    def to_data_batch(rec_exprs:typing.Sequence[PyRecExpr]) -> list[TreeData]:
         ...
 
     @staticmethod
-    def from_data(tree_data:TreeData, variable_names:typing.Sequence[str]) -> PyRecExpr:
+    def from_data(tree_data:TreeData) -> PyRecExpr:
         ...
 
     @staticmethod

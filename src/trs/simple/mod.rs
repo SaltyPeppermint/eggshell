@@ -2,7 +2,7 @@ use egg::{Id, Symbol, define_language, rewrite};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolType, TermRewriteSystem};
+use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 
 // use crate::typing::{Type, Typeable, TypingInfo};
 
@@ -22,16 +22,14 @@ define_language! {
 }
 
 impl MetaInfo for SimpleLang {
-    fn symbol_type(&self) -> SymbolType {
+    fn symbol_info(&self) -> SymbolInfo {
+        let id = SimpleLangDiscriminants::iter()
+            .position(|x| x == self.into())
+            .unwrap();
         match self {
-            SimpleLang::Symbol(name) => SymbolType::Variable(name.as_str()),
-            SimpleLang::Num(value) => SymbolType::Constant(0, value.to_string()),
-            _ => {
-                let position = SimpleLangDiscriminants::iter()
-                    .position(|x| x == self.into())
-                    .unwrap();
-                SymbolType::Operator(position + Self::N_CONST_TYPES)
-            }
+            SimpleLang::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
+            SimpleLang::Num(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
+            _ => SymbolInfo::new(id, SymbolType::Operator),
         }
     }
 
@@ -39,7 +37,7 @@ impl MetaInfo for SimpleLang {
         vec!["+", "*"]
     }
 
-    const N_CONST_TYPES: usize = 1;
+    const NUM_NON_OPERATORS: usize = 2;
 }
 
 // impl Typeable for SimpleLang {

@@ -57,28 +57,21 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::missing_errors_doc)]
-            pub fn to_data(
-                &self,
-                variable_names: Vec<String>,
-                ignore_unknown: bool,
-            ) -> PyResult<TreeData> {
-                let graph_data = TreeData::new(&self.0, &variable_names, ignore_unknown)
+            pub fn to_data(&self) -> PyResult<TreeData> {
+                let graph_data = (&self.0)
+                    .try_into()
                     .map_err(|e| EggshellError::<L>::from(e))?;
                 Ok(graph_data)
             }
 
             #[expect(clippy::missing_errors_doc)]
             #[staticmethod]
-            pub fn to_data_batch(
-                rec_exprs: Vec<PyRecExpr>,
-                variable_names: Vec<String>,
-                ignore_unknown: bool,
-            ) -> PyResult<Vec<TreeData>> {
+            pub fn to_data_batch(rec_exprs: Vec<PyRecExpr>) -> PyResult<Vec<TreeData>> {
                 rec_exprs
                     .into_par_iter()
                     .map(|r| {
-                        let graph_data = TreeData::new(&r.0, &variable_names, ignore_unknown)
-                            .map_err(|e| EggshellError::<L>::from(e))?;
+                        let graph_data =
+                            (&r.0).try_into().map_err(|e| EggshellError::<L>::from(e))?;
                         Ok(graph_data)
                     })
                     .collect()
@@ -86,12 +79,9 @@ macro_rules! monomorphize {
 
             #[staticmethod]
             #[expect(clippy::missing_errors_doc)]
-            pub fn from_data(
-                tree_data: TreeData,
-                variable_names: Vec<String>,
-            ) -> PyResult<PyRecExpr> {
-                let expr = tree_data
-                    .to_rec_expr(&variable_names)
+            pub fn from_data(tree_data: TreeData) -> PyResult<PyRecExpr> {
+                let expr = (&tree_data)
+                    .try_into()
                     .map_err(|e| EggshellError::<L>::from(e))?;
                 Ok(PyRecExpr(expr))
             }

@@ -2,14 +2,15 @@
 // Thank you very much for that!
 
 use std::fmt::{Display, Formatter};
-use std::mem::{discriminant, Discriminant};
+use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{SketchLang, SketchParseError};
-use crate::trs::{MetaInfo, SymbolType};
+use crate::trs::SymbolType::MetaSymbol;
+use crate::trs::{MetaInfo, SymbolInfo};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
@@ -75,24 +76,24 @@ impl<L: Language> Language for PartialSketchLang<L> {
 // }
 
 impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
-    fn symbol_type(&self) -> SymbolType {
+    fn symbol_info(&self) -> SymbolInfo {
         if let PartialSketchLang::Finished(l) = self {
-            l.symbol_type()
+            l.symbol_info()
         } else {
             let position = PartialSketchLangDiscriminants::iter()
                 .position(|x| x == self.into())
                 .unwrap();
-            SymbolType::Operator(position + Self::N_CONST_TYPES)
+            SymbolInfo::new(position + SketchLang::<L>::num_symbols(), MetaSymbol)
         }
     }
 
     fn named_symbols() -> Vec<&'static str> {
-        let mut operators = SketchLang::<L>::named_symbols();
-        operators.extend(vec!["[open]", "[active]"]);
-        operators
+        let mut s = vec!["[open]", "[active]"];
+        s.extend(SketchLang::<L>::named_symbols());
+        s
     }
 
-    const N_CONST_TYPES: usize = SketchLang::<L>::N_CONST_TYPES;
+    const NUM_NON_OPERATORS: usize = SketchLang::<L>::NUM_NON_OPERATORS;
 
     // const N_META_TYPES: usize = SketchLang::<L>::N_META_TYPES + 2;
 }
@@ -141,7 +142,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::trs::{halide::HalideLang, MetaInfo};
+    use crate::trs::{MetaInfo, halide::HalideLang};
 
     // use crate::typing::typecheck_expr;
 
@@ -158,8 +159,8 @@ mod tests {
     #[test]
     fn operators() {
         let known_operators = vec![
-            "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
-            "&&", "?", "contains", "or", "[open]", "[active]",
+            "[open]", "[active]", "?", "contains", "or", "+", "-", "*", "/", "%", "max", "min",
+            "<", ">", "!", "<=", ">=", "==", "!=", "||", "&&",
         ];
         assert_eq!(
             PartialSketchLang::<HalideLang>::named_symbols(),
