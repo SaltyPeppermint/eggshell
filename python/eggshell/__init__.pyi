@@ -13,6 +13,8 @@ class Node:
     nth_child: int
     dfs_order: int
     depth: int
+    id: int
+    value: typing.Optional[str]
 
 class TreeData:
     nodes: list[Node]

@@ -52,10 +52,21 @@ impl Node {
             symbol,
         }
     }
+}
 
+#[gen_stub_pymethods]
+#[pymethods]
+impl Node {
     #[must_use]
+    #[getter]
     pub fn id(&self) -> usize {
         self.symbol.id()
+    }
+
+    #[must_use]
+    #[getter]
+    pub fn value(&self) -> Option<String> {
+        self.symbol.value()
     }
 }
 
