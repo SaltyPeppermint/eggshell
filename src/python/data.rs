@@ -21,7 +21,7 @@ pub enum TreeDataError {
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Node {
     #[pyo3(get)]
-    name: String,
+    raw_name: String,
     #[pyo3(get)]
     arity: usize,
     #[pyo3(get)]
@@ -30,26 +30,26 @@ pub struct Node {
     dfs_order: usize,
     #[pyo3(get)]
     depth: usize,
-    symbol: SymbolInfo,
+    symbol_info: SymbolInfo,
 }
 
 impl Node {
     #[must_use]
     pub fn new(
-        name: String,
+        raw_name: String,
         arity: usize,
         nth_child: usize,
         dfs_order: usize,
         depth: usize,
-        symbol: SymbolInfo,
+        symbol_info: SymbolInfo,
     ) -> Self {
         Self {
-            name,
+            raw_name,
             arity,
             nth_child,
             dfs_order,
             depth,
-            symbol,
+            symbol_info,
         }
     }
 }
@@ -60,13 +60,25 @@ impl Node {
     #[must_use]
     #[getter]
     pub fn id(&self) -> usize {
-        self.symbol.id()
+        self.symbol_info.id()
     }
 
     #[must_use]
     #[getter]
     pub fn value(&self) -> Option<String> {
-        self.symbol.value()
+        self.symbol_info.value()
+    }
+
+    #[must_use]
+    #[getter]
+    pub fn name(&self) -> String {
+        match self.symbol_info.symbol_type() {
+            crate::trs::SymbolType::Constant(_) => "[constant]".to_owned(),
+            crate::trs::SymbolType::Variable(_) => "[variable]".to_owned(),
+            crate::trs::SymbolType::MetaSymbol | crate::trs::SymbolType::Operator => {
+                self.raw_name.clone()
+            }
+        }
     }
 }
 
@@ -100,12 +112,15 @@ impl TreeData {
 
     #[must_use]
     pub fn values(&self) -> Vec<String> {
-        self.nodes.iter().filter_map(|n| n.symbol.value()).collect()
+        self.nodes
+            .iter()
+            .filter_map(|n| n.symbol_info.value())
+            .collect()
     }
 
     #[must_use]
     pub fn names(&self) -> Vec<String> {
-        self.nodes.iter().map(|n| n.name.clone()).collect()
+        self.nodes.iter().map(|n| n.name().clone()).collect()
     }
 
     fn arity(&self, position: usize) -> usize {
@@ -176,7 +191,7 @@ impl TreeData {
         // Ids go  | operators & metasymbols | consts | variables
         let node = &self.nodes[node_idx];
 
-        if let Some(v) = node.symbol.value() {
+        if let Some(v) = node.symbol_info.value() {
             // If it is a constant we can safely unwrap
             L::from_op(&v, vec![]).unwrap()
         } else {
@@ -285,76 +300,76 @@ mod tests {
             data.nodes,
             vec![
                 Node {
-                    name: "<".to_owned(),
+                    raw_name: "<".to_owned(),
                     arity: 2,
                     nth_child: 0,
                     dfs_order: 0,
                     depth: 0,
-                    symbol: SymbolInfo::new(7, SymbolType::Operator)
+                    symbol_info: SymbolInfo::new(7, SymbolType::Operator)
                 },
                 Node {
-                    name: "*".to_owned(),
+                    raw_name: "*".to_owned(),
                     arity: 2,
                     nth_child: 0,
                     dfs_order: 1,
                     depth: 1,
-                    symbol: SymbolInfo::new(2, SymbolType::Operator)
+                    symbol_info: SymbolInfo::new(2, SymbolType::Operator)
                 },
                 Node {
-                    name: "v0".to_owned(),
+                    raw_name: "v0".to_owned(),
                     arity: 0,
                     nth_child: 0,
                     dfs_order: 2,
                     depth: 2,
-                    symbol: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                    symbol_info: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
                 },
                 Node {
-                    name: "35".to_owned(),
+                    raw_name: "35".to_owned(),
                     arity: 0,
                     nth_child: 1,
                     dfs_order: 3,
                     depth: 2,
-                    symbol: SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
+                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
                 },
                 Node {
-                    name: "*".to_owned(),
+                    raw_name: "*".to_owned(),
                     arity: 2,
                     nth_child: 1,
                     dfs_order: 4,
                     depth: 1,
-                    symbol: SymbolInfo::new(2, SymbolType::Operator)
+                    symbol_info: SymbolInfo::new(2, SymbolType::Operator)
                 },
                 Node {
-                    name: "+".to_owned(),
+                    raw_name: "+".to_owned(),
                     arity: 2,
                     nth_child: 0,
                     dfs_order: 5,
                     depth: 2,
-                    symbol: SymbolInfo::new(0, SymbolType::Operator)
+                    symbol_info: SymbolInfo::new(0, SymbolType::Operator)
                 },
                 Node {
-                    name: "v0".to_owned(),
+                    raw_name: "v0".to_owned(),
                     arity: 0,
                     nth_child: 0,
                     dfs_order: 6,
                     depth: 3,
-                    symbol: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                    symbol_info: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
                 },
                 Node {
-                    name: "5".to_owned(),
+                    raw_name: "5".to_owned(),
                     arity: 0,
                     nth_child: 1,
                     dfs_order: 7,
                     depth: 3,
-                    symbol: SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
+                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
                 },
                 Node {
-                    name: "17".to_owned(),
+                    raw_name: "17".to_owned(),
                     arity: 0,
                     nth_child: 1,
                     dfs_order: 8,
                     depth: 2,
-                    symbol: SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
+                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
                 }
             ]
         );

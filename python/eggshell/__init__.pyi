@@ -8,13 +8,14 @@ from . import rise
 from . import simple
 
 class Node:
-    name: str
+    raw_name: str
     arity: int
     nth_child: int
     dfs_order: int
     depth: int
     id: int
     value: typing.Optional[str]
+    name: str
 
 class TreeData:
     nodes: list[Node]

@@ -68,6 +68,11 @@ impl SymbolInfo {
     pub fn id(&self) -> usize {
         self.id
     }
+
+    #[must_use]
+    pub fn symbol_type(&self) -> &SymbolType {
+        &self.symbol_type
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Serialize)]
