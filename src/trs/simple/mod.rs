@@ -1,6 +1,6 @@
 use egg::{Id, Symbol, define_language, rewrite};
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 
@@ -11,7 +11,7 @@ pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
     #[strum_discriminants(derive(EnumIter))]
         pub enum SimpleLang {
         "+" = Add([Id; 2]),
@@ -36,8 +36,6 @@ impl MetaInfo for SimpleLang {
     fn named_symbols() -> Vec<&'static str> {
         vec!["+", "*"]
     }
-
-    const NUM_NON_OPERATORS: usize = 2;
 }
 
 // impl Typeable for SimpleLang {

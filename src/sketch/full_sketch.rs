@@ -3,7 +3,7 @@ use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::SketchParseError;
 use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
@@ -13,7 +13,17 @@ use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
 
 #[derive(
-    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
+    Debug,
+    Hash,
+    PartialEq,
+    Eq,
+    Clone,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    EnumDiscriminants,
+    EnumCount,
 )]
 #[strum_discriminants(derive(EnumIter))]
 pub enum SketchLang<L: Language> {
@@ -95,7 +105,7 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
             let id = SketchLangDiscriminants::iter()
                 .position(|x| x == self.into())
                 .unwrap();
-            SymbolInfo::new(id + L::num_symbols(), SymbolType::MetaSymbol)
+            SymbolInfo::new(id + L::NUM_SYMBOLS, SymbolType::MetaSymbol)
         }
     }
 
@@ -105,9 +115,7 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
         s
     }
 
-    const NUM_NON_OPERATORS: usize = L::NUM_NON_OPERATORS;
-
-    // const N_META_TYPES: usize = L::N_META_TYPES + 3;
+    const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {

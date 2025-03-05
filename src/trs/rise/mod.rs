@@ -4,7 +4,7 @@ mod substitute;
 use egg::{Analysis, DidMerge, Id, Language, RecExpr, Symbol, define_language};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -17,7 +17,7 @@ type EGraph = egg::EGraph<RiseLang, RiseAnalysis>;
 type Rewrite = egg::Rewrite<RiseLang, RiseAnalysis>;
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
     #[strum_discriminants(derive(EnumIter))]
     pub enum RiseLang {
         "var" = Var(Id),
@@ -91,14 +91,6 @@ impl MetaInfo for RiseLang {
             "snd",
         ]
     }
-
-    const NUM_NON_OPERATORS: usize = 2;
-
-    // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
-    //     let mut o = RiseLangDiscriminants::VARIANTS.to_vec();
-    //     o.truncate(o.len() - 2);
-    //     o
-    // }
 }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]

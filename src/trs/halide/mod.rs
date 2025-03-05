@@ -6,7 +6,7 @@ mod rules;
 
 use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -18,7 +18,7 @@ type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 
 // Definition of the language used.
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
     #[strum_discriminants(derive(EnumIter))]
     pub enum HalideLang {
         "+" = Add([Id; 2]),
@@ -65,8 +65,6 @@ impl MetaInfo for HalideLang {
             "&&",
         ]
     }
-
-    const NUM_NON_OPERATORS: usize = 3;
 }
 
 // impl Typeable for HalideLang {

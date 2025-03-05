@@ -6,7 +6,7 @@ mod rules;
 use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol, define_language};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 // use crate::typing::{Type, Typeable, TypingInfo};
@@ -19,7 +19,7 @@ pub type Constant = NotNan<f64>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants)]
+    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
     #[strum_discriminants(derive(EnumIter))]
     pub enum Math {
         "d" = Diff([Id; 2]),
@@ -58,14 +58,6 @@ impl MetaInfo for Math {
             "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
         ]
     }
-
-    const NUM_NON_OPERATORS: usize = 2;
-
-    // fn operators() -> Vec<&'static Self::EnumDiscriminant> {
-    //     let mut o = MathDiscriminants::VARIANTS.to_vec();
-    //     o.truncate(o.len() - 2);
-    //     o
-    // }
 }
 
 // impl Typeable for Math {

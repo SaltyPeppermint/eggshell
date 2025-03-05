@@ -34,7 +34,7 @@ class PyRecExpr:
         ...
 
     @staticmethod
-    def named_symbols() -> list[str]:
+    def num_symbols() -> int:
         ...
 
 

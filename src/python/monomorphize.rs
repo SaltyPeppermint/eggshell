@@ -88,11 +88,8 @@ macro_rules! monomorphize {
 
             #[staticmethod]
             #[must_use]
-            pub fn named_symbols() -> Vec<String> {
-                L::named_symbols()
-                    .into_iter()
-                    .map(|c| c.to_owned())
-                    .collect()
+            pub fn num_symbols() -> usize {
+                L::NUM_SYMBOLS
             }
         }
 

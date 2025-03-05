@@ -7,6 +7,7 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use serde::Serialize;
+use strum::EnumCount;
 use thiserror::Error;
 
 use pyo3::{PyErr, create_exception, exceptions::PyException};
@@ -77,18 +78,13 @@ pub enum SymbolType {
     MetaSymbol,
 }
 
-pub trait MetaInfo: Display + Language {
+pub trait MetaInfo: Display + Language + EnumCount {
     fn symbol_info(&self) -> SymbolInfo;
 
     #[must_use]
     fn named_symbols() -> Vec<&'static str>;
 
-    #[must_use]
-    fn num_symbols() -> usize {
-        Self::named_symbols().len() + Self::NUM_NON_OPERATORS
-    }
-
-    const NUM_NON_OPERATORS: usize;
+    const NUM_SYMBOLS: usize = Self::COUNT;
 }
 
 #[derive(Debug, Error)]

@@ -6,7 +6,7 @@ use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
-use strum::{EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{SketchLang, SketchParseError};
 use crate::trs::SymbolType::MetaSymbol;
@@ -17,7 +17,17 @@ use crate::trs::{MetaInfo, SymbolInfo};
 pub type PartialSketch<L> = RecExpr<PartialSketchLang<L>>;
 
 #[derive(
-    Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize, EnumDiscriminants,
+    Debug,
+    Hash,
+    PartialEq,
+    Eq,
+    Clone,
+    PartialOrd,
+    Ord,
+    Serialize,
+    Deserialize,
+    EnumDiscriminants,
+    EnumCount,
 )]
 #[strum_discriminants(derive(EnumIter))]
 pub enum PartialSketchLang<L: Language> {
@@ -83,7 +93,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
             let position = PartialSketchLangDiscriminants::iter()
                 .position(|x| x == self.into())
                 .unwrap();
-            SymbolInfo::new(position + SketchLang::<L>::num_symbols(), MetaSymbol)
+            SymbolInfo::new(position + SketchLang::<L>::NUM_SYMBOLS, MetaSymbol)
         }
     }
 
@@ -93,9 +103,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
         s
     }
 
-    const NUM_NON_OPERATORS: usize = SketchLang::<L>::NUM_NON_OPERATORS;
-
-    // const N_META_TYPES: usize = SketchLang::<L>::N_META_TYPES + 2;
+    const NUM_SYMBOLS: usize = SketchLang::<L>::NUM_SYMBOLS + Self::COUNT;
 }
 
 impl<L: Language + Display> Display for PartialSketchLang<L> {
