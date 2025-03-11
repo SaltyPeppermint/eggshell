@@ -1,4 +1,7 @@
+use std::num::TryFromIntError;
+
 use egg::{FromOp, Id, RecExpr};
+use hashbrown::{HashMap, HashSet};
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use rayon::prelude::*;
@@ -88,7 +91,6 @@ impl Node {
 pub struct TreeData {
     #[pyo3(get)]
     nodes: Vec<Node>,
-    #[pyo3(get)]
     adjacency: Vec<(usize, usize)>,
 }
 
@@ -99,6 +101,132 @@ impl TreeData {
     pub fn transposed_adjacency(&self) -> [Vec<usize>; 2] {
         let (a, b) = self.adjacency.iter().map(|x| x.to_owned()).unzip();
         [a, b]
+    }
+
+    /// Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
+    /// max describes the maximum distance to be encoded. Max is used to indicate that
+    /// no relationship between nodes exists OR the distance is bigger than max
+    ///
+    /// # Errors
+    ///
+    /// If distance cannot be converted to i32
+    pub fn anc_matrix(&self, max: usize) -> PyResult<Vec<Vec<i32>>> {
+        fn cmp_nodes(
+            a: usize,
+            b: usize,
+            par_child: &HashMap<usize, HashSet<usize>>,
+            max: usize,
+            curr_distance: usize,
+        ) -> Option<usize> {
+            par_child.get(&a).and_then(|cs| {
+                cs.contains(&b)
+                    .then_some(curr_distance)
+                    .and_then(|x| if x > max { None } else { Some(x) })
+                    .or_else(|| {
+                        cs.iter()
+                            .find_map(|c| cmp_nodes(*c, b, par_child, max, curr_distance + 1))
+                    })
+            })
+        }
+
+        let par_child = self.adjacency.iter().fold(
+            HashMap::new(),
+            |mut par_child_table, (parent_idx, child_idx)| {
+                par_child_table
+                    .entry(*parent_idx)
+                    .and_modify(|v: &mut HashSet<usize>| {
+                        v.insert(*child_idx);
+                    })
+                    .or_insert(HashSet::from([*child_idx]));
+                par_child_table
+            },
+        );
+
+        (0..self.adjacency.len())
+            .map(|a_idx| {
+                (0..self.adjacency.len())
+                    .map(|b_idx| {
+                        if a_idx == b_idx {
+                            Ok(0) // Distance to self is always 0
+                        } else if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, max, 1) {
+                            i32::try_from(d) // Positive since parent to child
+                        } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, max, 1) {
+                            i32::try_from(d).map(|x| -x) // Negative since child to parent
+                        } else {
+                            i32::try_from(max) // If no connection => inf
+                        }
+                    })
+                    .collect()
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.into())
+    }
+
+    /// Gives a matrix that describes the sibling relationship in nodes
+    /// max describes the maximum distance to be encoded. Max is used to indicate that
+    /// no relationship between nodes exists OR the distance is bigger than max
+    ///
+    /// # Errors
+    ///
+    /// Will error if any sibling distance is greater than i32
+    pub fn sib_matrix(&self, max: usize) -> PyResult<Vec<Vec<i32>>> {
+        fn cmp_nodes(
+            a: usize,
+            b: usize,
+            par_child: &HashMap<usize, Vec<usize>>,
+            child_par: &HashMap<usize, usize>,
+            max: i32,
+        ) -> Result<i32, TryFromIntError> {
+            // Distance to self is always 0
+            // This catches the special case where root is compared to root
+            // which would be problematic in the if let since root has no parents
+            if a == b {
+                return Ok(0);
+            }
+
+            // Root case where a and b are both root and have no parents is caught by a==b
+            if let (Some(par_idx_a), Some(par_idx_b)) = (child_par.get(&a), child_par.get(&b)) {
+                // Sibling distance only makes sense if both have the same direct parent, otherwise infinite distance
+                if par_idx_a != par_idx_b {
+                    return Ok(max);
+                }
+                // If in child_par_map it must be in par_child_map
+                let sibilings = par_child.get(par_idx_a).unwrap();
+                let pos_a = sibilings.iter().position(|x| x == &a).unwrap();
+                let pos_b = sibilings.iter().position(|x| x == &b).unwrap();
+                let d = i32::try_from(pos_a)? - i32::try_from(pos_b)?;
+                if d < max {
+                    return Ok(d);
+                }
+            }
+            // Either not related or bigger distance than max so we return max
+            Ok(max)
+        }
+
+        let (par_child, child_par) = self.adjacency.iter().fold(
+            (HashMap::new(), HashMap::new()),
+            |(mut par_child, mut child_par), (parent, child)| {
+                child_par.insert(*child, *parent);
+                par_child
+                    .entry(*parent)
+                    .and_modify(|v: &mut Vec<usize>| {
+                        v.push(*child);
+                    })
+                    .or_insert(vec![*child]);
+                (par_child, child_par)
+            },
+        );
+
+        (0..self.adjacency.len())
+            .map(|a_idx| {
+                (0..self.adjacency.len())
+                    .map(|b_idx| {
+                        cmp_nodes(a_idx, b_idx, &par_child, &child_par, i32::try_from(max)?)
+                    })
+                    .collect()
+            })
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.into())
     }
 
     #[must_use]
@@ -290,6 +418,47 @@ mod tests {
         let new_expr: RecExpr<HalideLang> = (&data).try_into().unwrap();
         assert_eq!(expr, new_expr);
         assert_eq!(expr.to_string(), new_expr.to_string());
+    }
+
+    #[test]
+    fn sib_matrix() {
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
+        let data: TreeData = (&expr).try_into().unwrap();
+        let par_sib = data.sib_matrix(16).unwrap();
+
+        assert_eq!(
+            par_sib,
+            vec![
+                vec![0, 16, 16, 16, 16, 16, 16, 16],
+                vec![16, 0, 16, 16, -1, 16, 16, 16],
+                vec![16, 16, 0, -1, 16, 16, 16, 16],
+                vec![16, 16, 1, 0, 16, 16, 16, 16],
+                vec![16, 1, 16, 16, 0, 16, 16, 16],
+                vec![16, 16, 16, 16, 16, 0, 16, 16],
+                vec![16, 16, 16, 16, 16, 16, 0, -1],
+                vec![16, 16, 16, 16, 16, 16, 1, 0]
+            ]
+        );
+    }
+    #[test]
+    fn anc_matrix() {
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
+        let data: TreeData = (&expr).try_into().unwrap();
+        let par_sib = data.anc_matrix(16).unwrap();
+
+        assert_eq!(
+            par_sib,
+            vec![
+                vec![0, 1, 2, 2, 1, 2, 3, 3],
+                vec![-1, 0, 1, 1, 16, 16, 16, 16],
+                vec![-2, -1, 0, 16, 16, 16, 16, 16],
+                vec![-2, -1, 16, 0, 16, 16, 16, 16],
+                vec![-1, 16, 16, 16, 0, 1, 2, 2],
+                vec![-2, 16, 16, 16, -1, 0, 1, 1],
+                vec![-3, 16, 16, 16, -2, -1, 0, 16],
+                vec![-3, 16, 16, 16, -2, -1, 16, 0]
+            ]
+        );
     }
 
     #[test]
