@@ -22,27 +22,19 @@ class TreeData:
     def transposed_adjacency(self) -> list[list[int]]:
         ...
 
-    def anc_matrix(self, max:int) -> list[list[int]]:
+    def anc_matrix(self, max_abs_distance:int) -> list[list[int]]:
         r"""
         Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
-        max describes the maximum distance to be encoded. Max is used to indicate that
-        no relationship between nodes exists OR the distance is bigger than max
-        
-        # Errors
-        
-        If distance cannot be converted to i32
+        maximum distance (positive or negative) to be encoded.
+        If the distance is too large or no relationship exists, -1 is returned
         """
         ...
 
-    def sib_matrix(self, max:int) -> list[list[int]]:
+    def sib_matrix(self, max_abs_distance:int) -> list[list[int]]:
         r"""
         Gives a matrix that describes the sibling relationship in nodes
-        max describes the maximum distance to be encoded. Max is used to indicate that
-        no relationship between nodes exists OR the distance is bigger than max
-        
-        # Errors
-        
-        Will error if any sibling distance is greater than i32
+        max_abs_distance describes the maximum distance (positive or negative) to be encoded.
+        If the distance is too large or no relationship exists, -1 is returned
         """
         ...
 

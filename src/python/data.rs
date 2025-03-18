@@ -102,10 +102,11 @@ impl TreeData {
     }
 
     /// Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
-    /// max describes the maximum distance to be encoded. Max is used to indicate that
-    /// no relationship between nodes exists OR the distance is bigger than max
+    /// maximum distance (positive or negative) to be encoded.
+    /// If the distance is too large or no relationship exists, -1 is returned
     #[must_use]
-    pub fn anc_matrix(&self, range_size: usize) -> Vec<Vec<usize>> {
+    #[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    pub fn anc_matrix(&self, max_abs_distance: usize) -> Vec<Vec<i32>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -133,22 +134,22 @@ impl TreeData {
             },
         );
 
-        let (inf, center) = inf_center(range_size);
         (0..self.adjacency.len())
             .map(|a_idx| {
                 (0..self.adjacency.len())
                     .map(|b_idx| {
                         if a_idx == b_idx {
-                            return center; // Distance to self is always 0
+                            return -(max_abs_distance as i32); // Distance to self is always 0
                         }
                         if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, 1) {
-                            (d < center).then_some(center + d) // Positive since parent to child
+                            (d <= max_abs_distance).then_some(max_abs_distance + d) // Positive since parent to child
                         } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, 1) {
-                            (d < center).then_some(center - d) // Negative since child to parent
+                            (d <= max_abs_distance).then_some(max_abs_distance - d) // Negative since child to parent
                         } else {
                             None
                         }
-                        .unwrap_or(inf) // If no connection => inf
+                        .map_or(-1, |v| v as i32)
+                        // If no connection => inf
                     })
                     .collect()
             })
@@ -156,30 +157,30 @@ impl TreeData {
     }
 
     /// Gives a matrix that describes the sibling relationship in nodes
-    /// max describes the maximum distance to be encoded. Max is used to indicate that
-    /// no relationship between nodes exists OR the distance is bigger than max
+    /// max_abs_distance describes the maximum distance (positive or negative) to be encoded.
+    /// If the distance is too large or no relationship exists, -1 is returned
     #[must_use]
-    pub fn sib_matrix(&self, range_size: usize) -> Vec<Vec<usize>> {
+    #[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    pub fn sib_matrix(&self, max_abs_distance: usize) -> Vec<Vec<i32>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
             par_child: &HashMap<usize, Vec<usize>>,
             child_par: &HashMap<usize, usize>,
-            center: usize,
-            inf: usize,
-        ) -> usize {
+            max_abs_distance: usize,
+        ) -> Option<usize> {
             // Distance to self is always 0 aka center
             // This catches the special case where root is compared to root
             // which would be problematic in the if let since root has no parents
             if a == b {
-                return center;
+                return Some(max_abs_distance);
             }
 
             // Root case where a and b are both root and have no parents is caught by a==b
             if let (Some(par_idx_a), Some(par_idx_b)) = (child_par.get(&a), child_par.get(&b)) {
                 // Sibling distance only makes sense if both have the same direct parent, otherwise infinite distance
                 if par_idx_a != par_idx_b {
-                    return inf;
+                    return None;
                 }
                 // If in child_par_map it must be in par_child_map
                 let sibilings = par_child.get(par_idx_a).unwrap();
@@ -187,13 +188,14 @@ impl TreeData {
                 let pos_b = sibilings.iter().position(|x| x == &b).unwrap();
                 let d = usize::abs_diff(pos_a, pos_b);
                 // == case caught earlier
-                match (d < center, pos_a < pos_b) {
-                    (true, true) => center - d,
-                    (true, false) => center + d,
-                    (false, _) => inf,
+
+                if pos_a < pos_b {
+                    Some(d.min(max_abs_distance) + max_abs_distance)
+                } else {
+                    Some(max_abs_distance.saturating_sub(d))
                 }
             } else {
-                inf // Either not related or bigger distance than max so we return max
+                None // Either not related or bigger distance than max so we return max
             }
         }
 
@@ -211,11 +213,13 @@ impl TreeData {
             },
         );
 
-        let (inf, center) = inf_center(range_size);
         (0..self.adjacency.len())
             .map(|a_idx| {
                 (0..self.adjacency.len())
-                    .map(|b_idx| cmp_nodes(a_idx, b_idx, &par_child, &child_par, center, inf))
+                    .map(|b_idx| {
+                        cmp_nodes(a_idx, b_idx, &par_child, &child_par, max_abs_distance)
+                            .map_or(-1, |v| v as i32)
+                    })
                     .collect()
             })
             .collect()
@@ -295,10 +299,6 @@ impl TreeData {
             .map(|d| d.simple_features(n_symbols, n_vars))
             .collect::<Vec<_>>()
     }
-}
-
-fn inf_center(range_size: usize) -> (usize, usize) {
-    (range_size - 1, range_size / 2 - 1)
 }
 
 impl TreeData {
@@ -425,14 +425,14 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![7, 15, 15, 15, 15, 15, 15, 15],
-                vec![15, 7, 15, 15, 6, 15, 15, 15],
-                vec![15, 15, 7, 6, 15, 15, 15, 15],
-                vec![15, 15, 8, 7, 15, 15, 15, 15],
-                vec![15, 8, 15, 15, 7, 15, 15, 15],
-                vec![15, 15, 15, 15, 15, 7, 15, 15],
-                vec![15, 15, 15, 15, 15, 15, 7, 6],
-                vec![15, 15, 15, 15, 15, 15, 8, 7]
+                vec![16, -1, -1, -1, -1, -1, -1, -1],
+                vec![-1, 16, -1, -1, 17, -1, -1, -1],
+                vec![-1, -1, 16, 17, -1, -1, -1, -1],
+                vec![-1, -1, 15, 16, -1, -1, -1, -1],
+                vec![-1, 15, -1, -1, 16, -1, -1, -1],
+                vec![-1, -1, -1, -1, -1, 16, -1, -1],
+                vec![-1, -1, -1, -1, -1, -1, 16, 17],
+                vec![-1, -1, -1, -1, -1, -1, 15, 16]
             ]
         );
     }
@@ -445,14 +445,14 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![7, 8, 9, 9, 8, 9, 10, 10],
-                vec![6, 7, 8, 8, 15, 15, 15, 15],
-                vec![5, 6, 7, 15, 15, 15, 15, 15],
-                vec![5, 6, 15, 7, 15, 15, 15, 15],
-                vec![6, 15, 15, 15, 7, 8, 9, 9],
-                vec![5, 15, 15, 15, 6, 7, 8, 8],
-                vec![4, 15, 15, 15, 5, 6, 7, 15],
-                vec![4, 15, 15, 15, 5, 6, 15, 7]
+                vec![-16, 17, 18, 18, 17, 18, 19, 19],
+                vec![15, -16, 17, 17, -1, -1, -1, -1],
+                vec![14, 15, -16, -1, -1, -1, -1, -1],
+                vec![14, 15, -1, -16, -1, -1, -1, -1],
+                vec![15, -1, -1, -1, -16, 17, 18, 18],
+                vec![14, -1, -1, -1, 15, -16, 17, 17],
+                vec![13, -1, -1, -1, 14, 15, -16, -1],
+                vec![13, -1, -1, -1, 14, 15, -1, -16]
             ]
         );
     }
