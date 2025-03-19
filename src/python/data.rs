@@ -105,8 +105,7 @@ impl TreeData {
     /// maximum distance (positive or negative) to be encoded.
     /// If the distance is too large or no relationship exists, -1 is returned
     #[must_use]
-    #[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    pub fn anc_matrix(&self, max_abs_distance: usize) -> Vec<Vec<i32>> {
+    pub fn anc_matrix(&self, max_abs_distance: usize) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -139,16 +138,16 @@ impl TreeData {
                 (0..self.adjacency.len())
                     .map(|b_idx| {
                         if a_idx == b_idx {
-                            return -(max_abs_distance as i32); // Distance to self is always 0
+                            return max_abs_distance; // Distance to self is always 0
                         }
                         if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, 1) {
-                            (d <= max_abs_distance).then_some(max_abs_distance + d) // Positive since parent to child
+                            (d < max_abs_distance).then_some(max_abs_distance + d) // Positive since parent to child
                         } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, 1) {
-                            (d <= max_abs_distance).then_some(max_abs_distance - d) // Negative since child to parent
+                            (d < max_abs_distance).then_some(max_abs_distance - d) // Negative since child to parent
                         } else {
                             None
                         }
-                        .map_or(-1, |v| v as i32)
+                        .unwrap_or(0)
                         // If no connection => inf
                     })
                     .collect()
@@ -160,8 +159,7 @@ impl TreeData {
     /// max_abs_distance describes the maximum distance (positive or negative) to be encoded.
     /// If the distance is too large or no relationship exists, -1 is returned
     #[must_use]
-    #[expect(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
-    pub fn sib_matrix(&self, max_abs_distance: usize) -> Vec<Vec<i32>> {
+    pub fn sib_matrix(&self, max_abs_distance: usize) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -187,12 +185,16 @@ impl TreeData {
                 let pos_a = sibilings.iter().position(|x| x == &a).unwrap();
                 let pos_b = sibilings.iter().position(|x| x == &b).unwrap();
                 let d = usize::abs_diff(pos_a, pos_b);
+
+                if d >= max_abs_distance {
+                    return None;
+                }
                 // == case caught earlier
 
                 if pos_a < pos_b {
-                    Some(d.min(max_abs_distance) + max_abs_distance)
+                    Some(max_abs_distance + d)
                 } else {
-                    Some(max_abs_distance.saturating_sub(d))
+                    Some(max_abs_distance - d)
                 }
             } else {
                 None // Either not related or bigger distance than max so we return max
@@ -218,7 +220,7 @@ impl TreeData {
                 (0..self.adjacency.len())
                     .map(|b_idx| {
                         cmp_nodes(a_idx, b_idx, &par_child, &child_par, max_abs_distance)
-                            .map_or(-1, |v| v as i32)
+                            .unwrap_or(0)
                     })
                     .collect()
             })
@@ -425,14 +427,14 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![16, -1, -1, -1, -1, -1, -1, -1],
-                vec![-1, 16, -1, -1, 17, -1, -1, -1],
-                vec![-1, -1, 16, 17, -1, -1, -1, -1],
-                vec![-1, -1, 15, 16, -1, -1, -1, -1],
-                vec![-1, 15, -1, -1, 16, -1, -1, -1],
-                vec![-1, -1, -1, -1, -1, 16, -1, -1],
-                vec![-1, -1, -1, -1, -1, -1, 16, 17],
-                vec![-1, -1, -1, -1, -1, -1, 15, 16]
+                vec![16, 0, 0, 0, 0, 0, 0, 0],
+                vec![0, 16, 0, 0, 17, 0, 0, 0],
+                vec![0, 0, 16, 17, 0, 0, 0, 0],
+                vec![0, 0, 15, 16, 0, 0, 0, 0],
+                vec![0, 15, 0, 0, 16, 0, 0, 0],
+                vec![0, 0, 0, 0, 0, 16, 0, 0],
+                vec![0, 0, 0, 0, 0, 0, 16, 17],
+                vec![0, 0, 0, 0, 0, 0, 15, 16]
             ]
         );
     }
@@ -445,14 +447,14 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![-16, 17, 18, 18, 17, 18, 19, 19],
-                vec![15, -16, 17, 17, -1, -1, -1, -1],
-                vec![14, 15, -16, -1, -1, -1, -1, -1],
-                vec![14, 15, -1, -16, -1, -1, -1, -1],
-                vec![15, -1, -1, -1, -16, 17, 18, 18],
-                vec![14, -1, -1, -1, 15, -16, 17, 17],
-                vec![13, -1, -1, -1, 14, 15, -16, -1],
-                vec![13, -1, -1, -1, 14, 15, -1, -16]
+                vec![16, 17, 18, 18, 17, 18, 19, 19],
+                vec![15, 16, 17, 17, 0, 0, 0, 0],
+                vec![14, 15, 16, 0, 0, 0, 0, 0],
+                vec![14, 15, 0, 16, 0, 0, 0, 0],
+                vec![15, 0, 0, 0, 16, 17, 18, 18],
+                vec![14, 0, 0, 0, 15, 16, 17, 17],
+                vec![13, 0, 0, 0, 14, 15, 16, 0],
+                vec![13, 0, 0, 0, 14, 15, 0, 16]
             ]
         );
     }
