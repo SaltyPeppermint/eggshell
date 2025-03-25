@@ -22,7 +22,7 @@ class TreeData:
     def transposed_adjacency(self) -> list[list[int]]:
         ...
 
-    def anc_matrix(self, max_abs_distance:int) -> list[list[int]]:
+    def anc_matrix(self, max_abs_distance,double_pad = ...) -> list[list[int]]:
         r"""
         Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
         maximum distance (positive or negative) to be encoded.
@@ -30,7 +30,7 @@ class TreeData:
         """
         ...
 
-    def sib_matrix(self, max_abs_distance:int) -> list[list[int]]:
+    def sib_matrix(self, max_abs_distance,double_pad = ...) -> list[list[int]]:
         r"""
         Gives a matrix that describes the sibling relationship in nodes
         max_abs_distance describes the maximum distance (positive or negative) to be encoded.
