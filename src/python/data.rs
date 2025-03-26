@@ -102,11 +102,11 @@ impl TreeData {
     }
 
     /// Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
-    /// maximum distance (positive or negative) to be encoded.
-    /// If the distance is too large or no relationship exists, -1 is returned
+    /// maximum distance (positive or negative) to be encoded mapped to the range 2 * max_rel_distance
+    /// If the distance is too large or no relationship exists, 0 is returned
     #[must_use]
-    #[pyo3(signature = (max_abs_distance, double_pad=true))]
-    pub fn anc_matrix(&self, max_abs_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
+    #[pyo3(signature = (max_rel_distance, double_pad=true))]
+    pub fn anc_matrix(&self, max_rel_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -134,16 +134,18 @@ impl TreeData {
             },
         );
 
+        let center = max_rel_distance + 1;
+
         let i = (0..self.adjacency.len()).map(|a_idx| {
             let inner_i = (0..self.adjacency.len()).map(|b_idx| {
                 if a_idx == b_idx {
-                    return max_abs_distance; // Distance to self is always 0
+                    return center; // Distance to self is always 0
                 }
                 if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, 1) {
-                    (d < max_abs_distance).then_some(max_abs_distance + d)
+                    (d < max_rel_distance).then_some(center + d)
                 // Positive since parent to child
                 } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, 1) {
-                    (d < max_abs_distance).then_some(max_abs_distance - d)
+                    (d < max_rel_distance).then_some(center - d)
                 // Negative since child to parent
                 } else {
                     None
@@ -169,23 +171,25 @@ impl TreeData {
     }
 
     /// Gives a matrix that describes the sibling relationship in nodes
-    /// max_abs_distance describes the maximum distance (positive or negative) to be encoded.
-    /// If the distance is too large or no relationship exists, -1 is returned
+    /// max_relative_distance describes the maximum distance (positive or negative) to be encoded,
+    /// mapped to the range 2 * max_relative_distance
+    /// If the distance is too large or no relationship exists, 0 is returned
     #[must_use]
-    #[pyo3(signature = (max_abs_distance, double_pad=true))]
-    pub fn sib_matrix(&self, max_abs_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
+    #[pyo3(signature = (max_rel_distance, double_pad=true))]
+    pub fn sib_matrix(&self, max_rel_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
             par_child: &HashMap<usize, Vec<usize>>,
             child_par: &HashMap<usize, usize>,
-            max_abs_distance: usize,
+            max_relative_distance: usize,
+            center: usize,
         ) -> Option<usize> {
             // Distance to self is always 0 aka center
             // This catches the special case where root is compared to root
             // which would be problematic in the if let since root has no parents
             if a == b {
-                return Some(max_abs_distance);
+                return Some(center);
             }
 
             // Root case where a and b are both root and have no parents is caught by a==b
@@ -200,20 +204,22 @@ impl TreeData {
                 let pos_b = sibilings.iter().position(|x| x == &b).unwrap();
                 let d = usize::abs_diff(pos_a, pos_b);
 
-                if d >= max_abs_distance {
+                if d >= max_relative_distance {
                     return None;
                 }
                 // == case caught earlier
 
                 if pos_a < pos_b {
-                    Some(max_abs_distance + d)
+                    Some(center + d)
                 } else {
-                    Some(max_abs_distance - d)
+                    Some(center - d)
                 }
             } else {
                 None // Either not related or bigger distance than max so we return max
             }
         }
+
+        let center = max_rel_distance + 1;
 
         let (par_child, child_par) = self.adjacency.iter().fold(
             (HashMap::new(), HashMap::new()),
@@ -231,7 +237,15 @@ impl TreeData {
 
         let i = (0..self.adjacency.len()).map(|a_idx| {
             let inner_i = (0..self.adjacency.len()).map(|b_idx| {
-                cmp_nodes(a_idx, b_idx, &par_child, &child_par, max_abs_distance).unwrap_or(0)
+                cmp_nodes(
+                    a_idx,
+                    b_idx,
+                    &par_child,
+                    &child_par,
+                    max_rel_distance,
+                    center,
+                )
+                .unwrap_or(0)
             });
             if !double_pad {
                 return inner_i.collect();
@@ -446,7 +460,7 @@ mod tests {
     fn sib_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.sib_matrix(16, false);
+        let par_sib = data.sib_matrix(15, false);
 
         assert_eq!(
             par_sib,
@@ -467,7 +481,7 @@ mod tests {
     fn anc_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.anc_matrix(16, false);
+        let par_sib = data.anc_matrix(15, false);
 
         assert_eq!(
             par_sib,
@@ -488,7 +502,7 @@ mod tests {
     fn anc_matrix_padded() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.anc_matrix(16, true);
+        let par_sib = data.anc_matrix(15, true);
 
         assert_eq!(
             par_sib,
@@ -511,7 +525,7 @@ mod tests {
     fn sib_matrix_padded() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.sib_matrix(16, true);
+        let par_sib = data.sib_matrix(15, true);
 
         assert_eq!(
             par_sib,
