@@ -18,17 +18,28 @@ pub enum NodeOrPlaceHolder {
 impl NodeOrPlaceHolder {
     #[must_use]
     pub fn id(&self) -> Option<usize> {
-        match self {
-            NodeOrPlaceHolder::Node(node) => Some(node.id()),
-            NodeOrPlaceHolder::Placeholder { .. } => None,
+        if let NodeOrPlaceHolder::Node(node) = self {
+            Some(node.id())
+        } else {
+            None
         }
     }
 
     #[must_use]
     pub fn value(&self) -> Option<String> {
-        match self {
-            NodeOrPlaceHolder::Node(node) => node.symbol_info.value(),
-            NodeOrPlaceHolder::Placeholder { .. } => None,
+        if let NodeOrPlaceHolder::Node(node) = self {
+            node.symbol_info.value()
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn arity(&self) -> Option<usize> {
+        if let NodeOrPlaceHolder::Node(node) = self {
+            Some(node.arity)
+        } else {
+            None
         }
     }
 

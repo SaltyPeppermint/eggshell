@@ -6,6 +6,7 @@ pub use nodes::Node;
 pub use nodes::NodeOrPlaceHolder;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+use rayon::prelude::*;
 
 use serde::Serialize;
 use thiserror::Error;
@@ -203,31 +204,30 @@ impl TreeData {
         }
     }
 
-    // #[must_use]
-    // pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
-    //     let mut f = vec![0; n_symbols + n_vars];
-    //     for n in &self.nodes {
-    //         f[n.id()] += 1;
-    //     }
-    //     f
-    // }
+    #[must_use]
+    pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
+        let mut f = vec![0; n_symbols + n_vars];
+        for n in &self.nodes {
+            if let NodeOrPlaceHolder::Node(node) = n {
+                f[node.id()] += 1;
+            }
+        }
+        f
+    }
 
-    // #[must_use]
-    // pub fn values(&self) -> Vec<String> {
-    //     self.nodes
-    //         .iter()
-    //         .filter_map(|n| n.symbol_info.value())
-    //         .collect()
-    // }
+    #[must_use]
+    pub fn values(&self) -> Vec<String> {
+        self.nodes.iter().filter_map(|n| n.value()).collect()
+    }
 
-    // #[must_use]
-    // pub fn names(&self) -> Vec<String> {
-    //     self.nodes.iter().map(|n| n.name().clone()).collect()
-    // }
+    #[must_use]
+    pub fn names(&self) -> Vec<String> {
+        self.nodes.iter().map(|n| n.name().clone()).collect()
+    }
 
-    // fn arity(&self, position: usize) -> usize {
-    //     self.nodes[position].arity
-    // }
+    fn arity(&self, position: usize) -> Option<usize> {
+        self.nodes[position].arity()
+    }
 
     #[expect(clippy::missing_panics_doc)]
     #[must_use]
@@ -240,43 +240,43 @@ impl TreeData {
         self.nodes.len()
     }
 
-    // #[expect(clippy::needless_pass_by_value)]
-    // #[must_use]
-    // pub fn simple_feature_names(
-    //     &self,
-    //     symbol_names: Vec<String>,
-    //     var_names: Vec<String>,
-    // ) -> Vec<String> {
-    //     let mut s = symbol_names.clone();
-    //     s.push("CONSTANT".to_owned());
-    //     s.extend(var_names);
-    //     s.push("SIZE".to_owned());
-    //     s.push("DEPTH".to_owned());
-    //     s
-    // }
+    #[expect(clippy::needless_pass_by_value)]
+    #[must_use]
+    pub fn simple_feature_names(
+        &self,
+        symbol_names: Vec<String>,
+        var_names: Vec<String>,
+    ) -> Vec<String> {
+        let mut s = symbol_names.clone();
+        s.push("CONSTANT".to_owned());
+        s.extend(var_names);
+        s.push("SIZE".to_owned());
+        s.push("DEPTH".to_owned());
+        s
+    }
 
-    // #[expect(clippy::cast_precision_loss)]
-    // #[must_use]
-    // pub fn simple_features(&self, n_symbols: usize, n_vars: usize) -> Vec<f64> {
-    //     let mut features = self.count_symbols(n_symbols, n_vars);
-    //     features.push(self.size());
-    //     features.push(self.depth());
-    //     features.into_iter().map(|v| v as f64).collect()
-    // }
+    #[expect(clippy::cast_precision_loss)]
+    #[must_use]
+    pub fn simple_features(&self, n_symbols: usize, n_vars: usize) -> Vec<f64> {
+        let mut features = self.count_symbols(n_symbols, n_vars);
+        features.push(self.size());
+        features.push(self.depth());
+        features.into_iter().map(|v| v as f64).collect()
+    }
 
-    // #[expect(clippy::needless_pass_by_value)]
-    // #[must_use]
-    // #[staticmethod]
-    // pub fn batch_simple_features(
-    //     tree_datas: Vec<TreeData>,
-    //     n_symbols: usize,
-    //     n_vars: usize,
-    // ) -> Vec<Vec<f64>> {
-    //     tree_datas
-    //         .par_iter()
-    //         .map(|d| d.simple_features(n_symbols, n_vars))
-    //         .collect::<Vec<_>>()
-    // }
+    #[expect(clippy::needless_pass_by_value)]
+    #[must_use]
+    #[staticmethod]
+    pub fn batch_simple_features(
+        tree_datas: Vec<TreeData>,
+        n_symbols: usize,
+        n_vars: usize,
+    ) -> Vec<Vec<f64>> {
+        tree_datas
+            .par_iter()
+            .map(|d| d.simple_features(n_symbols, n_vars))
+            .collect::<Vec<_>>()
+    }
 }
 
 impl TreeData {
