@@ -1,7 +1,6 @@
 // The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
 // Thank you very much for that!
 
-use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
@@ -135,25 +134,28 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let mut children_ids = VecDeque::new();
+    let mut children_ids = Vec::new();
     let mut nodes = Vec::new();
-    let mut greedy_children = Vec::new();
     for token in value {
-        for n in 0.. {
-            if let Ok(node) = PartialLang::<L>::from_op(token, greedy_children.clone()) {
+        // Sibling case
+        if let Ok(node) = PartialLang::<L>::from_op(token, vec![]) {
+            nodes.push(node);
+            children_ids.push(Id::from(nodes.len() - 1));
+            continue;
+        }
+        // Parent case (has to take all the existing children_ids)
+        for n in children_ids.len().. {
+            if let Ok(node) = PartialLang::<L>::from_op(token, children_ids.clone()) {
                 nodes.push(node);
-                greedy_children.clear();
-                children_ids.push_back(Id::from(nodes.len() - 1));
+                children_ids.clear();
+                children_ids.push(Id::from(nodes.len() - 1));
                 break;
             }
-            let next = children_ids.pop_front().unwrap_or_else(|| {
-                nodes.push(PartialLang::Placeholder);
-                Id::from(nodes.len() - 1)
-            });
-            greedy_children.push(next);
+            nodes.push(PartialLang::Placeholder);
+            children_ids.push(Id::from(nodes.len() - 1));
 
             if n > L::MAX_ARITY {
-                return Err(MetaLangError::MaxArity(n));
+                return Err(MetaLangError::MaxArity(token.to_owned(), n));
             }
         }
         // }

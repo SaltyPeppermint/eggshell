@@ -23,8 +23,8 @@ pub enum MetaLangError<E: Display> {
     BadChildren(#[from] egg::FromOpError),
     #[error("Tried to parse a partial sketch into a full sketch")]
     PartialSketch,
-    #[error("Max arity reached while trying to parse partial term: {0}")]
-    MaxArity(usize),
+    #[error("Max arity reached while trying to parse partial term: {1}: {0}")]
+    MaxArity(String, usize),
     #[error(transparent)]
     BadOp(E),
 }
