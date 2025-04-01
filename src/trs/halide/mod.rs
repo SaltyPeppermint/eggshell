@@ -65,6 +65,8 @@ impl MetaInfo for HalideLang {
             "&&",
         ]
     }
+
+    const MAX_ARITY: usize = 2;
 }
 
 // impl Typeable for HalideLang {

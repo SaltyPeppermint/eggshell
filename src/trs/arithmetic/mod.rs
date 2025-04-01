@@ -58,6 +58,8 @@ impl MetaInfo for Math {
             "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
         ]
     }
+
+    const MAX_ARITY: usize = 2;
 }
 
 // impl Typeable for Math {

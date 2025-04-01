@@ -36,6 +36,8 @@ impl MetaInfo for SimpleLang {
     fn operators() -> Vec<&'static str> {
         vec!["+", "*"]
     }
+
+    const MAX_ARITY: usize = 2;
 }
 
 // impl Typeable for SimpleLang {

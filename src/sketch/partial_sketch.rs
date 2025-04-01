@@ -104,6 +104,8 @@ impl<L: Language + MetaInfo> MetaInfo for PartialSketchLang<L> {
     }
 
     const NUM_SYMBOLS: usize = SketchLang::<L>::NUM_SYMBOLS + Self::COUNT;
+
+    const MAX_ARITY: usize = SketchLang::<L>::MAX_ARITY;
 }
 
 impl<L: Language + Display> Display for PartialSketchLang<L> {

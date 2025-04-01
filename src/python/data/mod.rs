@@ -1,13 +1,16 @@
+mod nodes;
+
 use egg::{FromOp, Id, RecExpr};
 use hashbrown::{HashMap, HashSet};
+pub use nodes::Node;
+pub use nodes::NodeOrPlaceHolder;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
-use rayon::prelude::*;
 
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::trs::{MetaInfo, SymbolInfo};
+use crate::trs::MetaInfo;
 
 #[derive(Debug, Error)]
 pub enum TreeDataError {
@@ -15,80 +18,15 @@ pub enum TreeDataError {
     UnknownSymbol(String),
     #[error("Cannot reconstruct ignored symbols")]
     ImpossibleReconstruction,
-}
-
-#[gen_stub_pyclass]
-#[pyclass(frozen, module = "eggshell")]
-#[derive(Debug, PartialEq, Clone, Serialize)]
-pub struct Node {
-    #[pyo3(get)]
-    raw_name: String,
-    #[pyo3(get)]
-    arity: usize,
-    #[pyo3(get)]
-    nth_child: usize,
-    #[pyo3(get)]
-    dfs_order: usize,
-    #[pyo3(get)]
-    depth: usize,
-    symbol_info: SymbolInfo,
-}
-
-impl Node {
-    #[must_use]
-    pub fn new(
-        raw_name: String,
-        arity: usize,
-        nth_child: usize,
-        dfs_order: usize,
-        depth: usize,
-        symbol_info: SymbolInfo,
-    ) -> Self {
-        Self {
-            raw_name,
-            arity,
-            nth_child,
-            dfs_order,
-            depth,
-            symbol_info,
-        }
-    }
-}
-
-#[gen_stub_pymethods]
-#[pymethods]
-impl Node {
-    #[must_use]
-    #[getter]
-    pub fn id(&self) -> usize {
-        self.symbol_info.id()
-    }
-
-    #[must_use]
-    #[getter]
-    pub fn value(&self) -> Option<String> {
-        self.symbol_info.value()
-    }
-
-    #[must_use]
-    #[getter]
-    pub fn name(&self) -> String {
-        match self.symbol_info.symbol_type() {
-            crate::trs::SymbolType::Constant(_) => "[constant]".to_owned(),
-            crate::trs::SymbolType::Variable(_) => "[variable]".to_owned(),
-            crate::trs::SymbolType::MetaSymbol | crate::trs::SymbolType::Operator => {
-                self.raw_name.clone()
-            }
-        }
-    }
+    #[error("Max arity reached while trying to parse partial term: {0}")]
+    MaxArity(usize),
 }
 
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "eggshell")]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct TreeData {
-    #[pyo3(get)]
-    nodes: Vec<Node>,
+    nodes: Vec<NodeOrPlaceHolder>,
     adjacency: Vec<(usize, usize)>,
 }
 
@@ -265,36 +203,36 @@ impl TreeData {
         }
     }
 
-    #[must_use]
-    pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
-        let mut f = vec![0; n_symbols + n_vars];
-        for n in &self.nodes {
-            f[n.id()] += 1;
-        }
-        f
-    }
+    // #[must_use]
+    // pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
+    //     let mut f = vec![0; n_symbols + n_vars];
+    //     for n in &self.nodes {
+    //         f[n.id()] += 1;
+    //     }
+    //     f
+    // }
 
-    #[must_use]
-    pub fn values(&self) -> Vec<String> {
-        self.nodes
-            .iter()
-            .filter_map(|n| n.symbol_info.value())
-            .collect()
-    }
+    // #[must_use]
+    // pub fn values(&self) -> Vec<String> {
+    //     self.nodes
+    //         .iter()
+    //         .filter_map(|n| n.symbol_info.value())
+    //         .collect()
+    // }
 
-    #[must_use]
-    pub fn names(&self) -> Vec<String> {
-        self.nodes.iter().map(|n| n.name().clone()).collect()
-    }
+    // #[must_use]
+    // pub fn names(&self) -> Vec<String> {
+    //     self.nodes.iter().map(|n| n.name().clone()).collect()
+    // }
 
-    fn arity(&self, position: usize) -> usize {
-        self.nodes[position].arity
-    }
+    // fn arity(&self, position: usize) -> usize {
+    //     self.nodes[position].arity
+    // }
 
     #[expect(clippy::missing_panics_doc)]
     #[must_use]
     pub fn depth(&self) -> usize {
-        self.nodes.iter().map(|x| x.depth).max().unwrap()
+        self.nodes.iter().map(|x| x.depth()).max().unwrap()
     }
 
     #[must_use]
@@ -302,43 +240,43 @@ impl TreeData {
         self.nodes.len()
     }
 
-    #[expect(clippy::needless_pass_by_value)]
-    #[must_use]
-    pub fn simple_feature_names(
-        &self,
-        symbol_names: Vec<String>,
-        var_names: Vec<String>,
-    ) -> Vec<String> {
-        let mut s = symbol_names.clone();
-        s.push("CONSTANT".to_owned());
-        s.extend(var_names);
-        s.push("SIZE".to_owned());
-        s.push("DEPTH".to_owned());
-        s
-    }
+    // #[expect(clippy::needless_pass_by_value)]
+    // #[must_use]
+    // pub fn simple_feature_names(
+    //     &self,
+    //     symbol_names: Vec<String>,
+    //     var_names: Vec<String>,
+    // ) -> Vec<String> {
+    //     let mut s = symbol_names.clone();
+    //     s.push("CONSTANT".to_owned());
+    //     s.extend(var_names);
+    //     s.push("SIZE".to_owned());
+    //     s.push("DEPTH".to_owned());
+    //     s
+    // }
 
-    #[expect(clippy::cast_precision_loss)]
-    #[must_use]
-    pub fn simple_features(&self, n_symbols: usize, n_vars: usize) -> Vec<f64> {
-        let mut features = self.count_symbols(n_symbols, n_vars);
-        features.push(self.size());
-        features.push(self.depth());
-        features.into_iter().map(|v| v as f64).collect()
-    }
+    // #[expect(clippy::cast_precision_loss)]
+    // #[must_use]
+    // pub fn simple_features(&self, n_symbols: usize, n_vars: usize) -> Vec<f64> {
+    //     let mut features = self.count_symbols(n_symbols, n_vars);
+    //     features.push(self.size());
+    //     features.push(self.depth());
+    //     features.into_iter().map(|v| v as f64).collect()
+    // }
 
-    #[expect(clippy::needless_pass_by_value)]
-    #[must_use]
-    #[staticmethod]
-    pub fn batch_simple_features(
-        tree_datas: Vec<TreeData>,
-        n_symbols: usize,
-        n_vars: usize,
-    ) -> Vec<Vec<f64>> {
-        tree_datas
-            .par_iter()
-            .map(|d| d.simple_features(n_symbols, n_vars))
-            .collect::<Vec<_>>()
-    }
+    // #[expect(clippy::needless_pass_by_value)]
+    // #[must_use]
+    // #[staticmethod]
+    // pub fn batch_simple_features(
+    //     tree_datas: Vec<TreeData>,
+    //     n_symbols: usize,
+    //     n_vars: usize,
+    // ) -> Vec<Vec<f64>> {
+    //     tree_datas
+    //         .par_iter()
+    //         .map(|d| d.simple_features(n_symbols, n_vars))
+    //         .collect::<Vec<_>>()
+    // }
 }
 
 impl TreeData {
@@ -346,20 +284,26 @@ impl TreeData {
         self.adjacency.push((parent, child));
     }
 
-    fn add_node(&mut self, node: Node) -> usize {
+    fn add_node(&mut self, node: NodeOrPlaceHolder) -> usize {
         self.nodes.push(node);
         self.nodes.len() - 1
     }
 
-    fn feature_vec_to_node<L: MetaInfo + FromOp>(&self, node_idx: usize, children: Vec<Id>) -> L {
+    fn feature_vec_to_node<L: MetaInfo + FromOp>(
+        &self,
+        node_idx: usize,
+        children: Vec<Id>,
+    ) -> Result<L, TreeDataError> {
         // Ids go  | operators & metasymbols | consts | variables
-        let node = &self.nodes[node_idx];
+        let NodeOrPlaceHolder::Node(node) = &self.nodes[node_idx] else {
+            return Err(TreeDataError::ImpossibleReconstruction);
+        };
 
-        if let Some(v) = node.symbol_info.value() {
+        if let Some(v) = node.symbol_info().value() {
             // If it is a constant we can safely unwrap
-            L::from_op(&v, vec![]).unwrap()
+            Ok(L::from_op(&v, vec![]).unwrap())
         } else {
-            L::from_op(L::operators()[node.id()], children).unwrap()
+            Ok(L::from_op(L::operators()[node.id()], children).unwrap())
         }
     }
 }
@@ -377,14 +321,14 @@ impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
         ) -> Result<usize, TreeDataError> {
             // All operators, variable_names, and last two are the constant symbol with its value
             let arity = node.children().len();
-            let parent_idx = graph_data.add_node(Node::new(
+            let parent_idx = graph_data.add_node(NodeOrPlaceHolder::Node(Node::new(
                 node.to_string(),
                 arity,
                 nth_node,
                 graph_data.nodes.len(),
                 depth,
                 node.symbol_info(),
-            ));
+            )));
             for (nth_child, c_id) in node.children().iter().enumerate() {
                 let child_idx = rec(rec_expr, &rec_expr[*c_id], graph_data, depth + 1, nth_child)?;
                 graph_data.add_adjacency(parent_idx, child_idx);
@@ -399,6 +343,103 @@ impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
             adjacency: Vec::new(),
         };
         rec(rec_expr, &rec_expr[root], &mut graph_data, 0, 0)?;
+        graph_data.adjacency.sort_unstable();
+        Ok(graph_data)
+    }
+}
+
+/// Tries to parse a list of tokens into a list of nodes in the language
+///
+/// # Errors
+///
+/// This function will return an error if it cannot be parsed as a partial term
+pub fn partial_parse<L: FromOp + MetaInfo>(
+    mut token_list: Vec<String>,
+) -> Result<Vec<Option<L>>, TreeDataError> {
+    token_list.reverse();
+    let max_arity = 1233;
+
+    let mut children_ids = Vec::new();
+    let mut nodes = Vec::new();
+    for token in &token_list {
+        // Either we are parsing a parent, then we take all the children currently on the stack
+        if let Ok(node) = L::from_op(token, children_ids.clone()) {
+            nodes.push(Some(node));
+            children_ids.clear();
+            children_ids.push(Id::from(nodes.len() - 1));
+        // Or we are parsing a sibling child with no children, so we put it on the stack
+        } else if let Ok(node) = L::from_op(token, Vec::new()) {
+            nodes.push(Some(node));
+            children_ids.push(Id::from(nodes.len() - 1));
+        // Or we are parsing and incomplete parent that only has some children already generated
+        } else {
+            for n in 0..max_arity {
+                if let Ok(node) = L::from_op(token, children_ids.clone()) {
+                    nodes.push(Some(node));
+                    children_ids.clear();
+                    children_ids.push(Id::from(nodes.len() - 1));
+                    break;
+                }
+                nodes.push(None);
+                children_ids.push(Id::from(nodes.len() - 1));
+                if n > max_arity {
+                    return Err(TreeDataError::MaxArity(n));
+                }
+            }
+        }
+    }
+    Ok(nodes)
+}
+
+impl<L: MetaInfo + FromOp> TryFrom<Vec<Option<L>>> for TreeData {
+    type Error = TreeDataError;
+
+    fn try_from(node_list: Vec<Option<L>>) -> Result<TreeData, TreeDataError> {
+        fn rec<L: MetaInfo + FromOp>(
+            node_list: &[Option<L>],
+            node: Option<&L>,
+            graph_data: &mut TreeData,
+            depth: usize,
+            position: usize,
+        ) -> Result<usize, TreeDataError> {
+            let Some(actual_l) = node else {
+                return Ok(graph_data.add_node(NodeOrPlaceHolder::Placeholder {
+                    depth,
+                    dfs_order: graph_data.nodes.len(),
+                    nth_child: position,
+                }));
+            };
+
+            // All operators, variable_names, and last two are the constant symbol with its value
+            let arity = actual_l.children().len();
+            let parent_idx = graph_data.add_node(NodeOrPlaceHolder::Node(Node::new(
+                actual_l.to_string(),
+                arity,
+                position,
+                graph_data.nodes.len(),
+                depth,
+                actual_l.symbol_info(),
+            )));
+            for (i, c_id) in actual_l.children().iter().enumerate() {
+                let child_idx = rec(
+                    node_list,
+                    node_list[usize::from(*c_id)].as_ref(),
+                    graph_data,
+                    depth + 1,
+                    i,
+                )?;
+                graph_data.add_adjacency(parent_idx, child_idx);
+            }
+            Ok(parent_idx)
+        }
+
+        let root = node_list.len();
+        // All operators, one for const, and variable_names
+        let mut graph_data = TreeData {
+            nodes: Vec::new(),
+            adjacency: Vec::new(),
+        };
+        rec(&node_list, node_list[root].as_ref(), &mut graph_data, 0, 0)?;
         graph_data.adjacency.sort_unstable();
         Ok(graph_data)
     }
@@ -420,7 +461,7 @@ impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
                 .map(|(_, c)| *c)
                 .map(|child_idx| rec::<LL>(data, child_idx, stack))
                 .collect::<Result<_, _>>()?;
-            let node = data.feature_vec_to_node::<LL>(node_idx, children);
+            let node = data.feature_vec_to_node::<LL>(node_idx, children)?;
             stack.push(node);
             Ok(Id::from(stack.len() - 1))
         }
@@ -442,7 +483,7 @@ impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
 mod tests {
     use super::*;
 
-    use crate::trs::{SymbolType, halide::HalideLang};
+    use crate::trs::{SymbolInfo, SymbolType, halide::HalideLang};
 
     use egg::RecExpr;
 
@@ -551,78 +592,78 @@ mod tests {
         assert_eq!(
             data.nodes,
             vec![
-                Node {
-                    raw_name: "<".to_owned(),
-                    arity: 2,
-                    nth_child: 0,
-                    dfs_order: 0,
-                    depth: 0,
-                    symbol_info: SymbolInfo::new(7, SymbolType::Operator)
-                },
-                Node {
-                    raw_name: "*".to_owned(),
-                    arity: 2,
-                    nth_child: 0,
-                    dfs_order: 1,
-                    depth: 1,
-                    symbol_info: SymbolInfo::new(2, SymbolType::Operator)
-                },
-                Node {
-                    raw_name: "v0".to_owned(),
-                    arity: 0,
-                    nth_child: 0,
-                    dfs_order: 2,
-                    depth: 2,
-                    symbol_info: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
-                },
-                Node {
-                    raw_name: "35".to_owned(),
-                    arity: 0,
-                    nth_child: 1,
-                    dfs_order: 3,
-                    depth: 2,
-                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
-                },
-                Node {
-                    raw_name: "*".to_owned(),
-                    arity: 2,
-                    nth_child: 1,
-                    dfs_order: 4,
-                    depth: 1,
-                    symbol_info: SymbolInfo::new(2, SymbolType::Operator)
-                },
-                Node {
-                    raw_name: "+".to_owned(),
-                    arity: 2,
-                    nth_child: 0,
-                    dfs_order: 5,
-                    depth: 2,
-                    symbol_info: SymbolInfo::new(0, SymbolType::Operator)
-                },
-                Node {
-                    raw_name: "v0".to_owned(),
-                    arity: 0,
-                    nth_child: 0,
-                    dfs_order: 6,
-                    depth: 3,
-                    symbol_info: SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
-                },
-                Node {
-                    raw_name: "5".to_owned(),
-                    arity: 0,
-                    nth_child: 1,
-                    dfs_order: 7,
-                    depth: 3,
-                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
-                },
-                Node {
-                    raw_name: "17".to_owned(),
-                    arity: 0,
-                    nth_child: 1,
-                    dfs_order: 8,
-                    depth: 2,
-                    symbol_info: SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
-                }
+                NodeOrPlaceHolder::Node(Node::new(
+                    "<".to_owned(),
+                    2,
+                    0,
+                    0,
+                    0,
+                    SymbolInfo::new(7, SymbolType::Operator)
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "*".to_owned(),
+                    2,
+                    0,
+                    1,
+                    1,
+                    SymbolInfo::new(2, SymbolType::Operator)
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "v0".to_owned(),
+                    0,
+                    0,
+                    2,
+                    2,
+                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "35".to_owned(),
+                    0,
+                    1,
+                    3,
+                    2,
+                    SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "*".to_owned(),
+                    2,
+                    1,
+                    4,
+                    1,
+                    SymbolInfo::new(2, SymbolType::Operator)
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "+".to_owned(),
+                    2,
+                    0,
+                    5,
+                    2,
+                    SymbolInfo::new(0, SymbolType::Operator)
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "v0".to_owned(),
+                    0,
+                    0,
+                    6,
+                    3,
+                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "5".to_owned(),
+                    0,
+                    1,
+                    7,
+                    3,
+                    SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
+                )),
+                NodeOrPlaceHolder::Node(Node::new(
+                    "17".to_owned(),
+                    0,
+                    1,
+                    8,
+                    2,
+                    SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
+                ))
             ]
         );
         assert_eq!(

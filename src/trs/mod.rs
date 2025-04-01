@@ -90,6 +90,7 @@ pub trait MetaInfo: Display + Language + EnumCount {
     fn operators() -> Vec<&'static str>;
 
     const NUM_SYMBOLS: usize = Self::COUNT;
+    const MAX_ARITY: usize;
 }
 
 #[derive(Debug, Error)]

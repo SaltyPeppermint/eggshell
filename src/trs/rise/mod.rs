@@ -91,6 +91,8 @@ impl MetaInfo for RiseLang {
             "snd",
         ]
     }
+
+    const MAX_ARITY: usize = 3;
 }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]

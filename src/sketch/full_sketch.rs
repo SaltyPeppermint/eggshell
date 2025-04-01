@@ -116,6 +116,8 @@ impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
     }
 
     const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
+
+    const MAX_ARITY: usize = { if L::MAX_ARITY > 2 { L::MAX_ARITY } else { 2 } };
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {
