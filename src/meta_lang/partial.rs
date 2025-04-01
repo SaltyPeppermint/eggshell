@@ -137,28 +137,29 @@ where
     let mut children_ids = Vec::new();
     let mut nodes = Vec::new();
     for token in value {
-        // Sibling case
-        if let Ok(node) = PartialLang::<L>::from_op(token, vec![]) {
-            nodes.push(node);
-            children_ids.push(Id::from(nodes.len() - 1));
-            continue;
-        }
-        // Parent case (has to take all the existing children_ids)
-        for n in children_ids.len().. {
-            if let Ok(node) = PartialLang::<L>::from_op(token, children_ids.clone()) {
-                nodes.push(node);
-                children_ids.clear();
+        let node = if let Ok(node) = PartialLang::<L>::from_op(token, vec![]) {
+            // Sibling case
+            node
+        } else {
+            // Parent case (has to take all the existing children_ids)
+            loop {
+                if let Ok(node) = PartialLang::<L>::from_op(token, children_ids.clone()) {
+                    children_ids.clear();
+                    break node;
+                }
+                nodes.push(PartialLang::Placeholder);
                 children_ids.push(Id::from(nodes.len() - 1));
-                break;
-            }
-            nodes.push(PartialLang::Placeholder);
-            children_ids.push(Id::from(nodes.len() - 1));
 
-            if n > L::MAX_ARITY {
-                return Err(MetaLangError::MaxArity(token.to_owned(), n));
+                if children_ids.len() > L::MAX_ARITY {
+                    return Err(MetaLangError::MaxArity(
+                        token.to_owned(),
+                        children_ids.len(),
+                    ));
+                }
             }
-        }
-        // }
+        };
+        nodes.push(node);
+        children_ids.push(Id::from(nodes.len() - 1));
     }
     Ok(nodes)
 }
