@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
+use crate::meta_lang::PartialLang;
 use crate::trs::MetaInfo;
 
 #[derive(Debug, Error)]
@@ -19,8 +20,6 @@ pub enum TreeDataError {
     UnknownSymbol(String),
     #[error("Cannot reconstruct ignored symbols")]
     ImpossibleReconstruction,
-    #[error("Max arity reached while trying to parse partial term: {0}")]
-    MaxArity(usize),
 }
 
 #[gen_stub_pyclass]
@@ -348,61 +347,18 @@ impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
     }
 }
 
-/// Tries to parse a list of tokens into a list of nodes in the language
-///
-/// # Errors
-///
-/// This function will return an error if it cannot be parsed as a partial term
-pub fn partial_parse<L: FromOp + MetaInfo>(
-    mut token_list: Vec<String>,
-) -> Result<Vec<Option<L>>, TreeDataError> {
-    token_list.reverse();
-    let max_arity = 1233;
-
-    let mut children_ids = Vec::new();
-    let mut nodes = Vec::new();
-    for token in &token_list {
-        // Either we are parsing a parent, then we take all the children currently on the stack
-        if let Ok(node) = L::from_op(token, children_ids.clone()) {
-            nodes.push(Some(node));
-            children_ids.clear();
-            children_ids.push(Id::from(nodes.len() - 1));
-        // Or we are parsing a sibling child with no children, so we put it on the stack
-        } else if let Ok(node) = L::from_op(token, Vec::new()) {
-            nodes.push(Some(node));
-            children_ids.push(Id::from(nodes.len() - 1));
-        // Or we are parsing and incomplete parent that only has some children already generated
-        } else {
-            for n in 0..max_arity {
-                if let Ok(node) = L::from_op(token, children_ids.clone()) {
-                    nodes.push(Some(node));
-                    children_ids.clear();
-                    children_ids.push(Id::from(nodes.len() - 1));
-                    break;
-                }
-                nodes.push(None);
-                children_ids.push(Id::from(nodes.len() - 1));
-                if n > max_arity {
-                    return Err(TreeDataError::MaxArity(n));
-                }
-            }
-        }
-    }
-    Ok(nodes)
-}
-
-impl<L: MetaInfo + FromOp> TryFrom<Vec<Option<L>>> for TreeData {
+impl<L: MetaInfo + FromOp> TryFrom<Vec<PartialLang<L>>> for TreeData {
     type Error = TreeDataError;
 
-    fn try_from(node_list: Vec<Option<L>>) -> Result<TreeData, TreeDataError> {
+    fn try_from(node_list: Vec<PartialLang<L>>) -> Result<TreeData, TreeDataError> {
         fn rec<L: MetaInfo + FromOp>(
-            node_list: &[Option<L>],
-            node: Option<&L>,
+            node_list: &[PartialLang<L>],
+            node: &PartialLang<L>,
             graph_data: &mut TreeData,
             depth: usize,
             position: usize,
         ) -> Result<usize, TreeDataError> {
-            let Some(actual_l) = node else {
+            let PartialLang::Finished(actual_l) = node else {
                 return Ok(graph_data.add_node(NodeOrPlaceHolder::Placeholder {
                     depth,
                     dfs_order: graph_data.nodes.len(),
@@ -423,7 +379,7 @@ impl<L: MetaInfo + FromOp> TryFrom<Vec<Option<L>>> for TreeData {
             for (i, c_id) in actual_l.children().iter().enumerate() {
                 let child_idx = rec(
                     node_list,
-                    node_list[usize::from(*c_id)].as_ref(),
+                    &node_list[usize::from(*c_id)],
                     graph_data,
                     depth + 1,
                     i,
@@ -439,7 +395,7 @@ impl<L: MetaInfo + FromOp> TryFrom<Vec<Option<L>>> for TreeData {
             nodes: Vec::new(),
             adjacency: Vec::new(),
         };
-        rec(&node_list, node_list[root].as_ref(), &mut graph_data, 0, 0)?;
+        rec(&node_list, &node_list[root], &mut graph_data, 0, 0)?;
         graph_data.adjacency.sort_unstable();
         Ok(graph_data)
     }

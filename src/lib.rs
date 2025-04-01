@@ -38,14 +38,13 @@
 )]
 
 mod analysis;
-mod typing;
 mod utils; //should maybe be deleted
 
 pub mod cli;
 pub mod eqsat;
 pub mod explanation;
 pub mod io;
+pub mod meta_lang;
 pub mod python;
 pub mod sampling;
-pub mod sketch;
 pub mod trs;

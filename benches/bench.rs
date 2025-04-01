@@ -1,5 +1,5 @@
-use criterion::black_box as bb;
 use criterion::Criterion;
+use criterion::black_box as bb;
 use criterion::{criterion_group, criterion_main};
 
 use egg::AstSize;
@@ -7,10 +7,10 @@ use egg::{EGraph, RecExpr, SymbolLang};
 use rand::SeedableRng;
 
 use eggshell::eqsat::{Eqsat, StartMaterial};
+use eggshell::meta_lang::Sketch;
+use eggshell::meta_lang::extract;
 use eggshell::sampling::sampler;
 use eggshell::sampling::sampler::Sampler;
-use eggshell::sketch::extract;
-use eggshell::sketch::Sketch;
 use eggshell::trs::{Simple, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 

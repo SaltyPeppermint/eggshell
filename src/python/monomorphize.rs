@@ -9,7 +9,7 @@ macro_rules! monomorphize {
 
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
-        use $crate::python::data;
+        use $crate::meta_lang;
         use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
         use $crate::trs::{MetaInfo, TermRewriteSystem};
@@ -92,8 +92,8 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[expect(clippy::missing_errors_doc)]
         pub fn partial_parse(token_list: Vec<String>) -> PyResult<TreeData> {
-            let r = data::partial_parse::<L>(token_list)
-                .and_then(|partial: Vec<Option<L>>| TreeData::try_from(partial))
+            let r = meta_lang::partial_parse::<L>(&token_list)?
+                .try_into()
                 .map_err(|e| EggshellError::<L>::from(e))?;
             Ok(r)
         }

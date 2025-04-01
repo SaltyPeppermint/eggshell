@@ -18,7 +18,6 @@ class Node:
     name: str
 
 class TreeData:
-    nodes: list[Node]
     def transposed_adjacency(self) -> list[list[int]]:
         ...
 
@@ -48,7 +47,7 @@ class TreeData:
     def names(self) -> list[str]:
         ...
 
-    def arity(self, position:int) -> int:
+    def arity(self, position:int) -> typing.Optional[int]:
         ...
 
     def depth(self) -> int:

@@ -49,3 +49,6 @@ def num_symbols() -> int:
 def operators() -> list[str]:
     ...
 
+def partial_parse(token_list:typing.Sequence[str]) -> TreeData:
+    ...
+

@@ -5,7 +5,7 @@ use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::SketchParseError;
+use super::MetaLangError;
 use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
 // use crate::typing::{Type, Typeable, TypingInfo};
 
@@ -82,21 +82,6 @@ impl<L: Language> Language for SketchLang<L> {
     }
 }
 
-// impl<L: Typeable> Typeable for SketchNode<L> {
-//     type Type = L::Type;
-
-//     fn type_info(&self) -> crate::typing::TypingInfo<Self::Type> {
-//         match self {
-//             Self::Any => TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type(),
-//             Self::Node(t) => t.type_info(),
-//             Self::Contains(_) => TypingInfo::new(Self::Type::top(), Self::Type::top()),
-//             Self::Or(_) => {
-//                 TypingInfo::new(Self::Type::top(), Self::Type::top()).infer_return_type()
-//             }
-//         }
-//     }
-// }
-
 impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
     fn symbol_info(&self) -> SymbolInfo {
         if let SketchLang::Node(l) = self {
@@ -136,7 +121,7 @@ where
     L::Error: Display,
     L: egg::FromOp,
 {
-    type Error = SketchParseError<L::Error>;
+    type Error = MetaLangError<L::Error>;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
@@ -144,7 +129,7 @@ where
                 if children.is_empty() {
                     Ok(Self::Any)
                 } else {
-                    Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
@@ -153,7 +138,7 @@ where
                 if children.len() == 1 {
                     Ok(Self::Contains(children[0]))
                 } else {
-                    Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
@@ -162,14 +147,14 @@ where
                 if children.len() == 2 {
                     Ok(Self::Or([children[0], children[1]]))
                 } else {
-                    Err(SketchParseError::BadChildren(egg::FromOpError::new(
+                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
             }
             _ => L::from_op(op, children)
                 .map(Self::Node)
-                .map_err(SketchParseError::BadOp),
+                .map_err(MetaLangError::BadOp),
         }
     }
 }
