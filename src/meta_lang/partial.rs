@@ -1,6 +1,7 @@
 // The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
 // Thank you very much for that!
 
+use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
@@ -134,39 +135,69 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let max_arity = 1233;
-
-    let mut children_ids = Vec::new();
+    let mut children_ids = VecDeque::new();
     let mut nodes = Vec::new();
+    let mut greedy_children = Vec::new();
     for token in value {
-        // Either we are parsing a parent, then we take all the children currently on the stack
-        if let Ok(node) = L::from_op(token, children_ids.clone()) {
-            nodes.push(PartialLang::Finished(node));
-            children_ids.clear();
-            children_ids.push(Id::from(nodes.len() - 1));
-        // Or we are parsing a sibling child with no children, so we put it on the stack
-        } else if let Ok(node) = L::from_op(token, Vec::new()) {
-            nodes.push(PartialLang::Finished(node));
-            children_ids.push(Id::from(nodes.len() - 1));
-        // Or we are parsing and incomplete parent that only has some children already generated
-        } else {
-            for n in 0..max_arity {
-                if let Ok(node) = L::from_op(token, children_ids.clone()) {
-                    nodes.push(PartialLang::Finished(node));
-                    children_ids.clear();
-                    children_ids.push(Id::from(nodes.len() - 1));
-                    break;
-                }
+        for n in 0.. {
+            if let Ok(node) = PartialLang::<L>::from_op(token, greedy_children.clone()) {
+                nodes.push(node);
+                greedy_children.clear();
+                children_ids.push_back(Id::from(nodes.len() - 1));
+                break;
+            }
+            let next = children_ids.pop_front().unwrap_or_else(|| {
                 nodes.push(PartialLang::Placeholder);
-                children_ids.push(Id::from(nodes.len() - 1));
-                if n > max_arity {
-                    return Err(MetaLangError::MaxArity(n));
-                }
+                Id::from(nodes.len() - 1)
+            });
+            greedy_children.push(next);
+
+            if n > L::MAX_ARITY {
+                return Err(MetaLangError::MaxArity(n));
             }
         }
+        // }
     }
     Ok(nodes)
 }
+
+// pub fn partial_parse<L: FromOp + MetaInfo>(
+//     mut token_list: Vec<String>,
+// ) -> Result<Vec<Option<L>>, MetaLangError<E>> {
+//     token_list.reverse();
+//     let max_arity = 1233;
+
+//     let mut children_ids = Vec::new();
+//     let mut nodes = Vec::new();
+//     for token in &token_list {
+//         // Either we are parsing a parent, then we take all the children currently on the stack
+//         if let Ok(node) = L::from_op(token, children_ids.clone()) {
+//             nodes.push(Some(node));
+//             children_ids.clear();
+//             children_ids.push(Id::from(nodes.len() - 1));
+//         // Or we are parsing a sibling child with no children, so we put it on the stack
+//         } else if let Ok(node) = L::from_op(token, Vec::new()) {
+//             nodes.push(Some(node));
+//             children_ids.push(Id::from(nodes.len() - 1));
+//         // Or we are parsing and incomplete parent that only has some children already generated
+//         } else {
+//             for n in 0..max_arity {
+//                 if let Ok(node) = L::from_op(token, children_ids.clone()) {
+//                     nodes.push(Some(node));
+//                     children_ids.clear();
+//                     children_ids.push(Id::from(nodes.len() - 1));
+//                     break;
+//                 }
+//                 nodes.push(None);
+//                 children_ids.push(Id::from(nodes.len() - 1));
+//                 if n > max_arity {
+//                     return Err(MetaLangError::MaxArity(n));
+//                 }
+//             }
+//         }
+//     }
+//     Ok(nodes)
+// }
 
 #[cfg(test)]
 mod tests {
