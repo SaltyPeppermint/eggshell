@@ -1,15 +1,11 @@
 mod rules;
 
-// use std::cmp::Ordering;
-// use std::fmt::Display;
-
 use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol, define_language};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
-// use crate::typing::{Type, Typeable, TypingInfo};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -61,50 +57,6 @@ impl MetaInfo for Math {
 
     const MAX_ARITY: usize = 2;
 }
-
-// impl Typeable for Math {
-//     type Type = ArithmaticType;
-
-//     fn type_info(&self) -> TypingInfo<Self::Type> {
-//         TypingInfo::new(Self::Type::Top, Self::Type::Top)
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-// pub enum ArithmaticType {
-//     Top,
-//     Bottom,
-// }
-
-// impl Display for ArithmaticType {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Top => write!(f, "Top (Float)"),
-//             Self::Bottom => write!(f, "Bottom"),
-//         }
-//     }
-// }
-
-// impl PartialOrd for ArithmaticType {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         match (self, other) {
-//             // Bottom Type is smaller than everything else
-//             (Self::Top, Self::Bottom) => Some(Ordering::Greater),
-//             (Self::Bottom, Self::Top) => Some(Ordering::Less),
-//             (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
-//         }
-//     }
-// }
-
-// impl Type for ArithmaticType {
-//     fn top() -> Self {
-//         Self::Top
-//     }
-
-//     fn bottom() -> Self {
-//         Self::Bottom
-//     }
-// }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;

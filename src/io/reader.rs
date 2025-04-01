@@ -4,8 +4,6 @@ use std::path::Path;
 use csv;
 use serde::{Deserialize, Serialize};
 
-// use pyo3::prelude::*;
-
 use super::structs::Entry;
 
 /// Reads expressions from a csv file into a vector of [`Expression`] Vector.

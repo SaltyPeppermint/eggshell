@@ -113,10 +113,9 @@ mod tests {
     use hashbrown::HashSet;
     use rand::SeedableRng;
 
+    use super::*;
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
     use crate::trs::{Halide, Simple, TermRewriteSystem};
-
-    use super::*;
 
     #[test]
     fn simple_sample() {

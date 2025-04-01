@@ -11,7 +11,6 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use super::MetaLangError;
 use crate::trs::SymbolType::MetaSymbol;
 use crate::trs::{MetaInfo, SymbolInfo};
-// use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
 pub type PartialTerm<L> = RecExpr<PartialLang<L>>;
@@ -162,52 +161,11 @@ where
     Ok(nodes)
 }
 
-// pub fn partial_parse<L: FromOp + MetaInfo>(
-//     mut token_list: Vec<String>,
-// ) -> Result<Vec<Option<L>>, MetaLangError<E>> {
-//     token_list.reverse();
-//     let max_arity = 1233;
-
-//     let mut children_ids = Vec::new();
-//     let mut nodes = Vec::new();
-//     for token in &token_list {
-//         // Either we are parsing a parent, then we take all the children currently on the stack
-//         if let Ok(node) = L::from_op(token, children_ids.clone()) {
-//             nodes.push(Some(node));
-//             children_ids.clear();
-//             children_ids.push(Id::from(nodes.len() - 1));
-//         // Or we are parsing a sibling child with no children, so we put it on the stack
-//         } else if let Ok(node) = L::from_op(token, Vec::new()) {
-//             nodes.push(Some(node));
-//             children_ids.push(Id::from(nodes.len() - 1));
-//         // Or we are parsing and incomplete parent that only has some children already generated
-//         } else {
-//             for n in 0..max_arity {
-//                 if let Ok(node) = L::from_op(token, children_ids.clone()) {
-//                     nodes.push(Some(node));
-//                     children_ids.clear();
-//                     children_ids.push(Id::from(nodes.len() - 1));
-//                     break;
-//                 }
-//                 nodes.push(None);
-//                 children_ids.push(Id::from(nodes.len() - 1));
-//                 if n > max_arity {
-//                     return Err(MetaLangError::MaxArity(n));
-//                 }
-//             }
-//         }
-//     }
-//     Ok(nodes)
-// }
-
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::meta_lang::SketchLang;
     use crate::trs::{MetaInfo, halide::HalideLang};
-
-    // use crate::typing::typecheck_expr;
-
-    use super::*;
 
     #[test]
     fn parse_and_print() {

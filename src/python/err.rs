@@ -3,7 +3,6 @@ use std::fmt::Display;
 use pyo3::PyErr;
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
-
 use thiserror::Error;
 
 use super::data::TreeDataError;

@@ -1,15 +1,11 @@
 mod data;
 mod rules;
 
-// use std::cmp::Ordering;
-// use std::fmt::Display;
-
 use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
-// use crate::typing::{Type, Typeable, TypingInfo};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -68,92 +64,6 @@ impl MetaInfo for HalideLang {
 
     const MAX_ARITY: usize = 2;
 }
-
-// impl Typeable for HalideLang {
-//     type Type = HalideType;
-
-//     fn type_info(&self) -> TypingInfo<Self::Type> {
-//         match self {
-//             // Primitive types
-//             Self::Bool(_) => TypingInfo::new(Self::Type::Boolean, Self::Type::Top),
-//             Self::Number(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Top),
-//             Self::Symbol(_) => TypingInfo::new(Self::Type::Top, Self::Type::Top),
-
-//             // Fns of type int
-//             Self::Add(_)
-//             | Self::Sub(_)
-//             | Self::Mul(_)
-//             | Self::Div(_)
-//             | Self::Mod(_)
-//             | Self::Max(_)
-//             | Self::Min(_) => TypingInfo::new(Self::Type::Integer, Self::Type::Integer),
-
-//             // Fns of type bool
-//             Self::Lt(_) | Self::Gt(_) | Self::Let(_) | Self::Get(_) => {
-//                 TypingInfo::new(Self::Type::Boolean, Self::Type::Integer)
-//             }
-//             Self::Or(_) | Self::And(_) | Self::Not(_) => {
-//                 TypingInfo::new(Self::Type::Boolean, Self::Type::Boolean)
-//             }
-
-//             // Fns of generic type
-//             Self::Eq(_) | HalideLang::IEq(_) => {
-//                 TypingInfo::new(Self::Type::Boolean, Self::Type::Top)
-//             }
-//         }
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-// pub enum HalideType {
-//     Integer,
-//     Boolean,
-//     Top,
-//     Bottom,
-// }
-
-// impl Display for HalideType {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Integer => write!(f, "Integer"),
-//             Self::Boolean => write!(f, "Boolean"),
-//             Self::Top => write!(f, "Top"),
-//             Self::Bottom => write!(f, "Bottom"),
-//         }
-//     }
-// }
-
-// impl PartialOrd for HalideType {
-//     #[expect(clippy::match_same_arms)]
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         match (self, other) {
-//             // Can't compare int and bool
-//             (Self::Integer, Self::Boolean) | (Self::Boolean, Self::Integer) => None,
-//             // Compare to self
-//             (Self::Boolean, Self::Boolean)
-//             | (Self::Integer, Self::Integer)
-//             | (Self::Top, Self::Top)
-//             | (Self::Bottom, Self::Bottom) => Some(Ordering::Equal),
-//             // Top is greater than bool and int
-//             (Self::Boolean | Self::Integer, Self::Top) => Some(Ordering::Less),
-//             (Self::Top, Self::Integer | Self::Boolean) => Some(Ordering::Greater),
-
-//             // Bottom Type is smaller than everything else
-//             (Self::Integer | Self::Boolean | Self::Top, Self::Bottom) => Some(Ordering::Greater),
-//             (Self::Bottom, Self::Integer | Self::Boolean | Self::Top) => Some(Ordering::Less),
-//         }
-//     }
-// }
-
-// impl Type for HalideType {
-//     fn top() -> Self {
-//         Self::Top
-//     }
-
-//     fn bottom() -> Self {
-//         Self::Bottom
-//     }
-// }
 
 /// Enabling Constant Folding through the Analysis of egg.
 #[derive(Default, Debug, Clone, Copy, Serialize)]
@@ -332,12 +242,9 @@ impl TermRewriteSystem for Halide {
 #[cfg(test)]
 mod tests {
     use egg::AstSize;
-    // use egg::{AstSize, RecExpr};
-
-    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    // use crate::typing::typecheck_expr;
 
     use super::*;
+    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
 
     #[test]
     fn eqsat_solved_true() {
@@ -397,52 +304,4 @@ mod tests {
         let eqsat = Eqsat::new(StartMaterial::RecExprs(&expr), &rules).with_conf(conf);
         let _ = eqsat.run();
     }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn false_typing_1() {
-    //     let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) false )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr);
-    //     assert!(tc.is_err());
-    // }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn false_typing_2() {
-    //     let expr: RecExpr<HalideLang> = "( max ( == v0 v1 ) v2 )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr);
-    //     assert!(tc.is_err());
-    // }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn correct_typing() {
-    //     let expr: RecExpr<HalideLang> = "( && ( == ( * v0 35 ) v1 ) true )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr);
-    //     assert!(tc.is_ok());
-    // }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn bool_typing() {
-    //     let expr: RecExpr<HalideLang> = "( && ( == ( * v0 35 ) v1 ) v2 )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr).unwrap();
-    //     assert_eq!(HalideType::Boolean, tc);
-    // }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn int_typing() {
-    //     let expr: RecExpr<HalideLang> = "( - ( + ( * v0 35 ) v1 ) v2 )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr).unwrap();
-    //     assert_eq!(HalideType::Integer, tc);
-    // }
-
-    // #[test]
-    // // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
-    // fn false_typing_inferred() {
-    //     let expr: RecExpr<HalideLang> = "( max ( + v0 v1 ) v2 )".parse().unwrap();
-    //     let tc = typecheck_expr(&expr).unwrap();
-    //     assert_eq!(HalideType::Integer, tc);
-    // }
 }

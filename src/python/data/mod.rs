@@ -437,11 +437,10 @@ impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use crate::trs::{SymbolInfo, SymbolType, halide::HalideLang};
-
     use egg::RecExpr;
+
+    use super::*;
+    use crate::trs::{SymbolInfo, SymbolType, halide::HalideLang};
 
     #[test]
     fn pytorch_inverse() {
@@ -627,16 +626,4 @@ mod tests {
             [vec![0, 0, 1, 1, 4, 4, 5, 5], vec![1, 4, 2, 3, 5, 8, 6, 7]]
         );
     }
-
-    // #[test]
-    // fn unknown_symbol_false() {
-    //     let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
-    //     assert!(TreeData::new(&expr, false).is_err());
-    // }
-
-    // #[test]
-    // fn unknown_symbol_true() {
-    //     let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v1 5 ) 17 ) )".parse().unwrap();
-    //     assert!(TreeData::new(&expr, true).is_ok());
-    // }
 }

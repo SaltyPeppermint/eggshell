@@ -7,7 +7,6 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::MetaLangError;
 use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
-// use crate::typing::{Type, Typeable, TypingInfo};
 
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
@@ -161,8 +160,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use egg::{RecExpr, SymbolLang};
+
+    use super::*;
 
     #[test]
     fn parse_and_print() {

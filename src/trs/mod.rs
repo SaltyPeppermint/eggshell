@@ -6,13 +6,10 @@ pub mod simple;
 use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
+use pyo3::{PyErr, create_exception, exceptions::PyException};
 use serde::Serialize;
 use strum::EnumCount;
 use thiserror::Error;
-
-use pyo3::{PyErr, create_exception, exceptions::PyException};
-
-// use crate::typing::{Type, Typeable};
 
 pub use arithmetic::Arithmetic;
 pub use halide::{Halide, HalideRuleset};

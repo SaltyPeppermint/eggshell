@@ -371,11 +371,10 @@ mod tests {
     use num::BigUint;
     use rand::SeedableRng;
 
+    use super::*;
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
     use crate::sampling::SampleError;
     use crate::trs::{Halide, Simple, TermRewriteSystem};
-
-    use super::*;
 
     #[test]
     fn simple_sample_uniform() {

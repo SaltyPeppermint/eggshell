@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
-// use crate::typing::{Type, Typeable, TypingInfo};
 
 // Big thanks to @Bastacyclop for implementing this all
 // https://github.com/Bastacyclop/egg-rise/blob/main/src/main.rs

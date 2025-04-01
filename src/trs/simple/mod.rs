@@ -4,8 +4,6 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
 
-// use crate::typing::{Type, Typeable, TypingInfo};
-
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
@@ -39,50 +37,6 @@ impl MetaInfo for SimpleLang {
 
     const MAX_ARITY: usize = 2;
 }
-
-// impl Typeable for SimpleLang {
-//     type Type = SimpleType;
-
-//     fn type_info(&self) -> TypingInfo<Self::Type> {
-//         TypingInfo::new(Self::Type::Top, Self::Type::Top)
-//     }
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq, Hash)]
-// pub enum SimpleType {
-//     Top,
-//     Bottom,
-// }
-
-// impl Display for SimpleType {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match self {
-//             Self::Top => write!(f, "Top (Integer)"),
-//             Self::Bottom => write!(f, "Bottom"),
-//         }
-//     }
-// }
-
-// impl PartialOrd for SimpleType {
-//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-//         match (self, other) {
-//             // Bottom type is less than everything else
-//             (Self::Top, Self::Bottom) => Some(Ordering::Greater),
-//             (Self::Bottom, Self::Top) => Some(Ordering::Less),
-//             (Self::Bottom, Self::Bottom) | (Self::Top, Self::Top) => Some(Ordering::Equal),
-//         }
-//     }
-// }
-
-// impl Type for SimpleType {
-//     fn top() -> Self {
-//         Self::Top
-//     }
-
-//     fn bottom() -> Self {
-//         Self::Bottom
-//     }
-// }
 
 fn make_rules() -> Vec<Rewrite> {
     vec![
