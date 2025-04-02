@@ -2,6 +2,7 @@
 // Thank you very much for that!
 
 use std::fmt::{Display, Formatter};
+use std::iter;
 use std::mem::{Discriminant, discriminant};
 
 use egg::{FromOp, Id, Language, RecExpr};
@@ -128,37 +129,74 @@ where
 /// # Errors
 ///
 /// This function will return an error if it cannot be parsed as a partial term
-pub fn partial_parse<L>(value: &[String]) -> Result<Vec<PartialLang<L>>, MetaLangError<L::Error>>
+pub fn partial_parse<L, T>(value: &[T]) -> Result<RecExpr<PartialLang<L>>, MetaLangError<L::Error>>
 where
+    T: AsRef<str>,
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
     let mut children_ids = Vec::new();
     let mut nodes = Vec::new();
     for token in value {
-        // Sibling case
-        let node = PartialLang::<L>::from_op(token, vec![]).or_else(|_| {
-            // Parent case (has to take all the existing children_ids)
-            loop {
-                if let Ok(node) = PartialLang::<L>::from_op(token, children_ids.clone()) {
-                    children_ids.clear();
-                    break Ok(node);
-                }
-                nodes.push(PartialLang::Placeholder);
-                children_ids.push(Id::from(nodes.len() - 1));
+        let nothings_to_add = L::MAX_ARITY.saturating_sub(children_ids.len());
+        nodes.extend(iter::repeat_n(PartialLang::Placeholder, nothings_to_add));
+        children_ids.extend((0..nothings_to_add).map(|x| Id::from(x + nodes.len() - 1)));
 
-                if children_ids.len() > L::MAX_ARITY {
-                    break Err(MetaLangError::MaxArity(
-                        token.to_owned(),
-                        children_ids.len(),
-                    ));
-                }
+        let mut skipped_ids = 0;
+        // First the parent case where all children on the stack are "absorbed"
+        let r = loop {
+            if let Ok(node) = L::from_op(token.as_ref(), children_ids[skipped_ids..].to_owned()) {
+                children_ids.truncate(skipped_ids);
+                break Some(PartialLang::Finished(node));
             }
+            match (nodes.last(), skipped_ids < children_ids.len()) {
+                (Some(PartialLang::Placeholder), true) => {
+                    nodes.pop();
+                    children_ids.pop();
+                }
+                (Some(PartialLang::Finished(_)), true) => {
+                    skipped_ids += 1;
+                }
+                _ => break None,
+            }
+        }
+        // // Or the sibling case where none are
+        // .or_else(|| {
+        //     if let Ok(node) = L::from_op(token.as_ref(), vec![]) {
+        //         Some(PartialLang::Finished(node))
+        //     } else {
+        //         None
+        //     }
+        // })
+        // If either fail, it's an error
+        .ok_or_else(|| {
+            MetaLangError::<L::Error>::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY)
         })?;
-        nodes.push(node);
+        // Sibling case
+        // let node = L::from_op(token.as_ref(), vec![])
+        //     .map(|l| PartialLang::Finished(l))
+        //     .or_else(|_| {
+        //         // Parent case (has to take all the existing children_ids)
+        //         loop {
+        //             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
+        //                 children_ids.clear();
+        //                 break Ok(PartialLang::Finished(node));
+        //             }
+        //             nodes.push(PartialLang::Placeholder);
+        //             children_ids.push(Id::from(nodes.len() - 1));
+
+        //             if children_ids.len() > L::MAX_ARITY {
+        //                 break Err(MetaLangError::MaxArity(
+        //                     token.as_ref().to_owned(),
+        //                     children_ids.len(),
+        //                 ));
+        //             }
+        //         }
+        //     })?;
+        nodes.push(r);
         children_ids.push(Id::from(nodes.len() - 1));
     }
-    Ok(nodes)
+    Ok(RecExpr::from(nodes))
 }
 
 #[cfg(test)]
@@ -205,6 +243,59 @@ mod tests {
         assert_eq!(
             PartialLang::<SketchLang<HalideLang>>::operators(),
             known_operators
+        );
+    }
+
+    #[test]
+    fn partial_parse_1_placeholder() {
+        let str_list = vec!["7", "+", "2", "v1", "-", "*"];
+        let l = super::partial_parse(str_list.as_slice()).unwrap();
+        assert_eq!(
+            l.as_ref().to_vec(),
+            vec![
+                PartialLang::Finished(HalideLang::Number(7)),
+                PartialLang::Placeholder,
+                PartialLang::Finished(HalideLang::Add([0.into(), 1.into()])),
+                PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Finished(HalideLang::Symbol("v1".into())),
+                PartialLang::Finished(HalideLang::Sub([3.into(), 4.into()])),
+                PartialLang::Finished(HalideLang::Mul([2.into(), 5.into()]))
+            ]
+        );
+    }
+
+    #[test]
+    fn partial_parse_2_placeholder() {
+        let str_list = vec!["v2", "-", "+", "2", "v1", "-", "*"];
+        let l = super::partial_parse(str_list.as_slice()).unwrap();
+        assert_eq!(
+            l.as_ref().to_vec(),
+            vec![
+                PartialLang::Finished(HalideLang::Symbol("v2".into())),
+                PartialLang::Placeholder,
+                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
+                PartialLang::Placeholder,
+                PartialLang::Finished(HalideLang::Add([2.into(), 3.into()])),
+                PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Finished(HalideLang::Symbol("v1".into())),
+                PartialLang::Finished(HalideLang::Sub([5.into(), 6.into()])),
+                PartialLang::Finished(HalideLang::Mul([4.into(), 7.into()]))
+            ]
+        );
+    }
+
+    #[test]
+    fn partial_parse_recexpr() {
+        let control: RecExpr<PartialLang<HalideLang>> =
+            "(* (+ (- v2 [placeholder]) [placeholder]) (- 2 v1))"
+                .parse()
+                .unwrap();
+        let str_list = vec!["v2", "-", "+", "2", "v1", "-", "*"];
+        let l = super::partial_parse::<HalideLang, _>(str_list.as_slice()).unwrap();
+        assert_eq!(control, l);
+        assert_eq!(
+            l.to_string(),
+            "(* (+ (- v2 [placeholder]) [placeholder]) (- 2 v1))".to_owned()
         );
     }
 }
