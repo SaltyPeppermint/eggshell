@@ -92,7 +92,7 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[expect(clippy::missing_errors_doc)]
         pub fn partial_parse(token_list: Vec<String>) -> PyResult<TreeData> {
-            let r = meta_lang::partial_parse::<L>(&token_list)?
+            let r = (&meta_lang::partial_parse::<L, _>(token_list.as_slice())?)
                 .try_into()
                 .map_err(|e| EggshellError::<L>::from(e))?;
             Ok(r)

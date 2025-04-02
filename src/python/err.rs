@@ -12,7 +12,9 @@ pub enum EggshellError<L: Display> {
     #[error(transparent)]
     RecExprParse(#[from] egg::RecExprParseError<L>),
     #[error(transparent)]
-    TreeData(#[from] TreeDataError),
+    BadFromOp(#[from] egg::FromOpError),
+    #[error(transparent)]
+    BadTreeData(#[from] TreeDataError),
 }
 
 create_exception!(

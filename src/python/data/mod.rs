@@ -3,7 +3,6 @@ mod nodes;
 use egg::{FromOp, Id, RecExpr};
 use hashbrown::{HashMap, HashSet};
 pub use nodes::Node;
-pub use nodes::NodeOrPlaceHolder;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use rayon::prelude::*;
@@ -11,7 +10,6 @@ use rayon::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::meta_lang::PartialLang;
 use crate::trs::MetaInfo;
 
 #[derive(Debug, Error)]
@@ -26,8 +24,20 @@ pub enum TreeDataError {
 #[pyclass(frozen, module = "eggshell")]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct TreeData {
-    nodes: Vec<NodeOrPlaceHolder>,
+    node_stack: Vec<Node>,
     adjacency: Vec<(usize, usize)>,
+}
+
+impl TreeData {
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.node_stack.len()
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.node_stack.is_empty()
+    }
 }
 
 #[gen_stub_pymethods]
@@ -35,7 +45,7 @@ pub struct TreeData {
 impl TreeData {
     #[must_use]
     pub fn transposed_adjacency(&self) -> [Vec<usize>; 2] {
-        let (a, b) = self.adjacency.iter().map(|x| x.to_owned()).unzip();
+        let (a, b) = self.adjacency.iter().rev().map(|x| x.to_owned()).unzip();
         [a, b]
     }
 
@@ -74,8 +84,9 @@ impl TreeData {
 
         let center = max_rel_distance + 1;
 
-        let i = (0..self.adjacency.len()).map(|a_idx| {
-            let inner_i = (0..self.adjacency.len()).map(|b_idx| {
+        // rev cause we present the stack inverted
+        let i = (0..self.len()).rev().map(|a_idx| {
+            let inner_i = (0..self.len()).rev().map(|b_idx| {
                 if a_idx == b_idx {
                     return center; // Distance to self is always 0
                 }
@@ -102,9 +113,9 @@ impl TreeData {
         if !double_pad {
             return i.collect();
         }
-        let mut r = vec![vec![0; self.adjacency.len() + 2]];
+        let mut r = vec![vec![0; self.len() + 2]];
         r.extend(i);
-        r.push(vec![0; self.adjacency.len() + 2]);
+        r.push(vec![0; self.len() + 2]);
         r
     }
 
@@ -173,8 +184,9 @@ impl TreeData {
             },
         );
 
-        let i = (0..self.adjacency.len()).map(|a_idx| {
-            let inner_i = (0..self.adjacency.len()).map(|b_idx| {
+        // rev cause we present the stack inverted
+        let i = (0..self.len()).rev().map(|a_idx| {
+            let inner_i = (0..self.len()).rev().map(|b_idx| {
                 cmp_nodes(
                     a_idx,
                     b_idx,
@@ -194,9 +206,9 @@ impl TreeData {
             r_inner
         });
         if double_pad {
-            let mut r = vec![vec![0; self.adjacency.len() + 2]];
+            let mut r = vec![vec![0; self.len() + 2]];
             r.extend(i);
-            r.push(vec![0; self.adjacency.len() + 2]);
+            r.push(vec![0; self.len() + 2]);
             r
         } else {
             i.collect()
@@ -206,37 +218,50 @@ impl TreeData {
     #[must_use]
     pub fn count_symbols(&self, n_symbols: usize, n_vars: usize) -> Vec<usize> {
         let mut f = vec![0; n_symbols + n_vars];
-        for n in &self.nodes {
-            if let NodeOrPlaceHolder::Node(node) = n {
-                f[node.id()] += 1;
-            }
+        for node in &self.node_stack {
+            f[node.id()] += 1;
         }
         f
     }
 
     #[must_use]
+    pub fn nodes(&self) -> Vec<Node> {
+        self.node_stack.iter().rev().map(|n| n.to_owned()).collect()
+    }
+
+    #[must_use]
     pub fn values(&self) -> Vec<String> {
-        self.nodes.iter().filter_map(|n| n.value()).collect()
+        self.node_stack
+            .iter()
+            .rev()
+            .filter_map(|n| n.value())
+            .collect()
     }
 
     #[must_use]
     pub fn names(&self) -> Vec<String> {
-        self.nodes.iter().map(|n| n.name().clone()).collect()
+        // rev cause we present the stack inverted
+        self.node_stack
+            .iter()
+            .rev()
+            .map(|n| n.name().clone())
+            .collect()
     }
 
-    fn arity(&self, position: usize) -> Option<usize> {
-        self.nodes[position].arity()
+    fn arity(&self, position: usize) -> usize {
+        // rev cause we present the stack inverted
+        self.node_stack.iter().rev().nth(position).unwrap().arity()
     }
 
     #[expect(clippy::missing_panics_doc)]
     #[must_use]
     pub fn depth(&self) -> usize {
-        self.nodes.iter().map(|x| x.depth()).max().unwrap()
+        self.node_stack.iter().map(|x| x.depth()).max().unwrap()
     }
 
     #[must_use]
-    pub fn size(&self) -> usize {
-        self.nodes.len()
+    pub fn __len__(&self) -> usize {
+        self.len()
     }
 
     #[expect(clippy::needless_pass_by_value)]
@@ -258,7 +283,7 @@ impl TreeData {
     #[must_use]
     pub fn simple_features(&self, n_symbols: usize, n_vars: usize) -> Vec<f64> {
         let mut features = self.count_symbols(n_symbols, n_vars);
-        features.push(self.size());
+        features.push(self.len());
         features.push(self.depth());
         features.into_iter().map(|v| v as f64).collect()
     }
@@ -283,26 +308,24 @@ impl TreeData {
         self.adjacency.push((parent, child));
     }
 
-    fn add_node(&mut self, node: NodeOrPlaceHolder) -> usize {
-        self.nodes.push(node);
-        self.nodes.len() - 1
+    fn add_node(&mut self, node: Node) -> usize {
+        self.node_stack.push(node);
+        self.len() - 1
     }
 
     fn feature_vec_to_node<L: MetaInfo + FromOp>(
         &self,
         node_idx: usize,
         children: Vec<Id>,
-    ) -> Result<L, TreeDataError> {
+    ) -> Result<L, L::Error> {
         // Ids go  | operators & metasymbols | consts | variables
-        let NodeOrPlaceHolder::Node(node) = &self.nodes[node_idx] else {
-            return Err(TreeDataError::ImpossibleReconstruction);
-        };
+        let node = &self.node_stack[node_idx];
 
         if let Some(v) = node.symbol_info().value() {
             // If it is a constant we can safely unwrap
             Ok(L::from_op(&v, vec![]).unwrap())
         } else {
-            Ok(L::from_op(L::operators()[node.id()], children).unwrap())
+            L::from_op(L::operators()[node.id()], children)
         }
     }
 }
@@ -313,24 +336,42 @@ impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
     fn try_from(rec_expr: &RecExpr<L>) -> Result<TreeData, TreeDataError> {
         fn rec<L: MetaInfo + FromOp>(
             rec_expr: &RecExpr<L>,
-            node: &L,
+            l: &L,
             graph_data: &mut TreeData,
             depth: usize,
+            dfs_pos: &mut usize,
             nth_node: usize,
         ) -> Result<usize, TreeDataError> {
-            // All operators, variable_names, and last two are the constant symbol with its value
-            let arity = node.children().len();
-            let parent_idx = graph_data.add_node(NodeOrPlaceHolder::Node(Node::new(
-                node.to_string(),
-                arity,
+            let new_node = Node::new(
+                l.to_string(),
+                l.children().len(),
                 nth_node,
-                graph_data.nodes.len(),
+                *dfs_pos,
                 depth,
-                node.symbol_info(),
-            )));
-            for (nth_child, c_id) in node.children().iter().enumerate() {
-                let child_idx = rec(rec_expr, &rec_expr[*c_id], graph_data, depth + 1, nth_child)?;
-                graph_data.add_adjacency(parent_idx, child_idx);
+                l.symbol_info(),
+            );
+
+            *dfs_pos += 1;
+            let child_indices = l
+                .children()
+                .iter()
+                .enumerate()
+                .map(|(nth_child, c_id)| {
+                    rec(
+                        rec_expr,
+                        &rec_expr[*c_id],
+                        graph_data,
+                        depth + 1,
+                        dfs_pos,
+                        nth_child,
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            // All operators, variable_names, and last two are the constant symbol with its value
+            let parent_idx = graph_data.add_node(new_node);
+
+            for c_idx in child_indices {
+                graph_data.add_adjacency(parent_idx, c_idx);
             }
             Ok(parent_idx)
         }
@@ -338,78 +379,24 @@ impl<L: MetaInfo + FromOp> TryFrom<&RecExpr<L>> for TreeData {
         let root = rec_expr.root();
         // All operators, one for const, and variable_names
         let mut graph_data = TreeData {
-            nodes: Vec::new(),
+            node_stack: Vec::new(),
             adjacency: Vec::new(),
         };
-        rec(rec_expr, &rec_expr[root], &mut graph_data, 0, 0)?;
-        graph_data.adjacency.sort_unstable();
-        Ok(graph_data)
-    }
-}
-
-impl<L: MetaInfo + FromOp> TryFrom<Vec<PartialLang<L>>> for TreeData {
-    type Error = TreeDataError;
-
-    fn try_from(node_list: Vec<PartialLang<L>>) -> Result<TreeData, TreeDataError> {
-        fn rec<L: MetaInfo + FromOp>(
-            node_list: &[PartialLang<L>],
-            node: &PartialLang<L>,
-            graph_data: &mut TreeData,
-            depth: usize,
-            position: usize,
-        ) -> Result<usize, TreeDataError> {
-            let PartialLang::Finished(actual_l) = node else {
-                return Ok(graph_data.add_node(NodeOrPlaceHolder::Placeholder {
-                    depth,
-                    dfs_order: graph_data.nodes.len(),
-                    nth_child: position,
-                }));
-            };
-
-            // All operators, variable_names, and last two are the constant symbol with its value
-            let arity = actual_l.children().len();
-            let parent_idx = graph_data.add_node(NodeOrPlaceHolder::Node(Node::new(
-                actual_l.to_string(),
-                arity,
-                position,
-                graph_data.nodes.len(),
-                depth,
-                actual_l.symbol_info(),
-            )));
-            for (i, c_id) in actual_l.children().iter().enumerate() {
-                let child_idx = rec(
-                    node_list,
-                    &node_list[usize::from(*c_id)],
-                    graph_data,
-                    depth + 1,
-                    i,
-                )?;
-                graph_data.add_adjacency(parent_idx, child_idx);
-            }
-            Ok(parent_idx)
-        }
-
-        let root = node_list.len();
-        // All operators, one for const, and variable_names
-        let mut graph_data = TreeData {
-            nodes: Vec::new(),
-            adjacency: Vec::new(),
-        };
-        rec(&node_list, &node_list[root], &mut graph_data, 0, 0)?;
+        rec(rec_expr, &rec_expr[root], &mut graph_data, 0, &mut 0, 0)?;
         graph_data.adjacency.sort_unstable();
         Ok(graph_data)
     }
 }
 
 impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
-    type Error = TreeDataError;
+    type Error = L::Error;
 
-    fn try_from(tree_data: &TreeData) -> Result<RecExpr<L>, TreeDataError> {
+    fn try_from(tree_data: &TreeData) -> Result<RecExpr<L>, L::Error> {
         fn rec<LL: MetaInfo + FromOp>(
             data: &TreeData,
             node_idx: usize,
             stack: &mut Vec<LL>,
-        ) -> Result<Id, TreeDataError> {
+        ) -> Result<Id, LL::Error> {
             let children = data
                 .adjacency
                 .iter()
@@ -453,6 +440,22 @@ mod tests {
     }
 
     #[test]
+    fn parse_order() {
+        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
+        let data: TreeData = (&expr).try_into().unwrap();
+        let types_in_data = data
+            .node_stack
+            .iter()
+            .map(|n| n.symbol_info().symbol_type().to_owned())
+            .collect::<Vec<_>>();
+        let types_in_expr = expr
+            .as_ref()
+            .iter()
+            .map(|n| n.symbol_info().symbol_type().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(types_in_data, types_in_expr);
+    }
+    #[test]
     fn sib_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
@@ -461,14 +464,15 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![16, 0, 0, 0, 0, 0, 0, 0],
-                vec![0, 16, 0, 0, 17, 0, 0, 0],
-                vec![0, 0, 16, 17, 0, 0, 0, 0],
-                vec![0, 0, 15, 16, 0, 0, 0, 0],
-                vec![0, 15, 0, 0, 16, 0, 0, 0],
-                vec![0, 0, 0, 0, 0, 16, 0, 0],
-                vec![0, 0, 0, 0, 0, 0, 16, 17],
-                vec![0, 0, 0, 0, 0, 0, 15, 16]
+                [16, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 16, 0, 0, 0, 0, 15, 0, 0],
+                [0, 0, 16, 15, 0, 0, 0, 0, 0],
+                [0, 0, 17, 16, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 16, 15, 0, 0, 0],
+                [0, 0, 0, 0, 17, 16, 0, 0, 0],
+                [0, 17, 0, 0, 0, 0, 16, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 16, 15],
+                [0, 0, 0, 0, 0, 0, 0, 17, 16]
             ]
         );
     }
@@ -477,19 +481,20 @@ mod tests {
     fn anc_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.anc_matrix(15, false);
+        let par_anc = data.anc_matrix(15, false);
 
         assert_eq!(
-            par_sib,
+            par_anc,
             vec![
-                vec![16, 17, 18, 18, 17, 18, 19, 19],
-                vec![15, 16, 17, 17, 0, 0, 0, 0],
-                vec![14, 15, 16, 0, 0, 0, 0, 0],
-                vec![14, 15, 0, 16, 0, 0, 0, 0],
-                vec![15, 0, 0, 0, 16, 17, 18, 18],
-                vec![14, 0, 0, 0, 15, 16, 17, 17],
-                vec![13, 0, 0, 0, 14, 15, 16, 0],
-                vec![13, 0, 0, 0, 14, 15, 0, 16]
+                vec![16, 17, 18, 18, 19, 19, 17, 18, 18],
+                vec![15, 16, 17, 17, 18, 18, 0, 0, 0],
+                vec![14, 15, 16, 0, 0, 0, 0, 0, 0],
+                vec![14, 15, 0, 16, 17, 17, 0, 0, 0],
+                vec![13, 14, 0, 15, 16, 0, 0, 0, 0],
+                vec![13, 14, 0, 15, 0, 16, 0, 0, 0],
+                vec![15, 0, 0, 0, 0, 0, 16, 17, 17],
+                vec![14, 0, 0, 0, 0, 0, 15, 16, 0],
+                vec![14, 0, 0, 0, 0, 0, 15, 0, 16]
             ]
         );
     }
@@ -498,21 +503,22 @@ mod tests {
     fn anc_matrix_padded() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
-        let par_sib = data.anc_matrix(15, true);
+        let par_anc = data.anc_matrix(15, true);
 
         assert_eq!(
-            par_sib,
+            par_anc,
             vec![
-                vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                vec![0, 16, 17, 18, 18, 17, 18, 19, 19, 0],
-                vec![0, 15, 16, 17, 17, 0, 0, 0, 0, 0],
-                vec![0, 14, 15, 16, 0, 0, 0, 0, 0, 0],
-                vec![0, 14, 15, 0, 16, 0, 0, 0, 0, 0],
-                vec![0, 15, 0, 0, 0, 16, 17, 18, 18, 0],
-                vec![0, 14, 0, 0, 0, 15, 16, 17, 17, 0],
-                vec![0, 13, 0, 0, 0, 14, 15, 16, 0, 0],
-                vec![0, 13, 0, 0, 0, 14, 15, 0, 16, 0],
-                vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 16, 17, 18, 18, 19, 19, 17, 18, 18, 0],
+                [0, 15, 16, 17, 17, 18, 18, 0, 0, 0, 0],
+                [0, 14, 15, 16, 0, 0, 0, 0, 0, 0, 0],
+                [0, 14, 15, 0, 16, 17, 17, 0, 0, 0, 0],
+                [0, 13, 14, 0, 15, 16, 0, 0, 0, 0, 0],
+                [0, 13, 14, 0, 15, 0, 16, 0, 0, 0, 0],
+                [0, 15, 0, 0, 0, 0, 0, 16, 17, 17, 0],
+                [0, 14, 0, 0, 0, 0, 0, 15, 16, 0, 0],
+                [0, 14, 0, 0, 0, 0, 0, 15, 0, 16, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             ]
         );
     }
@@ -526,16 +532,17 @@ mod tests {
         assert_eq!(
             par_sib,
             vec![
-                vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                vec![0, 16, 0, 0, 0, 0, 0, 0, 0, 0],
-                vec![0, 0, 16, 0, 0, 17, 0, 0, 0, 0],
-                vec![0, 0, 0, 16, 17, 0, 0, 0, 0, 0],
-                vec![0, 0, 0, 15, 16, 0, 0, 0, 0, 0],
-                vec![0, 0, 15, 0, 0, 16, 0, 0, 0, 0],
-                vec![0, 0, 0, 0, 0, 0, 16, 0, 0, 0],
-                vec![0, 0, 0, 0, 0, 0, 0, 16, 17, 0],
-                vec![0, 0, 0, 0, 0, 0, 0, 15, 16, 0],
-                vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                [0, 0, 16, 0, 0, 0, 0, 15, 0, 0, 0],
+                [0, 0, 0, 16, 15, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 17, 16, 0, 0, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 16, 15, 0, 0, 0, 0],
+                [0, 0, 0, 0, 0, 17, 16, 0, 0, 0, 0],
+                [0, 0, 17, 0, 0, 0, 0, 16, 0, 0, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 16, 15, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 17, 16, 0],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             ]
         );
     }
@@ -545,85 +552,85 @@ mod tests {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).try_into().unwrap();
         assert_eq!(
-            data.nodes,
+            data.nodes(),
             vec![
-                NodeOrPlaceHolder::Node(Node::new(
+                Node::new(
                     "<".to_owned(),
                     2,
                     0,
                     0,
                     0,
                     SymbolInfo::new(7, SymbolType::Operator)
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "*".to_owned(),
-                    2,
-                    0,
-                    1,
-                    1,
-                    SymbolInfo::new(2, SymbolType::Operator)
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "v0".to_owned(),
-                    0,
-                    0,
-                    2,
-                    2,
-                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "35".to_owned(),
-                    0,
-                    1,
-                    3,
-                    2,
-                    SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
+                ),
+                Node::new(
                     "*".to_owned(),
                     2,
                     1,
                     4,
                     1,
                     SymbolInfo::new(2, SymbolType::Operator)
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "+".to_owned(),
-                    2,
-                    0,
-                    5,
-                    2,
-                    SymbolInfo::new(0, SymbolType::Operator)
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "v0".to_owned(),
-                    0,
-                    0,
-                    6,
-                    3,
-                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
-                    "5".to_owned(),
-                    0,
-                    1,
-                    7,
-                    3,
-                    SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
-                )),
-                NodeOrPlaceHolder::Node(Node::new(
+                ),
+                Node::new(
                     "17".to_owned(),
                     0,
                     1,
                     8,
                     2,
                     SymbolInfo::new(17, SymbolType::Constant("17".to_owned()))
-                ))
+                ),
+                Node::new(
+                    "+".to_owned(),
+                    2,
+                    0,
+                    5,
+                    2,
+                    SymbolInfo::new(0, SymbolType::Operator)
+                ),
+                Node::new(
+                    "5".to_owned(),
+                    0,
+                    1,
+                    7,
+                    3,
+                    SymbolInfo::new(17, SymbolType::Constant("5".to_owned()))
+                ),
+                Node::new(
+                    "v0".to_owned(),
+                    0,
+                    0,
+                    6,
+                    3,
+                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                ),
+                Node::new(
+                    "*".to_owned(),
+                    2,
+                    0,
+                    1,
+                    1,
+                    SymbolInfo::new(2, SymbolType::Operator)
+                ),
+                Node::new(
+                    "35".to_owned(),
+                    0,
+                    1,
+                    3,
+                    2,
+                    SymbolInfo::new(17, SymbolType::Constant("35".to_owned()))
+                ),
+                Node::new(
+                    "v0".to_owned(),
+                    0,
+                    0,
+                    2,
+                    2,
+                    SymbolInfo::new(18, SymbolType::Variable("v0".to_owned()))
+                )
             ]
         );
         assert_eq!(
             data.transposed_adjacency(),
-            [vec![0, 0, 1, 1, 4, 4, 5, 5], vec![1, 4, 2, 3, 5, 8, 6, 7]]
+            [vec![8, 8, 7, 7, 5, 5, 2, 2], vec![7, 2, 6, 5, 4, 3, 1, 0]]
         );
     }
 }
