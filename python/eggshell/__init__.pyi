@@ -16,6 +16,12 @@ class Node:
     id: int
     value: typing.Optional[str]
     name: str
+    def arity(self) -> int:
+        ...
+
+    def depth(self) -> int:
+        ...
+
 
 class TreeData:
     def transposed_adjacency(self) -> list[list[int]]:
@@ -41,19 +47,22 @@ class TreeData:
     def count_symbols(self, n_symbols:int, n_vars:int) -> list[int]:
         ...
 
+    def nodes(self) -> list[Node]:
+        ...
+
     def values(self) -> list[str]:
         ...
 
     def names(self) -> list[str]:
         ...
 
-    def arity(self, position:int) -> typing.Optional[int]:
+    def arity(self, position:int) -> int:
         ...
 
     def depth(self) -> int:
         ...
 
-    def size(self) -> int:
+    def __len__(self) -> int:
         ...
 
     def simple_feature_names(self, symbol_names:typing.Sequence[str], var_names:typing.Sequence[str]) -> list[str]:
