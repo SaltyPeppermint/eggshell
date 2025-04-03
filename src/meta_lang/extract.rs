@@ -34,7 +34,7 @@ pub fn satisfies_sketch<L: Language, A: Analysis<L>>(
     ) -> HashSet<Id> {
         if let Some(value) = memo.get(&sketch_id) {
             return value.clone();
-        };
+        }
 
         let result = match &sketch[sketch_id] {
             // All nodes in the egraph fulfill the Any sketch
@@ -168,7 +168,7 @@ where
     {
         if let Some(value) = memo.get(&(egraph_id, sketch_id)) {
             return value.clone();
-        };
+        }
 
         let result = match &sketch[sketch_id] {
             // If the sketch says any, all the nodes in the eclass fulfill the sketch and

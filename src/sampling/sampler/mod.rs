@@ -13,8 +13,8 @@ use rand::seq::IteratorRandom;
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 
-use super::choices::PartialRecExpr;
 use super::SampleError;
+use super::choices::PartialRecExpr;
 
 pub use cost::CostWeighted;
 pub use count::{CountWeightedGreedy, CountWeightedUniformly};
@@ -88,7 +88,7 @@ where
         debug!("Running sampling in {} batches", ranges.len());
         if !self.extractable(root, size_limit) {
             return Err(SampleError::SizeLimit(size_limit));
-        };
+        }
 
         let samples = ranges
             .into_par_iter() // into_par_iter_here

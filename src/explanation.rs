@@ -60,7 +60,7 @@ fn explanation_chain<L: Language + FromOp + Display>(
 fn rec_applied_rules<L: Language>(rules: &mut Vec<String>, expl: &FlatTerm<L>) {
     if let Some(rule) = expl.forward_rule {
         rules.push(rule.to_string());
-    };
+    }
     for child in &expl.children {
         rec_applied_rules(rules, child);
     }

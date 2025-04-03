@@ -36,6 +36,12 @@ pub enum PartialLang<L: Language> {
     Placeholder,
 }
 
+impl<L: Language> PartialLang<L> {
+    pub fn is_placeholder(&self) -> bool {
+        matches!(self, Self::Placeholder)
+    }
+}
+
 impl<L: Language> Language for PartialLang<L> {
     type Discriminant = (Discriminant<Self>, Option<<L as Language>::Discriminant>);
 
@@ -139,6 +145,7 @@ where
     let mut nodes = Vec::new();
     for token in value {
         let nothings_to_add = L::MAX_ARITY.saturating_sub(children_ids.len());
+
         nodes.extend(iter::repeat_n(PartialLang::Placeholder, nothings_to_add));
         children_ids.extend((0..nothings_to_add).map(|x| Id::from(x + nodes.len() - 1)));
 
@@ -147,52 +154,19 @@ where
         let r = loop {
             if let Ok(node) = L::from_op(token.as_ref(), children_ids[skipped_ids..].to_owned()) {
                 children_ids.truncate(skipped_ids);
-                break Some(PartialLang::Finished(node));
+                break Ok(PartialLang::Finished(node));
             }
-            match (nodes.last(), skipped_ids < children_ids.len()) {
-                (Some(PartialLang::Placeholder), true) => {
-                    nodes.pop();
-                    children_ids.pop();
-                }
-                (Some(PartialLang::Finished(_)), true) => {
-                    skipped_ids += 1;
-                }
-                _ => break None,
+            if nodes.pop_if(|n| n.is_placeholder()).is_some() {
+                children_ids.pop();
+            } else if skipped_ids < children_ids.len() {
+                skipped_ids += 1;
+            } else {
+                break Err(MetaLangError::<L::Error>::MaxArity(
+                    token.as_ref().to_owned(),
+                    L::MAX_ARITY,
+                ));
             }
-        }
-        // // Or the sibling case where none are
-        // .or_else(|| {
-        //     if let Ok(node) = L::from_op(token.as_ref(), vec![]) {
-        //         Some(PartialLang::Finished(node))
-        //     } else {
-        //         None
-        //     }
-        // })
-        // If either fail, it's an error
-        .ok_or_else(|| {
-            MetaLangError::<L::Error>::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY)
-        })?;
-        // Sibling case
-        // let node = L::from_op(token.as_ref(), vec![])
-        //     .map(|l| PartialLang::Finished(l))
-        //     .or_else(|_| {
-        //         // Parent case (has to take all the existing children_ids)
-        //         loop {
-        //             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
-        //                 children_ids.clear();
-        //                 break Ok(PartialLang::Finished(node));
-        //             }
-        //             nodes.push(PartialLang::Placeholder);
-        //             children_ids.push(Id::from(nodes.len() - 1));
-
-        //             if children_ids.len() > L::MAX_ARITY {
-        //                 break Err(MetaLangError::MaxArity(
-        //                     token.as_ref().to_owned(),
-        //                     children_ids.len(),
-        //                 ));
-        //             }
-        //         }
-        //     })?;
+        }?;
         nodes.push(r);
         children_ids.push(Id::from(nodes.len() - 1));
     }

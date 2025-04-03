@@ -91,7 +91,7 @@ where
         if self.conf.explanation {
             info!("Running with explanations");
             runner = runner.with_explanations_enabled();
-        };
+        }
 
         if self.conf.root_check {
             info!("Installing root_check hook");

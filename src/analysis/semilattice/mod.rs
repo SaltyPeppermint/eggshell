@@ -7,8 +7,8 @@ use std::fmt::Debug;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
-use crate::utils::old_parents_iter;
 use crate::utils::UniqueQueue;
+use crate::utils::old_parents_iter;
 
 pub(crate) use contains::SatisfiesContainsAnalysis;
 pub use extract::ExtractAnalysis;
@@ -56,7 +56,7 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
                         // old_parents_iter returns only canonical ids
                         analysis_pending.extend(old_parents_iter(eclass, egraph));
                         data.insert(current_id, node_data);
-                    };
+                    }
                 } else {
                     analysis_pending.insert((node, current_id));
                 }
