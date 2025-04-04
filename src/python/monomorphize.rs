@@ -168,7 +168,7 @@ macro_rules! monomorphize {
             module.add_class::<PyRecExpr>()?;
             // module.add_class::<PyGraphData>()?;
             // module.add_class::<PyNode>()?;
-
+            module.add_function(pyo3::wrap_pyfunction!(partial_parse, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
