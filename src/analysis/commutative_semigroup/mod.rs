@@ -65,14 +65,12 @@ where
                 let available_data = eclass.nodes.iter().filter_map(|n| {
                     let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
                     // If all the childs eclass_children have data, we can calculate it!
-                    if u_node.all(|child_id| {
-                        let a = { data.read().unwrap().contains_key(&child_id) };
-                        a
-                    }) {
-                        Some(analysis.make(egraph, &u_node, data))
-                    } else {
-                        None
-                    }
+                    u_node
+                        .all(|child_id| {
+                            let a = { data.read().unwrap().contains_key(&child_id) };
+                            a
+                        })
+                        .then(|| analysis.make(egraph, &u_node, data))
                 });
 
                 // If we have some info, we add that info to our storage.
@@ -149,20 +147,20 @@ pub trait Counter:
 {
 }
 impl<
-        T: Debug
-            + Clone
-            + Send
-            + Sync
-            + Debug
-            + NumRef
-            + NumAssignRef
-            + for<'x> Sum<&'x Self>
-            + Sum<Self>
-            + for<'x> Product<&'x Self>
-            + Product<Self>
-            + SampleUniform
-            + PartialOrd
-            + Default,
-    > Counter for T
+    T: Debug
+        + Clone
+        + Send
+        + Sync
+        + Debug
+        + NumRef
+        + NumAssignRef
+        + for<'x> Sum<&'x Self>
+        + Sum<Self>
+        + for<'x> Product<&'x Self>
+        + Product<Self>
+        + SampleUniform
+        + PartialOrd
+        + Default,
+> Counter for T
 {
 }
