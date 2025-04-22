@@ -57,25 +57,15 @@ macro_rules! monomorphize {
                 self.0[egg::Id::from(position)].children().len()
             }
 
-            #[expect(clippy::missing_errors_doc)]
-            pub fn to_data(&self) -> PyResult<TreeData> {
-                let graph_data = (&self.0)
-                    .try_into()
-                    .map_err(|e| EggshellError::<L>::from(e))?;
-                Ok(graph_data)
+            #[must_use]
+            pub fn to_data(&self) -> TreeData {
+                (&self.0).into()
             }
 
-            #[expect(clippy::missing_errors_doc)]
             #[staticmethod]
-            pub fn to_data_batch(rec_exprs: Vec<PyRecExpr>) -> PyResult<Vec<TreeData>> {
-                rec_exprs
-                    .into_par_iter()
-                    .map(|r| {
-                        let graph_data =
-                            (&r.0).try_into().map_err(|e| EggshellError::<L>::from(e))?;
-                        Ok(graph_data)
-                    })
-                    .collect()
+            #[must_use]
+            pub fn to_data_batch(rec_exprs: Vec<PyRecExpr>) -> Vec<TreeData> {
+                rec_exprs.into_par_iter().map(|r| (&r.0).into()).collect()
             }
 
             #[staticmethod]
@@ -92,9 +82,7 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[expect(clippy::missing_errors_doc)]
         pub fn partial_parse(token_list: Vec<String>) -> PyResult<TreeData> {
-            let r = (&meta_lang::partial_parse::<L, _>(token_list.as_slice())?)
-                .try_into()
-                .map_err(|e| EggshellError::<L>::from(e))?;
+            let r = (&meta_lang::partial_parse::<L, _>(token_list.as_slice())?).into();
             Ok(r)
         }
 

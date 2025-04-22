@@ -16,7 +16,7 @@ pub struct Node {
     #[pyo3(get)]
     nth_child: usize,
     #[pyo3(get)]
-    dfs_order: usize,
+    bfs_order: usize,
     #[pyo3(get)]
     depth: usize,
     symbol_info: SymbolInfo,
@@ -28,7 +28,7 @@ impl Node {
         raw_name: String,
         arity: usize,
         nth_child: usize,
-        dfs_order: usize,
+        bfs_order: usize,
         depth: usize,
         symbol_info: SymbolInfo,
     ) -> Self {
@@ -36,7 +36,7 @@ impl Node {
             raw_name,
             arity,
             nth_child,
-            dfs_order,
+            bfs_order,
             depth,
             symbol_info,
         }
