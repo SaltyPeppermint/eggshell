@@ -319,7 +319,7 @@ impl<L: MetaInfo + FromOp> From<&RecExpr<L>> for TreeData {
         let mut queue = VecDeque::new();
 
         // Start with root node
-        queue.push_back((rec_expr.root(), 0, 0, None)); // (original index, parent's BFS position)
+        queue.push_back((rec_expr.root(), 0, 0, None)); // (original id, nth_node, depth, parent's BFS position)
 
         while let Some((original_idx, nth_node, depth, parent_bfs_pos)) = queue.pop_front() {
             // Record this node's position in BFS order

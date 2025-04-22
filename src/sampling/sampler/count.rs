@@ -263,8 +263,8 @@ where
         size_limit: usize,
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
-        debug!("Current EClass {:?}", eclass);
-        debug!("Choices: {:?}", partial_rec_expr);
+        debug!("Current EClass {eclass:?}");
+        debug!("Choices: {partial_rec_expr:?}");
         // We need to know what is the minimum size required to fill the rest of the open positions
         let min_to_fill_other_open = partial_rec_expr
             .other_open_slots()
