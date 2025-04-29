@@ -167,6 +167,8 @@ where
             .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
     };
 
+    // Find where the start and end point of the actual sequence is.
+    // if neither exist, we are dealing with an empty recexpr
     let Some(filtered_tokens) = tokens
         .iter()
         .position(not_finished)
@@ -177,23 +179,20 @@ where
     };
 
     // First determine the number of placeholders starting with the root, which should always be there
-    let mut expected_tokens = 1;
-    for token in filtered_tokens {
-        // Need to start with the biggest possible arity
-        for i in (0..=L::MAX_ARITY).rev() {
-            if let Ok(l) = L::from_op(token.as_ref(), vec![Id::from(0); i]) {
-                // Count children
-                expected_tokens += l.children().len();
-                break;
-            }
-            if i == 0 {
-                return Err(MetaLangError::<L::Error>::MaxArity(
-                    token.as_ref().to_owned(),
-                    L::MAX_ARITY,
-                ));
-            }
-        }
-    }
+    let expected_tokens = filtered_tokens.iter().try_fold(1, |acc, token| {
+        (0..=L::MAX_ARITY)
+            // Need to start with the biggest possible arity
+            .rev()
+            .filter_map(|i| L::from_op(token.as_ref(), vec![Id::from(0); i]).ok())
+            .map(|l| l.children().len())
+            .next()
+            // Get the first find and add it to the count
+            .map(|n_children| acc + n_children)
+            // Otherwise error out
+            .ok_or_else(|| {
+                MetaLangError::<L::Error>::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY)
+            })
+    })?;
 
     let mut nodes = vec![PartialLang::Pad; expected_tokens - filtered_tokens.len()];
     let mut used_pointer = 0;
@@ -207,7 +206,6 @@ where
             .collect::<Vec<_>>();
         let r = loop {
             // Try to absorb all children on the stack with the new token
-
             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
                 break PartialLang::Finished(node);
             }
