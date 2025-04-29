@@ -1,7 +1,7 @@
 // The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
 // Thank you very much for that!
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
 use egg::{FromOp, Id, Language, RecExpr};
@@ -158,16 +158,33 @@ where
 /// This function will return an error if it cannot be parsed as a partial term
 pub fn partial_parse<L, T>(value: &[T]) -> Result<RecExpr<PartialLang<L>>, MetaLangError<L::Error>>
 where
-    T: AsRef<str>,
+    T: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
     if value.is_empty() {
         return Ok(RecExpr::default());
     }
+    let start = value
+        .iter()
+        .position(|x| {
+            !PartialLang::<L>::from_op(x.as_ref(), vec![])
+                .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
+        })
+        .unwrap_or(0);
+    let end = value
+        .iter()
+        .rev()
+        .position(|x| {
+            !PartialLang::<L>::from_op(x.as_ref(), vec![])
+                .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
+        })
+        .unwrap_or(0);
+    let filtered_tokens = &value[start..value.len() - end];
+
     // First determine the number of placeholders starting with the root, which should always be there
     let mut expected_tokens = 1;
-    for token in value {
+    for token in filtered_tokens {
         // Need to start with the biggest possible arity
         for i in (0..=L::MAX_ARITY).rev() {
             if let Ok(l) = L::from_op(token.as_ref(), vec![Id::from(0); i]) {
@@ -184,10 +201,10 @@ where
         }
     }
 
-    let mut nodes = vec![PartialLang::Pad; expected_tokens - value.len()];
+    let mut nodes = vec![PartialLang::Pad; expected_tokens - filtered_tokens.len()];
     let mut used_pointer = 0;
 
-    for token in value.iter().rev() {
+    for token in filtered_tokens.iter().rev() {
         let mut children_ids = (used_pointer..(used_pointer + L::MAX_ARITY))
             .rev()
             .map(Id::from)
@@ -278,6 +295,20 @@ mod tests {
         assert_eq!(
             l.to_string(),
             "(* (- v1 2) (+ (- <pad> <pad>) v2))".to_owned()
+        );
+    }
+
+    #[test]
+    fn prefix_postfix_strip() {
+        let tokens = vec!["<s>", "*", "-", "+", "v1", "2", "-", "v2", "<pad>", "<pad>"];
+        let tokens_stripped = vec!["*", "-", "+", "v1", "2", "-", "v2"];
+
+        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let parsed_stripped = super::partial_parse(tokens_stripped.as_slice()).unwrap();
+        assert_eq!(parsed, parsed_stripped);
+        assert_eq!(
+            parsed_stripped.as_ref()[2],
+            PartialLang::Finished(HalideLang::Symbol("v2".into()))
         );
     }
 
