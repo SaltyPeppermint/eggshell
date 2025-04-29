@@ -31,13 +31,15 @@ pub type PartialTerm<L> = RecExpr<PartialLang<L>>;
 #[strum_discriminants(derive(EnumIter))]
 pub enum PartialLang<L: Language> {
     /// Finshed parts represented by [`SketchNode`]
+    Pad,
+    Start,
+    End,
     Finished(L),
-    Placeholder,
 }
 
 impl<L: Language> PartialLang<L> {
     pub fn is_placeholder(&self) -> bool {
-        matches!(self, Self::Placeholder)
+        matches!(self, Self::Pad)
     }
 }
 
@@ -48,7 +50,7 @@ impl<L: Language> Language for PartialLang<L> {
         let discr = discriminant(self);
         match self {
             PartialLang::Finished(x) => (discr, Some(x.discriminant())),
-            PartialLang::Placeholder => (discr, None),
+            _ => (discr, None),
         }
     }
 
@@ -58,15 +60,15 @@ impl<L: Language> Language for PartialLang<L> {
 
     fn children(&self) -> &[Id] {
         match self {
-            Self::Placeholder => &[],
             Self::Finished(n) => n.children(),
+            _ => &[],
         }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
-            Self::Placeholder => &mut [],
             Self::Finished(n) => n.children_mut(),
+            _ => &mut [],
         }
     }
 }
@@ -84,7 +86,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
     }
 
     fn operators() -> Vec<&'static str> {
-        let mut s = vec!["[placeholder]"];
+        let mut s = vec!["<pad>", "<s>", "</s>"];
         s.extend(L::operators());
         s
     }
@@ -97,8 +99,10 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
 impl<L: Language + Display> Display for PartialLang<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Placeholder => write!(f, "[placeholder]"),
             Self::Finished(sketch_node) => write!(f, "{sketch_node}"),
+            Self::Pad => write!(f, "<pad>"),
+            Self::Start => write!(f, "<s>"),
+            Self::End => write!(f, "</s>"),
         }
     }
 }
@@ -112,9 +116,27 @@ where
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
-            "[placeholder]" | "[PLACEHOLDER]" | "[Placeholder]" => {
+            "[pad]" | "[PAD]" | "[Pad]" | "<pad>" | "<PAD>" | "<Pad>" => {
                 if children.is_empty() {
-                    Ok(Self::Placeholder)
+                    Ok(Self::Pad)
+                } else {
+                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
+                        op, children,
+                    )))
+                }
+            }
+            "[s]" | "[S]" | "<s>" | "<S>" => {
+                if children.is_empty() {
+                    Ok(Self::Start)
+                } else {
+                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
+                        op, children,
+                    )))
+                }
+            }
+            "[/s]" | "[/S]" | "</s>" | "</S>" => {
+                if children.is_empty() {
+                    Ok(Self::End)
                 } else {
                     Err(MetaLangError::BadChildren(egg::FromOpError::new(
                         op, children,
@@ -162,7 +184,7 @@ where
         }
     }
 
-    let mut nodes = vec![PartialLang::Placeholder; expected_tokens - value.len()];
+    let mut nodes = vec![PartialLang::Pad; expected_tokens - value.len()];
     let mut used_pointer = 0;
 
     for token in value.iter().rev() {
@@ -197,38 +219,17 @@ mod tests {
 
     #[test]
     fn parse_and_print() {
-        let sketch = "(contains (max (min 1 [placeholder]) ?))"
+        let sketch = "(contains (max (min 1 <pad>) ?))"
             .parse::<PartialTerm<SketchLang<HalideLang>>>()
             .unwrap();
-        assert_eq!(
-            &sketch.to_string(),
-            "(contains (max (min 1 [placeholder]) ?))"
-        );
+        assert_eq!(&sketch.to_string(), "(contains (max (min 1 <pad>) ?))");
     }
 
     #[test]
     fn operators() {
         let known_operators = vec![
-            "[placeholder]",
-            "?",
-            "contains",
-            "or",
-            "+",
-            "-",
-            "*",
-            "/",
-            "%",
-            "max",
-            "min",
-            "<",
-            ">",
-            "!",
-            "<=",
-            ">=",
-            "==",
-            "!=",
-            "||",
-            "&&",
+            "<pad>", "<s>", "</s>", "?", "contains", "or", "+", "-", "*", "/", "%", "max", "min",
+            "<", ">", "!", "<=", ">=", "==", "!=", "||", "&&",
         ];
         assert_eq!(
             PartialLang::<SketchLang<HalideLang>>::operators(),
@@ -243,7 +244,7 @@ mod tests {
         assert_eq!(
             l.as_ref().to_vec(),
             vec![
-                PartialLang::Placeholder,
+                PartialLang::Pad,
                 PartialLang::Finished(HalideLang::Number(2)),
                 PartialLang::Finished(HalideLang::Number(7)),
                 PartialLang::Finished(HalideLang::Symbol("v1".into())),
@@ -252,7 +253,7 @@ mod tests {
                 PartialLang::Finished(HalideLang::Mul([5.into(), 4.into()]))
             ]
         );
-        assert_eq!(l.to_string(), "(* (- v1 7) (+ 2 [placeholder]))".to_owned());
+        assert_eq!(l.to_string(), "(* (- v1 7) (+ 2 <pad>))".to_owned());
     }
 
     #[test]
@@ -263,8 +264,8 @@ mod tests {
         assert_eq!(
             l.as_ref().to_vec(),
             vec![
-                PartialLang::Placeholder,
-                PartialLang::Placeholder,
+                PartialLang::Pad,
+                PartialLang::Pad,
                 PartialLang::Finished(HalideLang::Symbol("v2".into())),
                 PartialLang::Finished(HalideLang::Sub([1.into(), 0.into()])),
                 PartialLang::Finished(HalideLang::Number(2)),
@@ -276,22 +277,20 @@ mod tests {
         );
         assert_eq!(
             l.to_string(),
-            "(* (- v1 2) (+ (- [placeholder] [placeholder]) v2))".to_owned()
+            "(* (- v1 2) (+ (- <pad> <pad>) v2))".to_owned()
         );
     }
 
     #[test]
     fn partial_parse_recexpr() {
         let control: RecExpr<PartialLang<HalideLang>> =
-            "(* (- 2 v1) (+ (- [placeholder] [placeholder]) v2))"
-                .parse()
-                .unwrap();
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
         let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
         let l = super::partial_parse::<HalideLang, _>(tokens.as_slice()).unwrap();
         assert_eq!(control.to_string(), l.to_string());
         assert_eq!(
             l.to_string(),
-            "(* (- 2 v1) (+ (- [placeholder] [placeholder]) v2))".to_owned()
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".to_owned()
         );
     }
 }
