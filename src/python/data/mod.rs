@@ -314,6 +314,14 @@ impl TreeData {
 
 impl<L: MetaInfo + FromOp> From<&RecExpr<L>> for TreeData {
     fn from(rec_expr: &RecExpr<L>) -> TreeData {
+        // Guard against empty recexpr (root() call will panic otherwise)
+        if rec_expr.is_empty() {
+            return TreeData {
+                nodes: vec![],
+                adjacency_pairs: vec![],
+            };
+        }
+
         let mut nodes = Vec::new(); // Stores original indices in BFS order
         let mut adjacency_pairs = Vec::new();
         let mut queue = VecDeque::new();

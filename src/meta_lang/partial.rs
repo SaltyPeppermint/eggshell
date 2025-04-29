@@ -162,25 +162,19 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    if value.is_empty() {
+    let start = value.iter().position(|x| {
+        !PartialLang::<L>::from_op(x.as_ref(), vec![])
+            .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
+    });
+    let end = value.iter().rev().position(|x| {
+        !PartialLang::<L>::from_op(x.as_ref(), vec![])
+            .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
+    });
+    let filtered_tokens = if let (Some(s), Some(e)) = (start, end) {
+        &value[s..value.len() - e]
+    } else {
         return Ok(RecExpr::default());
-    }
-    let start = value
-        .iter()
-        .position(|x| {
-            !PartialLang::<L>::from_op(x.as_ref(), vec![])
-                .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
-        })
-        .unwrap_or(0);
-    let end = value
-        .iter()
-        .rev()
-        .position(|x| {
-            !PartialLang::<L>::from_op(x.as_ref(), vec![])
-                .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
-        })
-        .unwrap_or(0);
-    let filtered_tokens = &value[start..value.len() - end];
+    };
 
     // First determine the number of placeholders starting with the root, which should always be there
     let mut expected_tokens = 1;
@@ -201,11 +195,17 @@ where
         }
     }
 
+    println!("{expected_tokens}");
+
     let mut nodes = vec![PartialLang::Pad; expected_tokens - filtered_tokens.len()];
+
+    println!("{nodes:?}");
     let mut used_pointer = 0;
 
     for token in filtered_tokens.iter().rev() {
-        let mut children_ids = (used_pointer..(used_pointer + L::MAX_ARITY))
+        // Cant absorb more nodes than in those that are not yet used up
+        let end_pointer = usize::min(used_pointer + L::MAX_ARITY, nodes.len());
+        let mut children_ids = (used_pointer..end_pointer)
             .rev()
             .map(Id::from)
             .collect::<Vec<_>>();
@@ -232,6 +232,8 @@ where
 mod tests {
     use super::*;
     use crate::meta_lang::SketchLang;
+    use crate::python::data::TreeData;
+    use crate::trs::rise::RiseLang;
     use crate::trs::{MetaInfo, halide::HalideLang};
 
     #[test]
@@ -309,6 +311,52 @@ mod tests {
         assert_eq!(
             parsed_stripped.as_ref()[2],
             PartialLang::Finished(HalideLang::Symbol("v2".into()))
+        );
+    }
+
+    #[test]
+    fn empty_tokens() {
+        let tokens = Vec::<&str>::new();
+        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        assert_eq!(RecExpr::<PartialLang<HalideLang>>::default(), parsed);
+    }
+
+    #[test]
+    fn filler_tokens() {
+        let tokens = vec![
+            "<s>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
+            "<pad>",
+        ];
+        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let _treedata: TreeData = (&parsed).into();
+        assert_eq!(RecExpr::<PartialLang<RiseLang>>::default(), parsed);
+    }
+
+    #[test]
+    fn lam_overflow() {
+        let tokens = vec!["lam"];
+        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let _treedata: TreeData = (&parsed).into();
+        assert_eq!(
+            parsed.as_ref().to_vec(),
+            vec![
+                PartialLang::Pad,
+                PartialLang::Pad,
+                PartialLang::Finished(RiseLang::Lambda([1.into(), 0.into()])),
+            ]
         );
     }
 
