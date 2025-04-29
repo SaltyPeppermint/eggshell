@@ -2,7 +2,6 @@
 // Thank you very much for that!
 
 use std::fmt::{Display, Formatter};
-use std::iter;
 use std::mem::{Discriminant, discriminant};
 
 use egg::{FromOp, Id, Language, RecExpr};
@@ -141,34 +140,51 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let mut children_ids = Vec::new();
-    let mut nodes = Vec::new();
+    if value.is_empty() {
+        return Ok(RecExpr::default());
+    }
+    // First determine the number of placeholders starting with the root, which should always be there
+    let mut expected_tokens = 1;
     for token in value {
-        let nothings_to_add = L::MAX_ARITY.saturating_sub(children_ids.len());
-
-        nodes.extend(iter::repeat_n(PartialLang::Placeholder, nothings_to_add));
-        children_ids.extend((0..nothings_to_add).map(|x| Id::from(x + nodes.len() - 1)));
-
-        let mut skipped_ids = 0;
-        // First the parent case where all children on the stack are "absorbed"
-        let r = loop {
-            if let Ok(node) = L::from_op(token.as_ref(), children_ids[skipped_ids..].to_owned()) {
-                children_ids.truncate(skipped_ids);
-                break Ok(PartialLang::Finished(node));
+        // Need to start with the biggest possible arity
+        for i in (0..=L::MAX_ARITY).rev() {
+            if let Ok(l) = L::from_op(token.as_ref(), vec![Id::from(0); i]) {
+                // Count children
+                expected_tokens += l.children().len();
+                break;
             }
-            if nodes.pop_if(|n| n.is_placeholder()).is_some() {
-                children_ids.pop();
-            } else if skipped_ids < children_ids.len() {
-                skipped_ids += 1;
-            } else {
-                break Err(MetaLangError::<L::Error>::MaxArity(
+            if i == 0 {
+                return Err(MetaLangError::<L::Error>::MaxArity(
                     token.as_ref().to_owned(),
                     L::MAX_ARITY,
                 ));
             }
-        }?;
+        }
+    }
+
+    let mut nodes = vec![PartialLang::Placeholder; expected_tokens - value.len()];
+    let mut used_pointer = 0;
+
+    for token in value.iter().rev() {
+        let mut children_ids = (used_pointer..(used_pointer + L::MAX_ARITY))
+            .rev()
+            .map(Id::from)
+            .collect::<Vec<_>>();
+        let r = loop {
+            // Try to absorb all children on the stack with the new token
+
+            if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
+                break PartialLang::Finished(node);
+            }
+            if children_ids.pop().is_none() {
+                return Err(MetaLangError::<L::Error>::MaxArity(
+                    token.as_ref().to_owned(),
+                    L::MAX_ARITY,
+                ));
+            }
+        };
         nodes.push(r);
-        children_ids.push(Id::from(nodes.len() - 1));
+        used_pointer += children_ids.len();
     }
     Ok(RecExpr::from(nodes))
 }
@@ -222,54 +238,60 @@ mod tests {
 
     #[test]
     fn partial_parse_1_placeholder() {
-        let str_list = vec!["7", "+", "2", "v1", "-", "*"];
-        let l = super::partial_parse(str_list.as_slice()).unwrap();
+        let tokens = vec!["*", "-", "+", "v1", "7", "2"];
+        let l = super::partial_parse(tokens.as_slice()).unwrap();
         assert_eq!(
             l.as_ref().to_vec(),
             vec![
-                PartialLang::Finished(HalideLang::Number(7)),
                 PartialLang::Placeholder,
-                PartialLang::Finished(HalideLang::Add([0.into(), 1.into()])),
                 PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Finished(HalideLang::Number(7)),
                 PartialLang::Finished(HalideLang::Symbol("v1".into())),
-                PartialLang::Finished(HalideLang::Sub([3.into(), 4.into()])),
-                PartialLang::Finished(HalideLang::Mul([2.into(), 5.into()]))
+                PartialLang::Finished(HalideLang::Add([1.into(), 0.into()])),
+                PartialLang::Finished(HalideLang::Sub([3.into(), 2.into()])),
+                PartialLang::Finished(HalideLang::Mul([5.into(), 4.into()]))
             ]
         );
+        assert_eq!(l.to_string(), "(* (- v1 7) (+ 2 [placeholder]))".to_owned());
     }
 
     #[test]
     fn partial_parse_2_placeholder() {
-        let str_list = vec!["v2", "-", "+", "2", "v1", "-", "*"];
-        let l = super::partial_parse(str_list.as_slice()).unwrap();
+        let tokens = vec!["*", "-", "+", "v1", "2", "-", "v2"];
+
+        let l = super::partial_parse(tokens.as_slice()).unwrap();
         assert_eq!(
             l.as_ref().to_vec(),
             vec![
+                PartialLang::Placeholder,
+                PartialLang::Placeholder,
                 PartialLang::Finished(HalideLang::Symbol("v2".into())),
-                PartialLang::Placeholder,
-                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
-                PartialLang::Placeholder,
-                PartialLang::Finished(HalideLang::Add([2.into(), 3.into()])),
+                PartialLang::Finished(HalideLang::Sub([1.into(), 0.into()])),
                 PartialLang::Finished(HalideLang::Number(2)),
                 PartialLang::Finished(HalideLang::Symbol("v1".into())),
-                PartialLang::Finished(HalideLang::Sub([5.into(), 6.into()])),
-                PartialLang::Finished(HalideLang::Mul([4.into(), 7.into()]))
+                PartialLang::Finished(HalideLang::Add([3.into(), 2.into()])),
+                PartialLang::Finished(HalideLang::Sub([5.into(), 4.into()])),
+                PartialLang::Finished(HalideLang::Mul([7.into(), 6.into()]))
             ]
+        );
+        assert_eq!(
+            l.to_string(),
+            "(* (- v1 2) (+ (- [placeholder] [placeholder]) v2))".to_owned()
         );
     }
 
     #[test]
     fn partial_parse_recexpr() {
         let control: RecExpr<PartialLang<HalideLang>> =
-            "(* (+ (- v2 [placeholder]) [placeholder]) (- 2 v1))"
+            "(* (- 2 v1) (+ (- [placeholder] [placeholder]) v2))"
                 .parse()
                 .unwrap();
-        let str_list = vec!["v2", "-", "+", "2", "v1", "-", "*"];
-        let l = super::partial_parse::<HalideLang, _>(str_list.as_slice()).unwrap();
-        assert_eq!(control, l);
+        let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
+        let l = super::partial_parse::<HalideLang, _>(tokens.as_slice()).unwrap();
+        assert_eq!(control.to_string(), l.to_string());
         assert_eq!(
             l.to_string(),
-            "(* (+ (- v2 [placeholder]) [placeholder]) (- 2 v1))".to_owned()
+            "(* (- 2 v1) (+ (- [placeholder] [placeholder]) v2))".to_owned()
         );
     }
 }
