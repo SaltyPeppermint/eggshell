@@ -162,17 +162,17 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let start = tokens.iter().position(|x| {
+    let not_finished = |x: &T| {
         !PartialLang::<L>::from_op(x.as_ref(), vec![])
             .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
-    });
-    let end = tokens.iter().rev().position(|x| {
-        !PartialLang::<L>::from_op(x.as_ref(), vec![])
-            .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
-    });
-    let filtered_tokens = if let (Some(s), Some(e)) = (start, end) {
-        &tokens[s..tokens.len() - e]
-    } else {
+    };
+
+    let Some(filtered_tokens) = tokens
+        .iter()
+        .position(not_finished)
+        .zip(tokens.iter().rposition(not_finished))
+        .map(|(start, end)| &tokens[start..=end])
+    else {
         return Ok(RecExpr::default());
     };
 
