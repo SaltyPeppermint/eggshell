@@ -88,6 +88,15 @@ macro_rules! monomorphize {
 
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
+        #[expect(clippy::missing_errors_doc)]
+        pub fn lower_meta_level(token_list: Vec<String>) -> PyResult<PyRecExpr> {
+            let rec_expr = meta_lang::partial_parse::<L, _>(token_list.as_slice())?;
+            let r = meta_lang::lower_meta_level::<L>(&rec_expr)?;
+            Ok(PyRecExpr(r))
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
         #[must_use]
         pub fn operators() -> Vec<String> {
             L::operators().iter().map(|s| s.to_string()).collect()
@@ -154,12 +163,14 @@ macro_rules! monomorphize {
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<PyRecExpr>()?;
-            // module.add_class::<PyGraphData>()?;
-            // module.add_class::<PyNode>()?;
+
             module.add_function(pyo3::wrap_pyfunction!(partial_parse, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(lower_meta_level, m)?)?;
+
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
+
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(many_eqsat_check, m)?)?;
 

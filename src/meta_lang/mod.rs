@@ -13,6 +13,7 @@ use thiserror::Error;
 
 pub use partial::PartialLang;
 pub use partial::PartialTerm;
+pub use partial::lower_meta_level;
 pub use partial::partial_parse;
 pub use sketch_lang::Sketch;
 pub use sketch_lang::SketchLang;
@@ -23,6 +24,8 @@ pub enum MetaLangError<E: Display> {
     BadChildren(#[from] egg::FromOpError),
     #[error("Tried to parse a partial sketch into a full sketch")]
     PartialSketch,
+    #[error("Cannot lower into an easier language: {0:?}")]
+    NoLowering(String),
     #[error("Max arity reached while trying to parse partial term: {1}: {0}")]
     MaxArity(String, usize),
     #[error(transparent)]

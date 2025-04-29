@@ -156,22 +156,22 @@ where
 /// # Errors
 ///
 /// This function will return an error if it cannot be parsed as a partial term
-pub fn partial_parse<L, T>(value: &[T]) -> Result<RecExpr<PartialLang<L>>, MetaLangError<L::Error>>
+pub fn partial_parse<L, T>(tokens: &[T]) -> Result<RecExpr<PartialLang<L>>, MetaLangError<L::Error>>
 where
     T: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let start = value.iter().position(|x| {
+    let start = tokens.iter().position(|x| {
         !PartialLang::<L>::from_op(x.as_ref(), vec![])
             .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
     });
-    let end = value.iter().rev().position(|x| {
+    let end = tokens.iter().rev().position(|x| {
         !PartialLang::<L>::from_op(x.as_ref(), vec![])
             .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
     });
     let filtered_tokens = if let (Some(s), Some(e)) = (start, end) {
-        &value[s..value.len() - e]
+        &tokens[s..tokens.len() - e]
     } else {
         return Ok(RecExpr::default());
     };
@@ -195,11 +195,7 @@ where
         }
     }
 
-    println!("{expected_tokens}");
-
     let mut nodes = vec![PartialLang::Pad; expected_tokens - filtered_tokens.len()];
-
-    println!("{nodes:?}");
     let mut used_pointer = 0;
 
     for token in filtered_tokens.iter().rev() {
@@ -226,6 +222,28 @@ where
         used_pointer += children_ids.len();
     }
     Ok(RecExpr::from(nodes))
+}
+
+/// Lower the meta level of this partial lang to the underlying lang
+///
+/// # Errors
+///
+/// This function will return an error if it cant be lowered because meta lang nodes are still contained
+pub fn lower_meta_level<L>(
+    higher: &RecExpr<PartialLang<L>>,
+) -> Result<RecExpr<L>, MetaLangError<L::Error>>
+where
+    L: FromOp + MetaInfo,
+    L::Error: Display,
+{
+    let nodes = higher
+        .iter()
+        .map(|partial_node| match partial_node {
+            PartialLang::Finished(node) => Ok(node.to_owned()),
+            _ => Err(MetaLangError::NoLowering(partial_node.to_string())),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(nodes.into())
 }
 
 #[cfg(test)]

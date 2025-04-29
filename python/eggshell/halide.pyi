@@ -38,6 +38,9 @@ class PyRecExpr:
 def eqsat_check(start:PyRecExpr, goal:PyRecExpr, iter_limit:builtins.int) -> tuple[builtins.int, builtins.str, builtins.str]:
     ...
 
+def lower_meta_level(token_list:typing.Sequence[builtins.str]) -> PyRecExpr:
+    ...
+
 def many_eqsat_check(starts:typing.Sequence[PyRecExpr], goal:PyRecExpr, iter_limit:builtins.int) -> builtins.list[tuple[builtins.int, builtins.str, builtins.str]]:
     ...
 
