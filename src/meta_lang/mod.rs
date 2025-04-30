@@ -13,8 +13,7 @@ use thiserror::Error;
 
 pub use partial::PartialLang;
 pub use partial::PartialTerm;
-pub use partial::lower_meta_level;
-pub use partial::partial_parse;
+pub use partial::{count_expected_tokens, lower_meta_level, partial_parse};
 pub use sketch_lang::Sketch;
 pub use sketch_lang::SketchLang;
 

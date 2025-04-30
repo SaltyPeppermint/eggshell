@@ -89,6 +89,13 @@ macro_rules! monomorphize {
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[expect(clippy::missing_errors_doc)]
+        pub fn count_expected_tokens(token_list: Vec<String>) -> PyResult<usize> {
+            Ok(meta_lang::count_expected_tokens::<L, _>(&token_list)?)
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[expect(clippy::missing_errors_doc)]
         pub fn lower_meta_level(token_list: Vec<String>) -> PyResult<PyRecExpr> {
             let rec_expr = meta_lang::partial_parse::<L, _>(token_list.as_slice())?;
             let r = meta_lang::lower_meta_level::<L>(&rec_expr)?;
@@ -166,6 +173,7 @@ macro_rules! monomorphize {
 
             module.add_function(pyo3::wrap_pyfunction!(partial_parse, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(lower_meta_level, m)?)?;
+            module.add_function(pyo3::wrap_pyfunction!(count_expected_tokens, m)?)?;
 
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;

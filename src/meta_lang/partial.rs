@@ -32,8 +32,6 @@ pub type PartialTerm<L> = RecExpr<PartialLang<L>>;
 pub enum PartialLang<L: Language> {
     /// Finshed parts represented by [`SketchNode`]
     Pad,
-    Start,
-    End,
     Finished(L),
 }
 
@@ -50,7 +48,7 @@ impl<L: Language> Language for PartialLang<L> {
         let discr = discriminant(self);
         match self {
             PartialLang::Finished(x) => (discr, Some(x.discriminant())),
-            _ => (discr, None),
+            Self::Pad => (discr, None),
         }
     }
 
@@ -61,14 +59,14 @@ impl<L: Language> Language for PartialLang<L> {
     fn children(&self) -> &[Id] {
         match self {
             Self::Finished(n) => n.children(),
-            _ => &[],
+            Self::Pad => &[],
         }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
             Self::Finished(n) => n.children_mut(),
-            _ => &mut [],
+            Self::Pad => &mut [],
         }
     }
 }
@@ -86,7 +84,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
     }
 
     fn operators() -> Vec<&'static str> {
-        let mut s = vec!["<pad>", "<s>", "</s>"];
+        let mut s = vec!["<pad>"];
         s.extend(L::operators());
         s
     }
@@ -101,8 +99,6 @@ impl<L: Language + Display> Display for PartialLang<L> {
         match self {
             Self::Finished(sketch_node) => write!(f, "{sketch_node}"),
             Self::Pad => write!(f, "<pad>"),
-            Self::Start => write!(f, "<s>"),
-            Self::End => write!(f, "</s>"),
         }
     }
 }
@@ -119,24 +115,6 @@ where
             "[pad]" | "[PAD]" | "[Pad]" | "<pad>" | "<PAD>" | "<Pad>" => {
                 if children.is_empty() {
                     Ok(Self::Pad)
-                } else {
-                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
-                        op, children,
-                    )))
-                }
-            }
-            "[s]" | "[S]" | "<s>" | "<S>" => {
-                if children.is_empty() {
-                    Ok(Self::Start)
-                } else {
-                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
-                        op, children,
-                    )))
-                }
-            }
-            "[/s]" | "[/S]" | "</s>" | "</S>" => {
-                if children.is_empty() {
-                    Ok(Self::End)
                 } else {
                     Err(MetaLangError::BadChildren(egg::FromOpError::new(
                         op, children,
@@ -162,42 +140,20 @@ where
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
-    let not_finished = |x: &T| {
-        !PartialLang::<L>::from_op(x.as_ref(), vec![])
-            .is_ok_and(|l| !matches!(l, PartialLang::Finished(_)))
-    };
-
-    // Find where the start and end point of the actual sequence is.
-    // if neither exist, we are dealing with an empty recexpr
-    let Some(filtered_tokens) = tokens
-        .iter()
-        .position(not_finished)
-        .zip(tokens.iter().rposition(not_finished))
-        .map(|(start, end)| &tokens[start..=end])
-    else {
+    // If this is empty, return the empty RecExpr
+    if tokens.is_empty() {
         return Ok(RecExpr::default());
-    };
+    }
 
     // First determine the number of placeholders starting with the root, which should always be there
-    let expected_tokens = filtered_tokens.iter().try_fold(1, |acc, token| {
-        (0..=L::MAX_ARITY)
-            // Need to start with the biggest possible arity
-            .rev()
-            .filter_map(|i| L::from_op(token.as_ref(), vec![Id::from(0); i]).ok())
-            .map(|l| l.children().len())
-            .next()
-            // Get the first find and add it to the count
-            .map(|n_children| acc + n_children)
-            // Otherwise error out
-            .ok_or_else(|| {
-                MetaLangError::<L::Error>::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY)
-            })
-    })?;
+    let expected_tokens = count_expected_tokens::<L, _>(tokens)?;
+    // dbg!(expected_tokens);
+    // dbg!(tokens.len());
 
-    let mut nodes = vec![PartialLang::Pad; expected_tokens - filtered_tokens.len()];
+    let mut nodes = vec![PartialLang::Pad; expected_tokens - tokens.len()];
     let mut used_pointer = 0;
 
-    for token in filtered_tokens.iter().rev() {
+    for token in tokens.iter().rev() {
         // Cant absorb more nodes than in those that are not yet used up
         let end_pointer = usize::min(used_pointer + L::MAX_ARITY, nodes.len());
         let mut children_ids = (used_pointer..end_pointer)
@@ -222,6 +178,35 @@ where
     Ok(RecExpr::from(nodes))
 }
 
+/// Count how many nodes are expected to be there, including to be generated nodes atm
+///
+/// # Errors
+///
+/// This function will return an error if it cannot parse any tokens
+pub fn count_expected_tokens<L, T>(
+    filtered_tokens: &[T],
+) -> Result<usize, MetaLangError<<L as FromOp>::Error>>
+where
+    T: AsRef<str> + Debug,
+    L: FromOp + MetaInfo,
+    L::Error: Display,
+{
+    let expected_tokens = filtered_tokens.iter().try_fold(1, |acc, token| {
+        (0..=L::MAX_ARITY)
+            // Need to start with the biggest possible arity
+            .rev()
+            .find_map(|i| L::from_op(token.as_ref(), vec![Id::from(0); i]).ok())
+            .map(|l| l.children().len())
+            // Get the first find and add it to the count
+            .map(|n_children| acc + n_children)
+            // Otherwise error out
+            .ok_or_else(|| {
+                MetaLangError::<L::Error>::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY)
+            })
+    })?;
+    Ok(expected_tokens)
+}
+
 /// Lower the meta level of this partial lang to the underlying lang
 ///
 /// # Errors
@@ -238,7 +223,7 @@ where
         .iter()
         .map(|partial_node| match partial_node {
             PartialLang::Finished(node) => Ok(node.to_owned()),
-            _ => Err(MetaLangError::NoLowering(partial_node.to_string())),
+            PartialLang::Pad => Err(MetaLangError::NoLowering(partial_node.to_string())),
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(nodes.into())
@@ -263,8 +248,8 @@ mod tests {
     #[test]
     fn operators() {
         let known_operators = vec![
-            "<pad>", "<s>", "</s>", "?", "contains", "or", "+", "-", "*", "/", "%", "max", "min",
-            "<", ">", "!", "<=", ">=", "==", "!=", "||", "&&",
+            "<pad>", "?", "contains", "or", "+", "-", "*", "/", "%", "max", "min", "<", ">", "!",
+            "<=", ">=", "==", "!=", "||", "&&",
         ];
         assert_eq!(
             PartialLang::<SketchLang<HalideLang>>::operators(),
@@ -317,49 +302,41 @@ mod tests {
     }
 
     #[test]
-    fn prefix_postfix_strip() {
-        let tokens = vec!["<s>", "*", "-", "+", "v1", "2", "-", "v2", "<pad>", "<pad>"];
-        let tokens_stripped = vec!["*", "-", "+", "v1", "2", "-", "v2"];
-
-        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
-        let parsed_stripped = super::partial_parse(tokens_stripped.as_slice()).unwrap();
-        assert_eq!(parsed, parsed_stripped);
-        assert_eq!(
-            parsed_stripped.as_ref()[2],
-            PartialLang::Finished(HalideLang::Symbol("v2".into()))
-        );
-    }
-
-    #[test]
     fn empty_tokens() {
         let tokens = Vec::<&str>::new();
         let parsed = super::partial_parse(tokens.as_slice()).unwrap();
         assert_eq!(RecExpr::<PartialLang<HalideLang>>::default(), parsed);
     }
 
-    #[test]
-    fn filler_tokens() {
-        let tokens = vec![
-            "<s>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>", "<pad>",
-            "<pad>",
-        ];
-        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
-        let _treedata: TreeData = (&parsed).into();
-        assert_eq!(RecExpr::<PartialLang<RiseLang>>::default(), parsed);
-    }
+    // #[test]
+    // fn filler_tokens_long() {
+    //     let tokens = vec![
+    //         "lam",
+    //         ">>",
+    //         "lam",
+    //         ">>",
+    //         "transpose",
+    //         "[variable]",
+    //         "lam",
+    //         "[variable]",
+    //         "transpose",
+    //         "[variable]",
+    //         "lam",
+    //         "[variable]",
+    //         "transpose",
+    //         "[variable]",
+    //     ];
+    //     let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+    //     let _treedata: TreeData = (&parsed).into();
+    //     assert_eq!(
+    //         parsed.as_ref().to_vec(),
+    //         vec![
+    //             PartialLang::Pad,
+    //             PartialLang::Pad,
+    //             PartialLang::Finished(RiseLang::Lambda([1.into(), 0.into()])),
+    //         ]
+    //     );
+    // }
 
     #[test]
     fn lam_overflow() {

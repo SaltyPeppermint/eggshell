@@ -35,6 +35,9 @@ class PyRecExpr:
         ...
 
 
+def count_expected_tokens(token_list:typing.Sequence[builtins.str]) -> builtins.int:
+    ...
+
 def eqsat_check(start:PyRecExpr, goal:PyRecExpr, iter_limit:builtins.int) -> tuple[builtins.int, builtins.str, builtins.str]:
     ...
 
