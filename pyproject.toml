@@ -7,7 +7,7 @@ name = "eggshell"
 version = "0.0.1"
 description = "Python Wrappper around egg"
 authors = [{ name = "Nicole Heinimann", email = "heinimann@tu-berlin.de" }]
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 license = "GPL-3.0-or-later"
 classifiers = [
   "Programming Language :: Rust",
