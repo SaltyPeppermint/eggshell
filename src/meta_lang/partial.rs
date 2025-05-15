@@ -1,7 +1,3 @@
-// The whole folder is in large parts Copy-Paste from https://github.com/Bastacyclop/egg-sketches/blob/main/src/sketch.rs
-// Thank you very much for that!
-
-use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
@@ -9,8 +5,8 @@ use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::MetaLangError;
-use crate::trs::SymbolType::MetaSymbol;
+use super::{MetaLangError, TempNode};
+use crate::trs::SymbolType;
 use crate::trs::{MetaInfo, SymbolInfo};
 
 /// Simple alias
@@ -80,7 +76,7 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
             let position = PartialLangDiscriminants::iter()
                 .position(|x| x == self.into())
                 .unwrap();
-            SymbolInfo::new(position + L::NUM_SYMBOLS, MetaSymbol)
+            SymbolInfo::new(position + L::NUM_SYMBOLS, SymbolType::MetaSymbol)
         }
     }
 
@@ -130,58 +126,14 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-struct TempNode<L: Language> {
-    node: PartialLang<L>,
-    children: Vec<TempNode<L>>,
-}
-
-impl<L: Language> TempNode<L> {
-    fn find_next_open(&mut self) -> Option<&mut Self> {
-        let mut queue = VecDeque::new();
-        queue.push_back(self);
-        while let Some(x) = queue.pop_front() {
-            if matches!(x.node, PartialLang::Pad) {
-                return Some(x);
-            }
-            for c in &mut x.children {
-                queue.push_back(c);
-            }
-        }
-        None
-    }
-
-    fn new_empty() -> Self {
-        Self {
-            node: PartialLang::Pad,
-            children: vec![],
-        }
-    }
-}
-
-impl<L: Language> From<TempNode<L>> for RecExpr<PartialLang<L>> {
-    fn from(root: TempNode<L>) -> Self {
-        fn rec<LL: Language>(mut curr: TempNode<LL>, vec: &mut Vec<PartialLang<LL>>) -> Id {
-            let c = curr.children.into_iter().map(|c| rec(c, vec));
-            for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
-                *dummy_id = c_id;
-            }
-            let id = Id::from(vec.len());
-            vec.push(curr.node);
-            id
-        }
-        let mut stack = Vec::new();
-        rec(root, &mut stack);
-        RecExpr::from(stack)
-    }
-}
-
 /// Tries to parse a list of tokens into a list of nodes in the language
 ///
 /// # Errors
 ///
 /// This function will return an error if it cannot be parsed as a partial term
-pub fn partial_parse<L, T>(tokens: &[T]) -> Result<RecExpr<PartialLang<L>>, MetaLangError<L>>
+pub fn partial_parse<L, T>(
+    tokens: &[T],
+) -> Result<(RecExpr<PartialLang<L>>, usize), MetaLangError<L>>
 where
     T: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
@@ -189,11 +141,11 @@ where
 {
     // If this is empty, return the empty RecExpr
     if tokens.is_empty() {
-        return Ok(RecExpr::default());
+        return Ok((RecExpr::default(), 0));
     }
 
     let mut ast = TempNode::new_empty();
-    for token in tokens {
+    for (used_tokens, token) in tokens.iter().enumerate() {
         let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
         let (node, arity) = loop {
             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
@@ -201,19 +153,18 @@ where
             }
             children_ids.pop();
         };
-        dbg!(&node);
-        dbg!(arity);
+
         if let Some(position) = ast.find_next_open() {
             *position = TempNode {
                 node: PartialLang::Finished(node),
                 children: vec![TempNode::new_empty(); arity],
-            }
+            };
         } else {
-            return Err(MetaLangError::NoOpenPositions(ast.into()));
+            return Ok((ast.into(), used_tokens));
         }
     }
 
-    Ok(ast.into())
+    Ok((ast.into(), tokens.len()))
     // First determine the number of placeholders starting with the root, which should always be there
     // let expected_tokens = count_expected_tokens::<L, _>(tokens)?;
     // dbg!(expected_tokens);
@@ -323,51 +274,49 @@ mod tests {
     #[test]
     fn partial_parse_1_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "7", "2"];
-        let l: RecExpr<PartialLang<HalideLang>> = super::partial_parse(tokens.as_slice()).unwrap();
-        // assert_eq!(
-        //     l.as_ref().to_vec(),
-        //     vec![
-        //         PartialLang::Pad,
-        //         PartialLang::Finished(HalideLang::Number(2)),
-        //         PartialLang::Finished(HalideLang::Number(7)),
-        //         PartialLang::Finished(HalideLang::Symbol("v1".into())),
-        //         PartialLang::Finished(HalideLang::Add([1.into(), 0.into()])),
-        //         PartialLang::Finished(HalideLang::Sub([3.into(), 2.into()])),
-        //         PartialLang::Finished(HalideLang::Mul([5.into(), 4.into()]))
-        //     ]
-        // );
-        assert_eq!(l.to_string(), "(* (- v1 7) (+ 2 <pad>))".to_owned());
+        let (l, _) = super::partial_parse(tokens.as_slice()).unwrap();
+        assert_eq!(
+            l.as_ref().to_vec(),
+            vec![
+                PartialLang::Finished(HalideLang::Symbol("v1".into())),
+                PartialLang::Finished(HalideLang::Number(7)),
+                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
+                PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Pad,
+                PartialLang::Finished(HalideLang::Add([3.into(), 4.into()])),
+                PartialLang::Finished(HalideLang::Mul([2.into(), 5.into()]))
+            ]
+        );
+        assert_eq!(&l.to_string(), "(* (- v1 7) (+ 2 <pad>))");
     }
 
     #[test]
     fn partial_parse_2_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "2", "-", "v2"];
 
-        let l: RecExpr<PartialLang<HalideLang>> = super::partial_parse(tokens.as_slice()).unwrap();
-        // assert_eq!(
-        //     l.as_ref().to_vec(),
-        //     vec![
-        //         PartialLang::Pad,
-        //         PartialLang::Pad,
-        //         PartialLang::Finished(HalideLang::Symbol("v2".into())),
-        //         PartialLang::Finished(HalideLang::Sub([1.into(), 0.into()])),
-        //         PartialLang::Finished(HalideLang::Number(2)),
-        //         PartialLang::Finished(HalideLang::Symbol("v1".into())),
-        //         PartialLang::Finished(HalideLang::Add([3.into(), 2.into()])),
-        //         PartialLang::Finished(HalideLang::Sub([5.into(), 4.into()])),
-        //         PartialLang::Finished(HalideLang::Mul([7.into(), 6.into()]))
-        //     ]
-        // );
+        let (l, _) = super::partial_parse(tokens.as_slice()).unwrap();
         assert_eq!(
-            l.to_string(),
-            "(* (- v1 2) (+ (- <pad> <pad>) v2))".to_owned()
+            l.as_ref().to_vec(),
+            vec![
+                PartialLang::Finished(HalideLang::Symbol("v1".into())),
+                PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
+                PartialLang::Pad,
+                PartialLang::Pad,
+                PartialLang::Finished(HalideLang::Sub([3.into(), 4.into()])),
+                PartialLang::Finished(HalideLang::Symbol("v2".into())),
+                PartialLang::Finished(HalideLang::Add([5.into(), 6.into()])),
+                PartialLang::Finished(HalideLang::Mul([2.into(), 7.into()]))
+            ]
         );
+        assert_eq!(&l.to_string(), "(* (- v1 2) (+ (- <pad> <pad>) v2))");
     }
 
     #[test]
     fn empty_tokens() {
         let tokens = Vec::<&str>::new();
-        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let (parsed, used_tokens) = super::partial_parse(tokens.as_slice()).unwrap();
+        assert_eq!(used_tokens, 0);
         assert_eq!(RecExpr::<PartialLang<HalideLang>>::default(), parsed);
     }
 
@@ -424,22 +373,23 @@ mod tests {
             "[variable]",
             "[variable]",
         ];
-        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let (parsed, used_tokens) = super::partial_parse(tokens.as_slice()).unwrap();
         let _treedata: TreeData = (&parsed).into();
         assert_eq!(
-            parsed.as_ref().to_vec(),
-            vec![
-                PartialLang::Pad,
-                PartialLang::Pad,
-                PartialLang::Finished(RiseLang::Lambda([1.into(), 0.into()])),
-            ]
+            parsed.as_ref().last().unwrap(),
+            &PartialLang::Finished(RiseLang::Lambda([4.into(), 11.into()])),
+        );
+        assert_eq!(used_tokens, 13);
+        assert_eq!(
+            &parsed.to_string(),
+            "(lam (>> (>> [variable] transpose) transpose) (lam [variable] (lam [variable] (lam [variable] [variable]))))"
         );
     }
 
     #[test]
     fn lam_overflow() {
         let tokens = vec!["lam"];
-        let parsed = super::partial_parse(tokens.as_slice()).unwrap();
+        let (parsed, _) = super::partial_parse(tokens.as_slice()).unwrap();
         let _treedata: TreeData = (&parsed).into();
         assert_eq!(
             parsed.as_ref().to_vec(),
@@ -456,11 +406,8 @@ mod tests {
         let control: RecExpr<PartialLang<HalideLang>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
         let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
-        let l = super::partial_parse::<HalideLang, _>(tokens.as_slice()).unwrap();
+        let (l, _) = super::partial_parse::<HalideLang, _>(tokens.as_slice()).unwrap();
         assert_eq!(control.to_string(), l.to_string());
-        assert_eq!(
-            l.to_string(),
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".to_owned()
-        );
+        assert_eq!(&l.to_string(), "(* (- 2 v1) (+ (- <pad> <pad>) v2))");
     }
 }

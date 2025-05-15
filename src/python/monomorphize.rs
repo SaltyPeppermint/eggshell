@@ -79,8 +79,8 @@ macro_rules! monomorphize {
             #[new]
             #[expect(clippy::missing_errors_doc)]
             pub fn new(token_list: Vec<String>) -> PyResult<PartialRecExpr> {
-                let r = (meta_lang::partial_parse::<L, _>(token_list.as_slice())?);
-                Ok(PartialRecExpr(r))
+                let (l, _) = (meta_lang::partial_parse::<L, _>(token_list.as_slice())?);
+                Ok(PartialRecExpr(l))
             }
 
             #[must_use]
