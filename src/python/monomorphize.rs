@@ -2,14 +2,15 @@
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
     ($type: ty, $module_name: tt) => {
-        use egg::{Language, RecExpr};
+        use egg::Language;
+        use egg::RecExpr as EggRecExpr;
         use pyo3::prelude::*;
         use pyo3_stub_gen::derive::*;
-        use rayon::prelude::*;
 
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::meta_lang;
+        use $crate::meta_lang::PartialLang;
         use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
         use $crate::trs::{MetaInfo, TermRewriteSystem};
@@ -21,25 +22,19 @@ macro_rules! monomorphize {
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PyRecExpr(RecExpr<L>);
+        pub struct RecExpr(EggRecExpr<L>);
 
         #[gen_stub_pymethods]
         #[pymethods]
-        impl PyRecExpr {
+        impl RecExpr {
             /// Parse from string
             #[expect(clippy::missing_errors_doc)]
             #[new]
-            pub fn new(s_expr_str: &str) -> PyResult<PyRecExpr> {
+            pub fn new(s_expr_str: &str) -> PyResult<RecExpr> {
                 let rec_expr = s_expr_str
                     .parse::<egg::RecExpr<L>>()
                     .map_err(|e| EggshellError::from(e))?;
-                Ok(PyRecExpr(rec_expr))
-            }
-
-            #[expect(clippy::missing_errors_doc)]
-            #[staticmethod]
-            pub fn batch_new(s_expr_strs: Vec<String>) -> PyResult<Vec<PyRecExpr>> {
-                s_expr_strs.par_iter().map(|s| PyRecExpr::new(s)).collect()
+                Ok(RecExpr(rec_expr))
             }
 
             #[must_use]
@@ -63,43 +58,57 @@ macro_rules! monomorphize {
             }
 
             #[staticmethod]
+            #[expect(clippy::missing_errors_doc)]
+            pub fn from_data(tree_data: TreeData) -> PyResult<RecExpr> {
+                let expr = (&tree_data)
+                    .try_into()
+                    .map_err(|e| EggshellError::<L>::from(e))?;
+                Ok(RecExpr(expr))
+            }
+        }
+
+        #[gen_stub_pyclass]
+        #[pyclass(frozen, module = $module_name)]
+        #[derive(Debug, Clone, PartialEq)]
+        /// Wrapper type for Python
+        pub struct PartialRecExpr(EggRecExpr<PartialLang<L>>);
+
+        #[gen_stub_pymethods]
+        #[pymethods]
+        impl PartialRecExpr {
+            #[new]
+            #[expect(clippy::missing_errors_doc)]
+            pub fn new(token_list: Vec<String>) -> PyResult<PartialRecExpr> {
+                let r = (meta_lang::partial_parse::<L, _>(token_list.as_slice())?);
+                Ok(PartialRecExpr(r))
+            }
+
             #[must_use]
-            pub fn to_data_batch(rec_exprs: Vec<PyRecExpr>) -> Vec<TreeData> {
-                rec_exprs.into_par_iter().map(|r| (&r.0).into()).collect()
+            pub fn to_data(&self) -> TreeData {
+                (&self.0).into()
+            }
+
+            #[must_use]
+            fn __str__(&self) -> String {
+                self.0.to_string()
+            }
+
+            #[must_use]
+            pub fn __repr__(&self) -> String {
+                format!("{self:?}")
             }
 
             #[staticmethod]
             #[expect(clippy::missing_errors_doc)]
-            pub fn from_data(tree_data: TreeData) -> PyResult<PyRecExpr> {
-                let expr = (&tree_data)
-                    .try_into()
-                    .map_err(|e| EggshellError::<L>::from(e))?;
-                Ok(PyRecExpr(expr))
+            pub fn count_expected_tokens(token_list: Vec<String>) -> PyResult<usize> {
+                Ok(meta_lang::count_expected_tokens::<L, _>(&token_list)?)
             }
-        }
 
-        #[gen_stub_pyfunction(module = $module_name)]
-        #[pyfunction]
-        #[expect(clippy::missing_errors_doc)]
-        pub fn partial_parse(token_list: Vec<String>) -> PyResult<TreeData> {
-            let r = (&meta_lang::partial_parse::<L, _>(token_list.as_slice())?).into();
-            Ok(r)
-        }
-
-        #[gen_stub_pyfunction(module = $module_name)]
-        #[pyfunction]
-        #[expect(clippy::missing_errors_doc)]
-        pub fn count_expected_tokens(token_list: Vec<String>) -> PyResult<usize> {
-            Ok(meta_lang::count_expected_tokens::<L, _>(&token_list)?)
-        }
-
-        #[gen_stub_pyfunction(module = $module_name)]
-        #[pyfunction]
-        #[expect(clippy::missing_errors_doc)]
-        pub fn lower_meta_level(token_list: Vec<String>) -> PyResult<PyRecExpr> {
-            let rec_expr = meta_lang::partial_parse::<L, _>(token_list.as_slice())?;
-            let r = meta_lang::lower_meta_level::<L>(&rec_expr)?;
-            Ok(PyRecExpr(r))
+            #[expect(clippy::missing_errors_doc)]
+            pub fn lower_meta_level(&self) -> PyResult<RecExpr> {
+                let r = meta_lang::lower_meta_level::<L>(&self.0)?;
+                Ok(RecExpr(r))
+            }
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -127,8 +136,8 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[must_use]
         pub fn eqsat_check(
-            start: &PyRecExpr,
-            goal: &PyRecExpr,
+            start: &RecExpr,
+            goal: &RecExpr,
             iter_limit: usize,
         ) -> (usize, String, String) {
             let conf = EqsatConf::builder()
@@ -152,8 +161,8 @@ macro_rules! monomorphize {
         #[pyfunction]
         #[must_use]
         pub fn many_eqsat_check(
-            starts: Vec<PyRecExpr>,
-            goal: &PyRecExpr,
+            starts: Vec<RecExpr>,
+            goal: &RecExpr,
             iter_limit: usize,
         ) -> Vec<(usize, String, String)> {
             starts
@@ -169,11 +178,8 @@ macro_rules! monomorphize {
             use pyo3::prelude::PyModuleMethods;
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
-            module.add_class::<PyRecExpr>()?;
-
-            module.add_function(pyo3::wrap_pyfunction!(partial_parse, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(lower_meta_level, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(count_expected_tokens, m)?)?;
+            module.add_class::<RecExpr>()?;
+            module.add_class::<PartialRecExpr>()?;
 
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;

@@ -5,15 +5,33 @@ import builtins
 import eggshell
 import typing
 
-class PyRecExpr:
+class PartialRecExpr:
+    r"""
+    Wrapper type for Python
+    """
+    def __new__(cls,token_list:typing.Sequence[builtins.str]): ...
+    def to_data(self) -> TreeData:
+        ...
+
+    def __str__(self) -> builtins.str:
+        ...
+
+    def __repr__(self) -> builtins.str:
+        ...
+
+    @staticmethod
+    def count_expected_tokens(token_list:typing.Sequence[builtins.str]) -> builtins.int:
+        ...
+
+    def lower_meta_level(self) -> RecExpr:
+        ...
+
+
+class RecExpr:
     r"""
     Wrapper type for Python
     """
     def __new__(cls,s_expr_str:builtins.str): ...
-    @staticmethod
-    def batch_new(s_expr_strs:typing.Sequence[builtins.str]) -> builtins.list[PyRecExpr]:
-        ...
-
     def __str__(self) -> builtins.str:
         ...
 
@@ -27,24 +45,14 @@ class PyRecExpr:
         ...
 
     @staticmethod
-    def to_data_batch(rec_exprs:typing.Sequence[PyRecExpr]) -> builtins.list[TreeData]:
-        ...
-
-    @staticmethod
-    def from_data(tree_data:TreeData) -> PyRecExpr:
+    def from_data(tree_data:TreeData) -> RecExpr:
         ...
 
 
-def count_expected_tokens(token_list:typing.Sequence[builtins.str]) -> builtins.int:
+def eqsat_check(start:RecExpr, goal:RecExpr, iter_limit:builtins.int) -> tuple[builtins.int, builtins.str, builtins.str]:
     ...
 
-def eqsat_check(start:PyRecExpr, goal:PyRecExpr, iter_limit:builtins.int) -> tuple[builtins.int, builtins.str, builtins.str]:
-    ...
-
-def lower_meta_level(token_list:typing.Sequence[builtins.str]) -> PyRecExpr:
-    ...
-
-def many_eqsat_check(starts:typing.Sequence[PyRecExpr], goal:PyRecExpr, iter_limit:builtins.int) -> builtins.list[tuple[builtins.int, builtins.str, builtins.str]]:
+def many_eqsat_check(starts:typing.Sequence[RecExpr], goal:RecExpr, iter_limit:builtins.int) -> builtins.list[tuple[builtins.int, builtins.str, builtins.str]]:
     ...
 
 def name_to_id(s:builtins.str) -> typing.Optional[builtins.int]:
@@ -54,8 +62,5 @@ def num_symbols() -> builtins.int:
     ...
 
 def operators() -> builtins.list[builtins.str]:
-    ...
-
-def partial_parse(token_list:typing.Sequence[builtins.str]) -> TreeData:
     ...
 
