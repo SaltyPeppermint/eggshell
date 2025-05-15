@@ -8,6 +8,7 @@ mod sketch_lang;
 use std::fmt::Debug;
 use std::fmt::Display;
 
+use egg::FromOp;
 use pyo3::{PyErr, create_exception, exceptions::PyException};
 use thiserror::Error;
 
@@ -18,17 +19,23 @@ pub use sketch_lang::Sketch;
 pub use sketch_lang::SketchLang;
 
 #[derive(Debug, Error)]
-pub enum MetaLangError<E: Display> {
+pub enum MetaLangError<L>
+where
+    L: FromOp,
+    L::Error: Display,
+{
     #[error("Wrong number of children: {0:?}")]
     BadChildren(#[from] egg::FromOpError),
     #[error("Tried to parse a partial sketch into a full sketch")]
     PartialSketch,
     #[error("Cannot lower into an easier language: {0:?}")]
     NoLowering(String),
+    #[error("No open positions in partial sketch to fill: {0:?}")]
+    NoOpenPositions(egg::RecExpr<PartialLang<L>>),
     #[error("Max arity reached while trying to parse partial term: {1}: {0}")]
     MaxArity(String, usize),
     #[error(transparent)]
-    BadOp(E),
+    BadOp(L::Error),
 }
 
 create_exception!(
@@ -38,8 +45,12 @@ create_exception!(
     "Error parsing a Sketch."
 );
 
-impl<E: Display> From<MetaLangError<E>> for PyErr {
-    fn from(err: MetaLangError<E>) -> PyErr {
-        SketchParseException::new_err(err.to_string())
+impl<L> From<MetaLangError<L>> for PyErr
+where
+    L: FromOp,
+    L::Error: Display,
+{
+    fn from(err: MetaLangError<L>) -> PyErr {
+        SketchParseException::new_err(format!("{err:?}"))
     }
 }

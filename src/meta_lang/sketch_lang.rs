@@ -120,7 +120,7 @@ where
     L::Error: Display,
     L: egg::FromOp,
 {
-    type Error = MetaLangError<L::Error>;
+    type Error = MetaLangError<L>;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
