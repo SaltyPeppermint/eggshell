@@ -227,8 +227,7 @@ where
             // Go over all the possible combinations and zip them with the children of the node
             // Guranteed to be same length
             .map(|budget_combination| {
-                let combination_count = node
-                    .children()
+                node.children()
                     .iter()
                     .zip(budget_combination)
                     // For each child we have a specific budget in this combination
@@ -241,8 +240,7 @@ where
                     .product::<Option<C>>()
                     // If for a combination any child has no expression, the combination is impossible
                     // and we need to default to 0 as it does not contribute to the count
-                    .unwrap_or_else(|| C::zero());
-                combination_count
+                    .unwrap_or_else(|| C::zero())
             })
             .sum::<C>()
     }

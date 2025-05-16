@@ -54,7 +54,9 @@ where
             while let Some(id) = {
                 // Potentially, this might lead to a situation where only one thread is working on the queue.
                 // This has not been observed in practice, but it is a potential bottleneck.
-                let id = { analysis_pending.lock().unwrap().pop() };
+                let mut lock = analysis_pending.lock().unwrap();
+                let id = lock.pop();
+                drop(lock);
                 id
             } {
                 let canonical_id = egraph.find(id);
@@ -67,7 +69,9 @@ where
                     // If all the childs eclass_children have data, we can calculate it!
                     u_node
                         .all(|child_id| {
-                            let a = { data.read().unwrap().contains_key(&child_id) };
+                            let lock = data.read().unwrap();
+                            let a = lock.contains_key(&child_id);
+                            drop(lock);
                             a
                         })
                         .then(|| analysis.make(egraph, &u_node, data))

@@ -374,7 +374,7 @@ where
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Serialize + Clone,
 {
-    let generations = samples
+    samples
         .into_iter()
         .map(|sample| {
             let generation = eqsat_results
@@ -385,8 +385,7 @@ where
                 + 1;
             (sample, generation)
         })
-        .collect::<Vec<_>>();
-    generations
+        .collect::<Vec<_>>()
 }
 
 #[derive(Serialize, Clone, Debug)]
