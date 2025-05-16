@@ -9,6 +9,7 @@ class PartialRecExpr:
     r"""
     Wrapper type for Python
     """
+    used_tokens: builtins.int
     def __new__(cls,token_list:typing.Sequence[builtins.str]): ...
     def to_data(self) -> TreeData:
         ...

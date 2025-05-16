@@ -71,7 +71,11 @@ macro_rules! monomorphize {
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PartialRecExpr(EggRecExpr<PartialLang<L>>);
+        pub struct PartialRecExpr {
+            expr: EggRecExpr<PartialLang<L>>,
+            #[pyo3(get)]
+            used_tokens: usize,
+        }
 
         #[gen_stub_pymethods]
         #[pymethods]
@@ -79,18 +83,18 @@ macro_rules! monomorphize {
             #[new]
             #[expect(clippy::missing_errors_doc)]
             pub fn new(token_list: Vec<String>) -> PyResult<PartialRecExpr> {
-                let (l, _) = (meta_lang::partial_parse::<L, _>(token_list.as_slice())?);
-                Ok(PartialRecExpr(l))
+                let (expr, used_tokens) = meta_lang::partial_parse::<L, _>(token_list.as_slice())?;
+                Ok(PartialRecExpr { expr, used_tokens })
             }
 
             #[must_use]
             pub fn to_data(&self) -> TreeData {
-                (&self.0).into()
+                (&self.expr).into()
             }
 
             #[must_use]
             fn __str__(&self) -> String {
-                self.0.to_string()
+                self.expr.to_string()
             }
 
             #[must_use]
@@ -106,7 +110,7 @@ macro_rules! monomorphize {
 
             #[expect(clippy::missing_errors_doc)]
             pub fn lower_meta_level(&self) -> PyResult<RecExpr> {
-                let r = meta_lang::lower_meta_level::<L>(&self.0)?;
+                let r = meta_lang::lower_meta_level::<L>(&self.expr)?;
                 Ok(RecExpr(r))
             }
         }
