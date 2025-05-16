@@ -20,6 +20,9 @@ class PartialRecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
+    def to_dot(self, name:builtins.str, path:builtins.str) -> None:
+        ...
+
     @staticmethod
     def count_expected_tokens(token_list:typing.Sequence[builtins.str]) -> builtins.int:
         ...
@@ -37,6 +40,9 @@ class RecExpr:
         ...
 
     def __repr__(self) -> builtins.str:
+        ...
+
+    def to_dot(self, name:builtins.str, path:builtins.str) -> None:
         ...
 
     def arity(self, position:builtins.int) -> builtins.int:

@@ -47,6 +47,13 @@ macro_rules! monomorphize {
                 format!("{self:?}")
             }
 
+            pub fn to_dot(&self, name: String, path: String) {
+                let dot = $crate::viz::to_dot(&self.0, &name);
+                let svg = $crate::viz::dot_to_svg(&dot);
+                let path = std::env::current_dir().unwrap().join(path);
+                std::fs::write(path, svg).unwrap();
+            }
+
             #[must_use]
             pub fn arity(&self, position: usize) -> usize {
                 self.0[egg::Id::from(position)].children().len()
@@ -100,6 +107,13 @@ macro_rules! monomorphize {
             #[must_use]
             pub fn __repr__(&self) -> String {
                 format!("{self:?}")
+            }
+
+            pub fn to_dot(&self, name: String, path: String) {
+                let dot = $crate::viz::to_dot(&self.expr, &name);
+                let svg = $crate::viz::dot_to_svg(&dot);
+                let path = std::env::current_dir().unwrap().join(path);
+                std::fs::write(path, svg).unwrap();
             }
 
             #[staticmethod]

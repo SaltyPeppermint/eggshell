@@ -39,6 +39,7 @@
 
 mod analysis;
 mod utils; //should maybe be deleted
+mod viz;
 
 pub mod cli;
 pub mod eqsat;
