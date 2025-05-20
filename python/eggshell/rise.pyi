@@ -20,7 +20,7 @@ class PartialRecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
-    def to_dot(self, name:builtins.str, path:builtins.str) -> None:
+    def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
         ...
 
     @staticmethod
@@ -42,7 +42,7 @@ class RecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
-    def to_dot(self, name:builtins.str, path:builtins.str) -> None:
+    def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
         ...
 
     def arity(self, position:builtins.int) -> builtins.int:
