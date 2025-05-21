@@ -28,7 +28,7 @@ class TreeData:
     def transposed_adjacency(self) -> builtins.list[builtins.list[builtins.int]]:
         ...
 
-    def anc_matrix(self, max_rel_distance:builtins.int, double_pad:builtins.bool=True) -> builtins.list[builtins.list[builtins.int]]:
+    def anc_matrix(self, max_rel_distance:builtins.int) -> builtins.list[builtins.list[builtins.int]]:
         r"""
         Gives a matrix that describes the relationship of an ancestor to a child as a distance between them
         maximum distance (positive or negative) to be encoded mapped to the range 2 * max_rel_distance
@@ -36,7 +36,7 @@ class TreeData:
         """
         ...
 
-    def sib_matrix(self, max_rel_distance:builtins.int, double_pad:builtins.bool=True) -> builtins.list[builtins.list[builtins.int]]:
+    def sib_matrix(self, max_rel_distance:builtins.int) -> builtins.list[builtins.list[builtins.int]]:
         r"""
         Gives a matrix that describes the sibling relationship in nodes
         max_relative_distance describes the maximum distance (positive or negative) to be encoded,

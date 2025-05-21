@@ -56,8 +56,7 @@ impl TreeData {
     /// maximum distance (positive or negative) to be encoded mapped to the range 2 * max_rel_distance
     /// If the distance is too large or no relationship exists, 0 is returned
     #[must_use]
-    #[pyo3(signature = (max_rel_distance, double_pad=true))]
-    pub fn anc_matrix(&self, max_rel_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
+    pub fn anc_matrix(&self, max_rel_distance: usize) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -87,38 +86,28 @@ impl TreeData {
 
         let center = max_rel_distance + 1;
 
-        let i = (0..self.len()).map(|a_idx| {
-            let inner_i = (0..self.len()).map(|b_idx| {
-                if a_idx == b_idx {
-                    return center; // Distance to self is always 0
-                }
-                if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, 1) {
-                    (d < max_rel_distance).then_some(center + d)
-                // Positive since parent to child
-                } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, 1) {
-                    (d < max_rel_distance).then_some(center - d)
-                // Negative since child to parent
-                } else {
-                    None
-                }
-                .unwrap_or(0)
-                // If no connection => inf
-            });
-            if !double_pad {
-                return inner_i.collect();
-            }
-            let mut r_inner = vec![0];
-            r_inner.extend(inner_i);
-            r_inner.push(0);
-            r_inner
-        });
-        if !double_pad {
-            return i.collect();
-        }
-        let mut r = vec![vec![0; self.len() + 2]];
-        r.extend(i);
-        r.push(vec![0; self.len() + 2]);
-        r
+        (0..self.len())
+            .map(|a_idx| {
+                (0..self.len())
+                    .map(|b_idx| {
+                        if a_idx == b_idx {
+                            return center; // Distance to self is always 0
+                        }
+                        if let Some(d) = cmp_nodes(a_idx, b_idx, &par_child, 1) {
+                            (d < max_rel_distance).then_some(center + d)
+                        // Positive since parent to child
+                        } else if let Some(d) = cmp_nodes(b_idx, a_idx, &par_child, 1) {
+                            (d < max_rel_distance).then_some(center - d)
+                        // Negative since child to parent
+                        } else {
+                            None
+                        }
+                        .unwrap_or(0)
+                        // If no connection => inf
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     /// Gives a matrix that describes the sibling relationship in nodes
@@ -126,8 +115,7 @@ impl TreeData {
     /// mapped to the range 2 * max_relative_distance
     /// If the distance is too large or no relationship exists, 0 is returned
     #[must_use]
-    #[pyo3(signature = (max_rel_distance, double_pad=true))]
-    pub fn sib_matrix(&self, max_rel_distance: usize, double_pad: bool) -> Vec<Vec<usize>> {
+    pub fn sib_matrix(&self, max_rel_distance: usize) -> Vec<Vec<usize>> {
         fn cmp_nodes(
             a: usize,
             b: usize,
@@ -159,7 +147,6 @@ impl TreeData {
                     return None;
                 }
                 // == case caught earlier
-
                 if pos_a < pos_b {
                     Some(center + d)
                 } else {
@@ -186,34 +173,23 @@ impl TreeData {
             },
         );
 
-        let i = (0..self.len()).map(|a_idx| {
-            let inner_i = (0..self.len()).map(|b_idx| {
-                cmp_nodes(
-                    a_idx,
-                    b_idx,
-                    &par_child,
-                    &child_par,
-                    max_rel_distance,
-                    center,
-                )
-                .unwrap_or(0)
-            });
-            if !double_pad {
-                return inner_i.collect();
-            }
-            let mut r_inner = vec![0];
-            r_inner.extend(inner_i);
-            r_inner.push(0);
-            r_inner
-        });
-        if double_pad {
-            let mut r = vec![vec![0; self.len() + 2]];
-            r.extend(i);
-            r.push(vec![0; self.len() + 2]);
-            r
-        } else {
-            i.collect()
-        }
+        (0..self.len())
+            .map(|a_idx| {
+                (0..self.len())
+                    .map(|b_idx| {
+                        cmp_nodes(
+                            a_idx,
+                            b_idx,
+                            &par_child,
+                            &child_par,
+                            max_rel_distance,
+                            center,
+                        )
+                        .unwrap_or(0)
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     #[must_use]
@@ -429,7 +405,7 @@ mod tests {
     fn sib_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).into();
-        let par_sib = data.sib_matrix(15, false);
+        let par_sib = data.sib_matrix(15);
 
         assert_eq!(
             par_sib,
@@ -451,7 +427,7 @@ mod tests {
     fn anc_matrix() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
         let data: TreeData = (&expr).into();
-        let par_anc = data.anc_matrix(15, false);
+        let par_anc = data.anc_matrix(15);
 
         assert_eq!(
             par_anc,
@@ -465,54 +441,6 @@ mod tests {
                 [14, 0, 15, 0, 0, 0, 16, 0, 0],
                 [13, 0, 14, 0, 0, 15, 0, 16, 0],
                 [13, 0, 14, 0, 0, 15, 0, 0, 16]
-            ]
-        );
-    }
-
-    #[test]
-    fn anc_matrix_padded() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
-        let data: TreeData = (&expr).into();
-        let par_anc = data.anc_matrix(15, true);
-
-        assert_eq!(
-            par_anc,
-            vec![
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 16, 17, 17, 18, 18, 18, 18, 19, 19, 0],
-                [0, 15, 16, 0, 17, 17, 0, 0, 0, 0, 0],
-                [0, 15, 0, 16, 0, 0, 17, 17, 18, 18, 0],
-                [0, 14, 15, 0, 16, 0, 0, 0, 0, 0, 0],
-                [0, 14, 15, 0, 0, 16, 0, 0, 0, 0, 0],
-                [0, 14, 0, 15, 0, 0, 16, 0, 17, 17, 0],
-                [0, 14, 0, 15, 0, 0, 0, 16, 0, 0, 0],
-                [0, 13, 0, 14, 0, 0, 15, 0, 16, 0, 0],
-                [0, 13, 0, 14, 0, 0, 15, 0, 0, 16, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-            ]
-        );
-    }
-
-    #[test]
-    fn sib_matrix_padded() {
-        let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 5 ) 17 ) )".parse().unwrap();
-        let data: TreeData = (&expr).into();
-        let par_sib = data.sib_matrix(15, true);
-
-        assert_eq!(
-            par_sib,
-            vec![
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 16, 17, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 15, 16, 0, 0, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 16, 17, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 15, 16, 0, 0, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 16, 17, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 15, 16, 0, 0, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 16, 17, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 15, 16, 0],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
             ]
         );
     }
