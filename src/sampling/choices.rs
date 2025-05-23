@@ -1,9 +1,8 @@
 use std::collections::BTreeSet;
 
 use egg::{Id, Language, RecExpr};
-use hashbrown::HashMap;
-use rand::seq::IteratorRandom;
 use rand::Rng;
+use rand::seq::IteratorRandom;
 use serde::Serialize;
 
 use super::SampleError;
@@ -59,55 +58,6 @@ impl<L: Language> PartialRecExpr<L> {
         self.open_slots.remove(&position);
         self.slots[position].pick = Pick::Picked(owned_pick);
         Ok(())
-    }
-
-    pub fn check_ancestors<'a>(
-        &'a self,
-        slot: &'a Slot<L>,
-        taboo: &mut HashMap<(Id, &'a L), usize>,
-        limit: usize,
-    ) -> bool {
-        if let Some(slot_l) = slot.pick_ref() {
-            if let Some(count) = taboo.get_mut(&(slot.eclass_id, slot_l)) {
-                *count += 1;
-                if *count > limit {
-                    return false;
-                }
-            }
-        }
-        if let Some(parent_position) = slot.parent {
-            self.check_ancestors(&self.slots[parent_position], taboo, limit)
-        } else {
-            true
-        }
-    }
-    pub fn check_single_in_ancestors<'a>(
-        &'a self,
-        slot: &'a Slot<L>,
-        taboo_eclass: Id,
-        taboo_node: &'a L,
-        mut count: usize,
-        limit: usize,
-    ) -> bool {
-        if let Some(slot_l) = slot.pick_ref() {
-            if slot_l == taboo_node && slot.eclass_id == taboo_eclass {
-                count += 1;
-                if count > limit {
-                    return false;
-                }
-            }
-        }
-        if let Some(parent_position) = slot.parent {
-            self.check_single_in_ancestors(
-                &self.slots[parent_position],
-                taboo_eclass,
-                taboo_node,
-                count,
-                limit,
-            )
-        } else {
-            true
-        }
     }
 
     pub fn other_open_slots(&self) -> impl Iterator<Item = Id> + use<'_, L> {
@@ -199,13 +149,6 @@ impl<L: Language> Slot<L> {
 
     fn pick(self) -> Option<L> {
         match self.pick {
-            Pick::Open => None,
-            Pick::Picked(pick) => Some(pick),
-        }
-    }
-
-    fn pick_ref(&self) -> Option<&L> {
-        match &self.pick {
             Pick::Open => None,
             Pick::Picked(pick) => Some(pick),
         }
