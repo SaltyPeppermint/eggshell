@@ -76,7 +76,7 @@ mod tests {
 
     use egg::RecExpr;
 
-    use crate::meta_lang::PartialLang;
+    use crate::partial::PartialLang;
     use crate::trs::halide::HalideLang;
     use crate::trs::rise::RiseLang;
 

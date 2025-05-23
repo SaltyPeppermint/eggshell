@@ -1,12 +1,17 @@
+mod error;
+mod extract;
+
 use std::fmt::{Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
+use error::SketchError;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::MetaLangError;
 use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
+
+pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
 
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
@@ -120,7 +125,7 @@ where
     L::Error: Display,
     L: egg::FromOp,
 {
-    type Error = MetaLangError<L>;
+    type Error = SketchError<L>;
 
     fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
         match op {
@@ -128,7 +133,7 @@ where
                 if children.is_empty() {
                     Ok(Self::Any)
                 } else {
-                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
+                    Err(SketchError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
@@ -137,7 +142,7 @@ where
                 if children.len() == 1 {
                     Ok(Self::Contains(children[0]))
                 } else {
-                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
+                    Err(SketchError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
@@ -146,14 +151,14 @@ where
                 if children.len() == 2 {
                     Ok(Self::Or([children[0], children[1]]))
                 } else {
-                    Err(MetaLangError::BadChildren(egg::FromOpError::new(
+                    Err(SketchError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
             }
             _ => L::from_op(op, children)
                 .map(Self::Node)
-                .map_err(MetaLangError::BadOp),
+                .map_err(|e| SketchError::BadOp(e)),
         }
     }
 }

@@ -11,7 +11,8 @@ use egg::{
 use log::info;
 use serde::Serialize;
 
-use crate::meta_lang::{Sketch, extract};
+use crate::sketch;
+use crate::sketch::Sketch;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 
@@ -188,13 +189,13 @@ where
         CF: CostFunction<L> + Debug,
         CF::Cost: Ord,
     {
-        extract::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
+        sketch::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
     /// Extract
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
         let root = self.roots[root_index];
-        extract::eclass_satisfies_sketch(sketch, &self.egraph, root)
+        sketch::eclass_satisfies_sketch(sketch, &self.egraph, root)
     }
 
     /// Returns the root `egg::Id`

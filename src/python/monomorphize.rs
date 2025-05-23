@@ -9,8 +9,7 @@ macro_rules! monomorphize {
 
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
-        use $crate::meta_lang;
-        use $crate::meta_lang::PartialLang;
+        use $crate::partial;
         use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
         use $crate::trs::{MetaInfo, TermRewriteSystem};
@@ -80,7 +79,7 @@ macro_rules! monomorphize {
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct PartialRecExpr {
-            expr: EggRecExpr<PartialLang<L>>,
+            expr: EggRecExpr<partial::PartialLang<L>>,
             #[pyo3(get)]
             used_tokens: usize,
         }
@@ -91,7 +90,7 @@ macro_rules! monomorphize {
             #[new]
             #[expect(clippy::missing_errors_doc)]
             pub fn new(token_list: Vec<String>) -> PyResult<PartialRecExpr> {
-                let (expr, used_tokens) = meta_lang::partial_parse::<L, _>(token_list.as_slice())?;
+                let (expr, used_tokens) = partial::partial_parse::<L, _>(token_list.as_slice())?;
                 Ok(PartialRecExpr { expr, used_tokens })
             }
 
@@ -121,12 +120,12 @@ macro_rules! monomorphize {
             #[staticmethod]
             #[expect(clippy::missing_errors_doc)]
             pub fn count_expected_tokens(token_list: Vec<String>) -> PyResult<usize> {
-                Ok(meta_lang::count_expected_tokens::<L, _>(&token_list)?)
+                Ok(partial::count_expected_tokens::<L, _>(&token_list)?)
             }
 
             #[expect(clippy::missing_errors_doc)]
             pub fn lower_meta_level(&self) -> PyResult<RecExpr> {
-                let r = meta_lang::lower_meta_level::<L>(&self.expr)?;
+                let r = partial::lower_meta_level::<L>(self.expr.clone())?;
                 Ok(RecExpr(r))
             }
         }
