@@ -111,10 +111,15 @@ macro_rules! monomorphize {
 
             #[pyo3(signature = (name, path, transparent=false))]
             pub fn to_dot(&self, name: String, path: String, transparent: bool) {
+                let mut path = std::env::current_dir().unwrap().join(path);
+
                 let dot = $crate::viz::to_dot(&self.expr, &name, transparent);
+                path.set_extension("dot");
+                std::fs::write(&path, &dot).unwrap();
+
                 let svg = $crate::viz::dot_to_svg(&dot);
-                let path = std::env::current_dir().unwrap().join(path);
-                std::fs::write(path, svg).unwrap();
+                path.set_extension("svg");
+                std::fs::write(&path, &svg).unwrap();
             }
 
             #[staticmethod]
