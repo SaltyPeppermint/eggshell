@@ -55,6 +55,13 @@ macro_rules! monomorphize {
             }
 
             #[must_use]
+            pub fn distance(&self, other: &RecExpr) -> usize {
+                let self_tree: $crate::utils::TreeDiffData<L> = (&self.0).into();
+                let other_tree = (&other.0).into();
+                self_tree.distance(&other_tree)
+            }
+
+            #[must_use]
             pub fn arity(&self, position: usize) -> usize {
                 self.0[egg::Id::from(position)].children().len()
             }
@@ -107,6 +114,14 @@ macro_rules! monomorphize {
             #[must_use]
             pub fn __repr__(&self) -> String {
                 format!("{self:?}")
+            }
+
+            #[must_use]
+            pub fn distance(&self, other: &PartialRecExpr) -> usize {
+                let self_tree: $crate::utils::TreeDiffData<partial::PartialLang<L>> =
+                    (&self.expr).into();
+                let other_tree = (&other.expr).into();
+                self_tree.distance(&other_tree)
             }
 
             #[pyo3(signature = (name, path, transparent=false))]

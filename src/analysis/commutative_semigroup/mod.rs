@@ -12,7 +12,7 @@ use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 use log::debug;
 
-use crate::utils::UniqueQueue;
+use super::UniqueQueue;
 
 pub use expr_count::ExprCount;
 

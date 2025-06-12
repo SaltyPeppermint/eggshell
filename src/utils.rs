@@ -1,84 +1,12 @@
 use std::hash::Hash;
 
-use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
+use egg::{Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
-
-/// A data structure to maintain a queue of unique elements.
-///
-/// Notably, insert/pop operations have O(1) expected amortized runtime complexity.
-///
-/// Thanks @Bastacyclop for the implementation!
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct UniqueQueue<T>
-where
-    T: Eq + Hash + Clone,
-{
-    set: HashSet<T>, // hashbrown::
-    queue: std::collections::VecDeque<T>,
-}
-
-impl<T> Default for UniqueQueue<T>
-where
-    T: Eq + Hash + Clone,
-{
-    fn default() -> Self {
-        UniqueQueue {
-            set: HashSet::default(),
-            queue: std::collections::VecDeque::default(),
-        }
-    }
-}
-
-impl<U> FromIterator<U> for UniqueQueue<U>
-where
-    U: Eq + Hash + Clone,
-{
-    fn from_iter<T: IntoIterator<Item = U>>(iter: T) -> Self {
-        let mut queue = Self::default();
-        for t in iter {
-            queue.insert(t);
-        }
-        queue
-    }
-}
-
-impl<T> UniqueQueue<T>
-where
-    T: Eq + Hash + Clone,
-{
-    pub fn insert(&mut self, t: T) {
-        if self.set.insert(t.clone()) {
-            self.queue.push_back(t);
-        }
-    }
-
-    pub fn extend<I>(&mut self, iter: I)
-    where
-        I: IntoIterator<Item = T>,
-    {
-        for t in iter {
-            self.insert(t);
-        }
-    }
-
-    pub fn pop(&mut self) -> Option<T> {
-        let res = self.queue.pop_front();
-        res.as_ref().map(|t| self.set.remove(t));
-        res
-    }
-
-    #[expect(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        let r = self.queue.is_empty();
-        debug_assert_eq!(r, self.set.is_empty());
-        r
-    }
-}
 
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ExprHashCons<L: Hash + Eq> {
+pub(crate) struct ExprHashCons<L: Hash + Eq> {
     expr: RecExpr<L>,
     memo: HashMap<L, Id>,
 }
@@ -126,31 +54,182 @@ impl<L: Language> ExprHashCons<L> {
     }
 }
 
-impl<L: Language> Default for ExprHashCons<L> {
-    fn default() -> Self {
-        Self::new()
+struct RecNode<'a, L: Language> {
+    node: &'a L,
+    index: usize,
+    children: Vec<RecNode<'a, L>>,
+}
+
+impl<L: Language> RecNode<'_, L> {
+    fn leftmost(&self) -> &Self {
+        self.children.first().unwrap_or(self)
     }
 }
 
-/// Return an iterator over a pairs of the parents node and their canonical `Id`
-pub(crate) fn old_parents_iter<'a, L, N>(
-    eclass: &'a EClass<L, N::Data>,
-    egraph: &'a EGraph<L, N>,
-) -> impl Iterator<Item = (&'a L, Id)>
-where
-    L: Language,
-    N: Analysis<L>,
-{
-    let eclass_id = egraph.find(eclass.id);
-    eclass.parents().flat_map(move |id| {
-        egraph[id]
-            .nodes
-            .iter()
-            .filter(move |n| {
-                n.children()
-                    .iter()
-                    .any(|c_id| egraph.find(*c_id) == eclass_id)
-            })
-            .map(move |n| (n, egraph.find(id)))
-    })
+impl<'a, L: Language> From<&'a RecExpr<L>> for RecNode<'a, L> {
+    fn from(value: &'a RecExpr<L>) -> Self {
+        fn rec<'aa, LL: Language>(
+            rec_expr: &'aa RecExpr<LL>,
+            id: Id,
+            index: &mut usize,
+        ) -> RecNode<'aa, LL> {
+            let curr_index = *index;
+            *index += 1;
+            let children = rec_expr[id]
+                .children()
+                .iter()
+                .map(|c_id| rec(rec_expr, *c_id, index))
+                .collect();
+
+            RecNode {
+                node: &rec_expr[id],
+                children,
+                index: curr_index,
+            }
+        }
+        let mut index = 0;
+        rec(value, value.root(), &mut index)
+    }
+}
+
+pub(crate) struct TreeDiffData<L: Language> {
+    leftmosts: Vec<usize>,
+    keyroots: Vec<usize>,
+    labels: Vec<L::Discriminant>,
+}
+
+impl<L: Language> TreeDiffData<L> {
+    pub fn distance(&self, other: &TreeDiffData<L>) -> usize {
+        fn treedist<LL: Language>(
+            t1: &TreeDiffData<LL>,
+            t2: &TreeDiffData<LL>,
+            i: usize,
+            j: usize,
+            td: &mut [Vec<usize>],
+        ) -> usize {
+            const DELETE: usize = 1;
+            const INSERT: usize = 1;
+            const RELABEL: usize = 1;
+
+            // forestdist
+            let mut fdist = vec![vec![0usize; j + 1]; i + 1];
+
+            // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
+            for i_inner in t1.leftmosts[i - 1]..=i {
+                fdist[i_inner][0] = fdist[i_inner - 1][0] + DELETE;
+            }
+            // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
+
+            for j_inner in t2.leftmosts[j - 1]..=j {
+                fdist[0][j_inner] = fdist[0][j_inner - 1] + INSERT;
+            }
+            // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
+            for i_inner in t1.leftmosts[i - 1]..=i {
+                // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
+                for j_inner in t2.leftmosts[j - 1]..=j {
+                    let i_temp = if t1.leftmosts[i - 1] > i_inner - 1 {
+                        0
+                    } else {
+                        i_inner - 1
+                    };
+                    let j_temp = if t2.leftmosts[j - 1] > j_inner - 1 {
+                        0
+                    } else {
+                        j_inner - 1
+                    };
+                    if (t1.leftmosts[i_inner - 1] == t1.leftmosts[i - 1])
+                        && (t2.leftmosts[j_inner - 1] == t2.leftmosts[j - 1])
+                    {
+                        let cost = if t1.labels[i_inner - 1] == t2.labels[j_inner - 1] {
+                            0
+                        } else {
+                            RELABEL
+                        };
+
+                        fdist[i_inner][j_inner] = (fdist[i_temp][j_inner] + DELETE)
+                            .min(fdist[i_inner][j_temp] + INSERT)
+                            .min(fdist[i_temp][j_temp] + cost);
+                        td[i_inner][j_inner] = fdist[i_inner][j_inner];
+                    } else {
+                        let i_inner_temp = t1.leftmosts[i_inner - 1] - 1;
+                        let i_temp2 = if t1.leftmosts[i - 1] > i_inner_temp {
+                            0
+                        } else {
+                            i_inner_temp
+                        };
+
+                        let j_inner_temp = t2.leftmosts[j_inner - 1] - 1;
+                        let j_temp2 = if t2.leftmosts[j - 1] > j_inner_temp {
+                            0
+                        } else {
+                            j_inner_temp
+                        };
+
+                        fdist[i_inner][j_inner] = (fdist[i_temp][j_inner] + DELETE)
+                            .min(fdist[i_inner][j_temp] + INSERT)
+                            .min(fdist[i_temp2][j_temp2] + td[i_inner][j_inner]);
+                    }
+                }
+            }
+            fdist[i][j]
+        }
+
+        let mut td = vec![vec![0usize; self.leftmosts.len() + 1]; other.leftmosts.len() + 1];
+        for i1 in 1..=self.keyroots.len() {
+            for j1 in 1..=other.keyroots.len() {
+                let i = self.keyroots[i1 - 1];
+                let j = other.keyroots[j1 - 1];
+                td[i][j] = treedist(self, other, i, j, &mut td);
+            }
+        }
+
+        td[self.leftmosts.len()][other.leftmosts.len()]
+    }
+}
+
+impl<'a, L: Language> From<&'a RecExpr<L>> for TreeDiffData<L> {
+    fn from(value: &'a RecExpr<L>) -> TreeDiffData<L> {
+        fn traverse<'aa, 'bb: 'aa, LL: Language>(
+            node: &'aa RecNode<'aa, LL>,
+            labels: &mut Vec<LL::Discriminant>,
+            leftmosts: &mut Vec<usize>,
+        ) {
+            for children in &node.children {
+                traverse(children, labels, leftmosts);
+            }
+            labels.push(node.node.discriminant());
+            leftmosts.push(node.leftmost().index);
+        }
+
+        fn mk_keyroots(l: &[usize]) -> Vec<usize> {
+            let mut keyroots = vec![];
+            // for (int i = 0; i < l.size(); i++) {
+            for i in 0..l.len() {
+                let mut flag = true;
+
+                // for (int j = i + 1; j < l.size(); j++) {
+                for j in i + 1..l.len() {
+                    if l.get(j) == l.get(i) {
+                        flag = false;
+                    }
+                }
+                if flag {
+                    keyroots.push(i + 1);
+                }
+            }
+            keyroots
+        }
+
+        let root = value.into();
+        let mut labels = vec![];
+        let mut leftmosts = vec![];
+        traverse(&root, &mut labels, &mut leftmosts);
+        let keyroots = mk_keyroots(&leftmosts);
+
+        TreeDiffData {
+            leftmosts,
+            keyroots,
+            labels,
+        }
+    }
 }

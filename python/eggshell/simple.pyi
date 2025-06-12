@@ -20,6 +20,9 @@ class PartialRecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
+    def distance(self, other:PartialRecExpr) -> builtins.int:
+        ...
+
     def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
         ...
 
@@ -43,6 +46,9 @@ class RecExpr:
         ...
 
     def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
+        ...
+
+    def distance(self, other:RecExpr) -> builtins.int:
         ...
 
     def arity(self, position:builtins.int) -> builtins.int:
