@@ -1,16 +1,16 @@
 mod error;
+mod lang;
 
 use std::collections::VecDeque;
-use std::fmt::{Debug, Display, Formatter};
-use std::mem::{Discriminant, discriminant};
+use std::fmt::{Debug, Display};
 
 use egg::{FromOp, Id, Language, RecExpr};
 use error::PartialError;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
+use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
-use crate::trs::SymbolType;
-use crate::trs::{MetaInfo, SymbolInfo};
+use crate::node::Node;
+use crate::trs::MetaInfo;
 
 /// Simple alias
 pub type PartialRecExpr<L> = RecExpr<PartialLang<L>>;
@@ -41,102 +41,11 @@ impl<L: Language> PartialLang<L> {
     }
 }
 
-impl<L: Language> Language for PartialLang<L> {
-    type Discriminant = (Discriminant<Self>, Option<<L as Language>::Discriminant>);
-
-    fn discriminant(&self) -> Self::Discriminant {
-        let discr = discriminant(self);
-        match self {
-            PartialLang::Finished(x) => (discr, Some(x.discriminant())),
-            Self::Pad => (discr, None),
-        }
+impl<L: Language, T> Node<PartialLang<L>, Option<T>> {
+    fn new_empty() -> Self {
+        Node::new(PartialLang::Pad, Vec::new(), None)
     }
 
-    fn matches(&self, _other: &Self) -> bool {
-        panic!("Comparing sketches to each other does not make sense!")
-    }
-
-    fn children(&self) -> &[Id] {
-        match self {
-            Self::Finished(n) => n.children(),
-            Self::Pad => &[],
-        }
-    }
-
-    fn children_mut(&mut self) -> &mut [Id] {
-        match self {
-            Self::Finished(n) => n.children_mut(),
-            Self::Pad => &mut [],
-        }
-    }
-}
-
-impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
-    fn symbol_info(&self) -> SymbolInfo {
-        if let PartialLang::Finished(l) = self {
-            l.symbol_info()
-        } else {
-            let position = PartialLangDiscriminants::iter()
-                .position(|x| x == self.into())
-                .unwrap();
-            SymbolInfo::new(position + L::NUM_SYMBOLS, SymbolType::MetaSymbol)
-        }
-    }
-
-    fn operators() -> Vec<&'static str> {
-        let mut s = vec!["<pad>"];
-        s.extend(L::operators());
-        s
-    }
-
-    const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
-
-    const MAX_ARITY: usize = L::MAX_ARITY;
-}
-
-impl<L: Language + Display> Display for PartialLang<L> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Finished(sketch_node) => write!(f, "{sketch_node}"),
-            Self::Pad => write!(f, "<pad>"),
-        }
-    }
-}
-
-impl<L> egg::FromOp for PartialLang<L>
-where
-    L::Error: Display,
-    L: egg::FromOp,
-{
-    type Error = PartialError<L>;
-
-    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
-        match op {
-            "[pad]" | "[PAD]" | "[Pad]" | "<pad>" | "<PAD>" | "<Pad>" => {
-                if children.is_empty() {
-                    Ok(Self::Pad)
-                } else {
-                    Err(PartialError::BadChildren(egg::FromOpError::new(
-                        op, children,
-                    )))
-                }
-            }
-
-            _ => L::from_op(op, children)
-                .map(Self::Finished)
-                .map_err(PartialError::BadOp),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PartialNode<L: Language> {
-    node: PartialLang<L>,
-    children: Vec<PartialNode<L>>,
-    prob: Option<f64>,
-}
-
-impl<L: Language> PartialNode<L> {
     fn find_next_open(&mut self) -> Option<&mut Self> {
         let mut queue = VecDeque::new();
         queue.push_back(self);
@@ -150,19 +59,14 @@ impl<L: Language> PartialNode<L> {
         }
         None
     }
-
-    fn new_empty() -> Self {
-        Self {
-            node: PartialLang::Pad,
-            children: vec![],
-            prob: None,
-        }
-    }
 }
 
-impl<L: Language> From<PartialNode<L>> for RecExpr<PartialLang<L>> {
-    fn from(root: PartialNode<L>) -> Self {
-        fn rec<LL: Language>(mut curr: PartialNode<LL>, vec: &mut Vec<PartialLang<LL>>) -> Id {
+impl<L: Language, T> From<Node<PartialLang<L>, T>> for RecExpr<PartialLang<L>> {
+    fn from(root: Node<PartialLang<L>, T>) -> Self {
+        fn rec<LL: Language, TT>(
+            mut curr: Node<PartialLang<LL>, TT>,
+            vec: &mut Vec<PartialLang<LL>>,
+        ) -> Id {
             let c = curr.children.into_iter().map(|c| rec(c, vec));
             for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
                 *dummy_id = c_id;
@@ -178,18 +82,18 @@ impl<L: Language> From<PartialNode<L>> for RecExpr<PartialLang<L>> {
     }
 }
 
-impl<L> TryFrom<PartialNode<L>> for (RecExpr<PartialLang<L>>, Vec<f64>)
+impl<L, T> TryFrom<Node<PartialLang<L>, Option<T>>> for (RecExpr<PartialLang<L>>, Vec<T>)
 where
     L::Error: Display,
     L: Language + FromOp,
 {
     type Error = PartialError<PartialLang<L>>;
 
-    fn try_from(root: PartialNode<L>) -> Result<Self, Self::Error> {
-        fn rec<LL>(
-            mut curr: PartialNode<LL>,
+    fn try_from(root: Node<PartialLang<L>, Option<T>>) -> Result<Self, Self::Error> {
+        fn rec<LL, TT>(
+            mut curr: Node<PartialLang<LL>, Option<TT>>,
             stack: &mut Vec<PartialLang<LL>>,
-            probs_stack: &mut Vec<f64>,
+            probs_stack: &mut Vec<TT>,
         ) -> Result<Id, PartialError<PartialLang<LL>>>
         where
             LL::Error: Display,
@@ -203,11 +107,11 @@ where
                 *dummy_id = c_id?;
             }
             let id = Id::from(stack.len());
-            let prob = curr
-                .prob
+            let additional_data = curr
+                .additional_data
                 .ok_or_else(|| PartialError::NoProbability(format!("{:?}", &curr.node)))?;
             stack.push(curr.node);
-            probs_stack.push(prob);
+            probs_stack.push(additional_data);
             Ok(id)
         }
 
@@ -223,12 +127,12 @@ where
 /// # Errors
 ///
 /// This function will return an error if it cannot be parsed as a partial term
-pub fn partial_parse<L, T>(
-    tokens: &[T],
+pub fn partial_parse<L, S>(
+    tokens: &[S],
     probs: Option<&[f64]>,
-) -> Result<(PartialNode<L>, usize), PartialError<L>>
+) -> Result<(Node<PartialLang<L>, Option<f64>>, usize), PartialError<L>>
 where
-    T: AsRef<str> + Debug,
+    S: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
     L::Error: Display,
 {
@@ -237,7 +141,7 @@ where
         return Err(PartialError::NoTokens);
     }
 
-    let mut ast = PartialNode::new_empty();
+    let mut ast = Node::new_empty();
     for (index, token) in tokens.iter().enumerate() {
         let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
         let (node, arity) = loop {
@@ -248,11 +152,11 @@ where
         };
 
         if let Some(position) = ast.find_next_open() {
-            *position = PartialNode {
-                node: PartialLang::Finished(node),
-                children: vec![PartialNode::new_empty(); arity],
-                prob: probs.map(|v| v[index]),
-            };
+            *position = Node::new(
+                PartialLang::Finished(node),
+                vec![Node::new_empty(); arity],
+                probs.map(|v| v[index]),
+            );
         } else {
             return Ok((ast.into(), index));
         }
@@ -292,7 +196,7 @@ where
 /// This function will return an error if it cant be lowered because meta lang nodes are still contained
 pub fn lower_meta_level<L>(higher: RecExpr<PartialLang<L>>) -> Result<RecExpr<L>, PartialError<L>>
 where
-    L: FromOp + MetaInfo,
+    L: FromOp + Display,
     L::Error: Display,
 {
     higher
