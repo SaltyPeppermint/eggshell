@@ -50,4 +50,5 @@ pub mod partial;
 pub mod python;
 pub mod sampling;
 pub mod sketch;
+pub mod tree_distance;
 pub mod trs;
