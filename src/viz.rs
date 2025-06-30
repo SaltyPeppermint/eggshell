@@ -13,38 +13,28 @@ pub fn to_dot<L: Language + Display>(
     transparent: bool,
 ) -> String {
     fn rec<LL: Language + Display>(
-        parent_graph_id: Option<usize>,
-        curr_id: egg::Id,
+        parent_graph_id: usize,
+        id: egg::Id,
         rec_expr: &RecExpr<LL>,
         probs: Option<&[f64]>,
         nodes: &mut Vec<String>,
         edges: &mut Vec<(usize, usize)>,
     ) {
-        let curr = &rec_expr[curr_id];
-
-        let curr_graph_id = nodes.len();
-        let node_name = probs
-            .map(|v| v[usize::from(curr_id)])
-            .map(|v| format!("{curr}\n{v}"))
-            .unwrap_or_else(|| curr.to_string());
+        let node = &rec_expr[id];
+        let graph_id = nodes.len();
+        let node_name = node_name(id, probs, node);
         nodes.push(node_name);
-        if let Some(p_id) = parent_graph_id {
-            edges.push((p_id, curr_graph_id));
-        }
-        for c_id in curr.children() {
-            rec(Some(curr_graph_id), *c_id, rec_expr, probs, nodes, edges);
+        edges.push((parent_graph_id, graph_id));
+        for c_id in node.children() {
+            rec(graph_id, *c_id, rec_expr, probs, nodes, edges);
         }
     }
-    let mut nodes = Vec::new();
+    let root = &rec_expr[rec_expr.root()];
+    let mut nodes = vec![node_name(rec_expr.root(), probs, root)];
     let mut edges = Vec::new();
-    rec(
-        None,
-        rec_expr.root(),
-        rec_expr,
-        probs,
-        &mut nodes,
-        &mut edges,
-    );
+    for c_id in root.children() {
+        rec(0, *c_id, rec_expr, probs, &mut nodes, &mut edges);
+    }
 
     let mut stmts = nodes
         .into_iter()
@@ -76,6 +66,13 @@ pub fn to_dot<L: Language + Display>(
         stmts,
     }
     .print(&mut PrinterContext::default())
+}
+
+fn node_name<L: Display>(curr_id: egg::Id, probs: Option<&[f64]>, curr: &L) -> String {
+    probs
+        .map(|v| v[usize::from(curr_id)])
+        .map(|v| format!("{curr}\n{v}"))
+        .unwrap_or_else(|| curr.to_string())
 }
 
 pub fn dot_to_svg(dot: &str) -> Vec<u8> {
