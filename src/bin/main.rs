@@ -160,7 +160,7 @@ fn run_batch<L, N>(
 
     info!("Working in batches of size {BATCH_SIZE}...");
     for (batch_id, sample_batch) in samples_with_gen.chunks(BATCH_SIZE).enumerate() {
-        info!("Starting work on batch {}...", batch_id);
+        info!("Starting work on batch {batch_id}...");
         info!("Generating explanations...");
         let sample_data = sample_batch
             .par_iter()
@@ -189,7 +189,7 @@ fn run_batch<L, N>(
             .collect::<Vec<_>>();
         info!("Finished generating explanations!");
 
-        info!("Finished work on batch {}!", batch_id);
+        info!("Finished work on batch {batch_id}!");
 
         let batch_file: PathBuf = term_folder
             .join(batch_id.to_string())
@@ -218,7 +218,7 @@ fn run_batch<L, N>(
         serde_json::to_writer(&mut f, &data).unwrap();
         f.flush().unwrap();
         drop(data);
-        info!("Results for batch {} written to disk!", batch_id);
+        info!("Results for batch {batch_id} written to disk!");
     }
 }
 
