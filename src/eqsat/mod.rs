@@ -42,7 +42,7 @@ where
     pub fn new(start_material: StartMaterial<'a, L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
         Self {
             conf: EqsatConf::default(),
-            goals: vec![],
+            goals: Vec::new(),
             start_material,
             rules,
         }

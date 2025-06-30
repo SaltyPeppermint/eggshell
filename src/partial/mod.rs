@@ -9,7 +9,7 @@ use error::PartialError;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
-use crate::node::Node;
+use crate::node::OwnedRecNode;
 use crate::trs::MetaInfo;
 
 /// Simple alias
@@ -41,9 +41,9 @@ impl<L: Language> PartialLang<L> {
     }
 }
 
-impl<L: Language, T> Node<PartialLang<L>, Option<T>> {
+impl<L: Language, T> OwnedRecNode<PartialLang<L>, Option<T>> {
     fn new_empty() -> Self {
-        Node::new(PartialLang::Pad, Vec::new(), None)
+        OwnedRecNode::new(PartialLang::Pad, Vec::new(), None)
     }
 
     fn find_next_open(&mut self) -> Option<&mut Self> {
@@ -61,10 +61,10 @@ impl<L: Language, T> Node<PartialLang<L>, Option<T>> {
     }
 }
 
-impl<L: Language, T> From<Node<PartialLang<L>, T>> for RecExpr<PartialLang<L>> {
-    fn from(root: Node<PartialLang<L>, T>) -> Self {
+impl<L: Language, T> From<OwnedRecNode<PartialLang<L>, T>> for RecExpr<PartialLang<L>> {
+    fn from(root: OwnedRecNode<PartialLang<L>, T>) -> Self {
         fn rec<LL: Language, TT>(
-            mut curr: Node<PartialLang<LL>, TT>,
+            mut curr: OwnedRecNode<PartialLang<LL>, TT>,
             vec: &mut Vec<PartialLang<LL>>,
         ) -> Id {
             let c = curr.children.into_iter().map(|c| rec(c, vec));
@@ -82,16 +82,16 @@ impl<L: Language, T> From<Node<PartialLang<L>, T>> for RecExpr<PartialLang<L>> {
     }
 }
 
-impl<L, T> TryFrom<Node<PartialLang<L>, Option<T>>> for (RecExpr<PartialLang<L>>, Vec<T>)
+impl<L, T> TryFrom<OwnedRecNode<PartialLang<L>, Option<T>>> for (RecExpr<PartialLang<L>>, Vec<T>)
 where
     L::Error: Display,
     L: Language + FromOp,
 {
     type Error = PartialError<PartialLang<L>>;
 
-    fn try_from(root: Node<PartialLang<L>, Option<T>>) -> Result<Self, Self::Error> {
+    fn try_from(root: OwnedRecNode<PartialLang<L>, Option<T>>) -> Result<Self, Self::Error> {
         fn rec<LL, TT>(
-            mut curr: Node<PartialLang<LL>, Option<TT>>,
+            mut curr: OwnedRecNode<PartialLang<LL>, Option<TT>>,
             stack: &mut Vec<PartialLang<LL>>,
             probs_stack: &mut Vec<TT>,
         ) -> Result<Id, PartialError<PartialLang<LL>>>
@@ -130,7 +130,7 @@ where
 pub fn partial_parse<L, S>(
     tokens: &[S],
     probs: Option<&[f64]>,
-) -> Result<(Node<PartialLang<L>, Option<f64>>, usize), PartialError<L>>
+) -> Result<(OwnedRecNode<PartialLang<L>, Option<f64>>, usize), PartialError<L>>
 where
     S: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
@@ -141,7 +141,7 @@ where
         return Err(PartialError::NoTokens);
     }
 
-    let mut ast = Node::new_empty();
+    let mut ast = OwnedRecNode::new_empty();
     for (index, token) in tokens.iter().enumerate() {
         let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
         let (node, arity) = loop {
@@ -152,9 +152,9 @@ where
         };
 
         if let Some(position) = ast.find_next_open() {
-            *position = Node::new(
+            *position = OwnedRecNode::new(
                 PartialLang::Finished(node),
-                vec![Node::new_empty(); arity],
+                vec![OwnedRecNode::new_empty(); arity],
                 probs.map(|v| v[index]),
             );
         } else {

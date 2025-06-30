@@ -281,7 +281,7 @@ impl TreeData {
 
         if let Some(v) = node.symbol_info().value() {
             // If it is a constant we can safely unwrap
-            Ok(L::from_op(&v, vec![]).unwrap())
+            Ok(L::from_op(&v, Vec::new()).unwrap())
         } else {
             L::from_op(L::operators()[node.id()], children)
         }
@@ -293,8 +293,8 @@ impl<L: MetaInfo + FromOp> From<&RecExpr<L>> for TreeData {
         // Guard against empty recexpr (root() call will panic otherwise)
         if rec_expr.is_empty() {
             return TreeData {
-                nodes: vec![],
-                adjacency_pairs: vec![],
+                nodes: Vec::new(),
+                adjacency_pairs: Vec::new(),
             };
         }
 
@@ -365,7 +365,7 @@ impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
             .find(|(p, _)| !tree_data.adjacency_pairs.iter().any(|(_, c)| p == c))
             .unwrap();
 
-        let mut stack = vec![];
+        let mut stack = Vec::new();
         rec(tree_data, *root, &mut stack)?;
         Ok(stack.into())
     }

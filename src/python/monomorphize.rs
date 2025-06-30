@@ -56,9 +56,7 @@ macro_rules! monomorphize {
 
             #[must_use]
             pub fn distance(&self, other: &RecExpr) -> usize {
-                let self_tree: $crate::utils::TreeDiffData<L> = (&self.0).into();
-                let other_tree = (&other.0).into();
-                self_tree.distance(&other_tree)
+                $crate::tree_distance::distance(&self.0, &other.0)
             }
 
             #[must_use]
@@ -135,10 +133,7 @@ macro_rules! monomorphize {
 
             #[must_use]
             pub fn distance(&self, other: &PartialRecExpr) -> usize {
-                let self_tree: $crate::utils::TreeDiffData<partial::PartialLang<L>> =
-                    (&self.expr).into();
-                let other_tree = (&other.expr).into();
-                self_tree.distance(&other_tree)
+                $crate::tree_distance::distance(&self.expr, &other.expr)
             }
 
             #[pyo3(signature = (name, path, transparent=false))]
