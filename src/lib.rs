@@ -38,6 +38,7 @@
 )]
 
 mod analysis;
+mod node;
 mod utils; //should maybe be deleted
 mod viz;
 

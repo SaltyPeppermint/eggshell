@@ -130,9 +130,10 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct PartialNode<L: Language> {
+pub struct PartialNode<L: Language> {
     node: PartialLang<L>,
     children: Vec<PartialNode<L>>,
+    prob: Option<f64>,
 }
 
 impl<L: Language> PartialNode<L> {
@@ -154,6 +155,7 @@ impl<L: Language> PartialNode<L> {
         Self {
             node: PartialLang::Pad,
             children: vec![],
+            prob: None,
         }
     }
 }
@@ -169,9 +171,50 @@ impl<L: Language> From<PartialNode<L>> for RecExpr<PartialLang<L>> {
             vec.push(curr.node);
             id
         }
+
         let mut stack = Vec::new();
         rec(root, &mut stack);
         RecExpr::from(stack)
+    }
+}
+
+impl<L> TryFrom<PartialNode<L>> for (RecExpr<PartialLang<L>>, Vec<f64>)
+where
+    L::Error: Display,
+    L: Language + FromOp,
+{
+    type Error = PartialError<PartialLang<L>>;
+
+    fn try_from(root: PartialNode<L>) -> Result<Self, Self::Error> {
+        fn rec<LL>(
+            mut curr: PartialNode<LL>,
+            stack: &mut Vec<PartialLang<LL>>,
+            probs_stack: &mut Vec<f64>,
+        ) -> Result<Id, PartialError<PartialLang<LL>>>
+        where
+            LL::Error: Display,
+            LL: Language + FromOp,
+        {
+            let c = curr
+                .children
+                .into_iter()
+                .map(|c| rec(c, stack, probs_stack));
+            for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
+                *dummy_id = c_id?;
+            }
+            let id = Id::from(stack.len());
+            let prob = curr
+                .prob
+                .ok_or_else(|| PartialError::NoProbability(format!("{:?}", &curr.node)))?;
+            stack.push(curr.node);
+            probs_stack.push(prob);
+            Ok(id)
+        }
+
+        let mut stack = Vec::new();
+        let mut probs_stack = Vec::new();
+        let _ = rec(root, &mut stack, &mut probs_stack)?;
+        Ok((RecExpr::from(stack), probs_stack))
     }
 }
 
@@ -182,7 +225,8 @@ impl<L: Language> From<PartialNode<L>> for RecExpr<PartialLang<L>> {
 /// This function will return an error if it cannot be parsed as a partial term
 pub fn partial_parse<L, T>(
     tokens: &[T],
-) -> Result<(RecExpr<PartialLang<L>>, usize), PartialError<L>>
+    probs: Option<&[f64]>,
+) -> Result<(PartialNode<L>, usize), PartialError<L>>
 where
     T: AsRef<str> + Debug,
     L: FromOp + MetaInfo,
@@ -190,11 +234,11 @@ where
 {
     // If this is empty, return the empty RecExpr
     if tokens.is_empty() {
-        return Ok((RecExpr::default(), 0));
+        return Err(PartialError::NoTokens);
     }
 
     let mut ast = PartialNode::new_empty();
-    for (used_tokens, token) in tokens.iter().enumerate() {
+    for (index, token) in tokens.iter().enumerate() {
         let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
         let (node, arity) = loop {
             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
@@ -207,9 +251,10 @@ where
             *position = PartialNode {
                 node: PartialLang::Finished(node),
                 children: vec![PartialNode::new_empty(); arity],
+                prob: probs.map(|v| v[index]),
             };
         } else {
-            return Ok((ast.into(), used_tokens));
+            return Ok((ast.into(), index));
         }
     }
 
@@ -291,9 +336,10 @@ mod tests {
     #[test]
     fn partial_parse_1_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "7", "2"];
-        let (l, _) = super::partial_parse(tokens.as_slice()).unwrap();
+        let (partial_node, _) = super::partial_parse(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
         assert_eq!(
-            l.as_ref().to_vec(),
+            partial_rec_expr.as_ref().to_vec(),
             vec![
                 PartialLang::Finished(HalideLang::Symbol("v1".into())),
                 PartialLang::Finished(HalideLang::Number(7)),
@@ -304,16 +350,18 @@ mod tests {
                 PartialLang::Finished(HalideLang::Mul([2.into(), 5.into()]))
             ]
         );
-        assert_eq!(&l.to_string(), "(* (- v1 7) (+ 2 <pad>))");
+        assert_eq!(&partial_rec_expr.to_string(), "(* (- v1 7) (+ 2 <pad>))");
     }
 
     #[test]
     fn partial_parse_2_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "2", "-", "v2"];
 
-        let (l, _) = super::partial_parse(tokens.as_slice()).unwrap();
+        let (partial_node, _) = super::partial_parse(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
         assert_eq!(
-            l.as_ref().to_vec(),
+            partial_rec_expr.as_ref().to_vec(),
             vec![
                 PartialLang::Finished(HalideLang::Symbol("v1".into())),
                 PartialLang::Finished(HalideLang::Number(2)),
@@ -326,15 +374,18 @@ mod tests {
                 PartialLang::Finished(HalideLang::Mul([2.into(), 7.into()]))
             ]
         );
-        assert_eq!(&l.to_string(), "(* (- v1 2) (+ (- <pad> <pad>) v2))");
+        assert_eq!(
+            &partial_rec_expr.to_string(),
+            "(* (- v1 2) (+ (- <pad> <pad>) v2))"
+        );
     }
 
     #[test]
     fn empty_tokens() {
         let tokens = Vec::<&str>::new();
-        let (parsed, used_tokens) = super::partial_parse(tokens.as_slice()).unwrap();
-        assert_eq!(used_tokens, 0);
-        assert_eq!(RecExpr::<PartialLang<HalideLang>>::default(), parsed);
+        let partial_error: PartialError<HalideLang> =
+            super::partial_parse(tokens.as_slice(), None).unwrap_err();
+        assert!(matches!(partial_error, PartialError::NoTokens))
     }
 
     #[test]
@@ -390,15 +441,17 @@ mod tests {
             "[variable]",
             "[variable]",
         ];
-        let (parsed, used_tokens) = super::partial_parse(tokens.as_slice()).unwrap();
-        let _treedata: TreeData = (&parsed).into();
+        let (partial_node, used_tokens) = super::partial_parse(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
+        let _treedata: TreeData = (&partial_rec_expr).into();
         assert_eq!(
-            parsed.as_ref().last().unwrap(),
+            partial_rec_expr.as_ref().last().unwrap(),
             &PartialLang::Finished(RiseLang::Lambda([4.into(), 11.into()])),
         );
         assert_eq!(used_tokens, 13);
         assert_eq!(
-            &parsed.to_string(),
+            &partial_rec_expr.to_string(),
             "(lam (>> (>> [variable] transpose) transpose) (lam [variable] (lam [variable] (lam [variable] [variable]))))"
         );
     }
@@ -406,10 +459,12 @@ mod tests {
     #[test]
     fn lam_overflow() {
         let tokens = vec!["lam"];
-        let (parsed, _) = super::partial_parse(tokens.as_slice()).unwrap();
-        let _treedata: TreeData = (&parsed).into();
+        let (partial_node, _) = super::partial_parse(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
+        let _treedata: TreeData = (&partial_rec_expr).into();
         assert_eq!(
-            parsed.as_ref().to_vec(),
+            partial_rec_expr.as_ref().to_vec(),
             vec![
                 PartialLang::Pad,
                 PartialLang::Pad,
@@ -423,8 +478,14 @@ mod tests {
         let control: RecExpr<PartialLang<HalideLang>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
         let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
-        let (l, _) = super::partial_parse::<HalideLang, _>(tokens.as_slice()).unwrap();
-        assert_eq!(control.to_string(), l.to_string());
-        assert_eq!(&l.to_string(), "(* (- 2 v1) (+ (- <pad> <pad>) v2))");
+        let (partial_node, _) =
+            super::partial_parse::<HalideLang, _>(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
+        assert_eq!(control.to_string(), partial_rec_expr.to_string());
+        assert_eq!(
+            &partial_rec_expr.to_string(),
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))"
+        );
     }
 }

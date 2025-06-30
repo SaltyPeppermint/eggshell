@@ -48,7 +48,7 @@ macro_rules! monomorphize {
 
             #[pyo3(signature = (name, path, transparent=false))]
             pub fn to_dot(&self, name: String, path: String, transparent: bool) {
-                let dot = $crate::viz::to_dot(&self.0, &name, transparent);
+                let dot = $crate::viz::to_dot(&self.0, None, &name, transparent);
                 let svg = $crate::viz::dot_to_svg(&dot);
                 let path = std::env::current_dir().unwrap().join(path);
                 std::fs::write(path, svg).unwrap();
@@ -87,6 +87,7 @@ macro_rules! monomorphize {
         /// Wrapper type for Python
         pub struct PartialRecExpr {
             expr: EggRecExpr<partial::PartialLang<L>>,
+            probs: Option<Vec<f64>>,
             #[pyo3(get)]
             used_tokens: usize,
         }
@@ -96,9 +97,25 @@ macro_rules! monomorphize {
         impl PartialRecExpr {
             #[new]
             #[expect(clippy::missing_errors_doc)]
-            pub fn new(token_list: Vec<String>) -> PyResult<PartialRecExpr> {
-                let (expr, used_tokens) = partial::partial_parse::<L, _>(token_list.as_slice())?;
-                Ok(PartialRecExpr { expr, used_tokens })
+            pub fn new(
+                token_list: Vec<String>,
+                token_probs: Option<Vec<f64>>,
+            ) -> PyResult<PartialRecExpr> {
+                let (partial_node, used_tokens) = partial::partial_parse::<L, _>(
+                    token_list.as_slice(),
+                    token_probs.as_ref().map(|v| &**v),
+                )?;
+
+                let (expr, probs) = if token_probs.is_some() {
+                    partial_node.try_into().map(|o: (_, _)| (o.0, Some(o.1)))?
+                } else {
+                    (partial_node.into(), None)
+                };
+                Ok(PartialRecExpr {
+                    expr,
+                    probs,
+                    used_tokens,
+                })
             }
 
             #[must_use]
@@ -127,8 +144,8 @@ macro_rules! monomorphize {
             #[pyo3(signature = (name, path, transparent=false))]
             pub fn to_dot(&self, name: String, path: String, transparent: bool) {
                 let mut path = std::env::current_dir().unwrap().join(path);
-
-                let dot = $crate::viz::to_dot(&self.expr, &name, transparent);
+                let dot =
+                    $crate::viz::to_dot(&self.expr, self.probs.as_deref(), &name, transparent);
                 path.set_extension("dot");
                 std::fs::write(&path, &dot).unwrap();
 

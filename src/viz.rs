@@ -8,29 +8,43 @@ use graphviz_rust::printer::{DotPrinter, PrinterContext};
 
 pub fn to_dot<L: Language + Display>(
     rec_expr: &RecExpr<L>,
+    probs: Option<&[f64]>,
     name: &str,
     transparent: bool,
 ) -> String {
     fn rec<LL: Language + Display>(
-        parent_graph_id: usize,
-        curr: &LL,
+        parent_graph_id: Option<usize>,
+        curr_id: egg::Id,
         rec_expr: &RecExpr<LL>,
+        probs: Option<&[f64]>,
         nodes: &mut Vec<String>,
         edges: &mut Vec<(usize, usize)>,
     ) {
+        let curr = &rec_expr[curr_id];
+
         let curr_graph_id = nodes.len();
-        nodes.push(curr.to_string());
-        edges.push((parent_graph_id, curr_graph_id));
+        let node_name = probs
+            .map(|v| v[usize::from(curr_id)])
+            .map(|v| format!("{curr}\n{v}"))
+            .unwrap_or_else(|| curr.to_string());
+        nodes.push(node_name);
+        if let Some(p_id) = parent_graph_id {
+            edges.push((p_id, curr_graph_id));
+        }
         for c_id in curr.children() {
-            rec(curr_graph_id, &rec_expr[*c_id], rec_expr, nodes, edges);
+            rec(Some(curr_graph_id), *c_id, rec_expr, probs, nodes, edges);
         }
     }
-    let root_id = rec_expr.root();
-    let mut nodes = vec![rec_expr[root_id].to_string()];
+    let mut nodes = Vec::new();
     let mut edges = Vec::new();
-    for c in rec_expr[root_id].children() {
-        rec(0, &rec_expr[*c], rec_expr, &mut nodes, &mut edges);
-    }
+    rec(
+        None,
+        rec_expr.root(),
+        rec_expr,
+        probs,
+        &mut nodes,
+        &mut edges,
+    );
 
     let mut stmts = nodes
         .into_iter()
@@ -84,7 +98,7 @@ mod tests {
     fn simple_ast_dot() {
         let expr: RecExpr<PartialLang<HalideLang>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
-        let dot = to_dot(&expr, "partial_lang_test", false);
+        let dot = to_dot(&expr, None, "partial_lang_test", false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test1.svg");
@@ -97,10 +111,27 @@ mod tests {
     }
 
     #[test]
+    fn with_prob_ast_dot() {
+        let expr: RecExpr<PartialLang<HalideLang>> =
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
+        let probs = vec![0.2, 0.04, 0.6, 0.9, 0.3, 0.1, 0.3, 0.01, 0.9];
+        let dot = to_dot(&expr, Some(&probs), "partial_lang_test_probs", false);
+
+        // let svg = crate::viz::dot_to_svg(&dot);
+        // let path = std::env::current_dir().unwrap().join("test1.svg");
+        // std::fs::write(path, svg).unwrap();
+
+        assert_eq!(
+            &dot,
+            "strict graph \"partial_lang_test_probs\" {\n  0[label=\"*\n0.9\"]\n  1[label=\"-\n0.6\"]\n  2[label=\"2\n0.2\"]\n  3[label=\"v1\n0.04\"]\n  4[label=\"+\n0.01\"]\n  5[label=\"-\n0.1\"]\n  6[label=\"<pad>\n0.9\"]\n  7[label=\"<pad>\n0.3\"]\n  8[label=\"v2\n0.3\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test_probs\"\n}"
+        );
+    }
+
+    #[test]
     fn longer_ast_dot() {
         let s_expr = "(lam f1 (lam f2 (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app map (var f4)) (app (lam x1 (app (app map (var f3)) (app (lam x0 (app (app map (var f2)) (app (app map (var f1)) (var x0)))) (var x1)))) (var x2)))) (var x3)))))))))";
         let expr: RecExpr<RiseLang> = s_expr.parse().unwrap();
-        let dot = to_dot(&expr, s_expr, false);
+        let dot = to_dot(&expr, None, s_expr, false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test2.svg");
