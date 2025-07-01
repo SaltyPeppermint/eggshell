@@ -5,7 +5,7 @@ use egg::{Id, Language};
 use strum::{EnumCount, IntoEnumIterator};
 
 use crate::trs::SymbolType;
-use crate::trs::{MetaInfo, SymbolInfo};
+use crate::trs::{LangExtras, SymbolInfo};
 
 use super::error::PartialError;
 use super::{PartialLang, PartialLangDiscriminants};
@@ -16,34 +16,34 @@ impl<L: Language> Language for PartialLang<L> {
     fn discriminant(&self) -> Self::Discriminant {
         let discr = discriminant(self);
         match self {
-            PartialLang::Finished(x) => (discr, Some(x.discriminant())),
+            PartialLang::Finished { inner, prob: _ } => (discr, Some(inner.discriminant())),
             Self::Pad => (discr, None),
         }
     }
 
-    fn matches(&self, _other: &Self) -> bool {
-        panic!("Comparing sketches to each other does not make sense!")
+    fn matches(&self, other: &Self) -> bool {
+        self.discriminant() == other.discriminant()
     }
 
     fn children(&self) -> &[Id] {
         match self {
-            Self::Finished(n) => n.children(),
+            PartialLang::Finished { inner, prob: _ } => inner.children(),
             Self::Pad => &[],
         }
     }
 
     fn children_mut(&mut self) -> &mut [Id] {
         match self {
-            Self::Finished(n) => n.children_mut(),
+            PartialLang::Finished { inner, prob: _ } => inner.children_mut(),
             Self::Pad => &mut [],
         }
     }
 }
 
-impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
+impl<L: Language + LangExtras> LangExtras for PartialLang<L> {
     fn symbol_info(&self) -> SymbolInfo {
-        if let PartialLang::Finished(l) = self {
-            l.symbol_info()
+        if let PartialLang::Finished { inner, prob: _ } = self {
+            inner.symbol_info()
         } else {
             let position = PartialLangDiscriminants::iter()
                 .position(|x| x == self.into())
@@ -58,6 +58,20 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
         s
     }
 
+    fn pretty_string(&self) -> String {
+        match self {
+            PartialLang::Finished {
+                inner,
+                prob: Some(p),
+            } => format!("{inner}\n{p}"),
+            PartialLang::Finished {
+                inner: _,
+                prob: None,
+            }
+            | PartialLang::Pad => self.to_string(),
+        }
+    }
+
     const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
 
     const MAX_ARITY: usize = L::MAX_ARITY;
@@ -66,7 +80,11 @@ impl<L: Language + MetaInfo> MetaInfo for PartialLang<L> {
 impl<L: Language + Display> Display for PartialLang<L> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Finished(sketch_node) => write!(f, "{sketch_node}"),
+            PartialLang::Finished {
+                inner,
+                prob: Some(p),
+            } => write!(f, "{inner}: {p}"),
+            PartialLang::Finished { inner, prob: None } => write!(f, "{inner}"),
             Self::Pad => write!(f, "<pad>"),
         }
     }
@@ -92,7 +110,10 @@ where
             }
 
             _ => L::from_op(op, children)
-                .map(Self::Finished)
+                .map(|l| Self::Finished {
+                    inner: l,
+                    prob: None,
+                })
                 .map_err(PartialError::BadOp),
         }
     }

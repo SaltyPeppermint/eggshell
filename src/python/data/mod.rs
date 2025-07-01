@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::trs::MetaInfo;
+use crate::trs::LangExtras;
 
 #[derive(Debug, Error)]
 pub enum TreeDataError {
@@ -271,7 +271,7 @@ impl TreeData {
 }
 
 impl TreeData {
-    fn feature_vec_to_node<L: MetaInfo + FromOp>(
+    fn feature_vec_to_node<L: LangExtras + FromOp>(
         &self,
         node_idx: usize,
         children: Vec<Id>,
@@ -288,7 +288,7 @@ impl TreeData {
     }
 }
 
-impl<L: MetaInfo + FromOp> From<&RecExpr<L>> for TreeData {
+impl<L: LangExtras + FromOp> From<&RecExpr<L>> for TreeData {
     fn from(rec_expr: &RecExpr<L>) -> TreeData {
         // Guard against empty recexpr (root() call will panic otherwise)
         if rec_expr.is_empty() {
@@ -337,11 +337,11 @@ impl<L: MetaInfo + FromOp> From<&RecExpr<L>> for TreeData {
     }
 }
 
-impl<L: MetaInfo + FromOp> TryFrom<&TreeData> for RecExpr<L> {
+impl<L: LangExtras + FromOp> TryFrom<&TreeData> for RecExpr<L> {
     type Error = L::Error;
 
     fn try_from(tree_data: &TreeData) -> Result<RecExpr<L>, L::Error> {
-        fn rec<LL: MetaInfo + FromOp>(
+        fn rec<LL: LangExtras + FromOp>(
             data: &TreeData,
             node_idx: usize,
             stack: &mut Vec<LL>,

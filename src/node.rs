@@ -1,41 +1,31 @@
 use egg::{Id, Language, RecExpr};
 
 #[derive(Debug, Clone)]
-pub struct OwnedRecNode<L: Language, T> {
+pub struct OwnedRecNode<L: Language> {
     pub node: L,
-    pub children: Vec<OwnedRecNode<L, T>>,
-    pub additional_data: T,
+    pub children: Vec<OwnedRecNode<L>>,
 }
 
-impl<L: Language, T> OwnedRecNode<L, T> {
-    pub fn new(node: L, children: Vec<OwnedRecNode<L, T>>, additional_data: T) -> Self {
-        Self {
-            node,
-            children,
-            additional_data,
-        }
+impl<L: Language> OwnedRecNode<L> {
+    pub fn new(node: L, children: Vec<OwnedRecNode<L>>) -> Self {
+        Self { node, children }
     }
 }
 
-impl<L: Language, T: Clone> From<(&RecExpr<L>, &[T])> for OwnedRecNode<L, T> {
-    fn from(value: (&RecExpr<L>, &[T])) -> Self {
-        fn rec<LL: Language, TT: Clone>(
-            id: Id,
-            rec_expr: &RecExpr<LL>,
-            additional_data: &[TT],
-        ) -> OwnedRecNode<LL, TT> {
+impl<L: Language> From<&RecExpr<L>> for OwnedRecNode<L> {
+    fn from(value: &RecExpr<L>) -> Self {
+        fn rec<LL: Language>(id: Id, rec_expr: &RecExpr<LL>) -> OwnedRecNode<LL> {
             let node = &rec_expr[id];
             OwnedRecNode {
                 node: node.to_owned(),
                 children: node
                     .children()
                     .iter()
-                    .map(|c_id| rec(*c_id, rec_expr, additional_data))
+                    .map(|c_id| rec(*c_id, rec_expr))
                     .collect(),
-                additional_data: additional_data[usize::from(id)].to_owned(),
             }
         }
-        rec(value.0.root(), value.0, value.1)
+        rec(value.root(), value)
     }
 }
 

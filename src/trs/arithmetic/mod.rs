@@ -5,7 +5,7 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -37,7 +37,7 @@ define_language! {
     }
 }
 
-impl MetaInfo for Math {
+impl LangExtras for Math {
     fn symbol_info(&self) -> SymbolInfo {
         let id = MathDiscriminants::iter()
             .position(|x| x == self.into())

@@ -1,39 +1,36 @@
-use std::fmt::Display;
-
 use dot_generator::{attr, edge, id, node, node_id, stmt};
 use dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Vertex};
 use egg::{Language, RecExpr};
 
 use graphviz_rust::printer::{DotPrinter, PrinterContext};
 
-pub fn to_dot<L: Language + Display>(
+use crate::trs::LangExtras;
+
+pub fn to_dot<L: Language + LangExtras>(
     rec_expr: &RecExpr<L>,
-    probs: Option<&[f64]>,
     name: &str,
     transparent: bool,
 ) -> String {
-    fn rec<LL: Language + Display>(
+    fn rec<LL: Language + LangExtras>(
         parent_graph_id: usize,
         id: egg::Id,
         rec_expr: &RecExpr<LL>,
-        probs: Option<&[f64]>,
         nodes: &mut Vec<String>,
         edges: &mut Vec<(usize, usize)>,
     ) {
         let node = &rec_expr[id];
         let graph_id = nodes.len();
-        let node_name = node_name(id, probs, node);
-        nodes.push(node_name);
+        nodes.push(node.pretty_string());
         edges.push((parent_graph_id, graph_id));
         for c_id in node.children() {
-            rec(graph_id, *c_id, rec_expr, probs, nodes, edges);
+            rec(graph_id, *c_id, rec_expr, nodes, edges);
         }
     }
     let root = &rec_expr[rec_expr.root()];
-    let mut nodes = vec![node_name(rec_expr.root(), probs, root)];
+    let mut nodes = vec![root.pretty_string()];
     let mut edges = Vec::new();
     for c_id in root.children() {
-        rec(0, *c_id, rec_expr, probs, &mut nodes, &mut edges);
+        rec(0, *c_id, rec_expr, &mut nodes, &mut edges);
     }
 
     let mut stmts = nodes
@@ -68,13 +65,6 @@ pub fn to_dot<L: Language + Display>(
     .print(&mut PrinterContext::default())
 }
 
-fn node_name<L: Display>(curr_id: egg::Id, probs: Option<&[f64]>, curr: &L) -> String {
-    probs
-        .map(|v| v[usize::from(curr_id)])
-        .map(|v| format!("{curr}\n{v}"))
-        .unwrap_or_else(|| curr.to_string())
-}
-
 pub fn dot_to_svg(dot: &str) -> Vec<u8> {
     let format = graphviz_rust::cmd::Format::Svg;
     graphviz_rust::exec_dot(dot.into(), vec![format.into()]).unwrap()
@@ -95,7 +85,7 @@ mod tests {
     fn simple_ast_dot() {
         let expr: RecExpr<PartialLang<HalideLang>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
-        let dot = to_dot(&expr, None, "partial_lang_test", false);
+        let dot = to_dot(&expr, "partial_lang_test", false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test1.svg");
@@ -109,18 +99,48 @@ mod tests {
 
     #[test]
     fn with_prob_ast_dot() {
-        let expr: RecExpr<PartialLang<HalideLang>> =
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
-        let probs = vec![0.2, 0.04, 0.6, 0.9, 0.3, 0.1, 0.3, 0.01, 0.9];
-        let dot = to_dot(&expr, Some(&probs), "partial_lang_test_probs", false);
+        let expr: RecExpr<PartialLang<HalideLang>> = RecExpr::from(vec![
+            PartialLang::Finished {
+                inner: HalideLang::Symbol("v1".into()),
+                prob: Some(0.04.into()),
+            },
+            PartialLang::Finished {
+                inner: HalideLang::Number(2),
+                prob: Some(0.2.into()),
+            },
+            PartialLang::Finished {
+                inner: HalideLang::Sub([0.into(), 1.into()]),
+                prob: Some(0.6.into()),
+            },
+            PartialLang::Pad,
+            PartialLang::Pad,
+            PartialLang::Finished {
+                inner: HalideLang::Sub([3.into(), 4.into()]),
+                prob: Some(0.6.into()),
+            },
+            PartialLang::Finished {
+                inner: HalideLang::Symbol("v2".into()),
+                prob: Some(0.3.into()),
+            },
+            PartialLang::Finished {
+                inner: HalideLang::Add([5.into(), 6.into()]),
+                prob: Some(0.01.into()),
+            },
+            PartialLang::Finished {
+                inner: HalideLang::Mul([2.into(), 7.into()]),
+                prob: Some(0.9.into()),
+            },
+        ]);
+        // let probs = vec![0.2, 0.04, 0.6, 0.9, 0.3, 0.1, 0.3, 0.01, 0.9];
+        let dot = to_dot(&expr, "partial_lang_test_probs", false);
 
-        // let svg = crate::viz::dot_to_svg(&dot);
-        // let path = std::env::current_dir().unwrap().join("test1.svg");
-        // std::fs::write(path, svg).unwrap();
+        let svg = crate::viz::dot_to_svg(&dot);
+        let path = std::env::current_dir().unwrap().join("test1.svg");
+        std::fs::write(path, svg).unwrap();
 
         assert_eq!(
             &dot,
-            "strict graph \"partial_lang_test_probs\" {\n  0[label=\"*\n0.9\"]\n  1[label=\"-\n0.6\"]\n  2[label=\"2\n0.2\"]\n  3[label=\"v1\n0.04\"]\n  4[label=\"+\n0.01\"]\n  5[label=\"-\n0.1\"]\n  6[label=\"<pad>\n0.9\"]\n  7[label=\"<pad>\n0.3\"]\n  8[label=\"v2\n0.3\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test_probs\"\n}"
+            "strict graph \"partial_lang_test_probs\" {\n  0[label=\"*\n0.9\"]\n  1[label=\"-\n0.6\"]\n  2[label=\"v1\n0.04\"]\n  3[label=\"2\n0.2\"]\n  4[label=\"+\n0.01\"]\n  5[label=\"-\n0.6\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\n0.3\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test_probs\"\n}"
         );
     }
 
@@ -128,7 +148,7 @@ mod tests {
     fn longer_ast_dot() {
         let s_expr = "(lam f1 (lam f2 (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app map (var f4)) (app (lam x1 (app (app map (var f3)) (app (lam x0 (app (app map (var f2)) (app (app map (var f1)) (var x0)))) (var x1)))) (var x2)))) (var x3)))))))))";
         let expr: RecExpr<RiseLang> = s_expr.parse().unwrap();
-        let dot = to_dot(&expr, None, s_expr, false);
+        let dot = to_dot(&expr, s_expr, false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test2.svg");

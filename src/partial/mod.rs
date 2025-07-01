@@ -6,23 +6,24 @@ use std::fmt::{Debug, Display};
 
 use egg::{FromOp, Id, Language, RecExpr};
 use error::PartialError;
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter};
 
 use crate::node::OwnedRecNode;
-use crate::trs::MetaInfo;
+use crate::trs::LangExtras;
 
 /// Simple alias
 pub type PartialRecExpr<L> = RecExpr<PartialLang<L>>;
 
 #[derive(
     Debug,
-    Hash,
     PartialEq,
-    Eq,
     Clone,
-    PartialOrd,
+    Hash,
     Ord,
+    Eq,
+    PartialOrd,
     Serialize,
     Deserialize,
     EnumDiscriminants,
@@ -32,18 +33,21 @@ pub type PartialRecExpr<L> = RecExpr<PartialLang<L>>;
 pub enum PartialLang<L: Language> {
     /// Finshed parts represented by [`SketchNode`]
     Pad,
-    Finished(L),
+    Finished {
+        inner: L,
+        prob: Option<OrderedFloat<f64>>,
+    },
 }
 
 impl<L: Language> PartialLang<L> {
-    pub fn is_placeholder(&self) -> bool {
+    pub fn is_pad(&self) -> bool {
         matches!(self, Self::Pad)
     }
 }
 
-impl<L: Language, T> OwnedRecNode<PartialLang<L>, Option<T>> {
+impl<L: Language> OwnedRecNode<PartialLang<L>> {
     fn new_empty() -> Self {
-        OwnedRecNode::new(PartialLang::Pad, Vec::new(), None)
+        OwnedRecNode::new(PartialLang::Pad, Vec::new())
     }
 
     fn find_next_open(&mut self) -> Option<&mut Self> {
@@ -61,10 +65,10 @@ impl<L: Language, T> OwnedRecNode<PartialLang<L>, Option<T>> {
     }
 }
 
-impl<L: Language, T> From<OwnedRecNode<PartialLang<L>, T>> for RecExpr<PartialLang<L>> {
-    fn from(root: OwnedRecNode<PartialLang<L>, T>) -> Self {
-        fn rec<LL: Language, TT>(
-            mut curr: OwnedRecNode<PartialLang<LL>, TT>,
+impl<L: Language> From<OwnedRecNode<PartialLang<L>>> for RecExpr<PartialLang<L>> {
+    fn from(root: OwnedRecNode<PartialLang<L>>) -> Self {
+        fn rec<LL: Language>(
+            mut curr: OwnedRecNode<PartialLang<LL>>,
             vec: &mut Vec<PartialLang<LL>>,
         ) -> Id {
             let c = curr.children.into_iter().map(|c| rec(c, vec));
@@ -82,45 +86,45 @@ impl<L: Language, T> From<OwnedRecNode<PartialLang<L>, T>> for RecExpr<PartialLa
     }
 }
 
-impl<L, T> TryFrom<OwnedRecNode<PartialLang<L>, Option<T>>> for (RecExpr<PartialLang<L>>, Vec<T>)
-where
-    L::Error: Display,
-    L: Language + FromOp,
-{
-    type Error = PartialError<PartialLang<L>>;
+// impl<L> TryFrom<OwnedRecNode<PartialLang<L>>> for RecExpr<PartialLang<L>>
+// where
+//     L::Error: Display,
+//     L: Language + FromOp,
+// {
+//     type Error = PartialError<PartialLang<L>>;
 
-    fn try_from(root: OwnedRecNode<PartialLang<L>, Option<T>>) -> Result<Self, Self::Error> {
-        fn rec<LL, TT>(
-            mut curr: OwnedRecNode<PartialLang<LL>, Option<TT>>,
-            stack: &mut Vec<PartialLang<LL>>,
-            probs_stack: &mut Vec<TT>,
-        ) -> Result<Id, PartialError<PartialLang<LL>>>
-        where
-            LL::Error: Display,
-            LL: Language + FromOp,
-        {
-            let c = curr
-                .children
-                .into_iter()
-                .map(|c| rec(c, stack, probs_stack));
-            for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
-                *dummy_id = c_id?;
-            }
-            let id = Id::from(stack.len());
-            let additional_data = curr
-                .additional_data
-                .ok_or_else(|| PartialError::NoProbability(format!("{:?}", &curr.node)))?;
-            stack.push(curr.node);
-            probs_stack.push(additional_data);
-            Ok(id)
-        }
+//     fn try_from(root: OwnedRecNode<PartialLang<L>>) -> Result<Self, Self::Error> {
+//         fn rec<LL, TT>(
+//             mut curr: OwnedRecNode<PartialLang<LL>, Option<TT>>,
+//             stack: &mut Vec<PartialLang<LL>>,
+//             probs_stack: &mut Vec<TT>,
+//         ) -> Result<Id, PartialError<PartialLang<LL>>>
+//         where
+//             LL::Error: Display,
+//             LL: Language + FromOp,
+//         {
+//             let c = curr
+//                 .children
+//                 .into_iter()
+//                 .map(|c| rec(c, stack, probs_stack));
+//             for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
+//                 *dummy_id = c_id?;
+//             }
+//             let id = Id::from(stack.len());
+//             let additional_data = curr
+//                 .additional_data
+//                 .ok_or_else(|| PartialError::NoProbability(format!("{:?}", &curr.node)))?;
+//             stack.push(curr.node);
+//             probs_stack.push(additional_data);
+//             Ok(id)
+//         }
 
-        let mut stack = Vec::new();
-        let mut probs_stack = Vec::new();
-        let _ = rec(root, &mut stack, &mut probs_stack)?;
-        Ok((RecExpr::from(stack), probs_stack))
-    }
-}
+//         let mut stack = Vec::new();
+//         let mut probs_stack = Vec::new();
+//         let _ = rec(root, &mut stack, &mut probs_stack)?;
+//         Ok((RecExpr::from(stack), probs_stack))
+//     }
+// }
 
 /// Tries to parse a list of tokens into a list of nodes in the language
 ///
@@ -130,10 +134,10 @@ where
 pub fn partial_parse<L, S>(
     tokens: &[S],
     probs: Option<&[f64]>,
-) -> Result<(OwnedRecNode<PartialLang<L>, Option<f64>>, usize), PartialError<L>>
+) -> Result<(OwnedRecNode<PartialLang<L>>, usize), PartialError<L>>
 where
     S: AsRef<str> + Debug,
-    L: FromOp + MetaInfo,
+    L: FromOp + LangExtras,
     L::Error: Display,
 {
     // If this is empty, return the empty RecExpr
@@ -142,7 +146,11 @@ where
     }
 
     let mut ast = OwnedRecNode::new_empty();
-    for (index, token) in tokens.iter().enumerate() {
+    let v = match probs {
+        Some(v) => v.iter().map(|p| Some(*p)).collect(),
+        None => vec![None; tokens.len()],
+    };
+    for (index, (token, prob)) in tokens.iter().zip(v).enumerate() {
         let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
         let (node, arity) = loop {
             if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
@@ -153,9 +161,11 @@ where
 
         if let Some(position) = ast.find_next_open() {
             *position = OwnedRecNode::new(
-                PartialLang::Finished(node),
+                PartialLang::Finished {
+                    inner: node,
+                    prob: prob.map(|p| OrderedFloat::from(p)),
+                },
                 vec![OwnedRecNode::new_empty(); arity],
-                probs.map(|v| v[index]),
             );
         } else {
             return Ok((ast.into(), index));
@@ -173,7 +183,7 @@ where
 pub fn count_expected_tokens<L, T>(filtered_tokens: &[T]) -> Result<usize, PartialError<L>>
 where
     T: AsRef<str> + Debug,
-    L: FromOp + MetaInfo,
+    L: FromOp + LangExtras,
     L::Error: Display,
 {
     filtered_tokens.iter().try_fold(1, |acc, token| {
@@ -202,7 +212,7 @@ where
     higher
         .into_iter()
         .map(|partial_node| match partial_node {
-            PartialLang::Finished(node) => Ok(node),
+            PartialLang::Finished { inner, prob: _ } => Ok(inner),
             PartialLang::Pad => Err(PartialError::NoLowering(partial_node.to_string())),
         })
         .collect::<Result<Vec<_>, _>>()
@@ -215,7 +225,7 @@ mod tests {
     use crate::python::data::TreeData;
     use crate::sketch::SketchLang;
     use crate::trs::rise::RiseLang;
-    use crate::trs::{MetaInfo, halide::HalideLang};
+    use crate::trs::{LangExtras, halide::HalideLang};
 
     #[test]
     fn parse_and_print() {
@@ -245,13 +255,31 @@ mod tests {
         assert_eq!(
             partial_rec_expr.as_ref().to_vec(),
             vec![
-                PartialLang::Finished(HalideLang::Symbol("v1".into())),
-                PartialLang::Finished(HalideLang::Number(7)),
-                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
-                PartialLang::Finished(HalideLang::Number(2)),
+                PartialLang::Finished {
+                    inner: HalideLang::Symbol("v1".into()),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Number(7),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Sub([0.into(), 1.into()]),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Number(2),
+                    prob: None
+                },
                 PartialLang::Pad,
-                PartialLang::Finished(HalideLang::Add([3.into(), 4.into()])),
-                PartialLang::Finished(HalideLang::Mul([2.into(), 5.into()]))
+                PartialLang::Finished {
+                    inner: HalideLang::Add([3.into(), 4.into()]),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Mul([2.into(), 5.into()]),
+                    prob: None
+                }
             ]
         );
         assert_eq!(&partial_rec_expr.to_string(), "(* (- v1 7) (+ 2 <pad>))");
@@ -267,15 +295,36 @@ mod tests {
         assert_eq!(
             partial_rec_expr.as_ref().to_vec(),
             vec![
-                PartialLang::Finished(HalideLang::Symbol("v1".into())),
-                PartialLang::Finished(HalideLang::Number(2)),
-                PartialLang::Finished(HalideLang::Sub([0.into(), 1.into()])),
+                PartialLang::Finished {
+                    inner: HalideLang::Symbol("v1".into()),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Number(2),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Sub([0.into(), 1.into()]),
+                    prob: None
+                },
                 PartialLang::Pad,
                 PartialLang::Pad,
-                PartialLang::Finished(HalideLang::Sub([3.into(), 4.into()])),
-                PartialLang::Finished(HalideLang::Symbol("v2".into())),
-                PartialLang::Finished(HalideLang::Add([5.into(), 6.into()])),
-                PartialLang::Finished(HalideLang::Mul([2.into(), 7.into()]))
+                PartialLang::Finished {
+                    inner: HalideLang::Sub([3.into(), 4.into()]),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Symbol("v2".into()),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Add([5.into(), 6.into()]),
+                    prob: None
+                },
+                PartialLang::Finished {
+                    inner: HalideLang::Mul([2.into(), 7.into()]),
+                    prob: None
+                },
             ]
         );
         assert_eq!(
@@ -351,7 +400,10 @@ mod tests {
         let _treedata: TreeData = (&partial_rec_expr).into();
         assert_eq!(
             partial_rec_expr.as_ref().last().unwrap(),
-            &PartialLang::Finished(RiseLang::Lambda([4.into(), 11.into()])),
+            &PartialLang::Finished {
+                inner: RiseLang::Lambda([4.into(), 11.into()]),
+                prob: None
+            },
         );
         assert_eq!(used_tokens, 13);
         assert_eq!(
@@ -372,7 +424,10 @@ mod tests {
             vec![
                 PartialLang::Pad,
                 PartialLang::Pad,
-                PartialLang::Finished(RiseLang::Lambda([0.into(), 1.into()])),
+                PartialLang::Finished {
+                    inner: RiseLang::Lambda([0.into(), 1.into()]),
+                    prob: None
+                },
             ]
         );
     }

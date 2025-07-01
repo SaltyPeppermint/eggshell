@@ -27,7 +27,7 @@ pub trait TermRewriteSystem {
         + FromOp
         + Send
         + Sync
-        + MetaInfo
+        + LangExtras
         + 'static;
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Send + Sync>
         + Clone
@@ -80,11 +80,15 @@ pub enum SymbolType {
     MetaSymbol,
 }
 
-pub trait MetaInfo: Display + Language + EnumCount {
+pub trait LangExtras: Display + Language + EnumCount {
     fn symbol_info(&self) -> SymbolInfo;
 
     #[must_use]
     fn operators() -> Vec<&'static str>;
+
+    fn pretty_string(&self) -> String {
+        self.to_string()
+    }
 
     const NUM_SYMBOLS: usize = Self::COUNT;
     const MAX_ARITY: usize;

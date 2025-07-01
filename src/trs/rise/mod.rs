@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
 
 // Big thanks to @Bastacyclop for implementing this all
 // https://github.com/Bastacyclop/egg-rise/blob/main/src/main.rs
@@ -55,7 +55,7 @@ define_language! {
     }
 }
 
-impl MetaInfo for RiseLang {
+impl LangExtras for RiseLang {
     fn symbol_info(&self) -> SymbolInfo {
         let id = RiseLangDiscriminants::iter()
             .position(|x| x == self.into())

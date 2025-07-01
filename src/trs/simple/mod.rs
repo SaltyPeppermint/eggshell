@@ -2,7 +2,7 @@ use egg::{Id, Symbol, define_language, rewrite};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -19,7 +19,7 @@ define_language! {
     }
 }
 
-impl MetaInfo for SimpleLang {
+impl LangExtras for SimpleLang {
     fn symbol_info(&self) -> SymbolInfo {
         let id = SimpleLangDiscriminants::iter()
             .position(|x| x == self.into())

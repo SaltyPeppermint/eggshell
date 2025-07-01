@@ -9,7 +9,7 @@ use error::SketchError;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use crate::trs::{MetaInfo, SymbolInfo, SymbolType};
+use crate::trs::{LangExtras, SymbolInfo, SymbolType};
 
 pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
 
@@ -86,7 +86,7 @@ impl<L: Language> Language for SketchLang<L> {
     }
 }
 
-impl<L: Language + MetaInfo> MetaInfo for SketchLang<L> {
+impl<L: Language + LangExtras> LangExtras for SketchLang<L> {
     fn symbol_info(&self) -> SymbolInfo {
         if let SketchLang::Node(l) = self {
             l.symbol_info()

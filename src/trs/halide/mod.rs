@@ -5,7 +5,7 @@ use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{MetaInfo, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
+use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -39,7 +39,7 @@ define_language! {
     }
 }
 
-impl MetaInfo for HalideLang {
+impl LangExtras for HalideLang {
     fn symbol_info(&self) -> SymbolInfo {
         let id = HalideLangDiscriminants::iter()
             .position(|x| x == self.into())
