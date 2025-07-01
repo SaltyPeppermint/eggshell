@@ -131,12 +131,11 @@ mod tests {
                 prob: Some(0.9.into()),
             },
         ]);
-        // let probs = vec![0.2, 0.04, 0.6, 0.9, 0.3, 0.1, 0.3, 0.01, 0.9];
         let dot = to_dot(&expr, "partial_lang_test_probs", false);
 
-        let svg = crate::viz::dot_to_svg(&dot);
-        let path = std::env::current_dir().unwrap().join("test1.svg");
-        std::fs::write(path, svg).unwrap();
+        // let svg = crate::viz::dot_to_svg(&dot);
+        // let path = std::env::current_dir().unwrap().join("test1.svg");
+        // std::fs::write(path, svg).unwrap();
 
         assert_eq!(
             &dot,

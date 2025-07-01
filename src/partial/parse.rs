@@ -1,167 +1,140 @@
-mod error;
-mod parse;
+use std::fmt::{Debug, Display};
 
-use std::collections::VecDeque;
-use std::fmt::{Debug, Display, Formatter};
-use std::mem::Discriminant;
-
-use egg::{Id, Language, RecExpr};
+use egg::{FromOp, Id, RecExpr};
 use ordered_float::OrderedFloat;
-use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
+
+use super::PartialLang;
+use super::error::PartialError;
 
 use crate::node::OwnedRecNode;
-use crate::trs::{LangExtras, SymbolInfo, SymbolType};
+use crate::trs::LangExtras;
 
-pub use parse::{count_expected_tokens, lower_meta_level, partial_parse};
+impl<L> egg::FromOp for PartialLang<L>
+where
+    L::Error: Display,
+    L: egg::FromOp,
+{
+    type Error = PartialError<L>;
 
-/// Simple alias
-pub type PartialRecExpr<L> = RecExpr<PartialLang<L>>;
+    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
+        match op {
+            "[pad]" | "[PAD]" | "[Pad]" | "<pad>" | "<PAD>" | "<Pad>" => {
+                if children.is_empty() {
+                    Ok(Self::Pad)
+                } else {
+                    Err(PartialError::BadChildren(egg::FromOpError::new(
+                        op, children,
+                    )))
+                }
+            }
 
-#[derive(
-    Debug,
-    PartialEq,
-    Clone,
-    Hash,
-    Ord,
-    Eq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-    EnumDiscriminants,
-    EnumCount,
-)]
-#[strum_discriminants(derive(EnumIter))]
-pub enum PartialLang<L: Language> {
-    /// Finshed parts represented by [`SketchNode`]
-    Pad,
-    Finished {
-        inner: L,
-        prob: Option<OrderedFloat<f64>>,
-    },
-}
-
-impl<L: Language> Language for PartialLang<L> {
-    type Discriminant = (Discriminant<Self>, Option<<L as Language>::Discriminant>);
-
-    fn discriminant(&self) -> Self::Discriminant {
-        let discr = std::mem::discriminant(self);
-        match self {
-            PartialLang::Finished { inner, .. } => (discr, Some(inner.discriminant())),
-            Self::Pad => (discr, None),
-        }
-    }
-
-    fn matches(&self, other: &Self) -> bool {
-        self.discriminant() == other.discriminant()
-    }
-
-    fn children(&self) -> &[Id] {
-        match self {
-            PartialLang::Finished { inner, .. } => inner.children(),
-            Self::Pad => &[],
-        }
-    }
-
-    fn children_mut(&mut self) -> &mut [Id] {
-        match self {
-            PartialLang::Finished { inner, .. } => inner.children_mut(),
-            Self::Pad => &mut [],
+            _ => L::from_op(op, children)
+                .map(|l| Self::Finished {
+                    inner: l,
+                    prob: None,
+                })
+                .map_err(PartialError::BadOp),
         }
     }
 }
 
-impl<L: Language + LangExtras> LangExtras for PartialLang<L> {
-    fn symbol_info(&self) -> SymbolInfo {
-        if let PartialLang::Finished { inner, .. } = self {
-            inner.symbol_info()
+/// Tries to parse a list of tokens into a list of nodes in the language
+///
+/// # Errors
+///
+/// This function will return an error if it cannot be parsed as a partial term
+pub fn partial_parse<L, S>(
+    tokens: &[S],
+    probs: Option<&[f64]>,
+) -> Result<(OwnedRecNode<PartialLang<L>>, usize), PartialError<L>>
+where
+    S: AsRef<str> + Debug,
+    L: FromOp + LangExtras,
+    L::Error: Display,
+{
+    // If this is empty, return the empty RecExpr
+    if tokens.is_empty() {
+        return Err(PartialError::NoTokens);
+    }
+
+    let mut ast = OwnedRecNode::new_empty();
+    let v = match probs {
+        Some(v) => v.iter().map(|p| Some(*p)).collect(),
+        None => vec![None; tokens.len()],
+    };
+    for (index, (token, prob)) in tokens.iter().zip(v).enumerate() {
+        let mut children_ids = vec![Id::from(0); L::MAX_ARITY];
+        let (node, arity) = loop {
+            if let Ok(node) = L::from_op(token.as_ref(), children_ids.clone()) {
+                break (node, children_ids.len());
+            }
+            children_ids.pop();
+        };
+
+        if let Some(position) = ast.find_next_open() {
+            *position = OwnedRecNode::new(
+                PartialLang::Finished {
+                    inner: node,
+                    prob: prob.map(|p| OrderedFloat::from(p)),
+                },
+                vec![OwnedRecNode::new_empty(); arity],
+            );
         } else {
-            let position = PartialLangDiscriminants::iter()
-                .position(|x| x == self.into())
-                .unwrap();
-            SymbolInfo::new(position + L::NUM_SYMBOLS, SymbolType::MetaSymbol)
+            return Ok((ast.into(), index));
         }
     }
 
-    fn operators() -> Vec<&'static str> {
-        let mut s = vec!["<pad>"];
-        s.extend(L::operators());
-        s
-    }
-
-    fn pretty_string(&self) -> String {
-        match self {
-            PartialLang::Finished {
-                inner,
-                prob: Some(p),
-            } => format!("{inner}\n{p}"),
-            PartialLang::Finished { prob: None, .. } | PartialLang::Pad => self.to_string(),
-        }
-    }
-
-    const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
-
-    const MAX_ARITY: usize = L::MAX_ARITY;
+    Ok((ast.into(), tokens.len()))
 }
 
-impl<L: Language + Display> Display for PartialLang<L> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PartialLang::Finished {
-                inner,
-                prob: Some(p),
-            } => write!(f, "{inner}: {p}"),
-            PartialLang::Finished { inner, prob: None } => write!(f, "{inner}"),
-            Self::Pad => write!(f, "<pad>"),
-        }
-    }
+/// Count how many nodes are expected to be there, including to be generated nodes atm
+///
+/// # Errors
+///
+/// This function will return an error if it cannot parse any tokens
+pub fn count_expected_tokens<L, T>(filtered_tokens: &[T]) -> Result<usize, PartialError<L>>
+where
+    T: AsRef<str> + Debug,
+    L: FromOp + LangExtras,
+    L::Error: Display,
+{
+    filtered_tokens.iter().try_fold(1, |acc, token| {
+        (0..=L::MAX_ARITY)
+            // Need to start with the biggest possible arity
+            .rev()
+            .find_map(|i| L::from_op(token.as_ref(), vec![Id::from(0); i]).ok())
+            .map(|l| l.children().len())
+            // Get the first find and add it to the count
+            .map(|n_children| acc + n_children)
+            // Otherwise error out
+            .ok_or_else(|| PartialError::MaxArity(token.as_ref().to_owned(), L::MAX_ARITY))
+    })
 }
 
-impl<L: Language> OwnedRecNode<PartialLang<L>> {
-    fn new_empty() -> Self {
-        OwnedRecNode::new(PartialLang::Pad, Vec::new())
-    }
-
-    fn find_next_open(&mut self) -> Option<&mut Self> {
-        let mut queue = VecDeque::new();
-        queue.push_back(self);
-        while let Some(x) = queue.pop_front() {
-            if matches!(x.node, PartialLang::Pad) {
-                return Some(x);
-            }
-            for c in &mut x.children {
-                queue.push_back(c);
-            }
-        }
-        None
-    }
-}
-
-impl<L: Language> From<OwnedRecNode<PartialLang<L>>> for RecExpr<PartialLang<L>> {
-    fn from(root: OwnedRecNode<PartialLang<L>>) -> Self {
-        fn rec<LL: Language>(
-            mut curr: OwnedRecNode<PartialLang<LL>>,
-            vec: &mut Vec<PartialLang<LL>>,
-        ) -> Id {
-            let c = curr.children.into_iter().map(|c| rec(c, vec));
-            for (dummy_id, c_id) in curr.node.children_mut().iter_mut().zip(c) {
-                *dummy_id = c_id;
-            }
-            let id = Id::from(vec.len());
-            vec.push(curr.node);
-            id
-        }
-
-        let mut stack = Vec::new();
-        rec(root, &mut stack);
-        RecExpr::from(stack)
-    }
+/// Lower the meta level of this partial lang to the underlying lang
+///
+/// # Errors
+///
+/// This function will return an error if it cant be lowered because meta lang nodes are still contained
+pub fn lower_meta_level<L>(higher: RecExpr<PartialLang<L>>) -> Result<RecExpr<L>, PartialError<L>>
+where
+    L: FromOp + Display,
+    L::Error: Display,
+{
+    higher
+        .into_iter()
+        .map(|partial_node| match partial_node {
+            PartialLang::Finished { inner, .. } => Ok(inner),
+            PartialLang::Pad => Err(PartialError::NoLowering(partial_node.to_string())),
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(|v| v.into())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::partial::error::PartialError;
+    use crate::partial::PartialRecExpr;
     use crate::python::data::TreeData;
     use crate::sketch::SketchLang;
     use crate::trs::rise::RiseLang;
@@ -190,7 +163,7 @@ mod tests {
     #[test]
     fn partial_parse_1_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "7", "2"];
-        let (partial_node, _) = parse::partial_parse(tokens.as_slice(), None).unwrap();
+        let (partial_node, _) = partial_parse(tokens.as_slice(), None).unwrap();
         let partial_rec_expr: RecExpr<_> = partial_node.into();
         assert_eq!(
             partial_rec_expr.as_ref().to_vec(),
@@ -229,7 +202,7 @@ mod tests {
     fn partial_parse_2_placeholder() {
         let tokens = vec!["*", "-", "+", "v1", "2", "-", "v2"];
 
-        let (partial_node, _) = parse::partial_parse(tokens.as_slice(), None).unwrap();
+        let (partial_node, _) = partial_parse(tokens.as_slice(), None).unwrap();
         let partial_rec_expr: RecExpr<_> = partial_node.into();
 
         assert_eq!(
@@ -277,7 +250,7 @@ mod tests {
     fn empty_tokens() {
         let tokens = Vec::<&str>::new();
         let partial_error: PartialError<HalideLang> =
-            parse::partial_parse(tokens.as_slice(), None).unwrap_err();
+            partial_parse(tokens.as_slice(), None).unwrap_err();
         assert!(matches!(partial_error, PartialError::NoTokens))
     }
 
@@ -334,7 +307,7 @@ mod tests {
             "[variable]",
             "[variable]",
         ];
-        let (partial_node, used_tokens) = parse::partial_parse(tokens.as_slice(), None).unwrap();
+        let (partial_node, used_tokens) = partial_parse(tokens.as_slice(), None).unwrap();
         let partial_rec_expr: RecExpr<_> = partial_node.into();
 
         let _treedata: TreeData = (&partial_rec_expr).into();
@@ -355,7 +328,7 @@ mod tests {
     #[test]
     fn lam_overflow() {
         let tokens = vec!["lam"];
-        let (partial_node, _) = parse::partial_parse(tokens.as_slice(), None).unwrap();
+        let (partial_node, _) = partial_parse(tokens.as_slice(), None).unwrap();
         let partial_rec_expr: RecExpr<_> = partial_node.into();
 
         let _treedata: TreeData = (&partial_rec_expr).into();
@@ -377,8 +350,7 @@ mod tests {
         let control: RecExpr<PartialLang<HalideLang>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
         let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
-        let (partial_node, _) =
-            parse::partial_parse::<HalideLang, _>(tokens.as_slice(), None).unwrap();
+        let (partial_node, _) = partial_parse::<HalideLang, _>(tokens.as_slice(), None).unwrap();
         let partial_rec_expr: RecExpr<_> = partial_node.into();
 
         assert_eq!(control.to_string(), partial_rec_expr.to_string());
