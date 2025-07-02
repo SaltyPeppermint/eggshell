@@ -1,15 +1,15 @@
 use std::fmt::{Debug, Display};
 
 use egg::{FromOp, Id, RecExpr};
-use ordered_float::OrderedFloat;
 
 use super::PartialLang;
 use super::error::PartialError;
 
+use crate::meta_lang::ProbabilisticLang;
 use crate::node::OwnedRecNode;
 use crate::trs::LangExtras;
 
-impl<L> egg::FromOp for PartialLang<L>
+impl<L> egg::FromOp for PartialLang<ProbabilisticLang<L>>
 where
     L::Error: Display,
     L: egg::FromOp,
@@ -29,10 +29,7 @@ where
             }
 
             _ => L::from_op(op, children)
-                .map(|l| Self::Finished {
-                    inner: l,
-                    prob: None,
-                })
+                .map(|l| Self::Finished(ProbabilisticLang::NoProb(l)))
                 .map_err(PartialError::BadOp),
         }
     }
@@ -46,7 +43,7 @@ where
 pub fn partial_parse<L, S>(
     tokens: &[S],
     probs: Option<&[f64]>,
-) -> Result<(OwnedRecNode<PartialLang<L>>, usize), PartialError<L>>
+) -> Result<(OwnedRecNode<PartialLang<ProbabilisticLang<L>>>, usize), PartialError<L>>
 where
     S: AsRef<str> + Debug,
     L: FromOp + LangExtras,
@@ -73,10 +70,7 @@ where
 
         if let Some(position) = ast.find_next_open() {
             *position = OwnedRecNode::new(
-                PartialLang::Finished {
-                    inner: node,
-                    prob: prob.map(|p| OrderedFloat::from(p)),
-                },
+                PartialLang::Finished(ProbabilisticLang::new(node, prob)),
                 vec![OwnedRecNode::new_empty(); arity],
             );
         } else {
@@ -116,7 +110,9 @@ where
 /// # Errors
 ///
 /// This function will return an error if it cant be lowered because meta lang nodes are still contained
-pub fn lower_meta_level<L>(higher: RecExpr<PartialLang<L>>) -> Result<RecExpr<L>, PartialError<L>>
+pub fn lower_meta_level<L>(
+    higher: RecExpr<PartialLang<ProbabilisticLang<L>>>,
+) -> Result<RecExpr<L>, PartialError<L>>
 where
     L: FromOp + Display,
     L::Error: Display,
@@ -124,7 +120,10 @@ where
     higher
         .into_iter()
         .map(|partial_node| match partial_node {
-            PartialLang::Finished { inner, .. } => Ok(inner),
+            PartialLang::Finished(inner) => match inner {
+                ProbabilisticLang::NoProb(l) => Ok(l),
+                ProbabilisticLang::WithProb { inner, .. } => Ok(inner),
+            },
             PartialLang::Pad => Err(PartialError::NoLowering(partial_node.to_string())),
         })
         .collect::<Result<Vec<_>, _>>()
@@ -134,16 +133,16 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::partial::PartialRecExpr;
+    use crate::meta_lang::SketchLang;
+    use crate::meta_lang::partial::PartialRecExpr;
     use crate::python::data::TreeData;
-    use crate::sketch::SketchLang;
+    use crate::trs::halide::HalideLang;
     use crate::trs::rise::RiseLang;
-    use crate::trs::{LangExtras, halide::HalideLang};
 
     #[test]
     fn parse_and_print() {
         let sketch = "(contains (max (min 1 <pad>) ?))"
-            .parse::<PartialRecExpr<SketchLang<HalideLang>>>()
+            .parse::<PartialRecExpr<ProbabilisticLang<SketchLang<HalideLang>>>>()
             .unwrap();
         assert_eq!(&sketch.to_string(), "(contains (max (min 1 <pad>) ?))");
     }
@@ -168,31 +167,22 @@ mod tests {
         assert_eq!(
             partial_rec_expr.as_ref().to_vec(),
             vec![
-                PartialLang::Finished {
-                    inner: HalideLang::Symbol("v1".into()),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Number(7),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Sub([0.into(), 1.into()]),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Number(2),
-                    prob: None
-                },
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Symbol("v1".into()))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Number(7))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Sub([
+                    0.into(),
+                    1.into()
+                ]))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Number(2))),
                 PartialLang::Pad,
-                PartialLang::Finished {
-                    inner: HalideLang::Add([3.into(), 4.into()]),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Mul([2.into(), 5.into()]),
-                    prob: None
-                }
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Add([
+                    3.into(),
+                    4.into()
+                ]))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Mul([
+                    2.into(),
+                    5.into()
+                ]))),
             ]
         );
         assert_eq!(&partial_rec_expr.to_string(), "(* (- v1 7) (+ 2 <pad>))");
@@ -208,36 +198,27 @@ mod tests {
         assert_eq!(
             partial_rec_expr.as_ref().to_vec(),
             vec![
-                PartialLang::Finished {
-                    inner: HalideLang::Symbol("v1".into()),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Number(2),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Sub([0.into(), 1.into()]),
-                    prob: None
-                },
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Symbol("v1".into()))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Number(2))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Sub([
+                    0.into(),
+                    1.into()
+                ]))),
                 PartialLang::Pad,
                 PartialLang::Pad,
-                PartialLang::Finished {
-                    inner: HalideLang::Sub([3.into(), 4.into()]),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Symbol("v2".into()),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Add([5.into(), 6.into()]),
-                    prob: None
-                },
-                PartialLang::Finished {
-                    inner: HalideLang::Mul([2.into(), 7.into()]),
-                    prob: None
-                },
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Sub([
+                    3.into(),
+                    4.into()
+                ]))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Symbol("v2".into()))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Add([
+                    5.into(),
+                    6.into()
+                ]))),
+                PartialLang::Finished(ProbabilisticLang::NoProb(HalideLang::Mul([
+                    2.into(),
+                    7.into()
+                ]))),
             ]
         );
         assert_eq!(
@@ -252,6 +233,41 @@ mod tests {
         let partial_error: PartialError<HalideLang> =
             partial_parse(tokens.as_slice(), None).unwrap_err();
         assert!(matches!(partial_error, PartialError::NoTokens))
+    }
+
+    #[test]
+    fn lam_overflow() {
+        let tokens = vec!["lam"];
+        let (partial_node, _) = partial_parse(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
+        let _treedata: TreeData = (&partial_rec_expr).into();
+        assert_eq!(
+            partial_rec_expr.as_ref().to_vec(),
+            vec![
+                PartialLang::Pad,
+                PartialLang::Pad,
+                PartialLang::Finished(ProbabilisticLang::NoProb(RiseLang::Lambda([
+                    0.into(),
+                    1.into()
+                ]))),
+            ]
+        );
+    }
+
+    #[test]
+    fn partial_parse_recexpr() {
+        let control: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
+        let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
+        let (partial_node, _) = partial_parse::<HalideLang, _>(tokens.as_slice(), None).unwrap();
+        let partial_rec_expr: RecExpr<_> = partial_node.into();
+
+        assert_eq!(control.to_string(), partial_rec_expr.to_string());
+        assert_eq!(
+            &partial_rec_expr.to_string(),
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))"
+        );
     }
 
     #[test]
@@ -313,50 +329,15 @@ mod tests {
         let _treedata: TreeData = (&partial_rec_expr).into();
         assert_eq!(
             partial_rec_expr.as_ref().last().unwrap(),
-            &PartialLang::Finished {
-                inner: RiseLang::Lambda([4.into(), 11.into()]),
-                prob: None
-            },
+            &PartialLang::Finished(ProbabilisticLang::NoProb(RiseLang::Lambda([
+                4.into(),
+                11.into()
+            ]))),
         );
         assert_eq!(used_tokens, 13);
         assert_eq!(
             &partial_rec_expr.to_string(),
             "(lam (>> (>> [variable] transpose) transpose) (lam [variable] (lam [variable] (lam [variable] [variable]))))"
-        );
-    }
-
-    #[test]
-    fn lam_overflow() {
-        let tokens = vec!["lam"];
-        let (partial_node, _) = partial_parse(tokens.as_slice(), None).unwrap();
-        let partial_rec_expr: RecExpr<_> = partial_node.into();
-
-        let _treedata: TreeData = (&partial_rec_expr).into();
-        assert_eq!(
-            partial_rec_expr.as_ref().to_vec(),
-            vec![
-                PartialLang::Pad,
-                PartialLang::Pad,
-                PartialLang::Finished {
-                    inner: RiseLang::Lambda([0.into(), 1.into()]),
-                    prob: None
-                },
-            ]
-        );
-    }
-
-    #[test]
-    fn partial_parse_recexpr() {
-        let control: RecExpr<PartialLang<HalideLang>> =
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
-        let tokens = vec!["*", "-", "+", "2", "v1", "-", "v2"];
-        let (partial_node, _) = partial_parse::<HalideLang, _>(tokens.as_slice(), None).unwrap();
-        let partial_rec_expr: RecExpr<_> = partial_node.into();
-
-        assert_eq!(control.to_string(), partial_rec_expr.to_string());
-        assert_eq!(
-            &partial_rec_expr.to_string(),
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))"
         );
     }
 }

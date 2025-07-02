@@ -8,6 +8,8 @@ use hashbrown::{HashMap, HashSet};
 use serde::Serialize;
 use thiserror::Error;
 
+pub use sampler::Sampler;
+
 use crate::eqsat::EqsatConf;
 
 #[derive(Error, Debug, PartialEq, Eq)]

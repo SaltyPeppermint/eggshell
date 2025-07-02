@@ -77,13 +77,14 @@ mod tests {
 
     use egg::RecExpr;
 
-    use crate::partial::PartialLang;
+    use crate::meta_lang::PartialLang;
+    use crate::meta_lang::ProbabilisticLang;
     use crate::trs::halide::HalideLang;
     use crate::trs::rise::RiseLang;
 
     #[test]
     fn simple_ast_dot() {
-        let expr: RecExpr<PartialLang<HalideLang>> =
+        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
         let dot = to_dot(&expr, "partial_lang_test", false);
 
@@ -99,37 +100,37 @@ mod tests {
 
     #[test]
     fn with_prob_ast_dot() {
-        let expr: RecExpr<PartialLang<HalideLang>> = RecExpr::from(vec![
-            PartialLang::Finished {
+        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> = RecExpr::from(vec![
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Symbol("v1".into()),
-                prob: Some(0.04.into()),
-            },
-            PartialLang::Finished {
+                prob: 0.04.into(),
+            }),
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Number(2),
-                prob: Some(0.2.into()),
-            },
-            PartialLang::Finished {
+                prob: 0.2.into(),
+            }),
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Sub([0.into(), 1.into()]),
-                prob: Some(0.6.into()),
-            },
+                prob: 0.6.into(),
+            }),
             PartialLang::Pad,
             PartialLang::Pad,
-            PartialLang::Finished {
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Sub([3.into(), 4.into()]),
-                prob: Some(0.6.into()),
-            },
-            PartialLang::Finished {
+                prob: 0.6.into(),
+            }),
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Symbol("v2".into()),
-                prob: Some(0.3.into()),
-            },
-            PartialLang::Finished {
+                prob: 0.3.into(),
+            }),
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Add([5.into(), 6.into()]),
-                prob: Some(0.01.into()),
-            },
-            PartialLang::Finished {
+                prob: 0.01.into(),
+            }),
+            PartialLang::Finished(ProbabilisticLang::WithProb {
                 inner: HalideLang::Mul([2.into(), 7.into()]),
-                prob: Some(0.9.into()),
-            },
+                prob: 0.9.into(),
+            }),
         ]);
         let dot = to_dot(&expr, "partial_lang_test_probs", false);
 

@@ -7,10 +7,10 @@ use egg::{EGraph, RecExpr, SymbolLang};
 use rand::SeedableRng;
 
 use eggshell::eqsat::{Eqsat, StartMaterial};
+use eggshell::meta_lang::Sketch;
+use eggshell::meta_lang::sketch;
+use eggshell::sampling::Sampler;
 use eggshell::sampling::sampler;
-use eggshell::sampling::sampler::Sampler;
-use eggshell::sketch;
-use eggshell::sketch::Sketch;
 use eggshell::trs::{Simple, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 

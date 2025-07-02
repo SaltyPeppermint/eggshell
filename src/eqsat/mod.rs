@@ -11,8 +11,8 @@ use egg::{
 use log::info;
 use serde::Serialize;
 
-use crate::sketch;
-use crate::sketch::Sketch;
+use crate::meta_lang::Sketch;
+use crate::meta_lang::sketch;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 

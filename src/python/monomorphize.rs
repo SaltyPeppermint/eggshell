@@ -9,7 +9,8 @@ macro_rules! monomorphize {
 
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
-        use $crate::partial;
+        use $crate::meta_lang::partial;
+        use $crate::meta_lang::{PartialLang, ProbabilisticLang};
         use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
         use $crate::trs::{LangExtras, TermRewriteSystem};
@@ -84,7 +85,7 @@ macro_rules! monomorphize {
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct PartialRecExpr {
-            expr: EggRecExpr<partial::PartialLang<L>>,
+            expr: EggRecExpr<PartialLang<ProbabilisticLang<L>>>,
             #[pyo3(get)]
             used_tokens: usize,
         }
@@ -150,7 +151,7 @@ macro_rules! monomorphize {
 
             #[expect(clippy::missing_errors_doc)]
             pub fn lower_meta_level(&self) -> PyResult<RecExpr> {
-                let r = partial::lower_meta_level::<L>(self.expr.clone())?;
+                let r = partial::lower_meta_level(self.expr.clone())?;
                 Ok(RecExpr(r))
             }
         }
