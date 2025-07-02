@@ -5,6 +5,7 @@ use criterion::{criterion_group, criterion_main};
 use egg::AstSize;
 use egg::{EGraph, RecExpr, SymbolLang};
 use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 
 use eggshell::eqsat::{Eqsat, StartMaterial};
 use eggshell::meta_lang::Sketch;
@@ -12,7 +13,6 @@ use eggshell::meta_lang::sketch;
 use eggshell::rewrite_system::{RewriteSystem, Simple};
 use eggshell::sampling::Sampler;
 use eggshell::sampling::sampler;
-use rand_chacha::ChaCha12Rng;
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
