@@ -2,7 +2,7 @@ use egg::{Id, Symbol, define_language, rewrite};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType};
 
 pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
@@ -51,7 +51,7 @@ fn make_rules() -> Vec<Rewrite> {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Simple;
 
-impl TermRewriteSystem for Simple {
+impl RewriteSystem for Simple {
     type Language = SimpleLang;
     type Analysis = ();
 

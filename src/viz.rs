@@ -4,7 +4,7 @@ use egg::{Language, RecExpr};
 
 use graphviz_rust::printer::{DotPrinter, PrinterContext};
 
-use crate::trs::LangExtras;
+use crate::rewrite_system::LangExtras;
 
 pub fn to_dot<L: Language + LangExtras>(
     rec_expr: &RecExpr<L>,
@@ -79,8 +79,8 @@ mod tests {
 
     use crate::meta_lang::PartialLang;
     use crate::meta_lang::ProbabilisticLang;
-    use crate::trs::halide::HalideLang;
-    use crate::trs::rise::RiseLang;
+    use crate::rewrite_system::halide::HalideLang;
+    use crate::rewrite_system::rise::RiseLang;
 
     #[test]
     fn simple_ast_dot() {

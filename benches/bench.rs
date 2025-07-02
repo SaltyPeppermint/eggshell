@@ -9,9 +9,9 @@ use rand::SeedableRng;
 use eggshell::eqsat::{Eqsat, StartMaterial};
 use eggshell::meta_lang::Sketch;
 use eggshell::meta_lang::sketch;
+use eggshell::rewrite_system::{RewriteSystem, Simple};
 use eggshell::sampling::Sampler;
 use eggshell::sampling::sampler;
-use eggshell::trs::{Simple, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 
 fn extraction(c: &mut Criterion) {

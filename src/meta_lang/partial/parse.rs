@@ -7,7 +7,7 @@ use super::error::PartialError;
 
 use crate::meta_lang::ProbabilisticLang;
 use crate::node::OwnedRecNode;
-use crate::trs::LangExtras;
+use crate::rewrite_system::LangExtras;
 
 impl<L> egg::FromOp for PartialLang<ProbabilisticLang<L>>
 where
@@ -136,8 +136,8 @@ mod tests {
     use crate::meta_lang::SketchLang;
     use crate::meta_lang::partial::PartialRecExpr;
     use crate::python::data::TreeData;
-    use crate::trs::halide::HalideLang;
-    use crate::trs::rise::RiseLang;
+    use crate::rewrite_system::halide::HalideLang;
+    use crate::rewrite_system::rise::RiseLang;
 
     #[test]
     fn parse_and_print() {

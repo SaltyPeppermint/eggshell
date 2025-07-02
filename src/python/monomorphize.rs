@@ -13,10 +13,9 @@ macro_rules! monomorphize {
         use $crate::meta_lang::{PartialLang, ProbabilisticLang};
         use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
-        use $crate::trs::{LangExtras, TermRewriteSystem};
+        use $crate::rewrite_system::{LangExtras, RewriteSystem};
 
-        type L = <$type as TermRewriteSystem>::Language;
-        // type N = <$type as TermRewriteSystem>::Analysis;
+        type L = <$type as RewriteSystem>::Language;
 
         #[gen_stub_pyclass]
         #[pyclass(frozen, module = $module_name)]
@@ -191,7 +190,7 @@ macro_rules! monomorphize {
                 .build();
             let start_expr = &[&start.0];
             let start_material = StartMaterial::RecExprs(start_expr);
-            let rules = <$type as TermRewriteSystem>::full_rules();
+            let rules = <$type as RewriteSystem>::full_rules();
             let eqsat_result = Eqsat::new(start_material, &rules)
                 .with_conf(conf)
                 .with_goals(vec![goal.0.clone()])

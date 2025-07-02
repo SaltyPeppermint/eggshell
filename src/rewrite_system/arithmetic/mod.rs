@@ -5,7 +5,7 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, SymbolInfo, SymbolType, RewriteSystem};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -121,7 +121,7 @@ impl Analysis<Math> for ConstantFold {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Arithmetic;
 
-impl TermRewriteSystem for Arithmetic {
+impl RewriteSystem for Arithmetic {
     type Language = Math;
     type Analysis = ConstantFold;
 

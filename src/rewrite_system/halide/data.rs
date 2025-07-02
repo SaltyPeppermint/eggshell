@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::trs::TrsError;
+use crate::rewrite_system::TrsError;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub enum HalideData {

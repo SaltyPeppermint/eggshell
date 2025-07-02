@@ -3,7 +3,7 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use serde::Serialize;
 
-use crate::trs::SymbolInfo;
+use crate::rewrite_system::SymbolInfo;
 
 #[gen_stub_pyclass]
 #[pyclass(frozen, module = "eggshell")]
@@ -67,11 +67,10 @@ impl Node {
     #[getter]
     pub fn name(&self) -> String {
         match self.symbol_info.symbol_type() {
-            crate::trs::SymbolType::Constant(_) => "[constant]".to_owned(),
-            crate::trs::SymbolType::Variable(_) => "[variable]".to_owned(),
-            crate::trs::SymbolType::MetaSymbol | crate::trs::SymbolType::Operator => {
-                self.raw_name.clone()
-            }
+            crate::rewrite_system::SymbolType::Constant(_) => "[constant]".to_owned(),
+            crate::rewrite_system::SymbolType::Variable(_) => "[variable]".to_owned(),
+            crate::rewrite_system::SymbolType::MetaSymbol
+            | crate::rewrite_system::SymbolType::Operator => self.raw_name.clone(),
         }
     }
 

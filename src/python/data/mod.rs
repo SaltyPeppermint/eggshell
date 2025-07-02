@@ -12,7 +12,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 use thiserror::Error;
 
-use crate::trs::LangExtras;
+use crate::rewrite_system::LangExtras;
 
 #[derive(Debug, Error)]
 pub enum TreeDataError {
@@ -376,7 +376,7 @@ mod tests {
     use egg::RecExpr;
 
     use super::*;
-    use crate::trs::{SymbolInfo, SymbolType, halide::HalideLang};
+    use crate::rewrite_system::{SymbolInfo, SymbolType, halide::HalideLang};
 
     #[test]
     fn dfs_order() {

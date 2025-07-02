@@ -1,6 +1,6 @@
 use egg::rewrite as rw;
 
-use crate::trs::halide::Rewrite;
+use crate::rewrite_system::halide::Rewrite;
 
 pub(crate) fn mul() -> Vec<Rewrite> {
     vec![

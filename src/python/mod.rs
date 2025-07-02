@@ -5,19 +5,19 @@ mod monomorphize;
 use pyo3::prelude::*;
 
 pub mod simple {
-    super::monomorphize::monomorphize!(crate::trs::Simple, "eggshell.simple");
+    super::monomorphize::monomorphize!(crate::rewrite_system::Simple, "eggshell.simple");
 }
 
 pub mod arithmetic {
-    super::monomorphize::monomorphize!(crate::trs::Arithmetic, "eggshell.arithmetic");
+    super::monomorphize::monomorphize!(crate::rewrite_system::Arithmetic, "eggshell.arithmetic");
 }
 
 pub mod halide {
-    super::monomorphize::monomorphize!(crate::trs::Halide, "eggshell.halide");
+    super::monomorphize::monomorphize!(crate::rewrite_system::Halide, "eggshell.halide");
 }
 
 pub mod rise {
-    super::monomorphize::monomorphize!(crate::trs::Rise, "eggshell.rise");
+    super::monomorphize::monomorphize!(crate::rewrite_system::Rise, "eggshell.rise");
 }
 
 /// A Python module implemented in Rust.

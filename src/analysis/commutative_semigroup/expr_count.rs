@@ -169,7 +169,7 @@ mod tests {
     use num::BigUint;
 
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    use crate::trs::{Halide, TermRewriteSystem};
+    use crate::rewrite_system::{Halide, RewriteSystem};
 
     use super::*;
 

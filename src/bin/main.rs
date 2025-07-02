@@ -21,10 +21,10 @@ use eggshell::cli::{Cli, SampleStrategy, TrsName};
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::structs::Entry;
+use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
 use eggshell::sampling::sampler::{
     CostWeighted, CountWeightedGreedy, CountWeightedUniformly, Sampler,
 };
-use eggshell::trs::{Halide, Rise, TermRewriteSystem};
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -87,7 +87,7 @@ fn main() {
     info!("EXPR {} DONE!", cli.expr_id());
 }
 
-fn run<R: TermRewriteSystem>(
+fn run<R: RewriteSystem>(
     exprs: Vec<Entry>,
     eqsat_conf: EqsatConf,
     experiment_folder: PathBuf,

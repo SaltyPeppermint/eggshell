@@ -1,7 +1,7 @@
 use egg::{Id, Subst, rewrite as rw};
 
 use super::{EGraph, Math};
-use crate::trs::arithmetic::Rewrite;
+use crate::rewrite_system::arithmetic::Rewrite;
 
 #[rustfmt::skip]
 pub fn rules() -> Vec<Rewrite> { vec![

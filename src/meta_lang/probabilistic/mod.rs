@@ -8,7 +8,7 @@ use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants};
 
-use crate::trs::{LangExtras, SymbolInfo};
+use crate::rewrite_system::{LangExtras, SymbolInfo};
 
 pub use comparison::FirstErrorDistance;
 

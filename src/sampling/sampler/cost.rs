@@ -115,7 +115,7 @@ mod tests {
 
     use super::*;
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
-    use crate::trs::{Halide, Simple, TermRewriteSystem};
+    use crate::rewrite_system::{Halide, RewriteSystem, Simple};
 
     #[test]
     fn simple_sample() {

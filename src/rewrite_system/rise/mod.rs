@@ -6,7 +6,7 @@ use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem};
+use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType};
 
 // Big thanks to @Bastacyclop for implementing this all
 // https://github.com/Bastacyclop/egg-rise/blob/main/src/main.rs
@@ -170,7 +170,7 @@ impl Rise {
     }
 }
 
-impl TermRewriteSystem for Rise {
+impl RewriteSystem for Rise {
     type Language = RiseLang;
     type Analysis = RiseAnalysis;
 

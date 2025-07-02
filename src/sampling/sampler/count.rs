@@ -371,8 +371,8 @@ mod tests {
 
     use super::*;
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::rewrite_system::{Halide, RewriteSystem, Simple};
     use crate::sampling::SampleError;
-    use crate::trs::{Halide, Simple, TermRewriteSystem};
 
     #[test]
     fn simple_sample_uniform() {

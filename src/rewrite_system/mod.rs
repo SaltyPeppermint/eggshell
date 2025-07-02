@@ -16,12 +16,12 @@ pub use halide::{Halide, HalideRuleset};
 pub use rise::Rise;
 pub use simple::Simple;
 
-/// Trait that must be implemented by all Trs consumable by the system
+/// Trait that must be implemented by all RewriteSystem consumable by the system
 /// It is really simple and breaks down to having a [`Language`] for your System,
 /// a [`Analysis`] (can be a simplie as `()`) and one or more `Rulesets` to choose from.
-/// The [`TermRewriteSystem::full_rules`] returns the vector of [`Rewrite`] of your [`Trs`], specified
+/// The [`RewriteSystem::full_rules`] returns the vector of [`Rewrite`] of your [`RewriteSystem`], specified
 /// by your ruleset class.
-pub trait TermRewriteSystem {
+pub trait RewriteSystem {
     type Language: Language<Discriminant: Send + Sync>
         + Serialize
         + FromOp

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use crate::node::OwnedRecNode;
-use crate::trs::{LangExtras, SymbolInfo, SymbolType};
+use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
 pub use parse::{count_expected_tokens, lower_meta_level, partial_parse};
 
@@ -151,8 +151,8 @@ impl<L: Language> From<OwnedRecNode<PartialLang<L>>> for RecExpr<PartialLang<L>>
 mod tests {
     use super::*;
     use crate::meta_lang::SketchLang;
-    use crate::trs::LangExtras;
-    use crate::trs::halide::HalideLang;
+    use crate::rewrite_system::LangExtras;
+    use crate::rewrite_system::halide::HalideLang;
 
     #[test]
     fn operators() {

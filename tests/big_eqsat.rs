@@ -4,8 +4,8 @@ mod tests {
 
     use eggshell::eqsat::Eqsat;
     use eggshell::eqsat::StartMaterial;
-    use eggshell::trs::Halide;
-    use eggshell::trs::TermRewriteSystem;
+    use eggshell::rewrite_system::Halide;
+    use eggshell::rewrite_system::RewriteSystem;
 
     #[test]
     fn simple_eqsat_solved_true() {
@@ -19,7 +19,7 @@ mod tests {
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(
-            <Halide as TermRewriteSystem>::Language::Bool(true),
+            <Halide as RewriteSystem>::Language::Bool(true),
             expr[0.into()]
         );
     }
@@ -35,7 +35,7 @@ mod tests {
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(
-            <Halide as TermRewriteSystem>::Language::Bool(false),
+            <Halide as RewriteSystem>::Language::Bool(false),
             expr[0.into()]
         );
     }

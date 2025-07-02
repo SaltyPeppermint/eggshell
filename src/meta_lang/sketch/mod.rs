@@ -9,7 +9,7 @@ use error::SketchError;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use crate::trs::{LangExtras, SymbolInfo, SymbolType};
+use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
 pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
 

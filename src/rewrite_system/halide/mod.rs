@@ -5,7 +5,7 @@ use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, SymbolInfo, SymbolType, TermRewriteSystem, TrsError};
+use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType, TrsError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -230,7 +230,7 @@ impl Halide {
     }
 }
 
-impl TermRewriteSystem for Halide {
+impl RewriteSystem for Halide {
     type Language = HalideLang;
     type Analysis = ConstantFold;
 
