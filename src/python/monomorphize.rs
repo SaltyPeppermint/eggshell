@@ -10,9 +10,11 @@ macro_rules! monomorphize {
         use $crate::eqsat::conf::EqsatConf;
         use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::meta_lang::partial;
+        use $crate::meta_lang::probabilistic;
+        use $crate::meta_lang::probabilistic::FirstErrorDistance;
         use $crate::meta_lang::{PartialLang, ProbabilisticLang};
-        use $crate::python::data::TreeData;
         use $crate::python::err::EggshellError;
+        use $crate::python::tree_data::TreeData;
         use $crate::rewrite_system::{LangExtras, RewriteSystem};
 
         type L = <$type as RewriteSystem>::Language;
@@ -46,16 +48,34 @@ macro_rules! monomorphize {
                 format!("{self:?}")
             }
 
-            #[pyo3(signature = (name, path, transparent=false))]
-            pub fn to_dot(&self, name: String, path: String, transparent: bool) {
-                let dot = $crate::viz::to_dot(&self.0, &name, transparent);
+            #[pyo3(signature = (name, path, marked_ids=None, transparent=false))]
+            pub fn to_dot(
+                &self,
+                name: String,
+                path: String,
+                marked_ids: Option<Vec<usize>>,
+                transparent: bool,
+            ) {
+                let dot = $crate::viz::to_dot(
+                    &self.0,
+                    &name,
+                    &(marked_ids
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|id| egg::Id::from(id))
+                        .collect()),
+                    transparent,
+                );
                 let svg = $crate::viz::dot_to_svg(&dot);
-                let path = std::env::current_dir().unwrap().join(path);
-                std::fs::write(path, svg).unwrap();
+                let path = std::env::current_dir()
+                    .unwrap()
+                    .join(path)
+                    .with_extension("svg");
+                std::fs::write(&path, &svg).unwrap();
             }
 
             #[must_use]
-            pub fn distance(&self, other: &RecExpr) -> usize {
+            pub fn tree_distance(&self, other: &RecExpr) -> usize {
                 $crate::tree_distance::distance(&self.0, &other.0)
             }
 
@@ -83,7 +103,7 @@ macro_rules! monomorphize {
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct PartialRecExpr {
+        pub struct GeneratedRecExpr {
             expr: EggRecExpr<PartialLang<ProbabilisticLang<L>>>,
             #[pyo3(get)]
             used_tokens: usize,
@@ -91,20 +111,20 @@ macro_rules! monomorphize {
 
         #[gen_stub_pymethods]
         #[pymethods]
-        impl PartialRecExpr {
+        impl GeneratedRecExpr {
             #[expect(clippy::missing_errors_doc)]
             #[new]
             #[pyo3(signature = (token_list, token_probs=None))]
             pub fn new(
                 token_list: Vec<String>,
                 token_probs: Option<Vec<f64>>,
-            ) -> PyResult<PartialRecExpr> {
+            ) -> PyResult<GeneratedRecExpr> {
                 let (partial_node, used_tokens) = partial::partial_parse::<L, _>(
                     token_list.as_slice(),
                     token_probs.as_ref().map(|v| &**v),
                 )?;
 
-                Ok(PartialRecExpr {
+                Ok(GeneratedRecExpr {
                     expr: partial_node.into(),
                     used_tokens,
                 })
@@ -126,19 +146,33 @@ macro_rules! monomorphize {
             }
 
             #[must_use]
-            pub fn distance(&self, other: &PartialRecExpr) -> usize {
+            pub fn tree_distance(&self, other: &GeneratedRecExpr) -> usize {
                 $crate::tree_distance::distance(&self.expr, &other.expr)
             }
 
-            #[pyo3(signature = (name, path, transparent=false))]
-            pub fn to_dot(&self, name: String, path: String, transparent: bool) {
-                let mut path = std::env::current_dir().unwrap().join(path);
-                let dot = $crate::viz::to_dot(&self.expr, &name, transparent);
-                path.set_extension("dot");
-                std::fs::write(&path, &dot).unwrap();
-
+            #[pyo3(signature = (name, path, marked_ids=None, transparent=false))]
+            pub fn to_dot(
+                &self,
+                name: String,
+                path: String,
+                marked_ids: Option<Vec<usize>>,
+                transparent: bool,
+            ) {
+                let dot = $crate::viz::to_dot(
+                    &self.expr,
+                    &name,
+                    &(marked_ids
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|id| egg::Id::from(id))
+                        .collect()),
+                    transparent,
+                );
                 let svg = $crate::viz::dot_to_svg(&dot);
-                path.set_extension("svg");
+                let path = std::env::current_dir()
+                    .unwrap()
+                    .join(path)
+                    .with_extension("svg");
                 std::fs::write(&path, &svg).unwrap();
             }
 
@@ -149,10 +183,22 @@ macro_rules! monomorphize {
             }
 
             #[expect(clippy::missing_errors_doc)]
-            pub fn lower_meta_level(&self) -> PyResult<RecExpr> {
-                let r = partial::lower_meta_level(self.expr.clone())?;
+            pub fn lower(&self) -> PyResult<RecExpr> {
+                let r = PartialLang::lower(&self.expr)?;
+                let r = ProbabilisticLang::lower(&r);
                 Ok(RecExpr(r))
             }
+        }
+
+        #[gen_stub_pyfunction(module = $module_name)]
+        #[pyfunction]
+        #[must_use]
+        pub fn first_miss_distance(
+            ground_truth: &RecExpr,
+            generated: &GeneratedRecExpr,
+        ) -> PyResult<FirstErrorDistance> {
+            let inner = PartialLang::lower(&generated.expr)?;
+            Ok(probabilistic::compare(&ground_truth.0, &inner))
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -223,7 +269,9 @@ macro_rules! monomorphize {
 
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<RecExpr>()?;
-            module.add_class::<PartialRecExpr>()?;
+            module.add_class::<GeneratedRecExpr>()?;
+
+            module.add_function(pyo3::wrap_pyfunction!(first_miss_distance, m)?)?;
 
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;

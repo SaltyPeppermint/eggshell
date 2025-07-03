@@ -10,7 +10,7 @@ use strum::{EnumCount, EnumDiscriminants};
 
 use crate::rewrite_system::{LangExtras, SymbolInfo};
 
-pub use comparison::FirstErrorDistance;
+pub use comparison::{FirstErrorDistance, compare};
 
 pub type ProbabilisticRecExpr<L> = RecExpr<ProbabilisticLang<L>>;
 
@@ -62,6 +62,14 @@ impl<L: Language> ProbabilisticLang<L> {
             ProbabilisticLang::NoProb(_) => None,
             ProbabilisticLang::WithProb { prob, .. } => Some((*prob).into()),
         }
+    }
+
+    pub fn lower(higher: &RecExpr<Self>) -> RecExpr<L> {
+        higher
+            .into_iter()
+            .map(|partial_node| partial_node.inner().to_owned())
+            .collect::<Vec<_>>()
+            .into()
     }
 }
 
@@ -117,5 +125,17 @@ impl<L: Language + Display> Display for ProbabilisticLang<L> {
             }
             ProbabilisticLang::NoProb(inner) => write!(f, "{inner}"),
         }
+    }
+}
+
+impl<L> egg::FromOp for ProbabilisticLang<L>
+where
+    L::Error: Display,
+    L: egg::FromOp,
+{
+    type Error = L::Error;
+
+    fn from_op(op: &str, children: Vec<Id>) -> Result<Self, Self::Error> {
+        Ok(ProbabilisticLang::NoProb(L::from_op(op, children)?))
     }
 }

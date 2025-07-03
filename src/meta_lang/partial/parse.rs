@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use egg::{FromOp, Id, RecExpr};
+use egg::{FromOp, Id};
 
 use super::PartialLang;
 use super::error::PartialError;
@@ -9,7 +9,7 @@ use crate::meta_lang::ProbabilisticLang;
 use crate::node::OwnedRecNode;
 use crate::rewrite_system::LangExtras;
 
-impl<L> egg::FromOp for PartialLang<ProbabilisticLang<L>>
+impl<L> egg::FromOp for PartialLang<L>
 where
     L::Error: Display,
     L: egg::FromOp,
@@ -29,7 +29,7 @@ where
             }
 
             _ => L::from_op(op, children)
-                .map(|l| Self::Finished(ProbabilisticLang::NoProb(l)))
+                .map(|l| Self::Finished(l))
                 .map_err(PartialError::BadOp),
         }
     }
@@ -105,37 +105,14 @@ where
     })
 }
 
-/// Lower the meta level of this partial lang to the underlying lang
-///
-/// # Errors
-///
-/// This function will return an error if it cant be lowered because meta lang nodes are still contained
-pub fn lower_meta_level<L>(
-    higher: RecExpr<PartialLang<ProbabilisticLang<L>>>,
-) -> Result<RecExpr<L>, PartialError<L>>
-where
-    L: FromOp + Display,
-    L::Error: Display,
-{
-    higher
-        .into_iter()
-        .map(|partial_node| match partial_node {
-            PartialLang::Finished(inner) => match inner {
-                ProbabilisticLang::NoProb(l) => Ok(l),
-                ProbabilisticLang::WithProb { inner, .. } => Ok(inner),
-            },
-            PartialLang::Pad => Err(PartialError::NoLowering(partial_node.to_string())),
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .map(|v| v.into())
-}
-
 #[cfg(test)]
 mod tests {
+    use egg::RecExpr;
+
     use super::*;
     use crate::meta_lang::SketchLang;
     use crate::meta_lang::partial::PartialRecExpr;
-    use crate::python::data::TreeData;
+    use crate::python::tree_data::TreeData;
     use crate::rewrite_system::halide::HalideLang;
     use crate::rewrite_system::rise::RiseLang;
 

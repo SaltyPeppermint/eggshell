@@ -5,7 +5,7 @@ import builtins
 import eggshell
 import typing
 
-class PartialRecExpr:
+class GeneratedRecExpr:
     r"""
     Wrapper type for Python
     """
@@ -20,17 +20,17 @@ class PartialRecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
-    def distance(self, other:PartialRecExpr) -> builtins.int:
+    def tree_distance(self, other:GeneratedRecExpr) -> builtins.int:
         ...
 
-    def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
+    def to_dot(self, name:builtins.str, path:builtins.str, marked_ids:typing.Optional[typing.Sequence[builtins.int]]=None, transparent:builtins.bool=False) -> None:
         ...
 
     @staticmethod
     def count_expected_tokens(token_list:typing.Sequence[builtins.str]) -> builtins.int:
         ...
 
-    def lower_meta_level(self) -> RecExpr:
+    def lower(self) -> RecExpr:
         ...
 
 
@@ -45,10 +45,10 @@ class RecExpr:
     def __repr__(self) -> builtins.str:
         ...
 
-    def to_dot(self, name:builtins.str, path:builtins.str, transparent:builtins.bool=False) -> None:
+    def to_dot(self, name:builtins.str, path:builtins.str, marked_ids:typing.Optional[typing.Sequence[builtins.int]]=None, transparent:builtins.bool=False) -> None:
         ...
 
-    def distance(self, other:RecExpr) -> builtins.int:
+    def tree_distance(self, other:RecExpr) -> builtins.int:
         ...
 
     def arity(self, position:builtins.int) -> builtins.int:
@@ -63,6 +63,9 @@ class RecExpr:
 
 
 def eqsat_check(start:RecExpr, goal:RecExpr, iter_limit:builtins.int) -> tuple[builtins.int, builtins.str, builtins.str]:
+    ...
+
+def first_miss_distance(ground_truth:RecExpr, generated:GeneratedRecExpr) -> FirstErrorDistance:
     ...
 
 def many_eqsat_check(starts:typing.Sequence[RecExpr], goal:RecExpr, iter_limit:builtins.int) -> builtins.list[tuple[builtins.int, builtins.str, builtins.str]]:

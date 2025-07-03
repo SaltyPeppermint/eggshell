@@ -1,6 +1,6 @@
-pub mod data;
 mod err;
 mod monomorphize;
+pub mod tree_data;
 
 use pyo3::prelude::*;
 
@@ -34,11 +34,12 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "EggshellException",
         m.py().get_type::<err::EggshellException>(),
     )?;
-    m.add_class::<data::Node>()?;
-    m.add_class::<data::TreeData>()?;
+    m.add_class::<tree_data::Node>()?;
+    m.add_class::<tree_data::TreeData>()?;
 
     Ok(())
 }
 
 use pyo3_stub_gen::define_stub_info_gatherer;
+
 define_stub_info_gatherer!(stub_info);

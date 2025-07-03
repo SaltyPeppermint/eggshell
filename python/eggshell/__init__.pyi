@@ -8,6 +8,21 @@ from . import halide
 from . import rise
 from . import simple
 
+class FirstErrorDistance:
+    avg_hit_confidence: typing.Optional[builtins.float]
+    avg_miss_confidence: typing.Optional[builtins.float]
+    misses: builtins.list[builtins.int]
+    hits: builtins.list[builtins.int]
+    def avg_hit_confidence(self) -> typing.Optional[builtins.float]:
+        ...
+
+    def avg_miss_confidence(self) -> typing.Optional[builtins.float]:
+        ...
+
+    def combine(self, rhs:FirstErrorDistance) -> FirstErrorDistance:
+        ...
+
+
 class Node:
     raw_name: builtins.str
     arity: builtins.int

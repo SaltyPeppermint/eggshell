@@ -5,7 +5,7 @@ use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use thiserror::Error;
 
-use super::data::TreeDataError;
+use super::tree_data::TreeDataError;
 
 #[derive(Debug, Error)]
 pub enum EggshellError<L: Display> {

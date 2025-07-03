@@ -5,14 +5,14 @@ use std::collections::VecDeque;
 use std::fmt::{Debug, Display, Formatter};
 use std::mem::Discriminant;
 
-use egg::{Id, Language, RecExpr};
+use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use crate::node::OwnedRecNode;
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
-pub use parse::{count_expected_tokens, lower_meta_level, partial_parse};
+pub use parse::{count_expected_tokens, partial_parse};
 
 /// Simple alias
 pub type PartialRecExpr<L> = RecExpr<PartialLang<L>>;
@@ -35,6 +35,23 @@ pub enum PartialLang<L: Language> {
     /// Finshed parts represented by [`SketchNode`]
     Pad,
     Finished(L),
+}
+
+impl<L> PartialLang<L>
+where
+    L: Language + LangExtras + FromOp,
+    L::Error: Display,
+{
+    pub fn lower(higher: &RecExpr<Self>) -> Result<RecExpr<L>, error::PartialError<L>> {
+        higher
+            .into_iter()
+            .map(|partial_node| match partial_node {
+                PartialLang::Finished(inner) => Ok(inner.to_owned()),
+                PartialLang::Pad => Err(error::PartialError::NoLowering(partial_node.to_string())),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(|v| v.into())
+    }
 }
 
 impl<L: Language> Language for PartialLang<L> {

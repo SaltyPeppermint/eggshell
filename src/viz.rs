@@ -3,41 +3,53 @@ use dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Ver
 use egg::{Language, RecExpr};
 
 use graphviz_rust::printer::{DotPrinter, PrinterContext};
+use hashbrown::HashSet;
 
 use crate::rewrite_system::LangExtras;
 
 pub fn to_dot<L: Language + LangExtras>(
     rec_expr: &RecExpr<L>,
     name: &str,
+    marked_ids: &HashSet<egg::Id>,
     transparent: bool,
 ) -> String {
     fn rec<LL: Language + LangExtras>(
         parent_graph_id: usize,
         id: egg::Id,
         rec_expr: &RecExpr<LL>,
-        nodes: &mut Vec<String>,
+        nodes: &mut Vec<(String, bool)>,
         edges: &mut Vec<(usize, usize)>,
+        marked_ids: &HashSet<egg::Id>,
     ) {
         let node = &rec_expr[id];
         let graph_id = nodes.len();
-        nodes.push(node.pretty_string());
+        nodes.push((node.pretty_string(), marked_ids.contains(&id)));
         edges.push((parent_graph_id, graph_id));
         for c_id in node.children() {
-            rec(graph_id, *c_id, rec_expr, nodes, edges);
+            rec(graph_id, *c_id, rec_expr, nodes, edges, marked_ids);
         }
     }
     let root = &rec_expr[rec_expr.root()];
-    let mut nodes = vec![root.pretty_string()];
+    let mut nodes = vec![(
+        root.pretty_string(),
+        marked_ids.contains(&(rec_expr.root())),
+    )];
     let mut edges = Vec::new();
     for c_id in root.children() {
-        rec(0, *c_id, rec_expr, &mut nodes, &mut edges);
+        rec(0, *c_id, rec_expr, &mut nodes, &mut edges, marked_ids);
     }
 
     let mut stmts = nodes
         .into_iter()
-        .map(|x| format!("\"{x}\""))
         .enumerate()
-        .map(|(idx, label)| node!(idx; attr!("label", label)))
+        .map(|(idx, (label, marked))| {
+            let label = format!("\"{label}\"");
+            if marked {
+                node!(idx; attr!("label", label), attr!("color", "red"))
+            } else {
+                node!(idx; attr!("label", label))
+            }
+        })
         .map(Stmt::Node)
         .chain(
             edges
@@ -47,7 +59,8 @@ pub fn to_dot<L: Language + LangExtras>(
         )
         .collect::<Vec<_>>();
 
-    let escaped_name = format!("\"{name}\"");
+    // let escaped_name = format!("\\\"{name}\\\"");
+    let escaped_name = format!("\"{}\"", name.replace("\"", "\\\""));
     stmts.extend([
         stmt!(attr!("ordering", "out")),
         stmt!(attr!("labelloc", "t")),
@@ -86,7 +99,7 @@ mod tests {
     fn simple_ast_dot() {
         let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
             "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
-        let dot = to_dot(&expr, "partial_lang_test", false);
+        let dot = to_dot(&expr, "partial_lang_test", &HashSet::new(), false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test1.svg");
@@ -95,6 +108,27 @@ mod tests {
         assert_eq!(
             &dot,
             "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\"]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
+        );
+    }
+
+    #[test]
+    fn simple_ast_dot_marked_id() {
+        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
+            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
+        let dot = to_dot(
+            &expr,
+            "partial_lang_test",
+            &HashSet::from([0.into()]),
+            false,
+        );
+
+        let svg = crate::viz::dot_to_svg(&dot);
+        let path = std::env::current_dir().unwrap().join("test1.svg");
+        std::fs::write(path, svg).unwrap();
+
+        assert_eq!(
+            &dot,
+            "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\",color=red]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
         );
     }
 
@@ -132,7 +166,7 @@ mod tests {
                 prob: 0.9.into(),
             }),
         ]);
-        let dot = to_dot(&expr, "partial_lang_test_probs", false);
+        let dot = to_dot(&expr, "partial_lang_test_probs", &HashSet::new(), false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test1.svg");
@@ -148,7 +182,7 @@ mod tests {
     fn longer_ast_dot() {
         let s_expr = "(lam f1 (lam f2 (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app map (var f4)) (app (lam x1 (app (app map (var f3)) (app (lam x0 (app (app map (var f2)) (app (app map (var f1)) (var x0)))) (var x1)))) (var x2)))) (var x3)))))))))";
         let expr: RecExpr<RiseLang> = s_expr.parse().unwrap();
-        let dot = to_dot(&expr, s_expr, false);
+        let dot = to_dot(&expr, s_expr, &HashSet::new(), false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
         // let path = std::env::current_dir().unwrap().join("test2.svg");
