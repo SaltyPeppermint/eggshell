@@ -32,6 +32,11 @@ impl Default for FirstErrorDistance {
 #[gen_stub_pymethods]
 #[pymethods]
 impl FirstErrorDistance {
+    #[new]
+    fn new() -> FirstErrorDistance {
+        FirstErrorDistance::default()
+    }
+
     #[getter(hits)]
     fn hits_py(&self) -> Vec<usize> {
         self.hits.iter().map(|hit| (*hit.0).into()).collect()
