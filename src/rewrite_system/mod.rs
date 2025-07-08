@@ -6,7 +6,6 @@ pub mod simple;
 use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
-use pyo3::{PyErr, create_exception, exceptions::PyException};
 use serde::Serialize;
 use strum::EnumCount;
 use thiserror::Error;
@@ -100,17 +99,4 @@ pub enum TrsError {
     BadAnalysis(String),
     #[error("Bad ruleset name: {0}")]
     BadRulesetName(String),
-}
-
-create_exception!(
-    eggshell,
-    TrsException,
-    PyException,
-    "Eggshell internal error."
-);
-
-impl From<TrsError> for PyErr {
-    fn from(err: TrsError) -> PyErr {
-        TrsException::new_err(err.to_string())
-    }
 }

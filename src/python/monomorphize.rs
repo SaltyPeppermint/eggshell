@@ -32,9 +32,9 @@ macro_rules! monomorphize {
             #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: &str) -> PyResult<RecExpr> {
-                let rec_expr = s_expr_str
-                    .parse::<egg::RecExpr<L>>()
-                    .map_err(|e| EggshellError::from(e))?;
+                let rec_expr: egg::RecExpr<L> = s_expr_str
+                    .parse()
+                    .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
                 Ok(RecExpr(rec_expr))
             }
 
@@ -122,7 +122,8 @@ macro_rules! monomorphize {
                 let (partial_node, used_tokens) = partial::partial_parse::<L, _>(
                     token_list.as_slice(),
                     token_probs.as_ref().map(|v| &**v),
-                )?;
+                )
+                .map_err(|e| EggshellError::from(e))?;
 
                 Ok(GeneratedRecExpr {
                     expr: partial_node.into(),
@@ -179,12 +180,13 @@ macro_rules! monomorphize {
             #[staticmethod]
             #[expect(clippy::missing_errors_doc)]
             pub fn count_expected_tokens(token_list: Vec<String>) -> PyResult<usize> {
-                Ok(partial::count_expected_tokens::<L, _>(&token_list)?)
+                Ok(partial::count_expected_tokens::<L, _>(&token_list)
+                    .map_err(|e| EggshellError::from(e))?)
             }
 
             #[expect(clippy::missing_errors_doc)]
             pub fn lower(&self) -> PyResult<RecExpr> {
-                let r = PartialLang::lower(&self.expr)?;
+                let r = PartialLang::lower(&self.expr).map_err(|e| EggshellError::from(e))?;
                 let r = ProbabilisticLang::lower(&r);
                 Ok(RecExpr(r))
             }
@@ -197,7 +199,7 @@ macro_rules! monomorphize {
             ground_truth: &RecExpr,
             generated: &GeneratedRecExpr,
         ) -> PyResult<FirstErrorDistance> {
-            let inner = PartialLang::lower(&generated.expr)?;
+            let inner = PartialLang::lower(&generated.expr).map_err(|e| EggshellError::from(e))?;
             Ok(probabilistic::compare(&ground_truth.0, &inner))
         }
 

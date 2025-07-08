@@ -12,6 +12,7 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use crate::node::OwnedRecNode;
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
+pub use error::PartialError;
 pub use parse::{count_expected_tokens, partial_parse};
 
 /// Simple alias

@@ -4,7 +4,10 @@ use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use serde::Serialize;
 
-use crate::meta_lang::ProbabilisticLang;
+use crate::{
+    meta_lang::ProbabilisticLang,
+    rewrite_system::{LangExtras, SymbolType},
+};
 
 #[gen_stub_pyclass]
 #[pyclass(module = "eggshell")]
@@ -100,11 +103,11 @@ impl<T: Into<FirstErrorDistance>> Extend<T> for FirstErrorDistance {
     }
 }
 
-pub fn compare<L: Language>(
+pub fn compare<L: Language + LangExtras>(
     ground_truth: &RecExpr<L>,
     sample: &RecExpr<ProbabilisticLang<L>>,
 ) -> FirstErrorDistance {
-    fn rec<LL: Language>(
+    fn rec<LL: Language + LangExtras>(
         ground_truth: &RecExpr<LL>,
         gt_id: Id,
         sample: &RecExpr<ProbabilisticLang<LL>>,
@@ -112,7 +115,13 @@ pub fn compare<L: Language>(
     ) -> FirstErrorDistance {
         let gt_node = &ground_truth[gt_id];
         let sample_node = &sample[sample_id];
-        if gt_node.matches(sample_node.inner()) {
+        if gt_node.matches(sample_node.inner())
+            || (matches!(gt_node.symbol_info().symbol_type(), SymbolType::Variable(_))
+                && matches!(
+                    sample_node.symbol_info().symbol_type(),
+                    SymbolType::Variable(_)
+                ))
+        {
             gt_node
                 .children()
                 .iter()

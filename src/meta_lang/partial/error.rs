@@ -1,7 +1,6 @@
 use std::fmt::{Debug, Display};
 
 use egg::FromOp;
-use pyo3::{PyErr, create_exception, exceptions::PyException};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -22,21 +21,4 @@ where
     BadChildren(#[from] egg::FromOpError),
     #[error(transparent)]
     BadOp(L::Error),
-}
-
-create_exception!(
-    eggshell,
-    PartialException,
-    PyException,
-    "Error parsing a Sketch."
-);
-
-impl<L> From<PartialError<L>> for PyErr
-where
-    L: FromOp,
-    L::Error: Display,
-{
-    fn from(err: PartialError<L>) -> PyErr {
-        PartialException::new_err(format!("{err:?}"))
-    }
 }
