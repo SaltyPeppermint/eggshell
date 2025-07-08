@@ -28,15 +28,15 @@ egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-lim
 ] }
 env_logger = "0.11"
 graphviz-rust = "0.9.4"
-hashbrown = { version = "0.15", features = ["rayon", "serde"] }
+hashbrown = { version = "*", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
 log = "0.4"
 memory-stats = "1.2"
 num = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2"
 ordered-float = { version = "4", features = ["serde"] }
-pyo3 = { version = "0.24", features = ["hashbrown", "abi3", "abi3-py312"] }
-pyo3-stub-gen = "0.7"
+pyo3 = { version = "*", features = ["hashbrown", "abi3", "abi3-py312"] }
+pyo3-stub-gen = "*"
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1"

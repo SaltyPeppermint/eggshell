@@ -1,5 +1,5 @@
 use egg::{Id, Language, RecExpr};
-use hashbrown::HashSet;
+use hashbrown::HashMap;
 use pyo3::prelude::*;
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use serde::Serialize;
@@ -7,24 +7,24 @@ use serde::Serialize;
 use crate::meta_lang::ProbabilisticLang;
 
 #[gen_stub_pyclass]
-#[pyclass(frozen, module = "eggshell")]
+#[pyclass(module = "eggshell")]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct FirstErrorDistance {
-    hits: HashSet<Id>,
-    misses: HashSet<Id>,
-    #[pyo3(get)]
-    avg_hit_confidence: Option<f64>,
-    #[pyo3(get)]
-    avg_miss_confidence: Option<f64>,
+    hits: HashMap<Id, Option<f64>>,
+    misses: HashMap<Id, Option<f64>>,
+}
+
+impl From<&FirstErrorDistance> for FirstErrorDistance {
+    fn from(value: &FirstErrorDistance) -> Self {
+        value.to_owned()
+    }
 }
 
 impl Default for FirstErrorDistance {
     fn default() -> Self {
         Self {
-            hits: HashSet::new(),
-            misses: HashSet::new(),
-            avg_hit_confidence: None,
-            avg_miss_confidence: None,
+            hits: HashMap::new(),
+            misses: HashMap::new(),
         }
     }
 }
@@ -32,47 +32,66 @@ impl Default for FirstErrorDistance {
 #[gen_stub_pymethods]
 #[pymethods]
 impl FirstErrorDistance {
-    #[getter(misses)]
-    pub fn __misses__(&self) -> Vec<usize> {
-        self.misses.iter().map(|id| (*id).into()).collect()
-    }
-
     #[getter(hits)]
-    pub fn __hits__(&self) -> Vec<usize> {
-        self.hits.iter().map(|id| (*id).into()).collect()
+    fn hits_py(&self) -> Vec<usize> {
+        self.hits.iter().map(|hit| (*hit.0).into()).collect()
     }
 
-    pub fn avg_hit_confidence(&self) -> Option<f64> {
-        self.avg_hit_confidence
+    #[getter(hit_probabilities)]
+    fn hit_probabilities_py(&self) -> Vec<Option<f64>> {
+        self.hits.iter().map(|hit| (*hit.1).into()).collect()
     }
 
-    pub fn avg_miss_confidence(&self) -> Option<f64> {
-        self.avg_miss_confidence
+    pub fn n_hits(&self) -> usize {
+        self.hits.len()
     }
 
-    pub fn combine(&self, rhs: Self) -> Self {
-        FirstErrorDistance {
-            hits: self.hits.union(&rhs.hits).cloned().collect(),
-            misses: self.misses.union(&rhs.misses).cloned().collect(),
-            avg_hit_confidence: combine_probs_options(
-                self.avg_hit_confidence,
-                rhs.avg_hit_confidence,
-            ),
-            avg_miss_confidence: combine_probs_options(
-                self.avg_miss_confidence,
-                rhs.avg_miss_confidence,
-            ),
-        }
+    #[getter(misses)]
+    fn misses_py(&self) -> Vec<usize> {
+        self.misses.iter().map(|miss| (*miss.0).into()).collect()
+    }
+
+    #[getter(miss_probabilities)]
+    fn miss_probabilities_py(&self) -> Vec<Option<f64>> {
+        self.misses.iter().map(|miss| (*miss.1).into()).collect()
+    }
+
+    pub fn n_misses(&self) -> usize {
+        self.misses.len()
+    }
+
+    #[pyo3(name = "combine")]
+    fn combine_py(&mut self, rhs: &FirstErrorDistance) {
+        self.combine(rhs);
+    }
+
+    #[pyo3(name = "extend")]
+    fn extend_py(&mut self, others: Vec<FirstErrorDistance>) {
+        self.extend(others);
     }
 }
 
 impl FirstErrorDistance {
-    pub fn hits(&self) -> &HashSet<Id> {
+    pub fn hits(&self) -> &HashMap<Id, Option<f64>> {
         &self.hits
     }
 
-    pub fn misses(&self) -> &HashSet<Id> {
+    pub fn misses(&self) -> &HashMap<Id, Option<f64>> {
         &self.misses
+    }
+
+    pub fn combine<T: Into<FirstErrorDistance>>(&mut self, rhs: T) {
+        let o: FirstErrorDistance = rhs.into();
+        self.hits.extend(o.hits);
+        self.misses.extend(o.misses);
+    }
+}
+
+impl<T: Into<FirstErrorDistance>> Extend<T> for FirstErrorDistance {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        for el in iter {
+            self.combine(el)
+        }
     }
 }
 
@@ -95,18 +114,17 @@ pub fn compare<L: Language>(
                 .zip(sample_node.children().iter())
                 .fold(
                     FirstErrorDistance {
-                        hits: HashSet::from([sample_id]),
-                        avg_hit_confidence: sample_node.prob(),
+                        hits: HashMap::from([(sample_id, sample_node.prob())]),
                         ..Default::default()
                     },
-                    |acc, (gt_child, sample_child)| {
-                        acc.combine(rec(ground_truth, *gt_child, sample, *sample_child))
+                    |mut acc, (gt_child, sample_child)| {
+                        acc.combine(rec(ground_truth, *gt_child, sample, *sample_child));
+                        acc
                     },
                 )
         } else {
             FirstErrorDistance {
-                misses: HashSet::from([sample_id]),
-                avg_miss_confidence: sample_node.prob(),
+                misses: HashMap::from([(sample_id, sample_node.prob())]),
                 ..Default::default()
             }
         }
@@ -114,10 +132,10 @@ pub fn compare<L: Language>(
     rec(&ground_truth, ground_truth.root(), &sample, sample.root())
 }
 
-fn combine_probs_options(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
-    match (lhs, rhs) {
-        (None, None) => None,
-        (None, Some(x)) | (Some(x), None) => Some(x),
-        (Some(x), Some(y)) => Some((x + y) / 2.0),
-    }
-}
+// fn combine_probs_options(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {
+//     match (lhs, rhs) {
+//         (None, None) => None,
+//         (None, Some(x)) | (Some(x), None) => Some(x),
+//         (Some(x), Some(y)) => Some((x + y) / 2.0),
+//     }
+// }

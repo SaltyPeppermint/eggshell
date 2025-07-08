@@ -2,6 +2,8 @@ mod err;
 mod monomorphize;
 pub mod tree_data;
 
+use crate::meta_lang::probabilistic;
+
 use pyo3::prelude::*;
 
 pub mod simple {
@@ -36,6 +38,7 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?;
     m.add_class::<tree_data::Node>()?;
     m.add_class::<tree_data::TreeData>()?;
+    m.add_class::<probabilistic::FirstErrorDistance>()?;
 
     Ok(())
 }

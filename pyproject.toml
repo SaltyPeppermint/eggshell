@@ -20,7 +20,7 @@ classifiers = [
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-python-source = "python"
+# python-source = "python"
 
 [project.urls]
 homepage = "https://github.com/SaltyPeppermint/egg-ml/eggshell"
