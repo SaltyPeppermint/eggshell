@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[gen_stub_pyclass]
-#[pyclass(module = "eggshell")]
+#[pyclass(module = "eggshell", frozen)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct FirstErrorDistance {
     hits: HashMap<Id, Option<f64>>,
@@ -36,46 +36,34 @@ impl Default for FirstErrorDistance {
 #[pymethods]
 impl FirstErrorDistance {
     #[new]
-    fn new() -> FirstErrorDistance {
+    fn new_py() -> FirstErrorDistance {
         FirstErrorDistance::default()
     }
 
-    #[getter(hits)]
-    fn hits_py(&self) -> Vec<usize> {
+    pub fn hit_ids(&self) -> Vec<usize> {
         self.hits.iter().map(|hit| (*hit.0).into()).collect()
     }
 
-    #[getter(hit_probabilities)]
-    fn hit_probabilities_py(&self) -> Vec<Option<f64>> {
-        self.hits.iter().map(|hit| (*hit.1).into()).collect()
+    fn hit_probabilities(&self) -> Vec<Option<f64>> {
+        self.hits.iter().map(|hit| *hit.1).collect()
     }
 
+    #[getter(n_hits)]
     pub fn n_hits(&self) -> usize {
         self.hits.len()
     }
 
-    #[getter(misses)]
-    fn misses_py(&self) -> Vec<usize> {
+    pub fn miss_ids(&self) -> Vec<usize> {
         self.misses.iter().map(|miss| (*miss.0).into()).collect()
     }
 
-    #[getter(miss_probabilities)]
-    fn miss_probabilities_py(&self) -> Vec<Option<f64>> {
-        self.misses.iter().map(|miss| (*miss.1).into()).collect()
+    pub fn miss_probabilities(&self) -> Vec<Option<f64>> {
+        self.misses.iter().map(|miss| *miss.1).collect()
     }
 
+    #[getter(n_misses)]
     pub fn n_misses(&self) -> usize {
         self.misses.len()
-    }
-
-    #[pyo3(name = "combine")]
-    fn combine_py(&mut self, rhs: &FirstErrorDistance) {
-        self.combine(rhs);
-    }
-
-    #[pyo3(name = "extend")]
-    fn extend_py(&mut self, others: Vec<FirstErrorDistance>) {
-        self.extend(others);
     }
 }
 
