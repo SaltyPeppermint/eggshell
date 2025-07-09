@@ -19,7 +19,7 @@ for i in $(seq $START $END); do
         --memory-limit 1000000000 \
         --time-limit 120 \
         --uuid $uuid \
-        --trs rise \
+        --rewrite-system rise \
         --expr-id $i \
         &>$logfile # --random-guide-generation 3 \
 

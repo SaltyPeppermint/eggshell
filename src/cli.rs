@@ -52,9 +52,9 @@ pub struct Cli {
     #[arg(long)]
     uuid: String,
 
-    /// Trs of the input
+    /// RewriteSystem of the input
     #[arg(long)]
-    trs: TrsName,
+    rewrite_system: RewriteSystemName,
 }
 
 impl Cli {
@@ -89,8 +89,8 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn trs(&self) -> TrsName {
-        self.trs
+    pub fn rewrite_system(&self) -> RewriteSystemName {
+        self.rewrite_system
     }
 
     #[must_use]
@@ -148,12 +148,12 @@ impl FromStr for SampleStrategy {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum TrsName {
+pub enum RewriteSystemName {
     Halide,
     Rise,
 }
 
-impl Display for TrsName {
+impl Display for RewriteSystemName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Halide => write!(f, "halide"),
@@ -162,7 +162,7 @@ impl Display for TrsName {
     }
 }
 
-impl FromStr for TrsName {
+impl FromStr for RewriteSystemName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

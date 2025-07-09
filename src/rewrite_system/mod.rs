@@ -94,7 +94,7 @@ pub trait LangExtras: Display + Language + EnumCount {
 }
 
 #[derive(Debug, Error)]
-pub enum TrsError {
+pub enum RewriteSystemError {
     #[error("Wrong number of children: {0}")]
     BadAnalysis(String),
     #[error("Bad ruleset name: {0}")]

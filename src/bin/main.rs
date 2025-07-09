@@ -17,7 +17,7 @@ use log::{debug, info};
 use num::BigUint;
 use rand::SeedableRng;
 
-use eggshell::cli::{Cli, SampleStrategy, TrsName};
+use eggshell::cli::{Cli, RewriteSystemName, SampleStrategy};
 use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
 use eggshell::io::reader;
 use eggshell::io::structs::Entry;
@@ -39,7 +39,7 @@ fn main() {
 
     let folder: PathBuf = format!(
         "data/generated_samples/{}/{}-{}-{}",
-        cli.trs(),
+        cli.rewrite_system(),
         cli.file().file_stem().unwrap().to_str().unwrap(),
         start_time.format("%Y-%m-%d"),
         cli.uuid()
@@ -53,8 +53,8 @@ fn main() {
         extension => panic!("Unknown file extension {}", extension),
     };
 
-    match cli.trs() {
-        TrsName::Halide => {
+    match cli.rewrite_system() {
+        RewriteSystemName::Halide => {
             run::<Halide>(
                 exprs,
                 eqsat_conf,
@@ -64,7 +64,7 @@ fn main() {
                 &cli,
             );
         }
-        TrsName::Rise => {
+        RewriteSystemName::Rise => {
             run::<Rise>(
                 exprs,
                 eqsat_conf,

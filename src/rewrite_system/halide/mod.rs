@@ -5,7 +5,7 @@ use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType, TrsError};
+use super::{LangExtras, RewriteSystem, RewriteSystemError, SymbolInfo, SymbolType};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -153,7 +153,7 @@ pub enum HalideRuleset {
 }
 
 impl TryFrom<String> for HalideRuleset {
-    type Error = TrsError;
+    type Error = RewriteSystemError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
@@ -164,7 +164,7 @@ impl TryFrom<String> for HalideRuleset {
     }
 }
 
-/// Halide Trs implementation
+/// Halide Rewrite System implementation
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Halide;
 
