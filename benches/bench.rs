@@ -1,5 +1,6 @@
+use std::hint::black_box;
+
 use criterion::Criterion;
-use criterion::black_box as bb;
 use criterion::{criterion_group, criterion_main};
 
 use egg::AstSize;
@@ -26,7 +27,14 @@ fn extraction(c: &mut Criterion) {
     egraph.rebuild();
 
     c.bench_function("recursive map extract", |b| {
-        b.iter(|| sketch::eclass_extract(bb(&sketch), AstSize, bb(&egraph), bb(root_a)))
+        b.iter(|| {
+            sketch::eclass_extract(
+                black_box(&sketch),
+                AstSize,
+                black_box(&egraph),
+                black_box(root_a),
+            )
+        })
     });
 }
 
