@@ -2,6 +2,10 @@ use egg::{Language, RecExpr};
 
 use crate::node::BorrowingRecNode;
 
+const DELETE: usize = 1;
+const INSERT: usize = 1;
+const RELABEL: usize = 1;
+
 pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
     fn inner<LL: Language>(
         left: &TreeDiffData<LL>,
@@ -10,10 +14,6 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
         j: usize,
         td: &mut [Vec<usize>],
     ) -> usize {
-        const DELETE: usize = 1;
-        const INSERT: usize = 1;
-        const RELABEL: usize = 1;
-
         // forestdist
         let mut fdist = vec![vec![0usize; j + 1]; i + 1];
 
