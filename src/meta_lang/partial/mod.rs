@@ -9,7 +9,7 @@ use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use crate::node::OwnedRecNode;
+use crate::node::RecNode;
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
 pub use error::PartialError;
@@ -124,9 +124,9 @@ impl<L: Language + Display> Display for PartialLang<L> {
     }
 }
 
-impl<L: Language> OwnedRecNode<PartialLang<L>> {
+impl<L: Language> RecNode<PartialLang<L>> {
     fn new_empty() -> Self {
-        OwnedRecNode::new(PartialLang::Pad, Vec::new())
+        RecNode::new(PartialLang::Pad, Vec::new())
     }
 
     fn find_next_open(&mut self) -> Option<&mut Self> {
@@ -144,10 +144,10 @@ impl<L: Language> OwnedRecNode<PartialLang<L>> {
     }
 }
 
-impl<L: Language> From<OwnedRecNode<PartialLang<L>>> for RecExpr<PartialLang<L>> {
-    fn from(root: OwnedRecNode<PartialLang<L>>) -> Self {
+impl<L: Language> From<RecNode<PartialLang<L>>> for RecExpr<PartialLang<L>> {
+    fn from(root: RecNode<PartialLang<L>>) -> Self {
         fn rec<LL: Language>(
-            mut curr: OwnedRecNode<PartialLang<LL>>,
+            mut curr: RecNode<PartialLang<LL>>,
             vec: &mut Vec<PartialLang<LL>>,
         ) -> Id {
             let c = curr.children.into_iter().map(|c| rec(c, vec));

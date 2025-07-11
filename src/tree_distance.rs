@@ -1,7 +1,50 @@
 use egg::{Language, RecExpr};
 
-use crate::node::BorrowingRecNode;
+pub struct IdRecNode {
+    node_id: egg::Id,
+    index: usize,
+    children: Vec<IdRecNode>,
+}
 
+impl IdRecNode {
+    pub fn leftmost(&self) -> &Self {
+        self.children.first().map(|c| c.leftmost()).unwrap_or(self)
+    }
+
+    pub fn children(&self) -> &[IdRecNode] {
+        &self.children
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn node_id(&self) -> egg::Id {
+        self.node_id
+    }
+}
+
+impl<'a, L: Language> From<&RecExpr<L>> for IdRecNode {
+    fn from(value: &RecExpr<L>) -> Self {
+        fn rec<LL: Language>(rec_expr: &RecExpr<LL>, id: egg::Id, index: &mut usize) -> IdRecNode {
+            let curr_index = *index;
+            *index += 1;
+            let children = rec_expr[id]
+                .children()
+                .iter()
+                .map(|c_id| rec(rec_expr, *c_id, index))
+                .collect();
+
+            IdRecNode {
+                node_id: id,
+                children,
+                index: curr_index,
+            }
+        }
+        let mut index = 0;
+        rec(value, value.root(), &mut index)
+    }
+}
 const DELETE: usize = 1;
 const INSERT: usize = 1;
 const RELABEL: usize = 1;
@@ -18,59 +61,41 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
         let mut fdist = vec![vec![0usize; j + 1]; i + 1];
 
         // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
-        for i_inner in left.leftmosts[i - 1]..=i {
-            fdist[i_inner][0] = fdist[i_inner - 1][0] + DELETE;
+        for i1 in left.l[i - 1]..=i {
+            fdist[i1][0] = fdist[i1 - 1][0] + DELETE;
         }
         // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
 
-        for j_inner in right.leftmosts[j - 1]..=j {
-            fdist[0][j_inner] = fdist[0][j_inner - 1] + INSERT;
+        for j1 in right.l[j - 1]..=j {
+            fdist[0][j1] = fdist[0][j1 - 1] + INSERT;
         }
         // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
-        for i_inner in left.leftmosts[i - 1]..=i {
+        for i1 in left.l[i - 1]..=i {
             // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
-            for j_inner in right.leftmosts[j - 1]..=j {
-                let i_temp = if left.leftmosts[i - 1] > i_inner - 1 {
-                    0
-                } else {
-                    i_inner - 1
-                };
-                let j_temp = if right.leftmosts[j - 1] > j_inner - 1 {
-                    0
-                } else {
-                    j_inner - 1
-                };
-                if (left.leftmosts[i_inner - 1] == left.leftmosts[i - 1])
-                    && (right.leftmosts[j_inner - 1] == right.leftmosts[j - 1])
-                {
-                    let cost = if left.labels[i_inner - 1] == right.labels[j_inner - 1] {
+            for j1 in right.l[j - 1]..=j {
+                let i_temp = if left.l[i - 1] > i1 - 1 { 0 } else { i1 - 1 };
+                let j_temp = if right.l[j - 1] > j1 - 1 { 0 } else { j1 - 1 };
+                if (left.l[i1 - 1] == left.l[i - 1]) && (right.l[j1 - 1] == right.l[j - 1]) {
+                    let cost = if left.labels[i1 - 1].matches(right.labels[j1 - 1]) {
                         0
                     } else {
                         RELABEL
                     };
 
-                    fdist[i_inner][j_inner] = (fdist[i_temp][j_inner] + DELETE)
-                        .min(fdist[i_inner][j_temp] + INSERT)
+                    fdist[i1][j1] = (fdist[i_temp][j1] + DELETE)
+                        .min(fdist[i1][j_temp] + INSERT)
                         .min(fdist[i_temp][j_temp] + cost);
-                    td[i_inner][j_inner] = fdist[i_inner][j_inner];
+                    td[i1][j1] = fdist[i1][j1];
                 } else {
-                    let i_inner_temp = left.leftmosts[i_inner - 1] - 1;
-                    let i_temp2 = if left.leftmosts[i - 1] > i_inner_temp {
-                        0
-                    } else {
-                        i_inner_temp
-                    };
+                    let i1_temp = left.l[i1 - 1] - 1;
+                    let j1_temp = right.l[j1 - 1] - 1;
 
-                    let j_inner_temp = right.leftmosts[j_inner - 1] - 1;
-                    let j_temp2 = if right.leftmosts[j - 1] > j_inner_temp {
-                        0
-                    } else {
-                        j_inner_temp
-                    };
+                    let i_temp2 = if left.l[i - 1] > i1_temp { 0 } else { i1_temp };
+                    let j_temp2 = if right.l[j - 1] > j1_temp { 0 } else { j1_temp };
 
-                    fdist[i_inner][j_inner] = (fdist[i_temp][j_inner] + DELETE)
-                        .min(fdist[i_inner][j_temp] + INSERT)
-                        .min(fdist[i_temp2][j_temp2] + td[i_inner][j_inner]);
+                    fdist[i1][j1] = (fdist[i_temp][j1] + DELETE)
+                        .min(fdist[i1][j_temp] + INSERT)
+                        .min(fdist[i_temp2][j_temp2] + td[i1][j1]);
                 }
             }
         }
@@ -80,7 +105,7 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
     let left: TreeDiffData<L> = left.into();
     let right: TreeDiffData<L> = right.into();
 
-    let mut td = vec![vec![0usize; left.leftmosts.len() + 1]; right.leftmosts.len() + 1];
+    let mut td = vec![vec![0usize; right.l.len() + 1]; left.l.len() + 1];
     for i1 in 1..=left.keyroots.len() {
         for j1 in 1..=right.keyroots.len() {
             let i = left.keyroots[i1 - 1];
@@ -89,27 +114,36 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
         }
     }
 
-    td[left.leftmosts.len()][right.leftmosts.len()]
+    td[left.l.len()][right.l.len()]
 }
 
-struct TreeDiffData<L: Language> {
-    leftmosts: Vec<usize>,
+struct TreeDiffData<'a, L: Language> {
+    l: Vec<usize>,
     keyroots: Vec<usize>,
-    labels: Vec<L::Discriminant>,
+    labels: Vec<&'a L>,
 }
 
-impl<L: Language> From<&RecExpr<L>> for TreeDiffData<L> {
-    fn from(value: &RecExpr<L>) -> TreeDiffData<L> {
+impl<'a, L: Language> From<&'a RecExpr<L>> for TreeDiffData<'a, L> {
+    fn from(value: &'a RecExpr<L>) -> TreeDiffData<'a, L> {
         fn traverse<'a, LL: Language>(
-            node: &'a BorrowingRecNode<'a, LL>,
-            labels: &mut Vec<LL::Discriminant>,
+            rec_expr: &'a RecExpr<LL>,
+            node_id: egg::Id,
+            labels: &mut Vec<&'a LL>,
+            index: &mut usize,
             leftmosts: &mut Vec<usize>,
-        ) {
-            for children in node.children() {
-                traverse(children, labels, leftmosts);
-            }
-            labels.push(node.node().discriminant());
-            leftmosts.push(node.leftmost().index());
+        ) -> usize {
+            let node = &rec_expr[node_id];
+            let child_leftmosts = node
+                .children()
+                .into_iter()
+                .map(|child_id| traverse(rec_expr, *child_id, labels, index, leftmosts))
+                .collect::<Vec<_>>();
+
+            labels.push(node);
+            *index += 1;
+            let leftmost = *child_leftmosts.first().unwrap_or(&index);
+            leftmosts.push(leftmost);
+            leftmost
         }
 
         fn mk_keyroots(l: &[usize]) -> Vec<usize> {
@@ -131,16 +165,80 @@ impl<L: Language> From<&RecExpr<L>> for TreeDiffData<L> {
             keyroots
         }
 
-        let root = value.into();
+        fn mk_l<LL: Language>(
+            rec_expr: &RecExpr<LL>,
+            node_id: egg::Id,
+            leftmosts: &[usize],
+            index: &mut usize,
+            mut l: Vec<usize>,
+        ) -> Vec<usize> {
+            let node = &rec_expr[node_id];
+            for child_id in node.children() {
+                l = mk_l(rec_expr, *child_id, leftmosts, index, l);
+            }
+            l.push(leftmosts[*index]);
+            *index += 1;
+            l
+        }
         let mut labels = Vec::new();
         let mut leftmosts = Vec::new();
-        traverse(&root, &mut labels, &mut leftmosts);
+        traverse(&value, value.root(), &mut labels, &mut 0, &mut leftmosts);
         let keyroots = mk_keyroots(&leftmosts);
+        let l = mk_l(value, value.root(), &leftmosts, &mut 0, Vec::new());
 
         TreeDiffData {
-            leftmosts,
+            l,
             keyroots,
             labels,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::rewrite_system::arithmetic::Math;
+
+    use super::*;
+
+    #[test]
+    fn zero_distance() {
+        let expr: RecExpr<Math> = "(+ x x)".parse().unwrap();
+        assert_eq!(0, distance(&expr, &expr))
+    }
+
+    #[test]
+    fn one_distance() {
+        let left: RecExpr<Math> = "(+ x x)".parse().unwrap();
+        let right: RecExpr<Math> = "(+ x y)".parse().unwrap();
+        assert_eq!(1, distance(&left, &right))
+    }
+
+    #[test]
+    fn one_distance2() {
+        let left: RecExpr<Math> = "(ln x)".parse().unwrap();
+        let right: RecExpr<Math> = "(ln y)".parse().unwrap();
+        assert_eq!(1, distance(&left, &right))
+    }
+
+    #[test]
+    fn two_distance() {
+        let left: RecExpr<Math> = "(+ x y)".parse().unwrap();
+        let right: RecExpr<Math> = "(+ v w)".parse().unwrap();
+        assert_eq!(2, distance(&left, &right))
+    }
+
+    #[test]
+    fn subtree_distance() {
+        let left: RecExpr<Math> = "(+ x y)".parse().unwrap();
+        let right: RecExpr<Math> = "(+ (+ v w) y)".parse().unwrap();
+        assert_eq!(3, distance(&left, &right))
+    }
+
+    #[test]
+    fn subtree_distance2() {
+        let left: RecExpr<Math> = "(- x z)".parse().unwrap();
+        let right: RecExpr<Math> = "(+ (+ v w) y)".parse().unwrap();
+        assert_eq!(5, distance(&left, &right))
     }
 }

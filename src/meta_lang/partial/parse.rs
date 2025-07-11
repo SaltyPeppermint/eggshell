@@ -6,7 +6,7 @@ use super::PartialLang;
 use super::error::PartialError;
 
 use crate::meta_lang::ProbabilisticLang;
-use crate::node::OwnedRecNode;
+use crate::node::RecNode;
 use crate::rewrite_system::LangExtras;
 
 impl<L> egg::FromOp for PartialLang<L>
@@ -43,7 +43,7 @@ where
 pub fn partial_parse<L, S>(
     tokens: &[S],
     probs: Option<&[f64]>,
-) -> Result<(OwnedRecNode<PartialLang<ProbabilisticLang<L>>>, usize), PartialError<L>>
+) -> Result<(RecNode<PartialLang<ProbabilisticLang<L>>>, usize), PartialError<L>>
 where
     S: AsRef<str> + Debug,
     L: FromOp + LangExtras,
@@ -54,7 +54,7 @@ where
         return Err(PartialError::NoTokens);
     }
 
-    let mut ast = OwnedRecNode::new_empty();
+    let mut ast = RecNode::new_empty();
     let v = match probs {
         Some(v) => v.iter().map(|p| Some(*p)).collect(),
         None => vec![None; tokens.len()],
@@ -69,9 +69,9 @@ where
         };
 
         if let Some(position) = ast.find_next_open() {
-            *position = OwnedRecNode::new(
+            *position = RecNode::new(
                 PartialLang::Finished(ProbabilisticLang::new(node, prob)),
-                vec![OwnedRecNode::new_empty(); arity],
+                vec![RecNode::new_empty(); arity],
             );
         } else {
             return Ok((ast.into(), index));
