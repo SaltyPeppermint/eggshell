@@ -1,50 +1,5 @@
 use egg::{Language, RecExpr};
 
-pub struct IdRecNode {
-    node_id: egg::Id,
-    index: usize,
-    children: Vec<IdRecNode>,
-}
-
-impl IdRecNode {
-    pub fn leftmost(&self) -> &Self {
-        self.children.first().map(|c| c.leftmost()).unwrap_or(self)
-    }
-
-    pub fn children(&self) -> &[IdRecNode] {
-        &self.children
-    }
-
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn node_id(&self) -> egg::Id {
-        self.node_id
-    }
-}
-
-impl<'a, L: Language> From<&RecExpr<L>> for IdRecNode {
-    fn from(value: &RecExpr<L>) -> Self {
-        fn rec<LL: Language>(rec_expr: &RecExpr<LL>, id: egg::Id, index: &mut usize) -> IdRecNode {
-            let curr_index = *index;
-            *index += 1;
-            let children = rec_expr[id]
-                .children()
-                .iter()
-                .map(|c_id| rec(rec_expr, *c_id, index))
-                .collect();
-
-            IdRecNode {
-                node_id: id,
-                children,
-                index: curr_index,
-            }
-        }
-        let mut index = 0;
-        rec(value, value.root(), &mut index)
-    }
-}
 const DELETE: usize = 1;
 const INSERT: usize = 1;
 const RELABEL: usize = 1;
@@ -60,18 +15,13 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
         // forestdist
         let mut fdist = vec![vec![0usize; j + 1]; i + 1];
 
-        // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
         for i1 in left.l[i - 1]..=i {
             fdist[i1][0] = fdist[i1 - 1][0] + DELETE;
         }
-        // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
-
         for j1 in right.l[j - 1]..=j {
             fdist[0][j1] = fdist[0][j1 - 1] + INSERT;
         }
-        // for (int i1 = l1.get(i - 1); i1 <= i; i1++) {
         for i1 in left.l[i - 1]..=i {
-            // for (int j1 = l2.get(j - 1); j1 <= j; j1++) {
             for j1 in right.l[j - 1]..=j {
                 let i_temp = if left.l[i - 1] > i1 - 1 { 0 } else { i1 - 1 };
                 let j_temp = if right.l[j - 1] > j1 - 1 { 0 } else { j1 - 1 };
@@ -81,7 +31,6 @@ pub fn distance<L: Language>(left: &RecExpr<L>, right: &RecExpr<L>) -> usize {
                     } else {
                         RELABEL
                     };
-
                     fdist[i1][j1] = (fdist[i_temp][j1] + DELETE)
                         .min(fdist[i1][j_temp] + INSERT)
                         .min(fdist[i_temp][j_temp] + cost);
@@ -130,61 +79,58 @@ impl<'a, L: Language> From<&'a RecExpr<L>> for TreeDiffData<'a, L> {
             node_id: egg::Id,
             labels: &mut Vec<&'a LL>,
             index: &mut usize,
-            leftmosts: &mut Vec<usize>,
+            leftmost_table: &mut Vec<usize>,
         ) -> usize {
             let node = &rec_expr[node_id];
-            let child_leftmosts = node
-                .children()
-                .into_iter()
-                .map(|child_id| traverse(rec_expr, *child_id, labels, index, leftmosts))
-                .collect::<Vec<_>>();
+            let child_leftmosts = node.children().split_first().map(|(fst_id, tail_ids)| {
+                let fst_leftmost = traverse(rec_expr, *fst_id, labels, index, leftmost_table);
+                for child_id in tail_ids {
+                    traverse(rec_expr, *child_id, labels, index, leftmost_table);
+                }
+                fst_leftmost
+            });
 
             labels.push(node);
             *index += 1;
-            let leftmost = *child_leftmosts.first().unwrap_or(&index);
-            leftmosts.push(leftmost);
+            let leftmost = child_leftmosts.unwrap_or(*index);
+            leftmost_table.push(leftmost);
             leftmost
         }
 
         fn mk_keyroots(l: &[usize]) -> Vec<usize> {
-            let mut keyroots = Vec::new();
-            // for (int i = 0; i < l.size(); i++) {
-            for i in 0..l.len() {
-                let mut flag = true;
-
-                // for (int j = i + 1; j < l.size(); j++) {
-                for j in i + 1..l.len() {
-                    if l.get(j) == l.get(i) {
-                        flag = false;
-                    }
-                }
-                if flag {
-                    keyroots.push(i + 1);
-                }
-            }
-            keyroots
+            l.iter()
+                .enumerate()
+                .flat_map(|(i, l_i)| (l[i + 1..]).iter().all(|lj| l_i != lj).then_some(i + 1))
+                .collect()
         }
 
         fn mk_l<LL: Language>(
             rec_expr: &RecExpr<LL>,
             node_id: egg::Id,
-            leftmosts: &[usize],
+            leftmost_table: &[usize],
             index: &mut usize,
-            mut l: Vec<usize>,
+            mut leftmost: Vec<usize>,
         ) -> Vec<usize> {
             let node = &rec_expr[node_id];
             for child_id in node.children() {
-                l = mk_l(rec_expr, *child_id, leftmosts, index, l);
+                leftmost = mk_l(rec_expr, *child_id, leftmost_table, index, leftmost);
             }
-            l.push(leftmosts[*index]);
+            leftmost.push(leftmost_table[*index]);
             *index += 1;
-            l
+            leftmost
         }
+
         let mut labels = Vec::new();
-        let mut leftmosts = Vec::new();
-        traverse(&value, value.root(), &mut labels, &mut 0, &mut leftmosts);
-        let keyroots = mk_keyroots(&leftmosts);
-        let l = mk_l(value, value.root(), &leftmosts, &mut 0, Vec::new());
+        let mut leftmost_table = Vec::new();
+        traverse(
+            &value,
+            value.root(),
+            &mut labels,
+            &mut 0,
+            &mut leftmost_table,
+        );
+        let keyroots = mk_keyroots(&leftmost_table);
+        let l = mk_l(value, value.root(), &leftmost_table, &mut 0, Vec::new());
 
         TreeDiffData {
             l,
