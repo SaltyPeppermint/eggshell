@@ -112,9 +112,9 @@ mod tests {
     use super::*;
     use crate::meta_lang::SketchLang;
     use crate::meta_lang::partial::PartialRecExpr;
-    use crate::python::tree_data::TreeData;
     use crate::rewrite_system::halide::HalideLang;
     use crate::rewrite_system::rise::RiseLang;
+    use crate::tree_data::TreeData;
 
     #[test]
     fn parse_and_print() {

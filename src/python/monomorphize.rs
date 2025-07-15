@@ -14,8 +14,8 @@ macro_rules! monomorphize {
         use $crate::meta_lang::probabilistic::FirstErrorDistance;
         use $crate::meta_lang::{PartialLang, ProbabilisticLang};
         use $crate::python::err::EggshellError;
-        use $crate::python::tree_data::TreeData;
         use $crate::rewrite_system::{LangExtras, RewriteSystem};
+        use $crate::tree_data::TreeData;
 
         type L = <$type as RewriteSystem>::Language;
 

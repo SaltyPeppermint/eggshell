@@ -1,8 +1,8 @@
 mod err;
 mod monomorphize;
-pub mod tree_data;
 
 use crate::meta_lang::probabilistic;
+use crate::tree_data;
 
 use pyo3::prelude::*;
 
