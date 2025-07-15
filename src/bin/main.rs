@@ -18,7 +18,7 @@ use num::BigUint;
 use rand::SeedableRng;
 
 use eggshell::cli::{Cli, RewriteSystemName, SampleStrategy};
-use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult, StartMaterial};
+use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult};
 use eggshell::io::reader;
 use eggshell::io::structs::Entry;
 use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
@@ -265,9 +265,7 @@ where
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    let exprs = [start_expr];
-    let mut eqsat =
-        Eqsat::new(StartMaterial::RecExprs(&exprs), rules).with_conf(eqsat_conf.to_owned());
+    let mut eqsat = Eqsat::new(start_expr.into(), rules).with_conf(eqsat_conf.to_owned());
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
 

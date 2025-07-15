@@ -109,20 +109,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use egg::AstSize;
+    use egg::{AstSize, RecExpr};
     use hashbrown::HashSet;
     use rand::SeedableRng;
 
     use super::*;
     use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::rewrite_system::halide::HalideLang;
+    use crate::rewrite_system::simple::SimpleLang;
     use crate::rewrite_system::{Halide, RewriteSystem, Simple};
 
     #[test]
     fn simple_sample() {
-        let start_expr = "(* (+ a b) 1)".parse().unwrap();
+        let start_expr: RecExpr<SimpleLang> = "(* (+ a b) 1)".parse().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -134,10 +136,10 @@ mod tests {
 
     #[test]
     fn stringified_sample_len() {
-        let start_expr = "(* (+ a b) 1)".parse().unwrap();
+        let start_expr: RecExpr<SimpleLang> = "(* (+ a b) 1)".parse().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
 
         let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
@@ -162,7 +164,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = Eqsat::new(
-            StartMaterial::RecExprs(&[&start_expr_a, &start_expr_b]),
+            StartMaterial::RecExprs(vec![&start_expr_a, &start_expr_b]),
             rules.as_slice(),
         )
         .run();
@@ -177,13 +179,14 @@ mod tests {
 
     #[test]
     fn halide_sample() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse()
-            .unwrap();
+        let start_expr: RecExpr<HalideLang> =
+            "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+                .parse()
+                .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
 
@@ -198,13 +201,14 @@ mod tests {
 
     #[test]
     fn halide_sample_float() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse()
-            .unwrap();
+        let start_expr: RecExpr<HalideLang> =
+            "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+                .parse()
+                .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
 

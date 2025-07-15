@@ -7,8 +7,8 @@ macro_rules! monomorphize {
         use pyo3::prelude::*;
         use pyo3_stub_gen::derive::*;
 
+        use $crate::eqsat::Eqsat;
         use $crate::eqsat::conf::EqsatConf;
-        use $crate::eqsat::{Eqsat, StartMaterial};
         use $crate::meta_lang::partial;
         use $crate::meta_lang::probabilistic;
         use $crate::meta_lang::probabilistic::FirstErrorDistance;
@@ -226,22 +226,25 @@ macro_rules! monomorphize {
 
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
+        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, guides=Vec::new()))]
         #[must_use]
         pub fn eqsat_check(
             start: &RecExpr,
             goal: &RecExpr,
-            iter_limit: usize,
+            iter_limit: Option<usize>,
+            node_limit: Option<usize>,
+            guides: Vec<RecExpr>,
         ) -> (usize, String, String) {
             let conf = EqsatConf::builder()
-                .root_check(true)
-                .iter_limit(iter_limit)
+                .maybe_iter_limit(iter_limit)
+                .maybe_node_limit(node_limit)
                 .build();
-            let start_expr = &[&start.0];
-            let start_material = StartMaterial::RecExprs(start_expr);
             let rules = <$type as RewriteSystem>::full_rules();
-            let eqsat_result = Eqsat::new(start_material, &rules)
+            let guides = guides.into_iter().map(|r| r.0).collect::<Vec<_>>();
+            let eqsat_result = Eqsat::new((&start.0).into(), &rules)
                 .with_conf(conf)
-                .with_goals(vec![goal.0.clone()])
+                .with_goal(goal.0.clone())
+                .with_guides(&guides)
                 .run();
             let generation = eqsat_result.iterations().len();
             let stop_reason = serde_json::to_string(&eqsat_result.report().stop_reason).unwrap();
@@ -252,14 +255,30 @@ macro_rules! monomorphize {
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
+        #[pyo3(signature = (starts, goals, iter_limit=None, node_limit=None, guides=Vec::new()))]
         pub fn many_eqsat_check(
             starts: Vec<RecExpr>,
-            goal: &RecExpr,
-            iter_limit: usize,
+            goals: Vec<RecExpr>,
+            iter_limit: Option<usize>,
+            node_limit: Option<usize>,
+            guides: Vec<Vec<RecExpr>>,
         ) -> Vec<(usize, String, String)> {
             starts
-                .into_iter()
-                .map(|start| eqsat_check(&start, goal, iter_limit))
+                .iter()
+                .zip(goals.iter())
+                .enumerate()
+                .map(|(idx, (start, goal))| {
+                    eqsat_check(
+                        &start,
+                        &goal,
+                        iter_limit,
+                        node_limit,
+                        guides
+                            .get(idx)
+                            .map(|v| v.to_owned())
+                            .unwrap_or_else(Vec::new),
+                    )
+                })
                 .collect()
         }
 

@@ -165,10 +165,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use egg::{EGraph, SymbolLang};
+    use egg::{EGraph, RecExpr, SymbolLang};
     use num::BigUint;
 
-    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::eqsat::{Eqsat, EqsatConf};
+    use crate::rewrite_system::halide::HalideLang;
     use crate::rewrite_system::{Halide, RewriteSystem};
 
     use super::*;
@@ -209,13 +210,14 @@ mod tests {
 
     #[test]
     fn halide_count_size() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse()
-            .unwrap();
+        let start_expr: RecExpr<HalideLang> =
+            "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
+                .parse()
+                .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
         let egraph = eqsat.egraph();

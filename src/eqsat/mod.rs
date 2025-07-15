@@ -26,7 +26,8 @@ where
 {
     conf: EqsatConf,
     start_material: StartMaterial<'a, L, N>,
-    goals: Vec<RecExpr<L>>,
+    goal: Option<RecExpr<L>>,
+    guides: &'a [RecExpr<L>],
     rules: &'a [Rewrite<L, N>],
 }
 
@@ -42,7 +43,8 @@ where
     pub fn new(start_material: StartMaterial<'a, L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
         Self {
             conf: EqsatConf::default(),
-            goals: Vec::new(),
+            goal: None,
+            guides: &[],
             start_material,
             rules,
         }
@@ -57,8 +59,15 @@ where
 
     /// With the following goals to check.
     #[must_use]
-    pub fn with_goals(mut self, goals: Vec<RecExpr<L>>) -> Self {
-        self.goals = goals;
+    pub fn with_goal(mut self, goal: RecExpr<L>) -> Self {
+        self.goal = Some(goal);
+        self
+    }
+
+    /// With the following guides.
+    #[must_use]
+    pub fn with_guides(mut self, guides: &'a [RecExpr<L>]) -> Self {
+        self.guides = guides;
         self
     }
 
@@ -101,12 +110,12 @@ where
 
         if self.conf.memory_log {
             info!("Installing memory display hook");
-            runner = runner.with_hook(hooks::memory_hook());
+            runner = runner.with_hook(hooks::memory_log_hook());
         }
 
-        if !self.goals.is_empty() {
+        if let Some(goal) = self.goal {
             info!("Installing goals check hook");
-            runner = runner.with_hook(hooks::goals_check_hook(self.goals));
+            runner = runner.with_goals(goal, self.guides.to_owned());
         }
 
         // TODO ADD CONFIG OPTION
@@ -137,7 +146,6 @@ where
 
         info!("{}", &report);
         EqsatResult {
-            runner_args: self.conf.clone(),
             egraph: runner.egraph,
             iterations: runner.iterations,
             roots,
@@ -154,7 +162,6 @@ where
     N: Analysis<L> + Clone,
     N::Data: Serialize + Clone,
 {
-    runner_args: EqsatConf,
     // stats_history: Vec<EqsatStats>,
     egraph: EGraph<L, N>,
     iterations: Vec<Iteration<()>>,
@@ -192,7 +199,7 @@ where
         sketch::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
 
-    /// Extract
+    /// Check if sketch is satisfied
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
         let root = self.roots[root_index];
         sketch::eclass_satisfies_sketch(sketch, &self.egraph, root)
@@ -229,7 +236,7 @@ where
     N: Analysis<L> + Clone + Default + Debug,
     N::Data: Clone,
 {
-    RecExprs(&'a [&'a RecExpr<L>]),
+    RecExprs(Vec<&'a RecExpr<L>>),
     EGraph {
         egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,
@@ -247,5 +254,27 @@ where
             egraph: Box::new(eqsat_result.egraph),
             roots: eqsat_result.roots,
         }
+    }
+}
+
+impl<'a, L, N> From<&'a RecExpr<L>> for StartMaterial<'a, L, N>
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
+{
+    fn from(rec_expr: &'a RecExpr<L>) -> StartMaterial<'a, L, N> {
+        StartMaterial::RecExprs(vec![rec_expr])
+    }
+}
+
+impl<'a, L, N> From<Vec<&'a RecExpr<L>>> for StartMaterial<'a, L, N>
+where
+    L: Language + Display,
+    N: Analysis<L> + Clone + Default + Debug,
+    N::Data: Serialize + Clone,
+{
+    fn from(rec_exprs: Vec<&'a RecExpr<L>>) -> StartMaterial<'a, L, N> {
+        StartMaterial::RecExprs(rec_exprs)
     }
 }

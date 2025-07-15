@@ -1,4 +1,4 @@
-use egg::{Analysis, Language, RecExpr, Runner};
+use egg::{Analysis, Language, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
 
@@ -17,27 +17,27 @@ where
     }
 }
 
-pub const fn goals_check_hook<L, N>(
-    goals: Vec<RecExpr<L>>,
-) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
-where
-    L: Language + 'static,
-    N: Analysis<L> + Default,
-{
-    move |r: &mut Runner<L, N>| {
-        for goal in &goals {
-            if let Some(ids) = r.egraph.lookup_expr_ids(goal) {
-                if ids.iter().any(|id| r.roots.contains(id)) {
-                    return Err("Root found in goals".into());
-                }
-            }
-        }
-        Ok(())
-    }
-}
+// pub const fn goals_check_hook<L, N>(
+//     goals: Vec<RecExpr<L>>,
+// ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+// where
+//     L: Language + 'static,
+//     N: Analysis<L> + Default,
+// {
+//     move |r: &mut Runner<L, N>| {
+//         for goal in &goals {
+//             if let Some(ids) = r.egraph.lookup_expr_ids(goal) {
+//                 if ids.iter().any(|id| r.roots.contains(id)) {
+//                     return Err("Root found in goals".into());
+//                 }
+//             }
+//         }
+//         Ok(())
+//     }
+// }
 
 #[expect(clippy::cast_precision_loss)]
-pub fn memory_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub fn memory_log_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language,
     N: Analysis<L> + Default,

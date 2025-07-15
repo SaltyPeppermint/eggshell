@@ -370,7 +370,7 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::eqsat::{Eqsat, EqsatConf, StartMaterial};
+    use crate::eqsat::{Eqsat, EqsatConf};
     use crate::rewrite_system::{Halide, RewriteSystem, Simple};
     use crate::sampling::SampleError;
 
@@ -379,7 +379,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -396,7 +396,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
@@ -413,7 +413,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -433,7 +433,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
         let root_id = eqsat.roots()[0];
@@ -453,7 +453,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
         let root_id = eqsat.roots()[0];
@@ -475,7 +475,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new(StartMaterial::RecExprs(&[&start_expr]), rules.as_slice())
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
             .run();
         let root_id = eqsat.roots()[0];
