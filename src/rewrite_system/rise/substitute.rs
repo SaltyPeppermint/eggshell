@@ -1,6 +1,6 @@
 use egg::{Id, Language, RecExpr, Symbol};
 
-use super::{unwrap_symbol, RiseLang};
+use super::{RiseLang, unwrap_symbol};
 
 pub fn expr_contains(e: &[RiseLang], var: Symbol) -> bool {
     for node in e {

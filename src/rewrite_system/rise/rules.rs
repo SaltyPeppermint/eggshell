@@ -1,7 +1,7 @@
-use egg::{rewrite, Applier, Id, Pattern, PatternAst, Subst, Symbol, Var};
+use egg::{Applier, Id, Pattern, PatternAst, Subst, Symbol, Var, rewrite};
 use hashbrown::HashMap;
 
-use super::{substitute, EGraph, Rewrite, RiseAnalysis, RiseLang};
+use super::{EGraph, Rewrite, RiseAnalysis, RiseLang, substitute};
 
 fn var(s: &str) -> Var {
     s.parse().unwrap()

@@ -5,7 +5,7 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, SymbolInfo, SymbolType, RewriteSystem};
+use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType};
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
