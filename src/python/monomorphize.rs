@@ -226,18 +226,20 @@ macro_rules! monomorphize {
 
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
-        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, guides=Vec::new()))]
+        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, guides=Vec::new()))]
         #[must_use]
         pub fn eqsat_check(
             start: &RecExpr,
             goal: &RecExpr,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
+            time_limit: Option<f64>,
             guides: Vec<RecExpr>,
-        ) -> (usize, String, String) {
+        ) -> (String, usize, bool) {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
                 .maybe_node_limit(node_limit)
+                .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
             let rules = <$type as RewriteSystem>::full_rules();
             let guides = guides.into_iter().map(|r| r.0).collect::<Vec<_>>();
@@ -247,22 +249,23 @@ macro_rules! monomorphize {
                 .with_guides(&guides)
                 .run();
             let generation = eqsat_result.iterations().len();
-            let stop_reason = serde_json::to_string(&eqsat_result.report().stop_reason).unwrap();
             let report_json = serde_json::to_string(&eqsat_result).unwrap();
-            (generation, stop_reason, report_json)
+            let guide_used = matches!(eqsat_result.report().stop_reason, egg::StopReason::GuideFound(_,_));
+            (report_json, generation, guide_used)
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
-        #[pyo3(signature = (starts, goals, iter_limit=None, node_limit=None, guides=Vec::new()))]
+        #[pyo3(signature = (starts, goals, iter_limit=None, node_limit=None, time_limit=None, guides=Vec::new()))]
         pub fn many_eqsat_check(
             starts: Vec<RecExpr>,
             goals: Vec<RecExpr>,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
+            time_limit:Option<f64>,
             guides: Vec<Vec<RecExpr>>,
-        ) -> Vec<(usize, String, String)> {
+        ) -> Vec<(String, usize, bool)> {
             starts
                 .iter()
                 .zip(goals.iter())
@@ -273,6 +276,7 @@ macro_rules! monomorphize {
                         &goal,
                         iter_limit,
                         node_limit,
+                        time_limit,
                         guides
                             .get(idx)
                             .map(|v| v.to_owned())
