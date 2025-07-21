@@ -1,4 +1,5 @@
 mod hooks;
+mod scheduler;
 
 pub mod conf;
 
