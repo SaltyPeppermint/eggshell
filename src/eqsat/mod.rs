@@ -5,9 +5,10 @@ pub mod conf;
 
 use std::fmt::{Debug, Display};
 
+use egg::RewriteScheduler;
 use egg::{
     Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
-    Runner, SimpleScheduler,
+    Runner,
 };
 use log::info;
 use serde::Serialize;
@@ -16,6 +17,7 @@ use crate::meta_lang::Sketch;
 use crate::meta_lang::sketch;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
+pub use scheduler::BudgetScheduler;
 
 /// API accessible struct holding the equality Saturation
 #[derive(Clone, Debug)]
@@ -76,7 +78,7 @@ where
     /// (most often true or false) with the given ruleset
     #[expect(clippy::missing_panics_doc)]
     #[must_use]
-    pub fn run(self) -> EqsatResult<L, N> {
+    pub fn run<S: RewriteScheduler<L, N> + 'static>(self, scheduler: S) -> EqsatResult<L, N> {
         match &self.start_material {
             StartMaterial::RecExprs(exprs) => {
                 let expr_strs = exprs
@@ -94,6 +96,7 @@ where
         }
 
         let mut runner = Runner::default()
+            .with_scheduler(scheduler)
             .with_iter_limit(self.conf.iter_limit)
             .with_node_limit(self.conf.node_limit)
             .with_memory_limit(self.conf.memory_limit)
@@ -118,9 +121,6 @@ where
             info!("Installing goals check hook");
             runner = runner.with_goals(goal, self.guides.to_owned());
         }
-
-        // TODO ADD CONFIG OPTION
-        runner = runner.with_scheduler(SimpleScheduler);
 
         let egraph_roots = match self.start_material {
             StartMaterial::RecExprs(vec) => {

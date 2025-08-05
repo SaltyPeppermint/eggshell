@@ -3,6 +3,7 @@ mod tests {
     use egg::AstSize;
 
     use egg::RecExpr;
+    use egg::SimpleScheduler;
     use eggshell::eqsat::Eqsat;
     use eggshell::rewrite_system::Halide;
     use eggshell::rewrite_system::RewriteSystem;
@@ -16,7 +17,7 @@ mod tests {
             .unwrap();
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&true_expr).into(), &rules);
-        let result = eqsat.run();
+        let result = eqsat.run(SimpleScheduler);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(
@@ -32,7 +33,7 @@ mod tests {
             .unwrap();
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&false_expr).into(), &rules);
-        let result = eqsat.run();
+        let result = eqsat.run(SimpleScheduler);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(

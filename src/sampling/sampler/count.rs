@@ -365,7 +365,7 @@ fn sum_combinations(num: usize, n: usize) -> Vec<Vec<usize>> {
 
 #[cfg(test)]
 mod tests {
-    use egg::RecExpr;
+    use egg::{RecExpr, SimpleScheduler};
     use num::BigUint;
     use rand::SeedableRng;
 
@@ -379,7 +379,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -396,7 +396,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
@@ -413,7 +413,7 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run();
+        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -435,7 +435,7 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
-            .run();
+            .run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
@@ -455,7 +455,7 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
-            .run();
+            .run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 32);
@@ -477,7 +477,7 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
-            .run();
+            .run(SimpleScheduler);
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 2);

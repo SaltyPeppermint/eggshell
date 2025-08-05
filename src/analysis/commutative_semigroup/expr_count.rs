@@ -165,7 +165,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use egg::{EGraph, RecExpr, SymbolLang};
+    use egg::{EGraph, RecExpr, SimpleScheduler, SymbolLang};
     use num::BigUint;
 
     use crate::eqsat::{Eqsat, EqsatConf};
@@ -219,7 +219,7 @@ mod tests {
         let rules = Halide::full_rules();
         let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
             .with_conf(eqsat_conf)
-            .run();
+            .run(SimpleScheduler);
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 

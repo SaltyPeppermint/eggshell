@@ -9,7 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use chrono::Local;
 use clap::Parser;
 use egg::{
-    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, StopReason,
+    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, SimpleScheduler,
+    StopReason,
 };
 use eggshell::explanation::{self, ExplanationData};
 use hashbrown::HashSet;
@@ -270,7 +271,7 @@ where
     let mut iter_count = 0;
 
     loop {
-        let result = eqsat.run();
+        let result = eqsat.run(SimpleScheduler);
         iter_count += 1;
         info!("Iteration {iter_count} stopped.");
 

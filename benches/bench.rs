@@ -3,7 +3,7 @@ use std::hint::black_box;
 use criterion::Criterion;
 use criterion::{criterion_group, criterion_main};
 
-use egg::AstSize;
+use egg::{AstSize, SimpleScheduler};
 use egg::{EGraph, RecExpr, SymbolLang};
 use eggshell::rewrite_system::simple::SimpleLang;
 use rand::SeedableRng;
@@ -42,7 +42,7 @@ fn extraction(c: &mut Criterion) {
 fn sampling(c: &mut Criterion) {
     let start_expr: RecExpr<SimpleLang> = "(+ c (* (+ a b) 1))".parse().unwrap();
     let rules = Simple::full_rules();
-    let eqsat = Eqsat::new((&start_expr).into(), &rules).run();
+    let eqsat = Eqsat::new((&start_expr).into(), &rules).run(SimpleScheduler);
 
     let mut rng = ChaCha12Rng::seed_from_u64(1024);
     let strategy = sampler::CostWeighted::new(eqsat.egraph(), AstSize);

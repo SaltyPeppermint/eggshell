@@ -241,7 +241,7 @@ impl RewriteSystem for Halide {
 
 #[cfg(test)]
 mod tests {
-    use egg::{AstSize, RecExpr};
+    use egg::{AstSize, RecExpr, SimpleScheduler};
 
     use super::*;
     use crate::eqsat::{Eqsat, EqsatConf};
@@ -251,7 +251,7 @@ mod tests {
         let true_expr: RecExpr<HalideLang> = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new((&true_expr).into(), &rules).run();
+        let result = Eqsat::new((&true_expr).into(), &rules).run(SimpleScheduler);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
@@ -262,7 +262,7 @@ mod tests {
         let false_expr: RecExpr<HalideLang> = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new((&false_expr).into(), &rules).run();
+        let result = Eqsat::new((&false_expr).into(), &rules).run(SimpleScheduler);
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
@@ -278,7 +278,7 @@ mod tests {
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run();
+        let _ = eqsat.run(SimpleScheduler);
     }
 
     #[test]
@@ -290,7 +290,7 @@ mod tests {
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run();
+        let _ = eqsat.run(SimpleScheduler);
     }
 
     #[test]
@@ -301,6 +301,6 @@ mod tests {
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run();
+        let _ = eqsat.run(SimpleScheduler);
     }
 }
