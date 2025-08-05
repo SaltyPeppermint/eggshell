@@ -234,7 +234,7 @@ macro_rules! monomorphize {
             node_limit: Option<usize>,
             time_limit: Option<f64>,
             guides: Vec<RecExpr>,
-        ) -> (String, usize, bool) {
+        ) -> (String, bool) {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
                 .maybe_node_limit(node_limit)
@@ -246,10 +246,9 @@ macro_rules! monomorphize {
                 .with_goal(goal.0.clone())
                 .with_guides(&guides)
                 .run(egg::SimpleScheduler);
-            let generation = eqsat_result.iterations().len();
             let report_json = serde_json::to_string(&eqsat_result).unwrap();
             let guide_used = matches!(eqsat_result.report().stop_reason, egg::StopReason::GuideFound(_,_));
-            (report_json, generation, guide_used)
+            (report_json, guide_used)
         }
 
         #[gen_stub_pyfunction(module = $module_name)]
@@ -263,7 +262,7 @@ macro_rules! monomorphize {
             node_limit: Option<usize>,
             time_limit: Option<f64>,
             ordered_rules: Vec<String>,
-        ) -> (String, usize, bool) {
+        ) -> String {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
                 .maybe_node_limit(node_limit)
@@ -273,10 +272,7 @@ macro_rules! monomorphize {
                 .with_conf(conf)
                 .with_goal(goal.0.clone())
                 .run(BudgetScheduler::from_expl(ordered_rules.into_iter().map(|r|r.into()).collect()));
-            let generation = eqsat_result.iterations().len();
-            let report_json = serde_json::to_string(&eqsat_result).unwrap();
-            let guide_used = matches!(eqsat_result.report().stop_reason, egg::StopReason::GuideFound(_,_));
-            (report_json, generation, guide_used)
+            serde_json::to_string(&eqsat_result).unwrap()
         }
 
 
