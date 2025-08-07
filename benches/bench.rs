@@ -5,11 +5,11 @@ use criterion::{criterion_group, criterion_main};
 
 use egg::{AstSize, SimpleScheduler};
 use egg::{EGraph, RecExpr, SymbolLang};
+use eggshell::eqsat::{self, EqsatConf};
 use eggshell::rewrite_system::simple::SimpleLang;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
-use eggshell::eqsat::Eqsat;
 use eggshell::meta_lang::Sketch;
 use eggshell::meta_lang::sketch;
 use eggshell::rewrite_system::{RewriteSystem, Simple};
@@ -42,10 +42,18 @@ fn extraction(c: &mut Criterion) {
 fn sampling(c: &mut Criterion) {
     let start_expr: RecExpr<SimpleLang> = "(+ c (* (+ a b) 1))".parse().unwrap();
     let rules = Simple::full_rules();
-    let eqsat = Eqsat::new((&start_expr).into(), &rules).run(SimpleScheduler);
+
+    let result = eqsat::eqsat(
+        EqsatConf::default(),
+        (&start_expr).into(),
+        &rules,
+        None,
+        &[],
+        SimpleScheduler,
+    );
 
     let mut rng = ChaCha12Rng::seed_from_u64(1024);
-    let strategy = sampler::CostWeighted::new(eqsat.egraph(), AstSize);
+    let strategy = sampler::CostWeighted::new(result.egraph(), AstSize);
 
     c.bench_function("sample simple", |b| {
         b.iter(|| strategy.sample_egraph(&mut rng, 1000, 4, 4))

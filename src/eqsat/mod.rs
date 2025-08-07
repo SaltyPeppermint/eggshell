@@ -1,3 +1,4 @@
+mod guide;
 mod hooks;
 mod scheduler;
 
@@ -5,153 +6,98 @@ pub mod conf;
 
 use std::fmt::{Debug, Display};
 
-use egg::RewriteScheduler;
 use egg::{
     Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
     Runner,
 };
+use egg::{Guide, RewriteScheduler};
 use log::info;
 use serde::Serialize;
 
+use crate::eqsat::guide::ConcreteGuide;
 use crate::meta_lang::Sketch;
 use crate::meta_lang::sketch;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 pub use scheduler::BudgetScheduler;
 
-/// API accessible struct holding the equality Saturation
-#[derive(Clone, Debug)]
-pub struct Eqsat<'a, L, N>
-where
-    L: Language + Display + 'static,
-    N: Analysis<L> + Clone + Default + Debug + 'static,
-    N::Data: Clone,
-{
+/// Runs single cycle of to prove an expression to be equal to the goals
+/// (most often true or false) with the given ruleset
+#[expect(clippy::missing_panics_doc)]
+#[must_use]
+pub fn eqsat<'a, L, N, S>(
     conf: EqsatConf,
-    start_material: StartMaterial<'a, L, N>,
+    start_material: StartMaterial<L, N>,
+    rules: &'a [Rewrite<L, N>],
     goal: Option<RecExpr<L>>,
     guides: &'a [RecExpr<L>],
-    rules: &'a [Rewrite<L, N>],
-}
-
-impl<'a, L, N> Eqsat<'a, L, N>
+    scheduler: S,
+) -> EqsatResult<L, N>
 where
     L: Language + Display + 'static,
+    S: RewriteScheduler<L, N> + 'static,
     N: Analysis<L> + Clone + Default + Debug + 'static,
-    N::Data: Serialize + Clone,
+    N::Data: Clone + Serialize,
 {
-    /// Create a new Equality Saturation
-    ///
-    #[must_use]
-    pub fn new(start_material: StartMaterial<'a, L, N>, rules: &'a [Rewrite<L, N>]) -> Self {
-        Self {
-            conf: EqsatConf::default(),
-            goal: None,
-            guides: &[],
-            start_material,
-            rules,
-        }
+    let mut runner = Runner::default()
+        .with_scheduler(scheduler)
+        .with_iter_limit(conf.iter_limit)
+        .with_node_limit(conf.node_limit)
+        .with_memory_limit(conf.memory_limit)
+        .with_time_limit(conf.time_limit);
+
+    if conf.explanation {
+        info!("Running with explanations");
+        runner = runner.with_explanations_enabled();
     }
 
-    /// With the following conf.
-    #[must_use]
-    pub fn with_conf(mut self, conf: EqsatConf) -> Self {
-        self.conf = conf;
-        self
+    if conf.root_check {
+        info!("Installing root_check hook");
+        runner = runner.with_hook(hooks::root_check_hook());
     }
 
-    /// With the following goals to check.
-    #[must_use]
-    pub fn with_goal(mut self, goal: RecExpr<L>) -> Self {
-        self.goal = Some(goal);
-        self
+    if conf.memory_log {
+        info!("Installing memory display hook");
+        runner = runner.with_hook(hooks::memory_log_hook());
     }
 
-    /// With the following guides.
-    #[must_use]
-    pub fn with_guides(mut self, guides: &'a [RecExpr<L>]) -> Self {
-        self.guides = guides;
-        self
+    if let Some(goal) = goal {
+        info!("Installing goals check hook");
+        let guides = guides
+            .into_iter()
+            .map(|g| Box::new(ConcreteGuide::new(g.clone())) as Box<dyn Guide<L, N>>)
+            .collect();
+        runner = runner.with_goals(goal, guides);
     }
 
-    /// Runs single cycle of to prove an expression to be equal to the goals
-    /// (most often true or false) with the given ruleset
-    #[expect(clippy::missing_panics_doc)]
-    #[must_use]
-    pub fn run<S: RewriteScheduler<L, N> + 'static>(self, scheduler: S) -> EqsatResult<L, N> {
-        match &self.start_material {
-            StartMaterial::RecExprs(exprs) => {
-                let expr_strs = exprs
-                    .iter()
-                    .map(|x| x.to_string())
-                    .reduce(|mut a, b| {
-                        a.push_str(", ");
-                        a.push_str(&b);
-                        a
-                    })
-                    .expect("Eqsat needs at least one starting material!");
-                info!("Running Eqsat with Expressions: [{expr_strs}]");
+    let egraph_roots = match start_material {
+        StartMaterial::RecExprs(vec) => {
+            if vec.len() == 0 {
+                panic!("Eqsat needs at least one starting material!")
             }
-            StartMaterial::EGraph { .. } => info!("Running Eqsat with previous EGraph"),
-        }
-
-        let mut runner = Runner::default()
-            .with_scheduler(scheduler)
-            .with_iter_limit(self.conf.iter_limit)
-            .with_node_limit(self.conf.node_limit)
-            .with_memory_limit(self.conf.memory_limit)
-            .with_time_limit(self.conf.time_limit);
-
-        if self.conf.explanation {
-            info!("Running with explanations");
-            runner = runner.with_explanations_enabled();
-        }
-
-        if self.conf.root_check {
-            info!("Installing root_check hook");
-            runner = runner.with_hook(hooks::root_check_hook());
-        }
-
-        if self.conf.memory_log {
-            info!("Installing memory display hook");
-            runner = runner.with_hook(hooks::memory_log_hook());
-        }
-
-        if let Some(goal) = self.goal {
-            info!("Installing goals check hook");
-            runner = runner.with_goals(goal, self.guides.to_owned());
-        }
-
-        let egraph_roots = match self.start_material {
-            StartMaterial::RecExprs(vec) => {
-                for expr in vec {
-                    runner = runner.with_expr(expr);
-                }
-                None
+            let expr_strs: Vec<_> = vec.iter().map(|x| x.to_string()).collect();
+            info!("Running Eqsat with Expressions: {expr_strs:?}");
+            for expr in vec {
+                runner = runner.with_expr(expr);
             }
-            StartMaterial::EGraph { egraph, roots } => {
-                runner = runner.with_egraph(*egraph);
-                Some(roots)
-            }
-        };
-
-        runner = runner.run(self.rules);
-
-        let report = runner.report();
-
-        // Workaround since we need to deconstruct the starting material
-        let roots = match egraph_roots {
-            Some(roots) => roots,
-            None => runner.roots,
-        };
-
-        info!("{}", &report);
-        EqsatResult {
-            egraph: runner.egraph,
-            iterations: runner.iterations,
-            roots,
-            report,
+            None
         }
+        StartMaterial::EGraph { egraph, roots } => {
+            info!("Running Eqsat with previous EGraph");
+            runner = runner.with_egraph(*egraph);
+            Some(roots)
+        }
+    };
+
+    runner = runner.run(rules);
+
+    let report = runner.report();
+    info!("{}", &report);
+    EqsatResult {
+        egraph: runner.egraph,
+        iterations: runner.iterations,
+        roots: egraph_roots.unwrap_or(runner.roots),
+        report,
     }
 }
 
@@ -165,9 +111,9 @@ where
 {
     // stats_history: Vec<EqsatStats>,
     egraph: EGraph<L, N>,
-    iterations: Vec<Iteration<()>>,
+    iterations: Vec<Iteration<(), L>>,
     roots: Vec<Id>,
-    report: Report,
+    report: Report<L>,
 }
 
 impl<L, N> EqsatResult<L, N>
@@ -213,11 +159,11 @@ where
         &self.roots
     }
 
-    pub fn report(&self) -> &Report {
+    pub fn report(&self) -> &Report<L> {
         &self.report
     }
 
-    pub fn iterations(&self) -> &[Iteration<()>] {
+    pub fn iterations(&self) -> &[Iteration<(), L>] {
         &self.iterations
     }
 

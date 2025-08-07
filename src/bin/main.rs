@@ -19,7 +19,7 @@ use num::BigUint;
 use rand::SeedableRng;
 
 use eggshell::cli::{Cli, RewriteSystemName, SampleStrategy};
-use eggshell::eqsat::{Eqsat, EqsatConf, EqsatResult};
+use eggshell::eqsat::{self, EqsatConf, EqsatResult};
 use eggshell::io::reader;
 use eggshell::io::structs::Entry;
 use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
@@ -266,12 +266,18 @@ where
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    let mut eqsat = Eqsat::new(start_expr.into(), rules).with_conf(eqsat_conf.to_owned());
+    let mut result = eqsat::eqsat(
+        eqsat_conf.to_owned(),
+        start_expr.into(),
+        rules,
+        None,
+        &[],
+        SimpleScheduler,
+    );
     let mut eqsat_results = Vec::new();
     let mut iter_count = 0;
 
     loop {
-        let result = eqsat.run(SimpleScheduler);
         iter_count += 1;
         info!("Iteration {iter_count} stopped.");
 
@@ -279,7 +285,15 @@ where
         match result.report().stop_reason {
             StopReason::IterationLimit(_) => {
                 eqsat_results.push(result.clone());
-                eqsat = Eqsat::new(result.into(), rules).with_conf(eqsat_conf.to_owned());
+
+                result = eqsat::eqsat(
+                    eqsat_conf.to_owned(),
+                    result.into(),
+                    rules,
+                    None,
+                    &[],
+                    SimpleScheduler,
+                );
             }
             _ => {
                 info!("Limits reached after {} full iterations!", iter_count - 1);
@@ -413,14 +427,14 @@ pub struct SampleData<L: Language + FromOp + Display> {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct EqsatStats {
-    stop_reason: StopReason,
+pub struct EqsatStats<L: Language + std::fmt::Display> {
+    stop_reason: StopReason<L>,
     total_time: f64,
     total_nodes: usize,
     total_iters: usize,
 }
 
-impl<L, N> From<EqsatResult<L, N>> for EqsatStats
+impl<L, N> From<EqsatResult<L, N>> for EqsatStats<L>
 where
     L: Language + Display,
     N: Analysis<L> + Clone,

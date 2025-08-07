@@ -1,5 +1,6 @@
 mod error;
 mod extract;
+mod guide;
 
 use std::fmt::{Display, Formatter};
 use std::mem::{Discriminant, discriminant};

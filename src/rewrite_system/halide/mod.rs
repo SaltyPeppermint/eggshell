@@ -244,14 +244,21 @@ mod tests {
     use egg::{AstSize, RecExpr, SimpleScheduler};
 
     use super::*;
-    use crate::eqsat::{Eqsat, EqsatConf};
+    use crate::eqsat::{self, EqsatConf};
 
     #[test]
     fn eqsat_solved_true() {
         let true_expr: RecExpr<HalideLang> = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new((&true_expr).into(), &rules).run(SimpleScheduler);
+        let result = eqsat::eqsat(
+            EqsatConf::default(),
+            (&true_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
@@ -262,7 +269,14 @@ mod tests {
         let false_expr: RecExpr<HalideLang> = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = Eqsat::new((&false_expr).into(), &rules).run(SimpleScheduler);
+        let result = eqsat::eqsat(
+            EqsatConf::default(),
+            (&false_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
@@ -277,8 +291,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run(SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
     }
 
     #[test]
@@ -289,8 +302,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run(SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
     }
 
     #[test]
@@ -300,7 +312,6 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let eqsat = Eqsat::new((&expr).into(), &rules).with_conf(conf);
-        let _ = eqsat.run(SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
     }
 }

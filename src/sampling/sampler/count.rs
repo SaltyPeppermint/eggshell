@@ -370,7 +370,7 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::eqsat::{Eqsat, EqsatConf};
+    use crate::eqsat::{self, EqsatConf};
     use crate::rewrite_system::{Halide, RewriteSystem, Simple};
     use crate::sampling::SampleError;
 
@@ -379,7 +379,14 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            EqsatConf::default(),
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -396,7 +403,14 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            EqsatConf::default(),
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
@@ -413,7 +427,14 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice()).run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            EqsatConf::default(),
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
@@ -433,9 +454,14 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
-            .with_conf(eqsat_conf)
-            .run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            eqsat_conf,
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
@@ -453,9 +479,14 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
-            .with_conf(eqsat_conf)
-            .run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            eqsat_conf,
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 32);
@@ -475,9 +506,14 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
-            .with_conf(eqsat_conf)
-            .run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            eqsat_conf,
+            (&start_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root_id = eqsat.roots()[0];
 
         let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 2);

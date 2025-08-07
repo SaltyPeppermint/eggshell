@@ -4,7 +4,8 @@ mod tests {
 
     use egg::RecExpr;
     use egg::SimpleScheduler;
-    use eggshell::eqsat::Eqsat;
+    use eggshell::eqsat;
+    use eggshell::eqsat::EqsatConf;
     use eggshell::rewrite_system::Halide;
     use eggshell::rewrite_system::RewriteSystem;
     use eggshell::rewrite_system::halide::HalideLang;
@@ -16,8 +17,15 @@ mod tests {
             .parse()
             .unwrap();
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&true_expr).into(), &rules);
-        let result = eqsat.run(SimpleScheduler);
+
+        let result = eqsat::eqsat(
+            EqsatConf::default(),
+            (&true_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(
@@ -32,8 +40,14 @@ mod tests {
             .parse()
             .unwrap();
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&false_expr).into(), &rules);
-        let result = eqsat.run(SimpleScheduler);
+        let result = eqsat::eqsat(
+            EqsatConf::default(),
+            (&false_expr).into(),
+            &rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
         let root = result.roots().first().unwrap();
         let (_, expr) = result.classic_extract(*root, AstSize);
         assert_eq!(

@@ -7,7 +7,7 @@ macro_rules! monomorphize {
         use pyo3::prelude::*;
         use pyo3_stub_gen::derive::*;
 
-        use $crate::eqsat::{Eqsat, EqsatConf, BudgetScheduler};
+        use $crate::eqsat::{self, EqsatConf, BudgetScheduler};
         use $crate::meta_lang::partial;
         use $crate::meta_lang::probabilistic;
         use $crate::meta_lang::probabilistic::FirstErrorDistance;
@@ -241,11 +241,16 @@ macro_rules! monomorphize {
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
             let guides = guides.into_iter().map(|r| r.0).collect::<Vec<_>>();
-            let eqsat_result = Eqsat::new((&start.0).into(), &<$type as RewriteSystem>::full_rules())
-                .with_conf(conf)
-                .with_goal(goal.0.clone())
-                .with_guides(&guides)
-                .run(egg::SimpleScheduler);
+
+            let eqsat_result = eqsat::eqsat(
+                conf,
+                (&start.0).into(),
+                &<$type as RewriteSystem>::full_rules(),
+                Some(goal.0.clone()),
+                &guides,
+                egg::SimpleScheduler,
+            );
+
             let report_json = serde_json::to_string(&eqsat_result).unwrap();
             let guide_used = matches!(eqsat_result.report().stop_reason, egg::StopReason::GuideFound(_,_));
             (report_json, guide_used)
@@ -268,10 +273,15 @@ macro_rules! monomorphize {
                 .maybe_node_limit(node_limit)
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
-            let eqsat_result = Eqsat::new((&start.0).into(), &<$type as RewriteSystem>::full_rules())
-                .with_conf(conf)
-                .with_goal(goal.0.clone())
-                .run(BudgetScheduler::from_expl(ordered_rules.into_iter().map(|r|r.into()).collect()));
+
+            let eqsat_result = eqsat::eqsat(
+                conf,
+                (&start.0).into(),
+                &<$type as RewriteSystem>::full_rules(),
+                Some(goal.0.clone()),
+                &[],
+                BudgetScheduler::from_expl(ordered_rules.into_iter().map(|r|r.into()).collect()),
+            );
             serde_json::to_string(&eqsat_result).unwrap()
         }
 

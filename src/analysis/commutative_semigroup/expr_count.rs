@@ -168,7 +168,7 @@ mod tests {
     use egg::{EGraph, RecExpr, SimpleScheduler, SymbolLang};
     use num::BigUint;
 
-    use crate::eqsat::{Eqsat, EqsatConf};
+    use crate::eqsat::{self, EqsatConf};
     use crate::rewrite_system::halide::HalideLang;
     use crate::rewrite_system::{Halide, RewriteSystem};
 
@@ -217,9 +217,15 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat = Eqsat::new((&start_expr).into(), rules.as_slice())
-            .with_conf(eqsat_conf)
-            .run(SimpleScheduler);
+        let eqsat = eqsat::eqsat(
+            eqsat_conf,
+            (&start_expr).into(),
+            rules.as_slice(),
+            None,
+            &[],
+            SimpleScheduler,
+        );
+
         let egraph = eqsat.egraph();
         let root = eqsat.roots()[0];
 
