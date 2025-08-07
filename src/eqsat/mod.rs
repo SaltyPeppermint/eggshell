@@ -1,4 +1,3 @@
-mod guide;
 mod hooks;
 mod scheduler;
 
@@ -14,11 +13,11 @@ use egg::{Guide, RewriteScheduler};
 use log::info;
 use serde::Serialize;
 
-use crate::eqsat::guide::ConcreteGuide;
 use crate::meta_lang::Sketch;
 use crate::meta_lang::sketch;
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
+use hooks::ConcreteGuide;
 pub use scheduler::BudgetScheduler;
 
 /// Runs single cycle of to prove an expression to be equal to the goals
@@ -62,7 +61,7 @@ where
     }
 
     if let Some(goal) = goal {
-        info!("Installing goals check hook");
+        info!("Adding goals");
         let guides = guides
             .into_iter()
             .map(|g| Box::new(ConcreteGuide::new(g.clone())) as Box<dyn Guide<L, N>>)
@@ -84,7 +83,7 @@ where
         }
         StartMaterial::EGraph { egraph, roots } => {
             info!("Running Eqsat with previous EGraph");
-            runner = runner.with_egraph(*egraph);
+            runner = runner.with_egraph(egraph);
             Some(roots)
         }
     };
@@ -185,7 +184,7 @@ where
 {
     RecExprs(Vec<&'a RecExpr<L>>),
     EGraph {
-        egraph: Box<EGraph<L, N>>,
+        egraph: EGraph<L, N>,
         roots: Vec<Id>,
     },
 }
@@ -198,7 +197,7 @@ where
 {
     fn from(eqsat_result: EqsatResult<L, N>) -> Self {
         StartMaterial::EGraph {
-            egraph: Box::new(eqsat_result.egraph),
+            egraph: eqsat_result.egraph,
             roots: eqsat_result.roots,
         }
     }

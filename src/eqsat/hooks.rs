@@ -1,6 +1,25 @@
-use egg::{Analysis, Language, Runner};
+use egg::{Analysis, EGraph, Guide, Id, Language, RecExpr, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
+
+#[derive(Debug)]
+pub struct ConcreteGuide<L: Language>(RecExpr<L>);
+
+impl<L: Language> ConcreteGuide<L> {
+    pub fn new(rec_expr: RecExpr<L>) -> Self {
+        Self(rec_expr)
+    }
+}
+
+impl<L: Language, N: Analysis<L>> Guide<L, N> for ConcreteGuide<L> {
+    fn check(&self, egraph: &EGraph<L, N>, id: Id) -> Option<RecExpr<L>> {
+        if egraph.lookup_expr(&self.0).is_some_and(|x| x == id) {
+            Some(self.0.clone())
+        } else {
+            None
+        }
+    }
+}
 
 pub const fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
