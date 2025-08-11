@@ -32,25 +32,13 @@ pub struct Cli {
     #[arg(long, default_value_t = SampleStrategy::CountWeightedSizeAdjusted)]
     strategy: SampleStrategy,
 
-    /// Calculate and save explanations
-    #[arg(long, default_value_t = true)]
-    with_explanations: bool,
-
-    /// Node limit for egraph in seconds
-    #[arg(long)]
-    node_limit: Option<usize>,
-
     /// Memory limit for eqsat in bytes
     #[arg(long)]
     memory_limit: Option<usize>,
 
-    /// Time limit for eqsat in seconds
+    /// Memory limit for eqsat in bytes
     #[arg(long)]
-    time_limit: Option<usize>,
-
-    /// UUID to identify run
-    #[arg(long)]
-    uuid: String,
+    iter_limit: Option<usize>,
 
     /// RewriteSystem of the input
     #[arg(long)]
@@ -74,16 +62,6 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn uuid(&self) -> &str {
-        &self.uuid
-    }
-
-    #[must_use]
-    pub fn with_explanations(&self) -> bool {
-        self.with_explanations
-    }
-
-    #[must_use]
     pub fn rng_seed(&self) -> u64 {
         self.rng_seed
     }
@@ -99,18 +77,13 @@ impl Cli {
     }
 
     #[must_use]
-    pub(crate) fn node_limit(&self) -> Option<usize> {
-        self.node_limit
-    }
-
-    #[must_use]
-    pub(crate) fn time_limit(&self) -> Option<usize> {
-        self.time_limit
-    }
-
-    #[must_use]
-    pub(crate) fn memory_limit(&self) -> Option<usize> {
+    pub fn memory_limit(&self) -> Option<usize> {
         self.memory_limit
+    }
+
+    #[must_use]
+    pub fn iter_limit(&self) -> Option<usize> {
+        self.iter_limit
     }
 }
 

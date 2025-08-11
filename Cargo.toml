@@ -16,6 +16,8 @@ name = "eggshell"
 # To use it from both Python and Rust, you need "cdylib" and "rlib".
 crate-type = ["cdylib", "rlib"]
 
+
+
 [dependencies]
 bon = "3"
 chrono = "0.4"
@@ -46,6 +48,7 @@ smallvec = { version = "1", features = ["const_generics", "serde"] }
 strum = { version = "0.27", features = ["derive"] }
 symbolic_expressions = "5"
 thiserror = "2"
+uuid = { version = "1.18.0", features = ["serde", "v4"] }
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
@@ -57,3 +60,4 @@ debug = true
 [[bench]]
 name = "bench"
 harness = false
+

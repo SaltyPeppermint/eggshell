@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use chrono::Local;
 use clap::Parser;
 use egg::{
-    Analysis, AstSize, CostFunction, EGraph, FromOp, Language, RecExpr, Rewrite, SimpleScheduler,
-    StopReason,
+    Analysis, AstSize, CostFunction, EGraph, FromOp, Id, Language, RecExpr, Rewrite,
+    SimpleScheduler, StopReason,
 };
 use eggshell::explanation::{self, ExplanationData};
 use hashbrown::HashSet;
@@ -29,21 +29,27 @@ use eggshell::sampling::sampler::{
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+const BATCH_SIZE: usize = 1000;
 
 fn main() {
     env_logger::init();
     let start_time = Local::now();
-
     let cli = Cli::parse();
-
-    let eqsat_conf = (&cli).into();
+    let eqsat_conf = EqsatConf::builder()
+        .explanation(true)
+        .maybe_memory_limit(cli.memory_limit())
+        .maybe_iter_limit(cli.iter_limit())
+        .build();
+    let uuid = Uuid::new_v4();
 
     let folder: PathBuf = format!(
         "data/generated_samples/{}/{}-{}-{}",
         cli.rewrite_system(),
         cli.file().file_stem().unwrap().to_str().unwrap(),
-        start_time.format("%Y-%m-%d"),
-        cli.uuid()
+        start_time.format("%y-%m-%d"),
+        uuid
     )
     .into();
     fs::create_dir_all(&folder).unwrap();
@@ -61,8 +67,8 @@ fn main() {
                 eqsat_conf,
                 folder,
                 start_time.timestamp(),
-                Halide::full_rules(),
                 &cli,
+                uuid,
             );
         }
         RewriteSystemName::Rise => {
@@ -71,8 +77,8 @@ fn main() {
                 eqsat_conf,
                 folder,
                 start_time.timestamp(),
-                Rise::full_rules(),
                 &cli,
+                uuid,
             );
         }
     }
@@ -93,9 +99,10 @@ fn run<R: RewriteSystem>(
     eqsat_conf: EqsatConf,
     experiment_folder: PathBuf,
     timestamp: i64,
-    rules: Vec<Rewrite<R::Language, R::Analysis>>,
     cli: &Cli,
+    uuid: Uuid,
 ) {
+    let rules = R::full_rules();
     let entry = exprs
         .into_iter()
         .nth(cli.expr_id())
@@ -111,151 +118,100 @@ fn run<R: RewriteSystem>(
 
     info!("Starting Eqsat...");
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let mut eqsat_results = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-    info!("Finished Eqsat!");
+    let midpoint_eqsats = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
+    let last_midpoint_eqsat = &midpoint_eqsats[midpoint_eqsats.len() - 1];
+    let second_to_last_midpoint_egraph = &midpoint_eqsats[midpoint_eqsats.len() - 2].egraph();
 
-    info!("Starting sampling...");
-    let samples = sample_generations(cli, &start_expr, &eqsat_results);
+    info!("Finished Eqsat!\nStarting sampling...");
+    let midpoint_samples = sample_egraph(cli, &start_expr, last_midpoint_eqsat)
+        .into_iter()
+        .filter(|sample| second_to_last_midpoint_egraph.lookup_expr(sample).is_none())
+        .collect::<Vec<_>>();
     info!(
         "Took {} unique samples while aiming for {}.",
-        samples.len(),
-        cli.eclass_samples() * eqsat_results.len()
+        midpoint_samples.len(),
+        cli.eclass_samples() * midpoint_eqsats.len()
     );
 
-    // let max_generation = eqsat_results.len();
-    let samples_with_gen = with_generations(samples, &mut eqsat_results);
-    let last_egraph = eqsat_results.last().unwrap().egraph().to_owned();
-    drop(eqsat_results);
+    let expl_counter = AtomicUsize::new(0);
+    for (midpoint, midpoint_expl) in midpoint_samples.chunks(BATCH_SIZE).enumerate().fold(
+        Vec::new(),
+        |mut acc, (batch_id, sample_batch)| {
+            info!("Starting explenations on batch {batch_id}...");
+            let midpoints = par_expls(
+                &start_expr,
+                last_midpoint_eqsat.egraph(),
+                &expl_counter,
+                sample_batch,
+            );
+            info!("Finished work on batch {batch_id}!");
+            acc.par_extend(midpoints);
+            acc
+        },
+    ) {
+        let second_eqsats = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
+        info!("Finished Eqsat!");
 
-    run_batch(
-        eqsat_conf,
-        term_folder,
-        timestamp,
-        rules,
-        cli,
-        start_expr,
-        &last_egraph,
-        samples_with_gen,
-    );
+        let last_goal_eqsat = &second_eqsats[midpoint_eqsats.len() - 1];
+        let second_to_last_goal_egraph = &second_eqsats[midpoint_eqsats.len() - 2].egraph();
+
+        let goal_samples = sample_egraph(cli, &midpoint, last_goal_eqsat)
+            .into_iter()
+            .filter(|sample| {
+                last_midpoint_eqsat.egraph().lookup_expr(sample).is_none()
+                    && second_to_last_goal_egraph.lookup_expr(sample).is_none()
+            })
+            .collect::<Vec<_>>();
+
+        let expl_counter = AtomicUsize::new(0);
+        for (batch_id, sample_batch) in goal_samples.chunks(BATCH_SIZE).enumerate() {
+            info!("Starting work on batch {batch_id}...");
+            info!("Generating explanations...");
+            let second_legs = par_expls(
+                &midpoint,
+                last_midpoint_eqsat.egraph(),
+                &expl_counter,
+                sample_batch,
+            )
+            .map(|(goal, goal_expl)| GoalSamples {
+                sample: goal,
+                explanation: goal_expl,
+            })
+            .collect();
+            info!("Finished work on batch {batch_id}!");
+
+            info!("Writing batch to disk at {batch_id}.json ...",);
+            let data = DataEntry {
+                start_expr: start_expr.clone(),
+                sample_data: MidpointSamples {
+                    midpoint: midpoint.clone(),
+                    midpoint_expl: midpoint_expl.clone(),
+                    second_legs,
+                },
+                metadata: MetaData {
+                    batch_file: batch_id,
+                    uuid: uuid.to_string(),
+                    cli: cli.to_owned(),
+                    timestamp,
+                    eqsat_conf: eqsat_conf.clone(),
+                    rules: rules.iter().map(|r| r.name.to_string()).collect(),
+                },
+            };
+
+            let batch_file: PathBuf = term_folder
+                .join(batch_id.to_string())
+                .with_extension("json");
+
+            let mut f = BufWriter::new(File::create(batch_file).unwrap());
+            serde_json::to_writer(&mut f, &data).unwrap();
+            f.flush().unwrap();
+            drop(data);
+            info!("Results for batch {batch_id} written to disk!");
+        }
+    }
+
     info!("Work on expr {} done!", cli.expr_id());
 }
-
-#[expect(clippy::too_many_arguments)]
-fn run_batch<L, N>(
-    eqsat_conf: EqsatConf,
-    term_folder: PathBuf,
-    timestamp: i64,
-    rules: Vec<Rewrite<L, N>>,
-    cli: &Cli,
-    start_expr: RecExpr<L>,
-    last_egraph: &EGraph<L, N>,
-    samples_with_gen: Vec<(RecExpr<L>, usize)>,
-) where
-    L: Language + Display + FromOp + Clone + Send + Sync + Serialize,
-    L::Discriminant: Sync + Send,
-    N: Analysis<L> + Clone + Debug + Send + Sync,
-    N::Data: Serialize + Clone + Sync + Send,
-{
-    let expl_counter = AtomicUsize::new(0);
-    const BATCH_SIZE: usize = 1000;
-
-    info!("Working in batches of size {BATCH_SIZE}...");
-    for (batch_id, sample_batch) in samples_with_gen.chunks(BATCH_SIZE).enumerate() {
-        info!("Starting work on batch {batch_id}...");
-        info!("Generating explanations...");
-        let sample_data = sample_batch
-            .par_iter()
-            .map_with(
-                last_egraph.clone(),
-                |thread_local_eqsat_results, (sample, generation)| {
-                    let explanation = cli.with_explanations().then(|| {
-                        let expl = explanation::explain_equivalence(
-                            thread_local_eqsat_results,
-                            &start_expr,
-                            sample,
-                        );
-                        let c = expl_counter.fetch_add(1, Ordering::AcqRel);
-                        if (c + 1) % 100 == 0 {
-                            info!("Generated explanation {}...", c + 1);
-                        }
-                        expl
-                    });
-                    SampleData {
-                        sample: sample.to_owned(),
-                        generation: *generation,
-                        explanation,
-                    }
-                },
-            )
-            .collect::<Vec<_>>();
-        info!("Finished generating explanations!");
-
-        info!("Finished work on batch {batch_id}!");
-
-        let batch_file: PathBuf = term_folder
-            .join(batch_id.to_string())
-            .with_extension("json");
-
-        info!(
-            "Writing batch to disk at {}...",
-            batch_file.to_string_lossy()
-        );
-
-        let data = DataEntry {
-            start_expr: start_expr.clone(),
-            sample_data,
-            // baselines,
-            metadata: MetaData {
-                uuid: cli.uuid().to_owned(),
-                folder: batch_file.to_string_lossy().into(),
-                cli: cli.to_owned(),
-                timestamp,
-                eqsat_conf: eqsat_conf.clone(),
-                rules: rules.iter().map(|r| r.name.to_string()).collect(),
-            },
-        };
-
-        let mut f = BufWriter::new(File::create(batch_file).unwrap());
-        serde_json::to_writer(&mut f, &data).unwrap();
-        f.flush().unwrap();
-        drop(data);
-        info!("Results for batch {batch_id} written to disk!");
-    }
-}
-
-fn sample_generations<L, N>(
-    cli: &Cli,
-    start_expr: &RecExpr<L>,
-    eqsat_results: &[EqsatResult<L, N>],
-) -> Vec<RecExpr<L>>
-where
-    L: Language + Display + Clone + Send + Sync,
-    L::Discriminant: Sync,
-    N: Analysis<L> + Clone + Debug + Sync,
-    N::Data: Serialize + Clone + Sync,
-{
-    let mut rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
-
-    let samples: Vec<_> = eqsat_results
-        .iter()
-        .enumerate()
-        .flat_map(|(eqsat_generation, eqsat_result)| {
-            info!("Running sampling of generation {}...", eqsat_generation + 1);
-            let s = sample(
-                cli,
-                start_expr,
-                eqsat_result,
-                cli.eclass_samples(),
-                &mut rng,
-            );
-            info!("Finished sampling of generation {}!", eqsat_generation + 1);
-            s
-        })
-        .collect();
-    info!("Finished sampling!");
-    samples
-}
-
 fn eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
@@ -312,13 +268,41 @@ where
     eqsat_results
 }
 
+fn sample_egraph<L, N>(
+    cli: &Cli,
+    start_expr: &RecExpr<L>,
+    eqsat_result: &EqsatResult<L, N>,
+) -> Vec<RecExpr<L>>
+where
+    L: Language + Display + Clone + Send + Sync,
+    L::Discriminant: Sync,
+    N: Analysis<L> + Clone + Debug + Sync,
+    N::Data: Serialize + Clone + Sync,
+{
+    let eclass_id = eqsat_result.roots()[0];
+    let mut rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
+
+    info!("Running sampling ...");
+    let samples = sample(
+        cli,
+        start_expr,
+        eqsat_result.egraph(),
+        cli.eclass_samples(),
+        eclass_id,
+        &mut rng,
+    );
+    info!("Finished sampling!");
+    samples.into_iter().collect()
+}
+
 /// Inner sample logic.
 /// Samples guranteed to be unique.
 fn sample<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
-    eqsat: &EqsatResult<L, N>,
+    egraph: &EGraph<L, N>,
     n_samples: usize,
+    eclass_id: Id,
     rng: &mut ChaCha12Rng,
 ) -> HashSet<RecExpr<L>>
 where
@@ -327,19 +311,18 @@ where
     N: Analysis<L> + Clone + Debug + Sync,
     N::Data: Serialize + Clone + Sync,
 {
-    let root_id = eqsat.roots()[0];
     let parallelism = std::thread::available_parallelism().unwrap().into();
     let min_size = AstSize.cost_rec(start_expr);
     let max_size = min_size * 2;
 
-    match &cli.strategy() {
+    let exprs = match &cli.strategy() {
         SampleStrategy::CountWeightedUniformly => {
-            CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), max_size)
-                .sample_eclass(rng, n_samples, root_id, max_size, parallelism)
+            CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size)
+                .sample_eclass(rng, n_samples, eclass_id, max_size, parallelism)
                 .unwrap()
         }
         SampleStrategy::CountWeightedSizeAdjusted => {
-            let sampler = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), max_size);
+            let sampler = CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size);
             let samples = (min_size..max_size)
                 .into_par_iter()
                 .enumerate()
@@ -352,7 +335,7 @@ where
                             .sample_eclass(
                                 &inner_rng,
                                 n_samples / min_size,
-                                root_id,
+                                eclass_id,
                                 limit,
                                 parallelism / 8,
                             )
@@ -368,51 +351,54 @@ where
             samples
         }
         SampleStrategy::CountWeightedGreedy => {
-            CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), max_size)
-                .sample_eclass(rng, n_samples, root_id, start_expr.len(), parallelism)
+            CountWeightedGreedy::<BigUint, _, _>::new(egraph, max_size)
+                .sample_eclass(rng, n_samples, eclass_id, start_expr.len(), parallelism)
                 .unwrap()
         }
-        SampleStrategy::CostWeighted => CostWeighted::new(eqsat.egraph(), AstSize)
-            .sample_eclass(rng, n_samples, root_id, max_size, parallelism)
+        SampleStrategy::CostWeighted => CostWeighted::new(egraph, AstSize)
+            .sample_eclass(rng, n_samples, eclass_id, max_size, parallelism)
             .unwrap(),
-    }
+    };
+    exprs
 }
 
-fn with_generations<L, N>(
-    samples: Vec<RecExpr<L>>,
-    eqsat_results: &mut [EqsatResult<L, N>],
-) -> Vec<(RecExpr<L>, usize)>
+fn par_expls<L, N>(
+    start_expr: &RecExpr<L>,
+    egraph: &EGraph<L, N>,
+    expl_counter: &AtomicUsize,
+    sample_batch: &[RecExpr<L>],
+) -> impl ParallelIterator<Item = (RecExpr<L>, ExplanationData<L>)>
 where
-    L: Language + Display + FromOp,
-    N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Serialize + Clone,
+    L: Language + Display + FromOp + Send + Sync,
+    L::Discriminant: Send + Sync,
+    N: Analysis<L> + Clone + Send + Sync,
+    N::Data: Clone + Serialize + Send + Sync,
 {
-    samples
-        .into_iter()
-        .map(|sample| {
-            let generation = eqsat_results
-                .iter_mut()
-                .map(|r| r.egraph())
-                .position(|egraph| egraph.lookup_expr(&sample).is_some())
-                .expect("Must be in at least one of the egraphs")
-                + 1;
-            (sample, generation)
+    sample_batch
+        .par_iter()
+        .map_with(egraph.clone(), |thread_local_egraph, sample| {
+            let explanation =
+                explanation::explain_equivalence(thread_local_egraph, start_expr, sample);
+            let c = expl_counter.fetch_add(1, Ordering::AcqRel);
+            if (c + 1) % 100 == 0 {
+                info!("Generated explanation {}...", c + 1);
+            }
+            (sample.to_owned(), explanation)
         })
-        .collect::<Vec<_>>()
 }
 
 #[derive(Serialize, Clone, Debug)]
 pub struct DataEntry<L: Language + FromOp + Display> {
     start_expr: RecExpr<L>,
-    sample_data: Vec<SampleData<L>>,
+    sample_data: MidpointSamples<L>,
     // baselines: Option<HashMap<usize, HashMap<usize, EqsatStats>>>,
     metadata: MetaData,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
 pub struct MetaData {
+    batch_file: usize,
     uuid: String,
-    folder: String,
     cli: Cli,
     timestamp: i64,
     eqsat_conf: EqsatConf,
@@ -420,32 +406,14 @@ pub struct MetaData {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct SampleData<L: Language + FromOp + Display> {
-    sample: RecExpr<L>,
-    generation: usize,
-    explanation: Option<ExplanationData<L>>,
+pub struct MidpointSamples<L: Language + FromOp + Display> {
+    midpoint: RecExpr<L>,
+    midpoint_expl: ExplanationData<L>,
+    second_legs: Vec<GoalSamples<L>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct EqsatStats<L: Language + std::fmt::Display> {
-    stop_reason: StopReason<L>,
-    total_time: f64,
-    total_nodes: usize,
-    total_iters: usize,
-}
-
-impl<L, N> From<EqsatResult<L, N>> for EqsatStats<L>
-where
-    L: Language + Display,
-    N: Analysis<L> + Clone,
-    N::Data: Serialize + Clone,
-{
-    fn from(result: EqsatResult<L, N>) -> Self {
-        EqsatStats {
-            stop_reason: result.report().stop_reason.clone(),
-            total_time: result.report().total_time,
-            total_nodes: result.report().egraph_nodes,
-            total_iters: result.report().iterations,
-        }
-    }
+pub struct GoalSamples<L: Language + FromOp + Display> {
+    sample: RecExpr<L>,
+    explanation: ExplanationData<L>,
 }

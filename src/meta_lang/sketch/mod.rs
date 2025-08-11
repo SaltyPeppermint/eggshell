@@ -13,6 +13,7 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
 pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
+pub use guide::SketchGuide;
 
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
