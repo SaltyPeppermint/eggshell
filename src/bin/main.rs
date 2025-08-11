@@ -14,7 +14,7 @@ use egg::{
 };
 use eggshell::explanation::{self, ExplanationData};
 use hashbrown::HashSet;
-use log::{debug, info};
+use log::{debug, info, warn};
 use num::BigUint;
 use rand::SeedableRng;
 
@@ -31,7 +31,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-const BATCH_SIZE: usize = 1000;
+const BATCH_SIZE: usize = 100;
 
 fn main() {
     env_logger::init();
@@ -40,7 +40,7 @@ fn main() {
     let eqsat_conf = EqsatConf::builder()
         .explanation(true)
         .maybe_memory_limit(cli.memory_limit())
-        .maybe_iter_limit(cli.iter_limit())
+        .iter_limit(1) // Important to capture the egraph after every iteration!
         .build();
     let uuid = Uuid::new_v4();
 
@@ -116,56 +116,67 @@ fn run<R: RewriteSystem>(
         cli.expr_id()
     );
 
-    info!("Starting Eqsat...");
+    info!("Starting Midpoint Eqsat...");
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let midpoint_eqsats = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-    let last_midpoint_eqsat = &midpoint_eqsats[midpoint_eqsats.len() - 1];
-    let second_to_last_midpoint_egraph = &midpoint_eqsats[midpoint_eqsats.len() - 2].egraph();
+    let (last_midpoint_eqsat, second_to_last_midpoint_eqsat) =
+        eqsat(&start_expr, &eqsat_conf, rules.as_slice());
+    info!("Finished Midpoint Eqsat!");
 
     info!("Finished Eqsat!\nStarting sampling...");
-    let midpoint_samples = sample_egraph(cli, &start_expr, last_midpoint_eqsat)
-        .into_iter()
-        .filter(|sample| second_to_last_midpoint_egraph.lookup_expr(sample).is_none())
-        .collect::<Vec<_>>();
-    info!(
-        "Took {} unique samples while aiming for {}.",
-        midpoint_samples.len(),
-        cli.eclass_samples() * midpoint_eqsats.len()
-    );
+    let raw_midpoint_samples = sample_egraph(cli, &start_expr, &last_midpoint_eqsat);
+    let midpoint_samples: Vec<_> = if let Some(e) = second_to_last_midpoint_eqsat {
+        raw_midpoint_samples
+            .filter(|sample| e.egraph().lookup_expr(sample).is_none())
+            .collect()
+    } else {
+        warn!("Only one iteration was possible in the midpoint eqsat");
+        raw_midpoint_samples.collect()
+    };
+    info!("Took {} unique midpoint samples.", midpoint_samples.len());
 
     let expl_counter = AtomicUsize::new(0);
     for (midpoint, midpoint_expl) in midpoint_samples.chunks(BATCH_SIZE).enumerate().fold(
         Vec::new(),
         |mut acc, (batch_id, sample_batch)| {
-            info!("Starting explenations on batch {batch_id}...");
+            info!("Starting explenations on midpoint batch {batch_id}...");
             let midpoints = par_expls(
                 &start_expr,
                 last_midpoint_eqsat.egraph(),
                 &expl_counter,
                 sample_batch,
             );
-            info!("Finished work on batch {batch_id}!");
+            info!("Finished work on midpoint batch {batch_id}!");
             acc.par_extend(midpoints);
             acc
         },
     ) {
-        let second_eqsats = eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-        info!("Finished Eqsat!");
+        info!("Starting Goal Eqsat...");
+        let (last_goal_eqsat, second_to_last_goal_eqsat) =
+            eqsat(&start_expr, &eqsat_conf, rules.as_slice());
+        info!("Finished Goal Eqsat!");
 
-        let last_goal_eqsat = &second_eqsats[midpoint_eqsats.len() - 1];
-        let second_to_last_goal_egraph = &second_eqsats[midpoint_eqsats.len() - 2].egraph();
-
-        let goal_samples = sample_egraph(cli, &midpoint, last_goal_eqsat)
-            .into_iter()
-            .filter(|sample| {
-                last_midpoint_eqsat.egraph().lookup_expr(sample).is_none()
-                    && second_to_last_goal_egraph.lookup_expr(sample).is_none()
-            })
-            .collect::<Vec<_>>();
+        let raw_goal_samples = sample_egraph(cli, &midpoint, &last_goal_eqsat);
+        let goal_samples: Vec<_> = if let Some(e) = second_to_last_goal_eqsat {
+            raw_goal_samples
+                .filter(|sample| {
+                    last_midpoint_eqsat.egraph().lookup_expr(sample).is_none()
+                        && e.egraph().lookup_expr(sample).is_none()
+                })
+                .collect()
+        } else {
+            warn!("Only one iteration was possible in the goal eqsat");
+            raw_goal_samples
+                .filter(|sample| last_midpoint_eqsat.egraph().lookup_expr(sample).is_none())
+                .collect()
+        };
+        info!(
+            "Took {} unique goal samples for midpoint {midpoint}.",
+            goal_samples.len()
+        );
 
         let expl_counter = AtomicUsize::new(0);
         for (batch_id, sample_batch) in goal_samples.chunks(BATCH_SIZE).enumerate() {
-            info!("Starting work on batch {batch_id}...");
+            info!("Starting work on goal batch {batch_id}...");
             info!("Generating explanations...");
             let second_legs = par_expls(
                 &midpoint,
@@ -178,7 +189,7 @@ fn run<R: RewriteSystem>(
                 explanation: goal_expl,
             })
             .collect();
-            info!("Finished work on batch {batch_id}!");
+            info!("Finished work on goal batch {batch_id}!");
 
             info!("Writing batch to disk at {batch_id}.json ...",);
             let data = DataEntry {
@@ -216,7 +227,7 @@ fn eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
     rules: &[Rewrite<L, N>],
-) -> Vec<EqsatResult<L, N>>
+) -> (EqsatResult<L, N>, Option<EqsatResult<L, N>>)
 where
     L: Language + Display + Serialize + 'static,
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
@@ -230,17 +241,17 @@ where
         &[],
         SimpleScheduler,
     );
-    let mut eqsat_results = Vec::new();
+    let mut second_to_last_eqsat = None;
     let mut iter_count = 0;
 
-    loop {
+    let last_eqsat = loop {
         iter_count += 1;
         info!("Iteration {iter_count} stopped.");
 
         assert!(result.egraph().clean);
         match result.report().stop_reason {
             StopReason::IterationLimit(_) => {
-                eqsat_results.push(result.clone());
+                second_to_last_eqsat = Some(result.clone());
 
                 result = eqsat::eqsat(
                     eqsat_conf.to_owned(),
@@ -261,18 +272,18 @@ where
                         .expect("Should be at least one")
                         .mem_usage
                 );
-                break;
+                break result;
             }
         }
-    }
-    eqsat_results
+    };
+    (last_eqsat, second_to_last_eqsat)
 }
 
 fn sample_egraph<L, N>(
     cli: &Cli,
     start_expr: &RecExpr<L>,
     eqsat_result: &EqsatResult<L, N>,
-) -> Vec<RecExpr<L>>
+) -> impl Iterator<Item = RecExpr<L>>
 where
     L: Language + Display + Clone + Send + Sync,
     L::Discriminant: Sync,
@@ -292,7 +303,7 @@ where
         &mut rng,
     );
     info!("Finished sampling!");
-    samples.into_iter().collect()
+    samples.into_iter()
 }
 
 /// Inner sample logic.
