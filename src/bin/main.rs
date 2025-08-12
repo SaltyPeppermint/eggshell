@@ -54,12 +54,22 @@ fn main() {
         extension => panic!("Unknown file extension {}", extension),
     };
 
+    let entry = exprs
+        .into_iter()
+        .nth(cli.expr_id())
+        .expect("Entry not found!");
+    info!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
+
+    let term_folder = folder.join(cli.expr_id().to_string());
+    fs::create_dir_all(&term_folder).unwrap();
+    info!("Will write to folder: {}", term_folder.to_string_lossy());
+
     match cli.rewrite_system() {
         RewriteSystemName::Halide => {
-            run::<Halide>(exprs, eqsat_conf, folder, start_time, &cli);
+            run::<Halide>(entry, eqsat_conf, term_folder, start_time, &cli);
         }
         RewriteSystemName::Rise => {
-            run::<Rise>(exprs, eqsat_conf, folder, start_time, &cli);
+            run::<Rise>(entry, eqsat_conf, term_folder, start_time, &cli);
         }
     }
 
@@ -68,134 +78,139 @@ fn main() {
 }
 
 fn run<R: RewriteSystem>(
-    exprs: Vec<Entry>,
+    entry: Entry,
     eqsat_conf: EqsatConf,
-    experiment_folder: PathBuf,
+    term_folder: PathBuf,
     start_time: DateTime<Local>,
     cli: &Cli,
 ) {
-    let entry = exprs
-        .into_iter()
-        .nth(cli.expr_id())
-        .expect("Entry not found!");
-    info!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
-    let term_folder = experiment_folder.join(cli.expr_id().to_string());
-    fs::create_dir_all(&term_folder).unwrap();
-    info!("Will write to folder: {}", term_folder.to_string_lossy());
-
-    let rules = R::full_rules();
-
-    info!("Starting Midpoint Eqsat...");
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let (last_midpoint_eqsat, second_to_last_midpoint_eqsat) =
-        run_eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-    info!("Finished Midpoint Eqsat!");
-
-    info!("Starting sampling...");
-    let raw_midpoint_samples = sample_egraph(
-        cli,
-        &start_expr,
-        last_midpoint_eqsat.egraph(),
-        last_midpoint_eqsat.roots()[0],
+    let rules = R::full_rules();
+    let (midpoint_eqsat, midpoints_with_expls) = midpoints(&eqsat_conf, cli, &rules, &start_expr);
+    let metadata = MetaData::new(
+        cli.to_owned(),
+        start_time.to_rfc3339(),
+        eqsat_conf.clone(),
+        rules.iter().map(|r| r.name.to_string()).collect(),
     );
-    info!("Finished sampling, now filtering...");
-    let midpoint_samples: Vec<_> = if let Some(e) = second_to_last_midpoint_eqsat {
-        raw_midpoint_samples
-            .filter(|sample| e.egraph().lookup_expr(sample).is_none())
-            .collect()
-    } else {
-        warn!("Only one iteration was possible in the midpoint eqsat");
-        raw_midpoint_samples.collect()
-    };
-    info!("Took {} unique midpoint samples.", midpoint_samples.len());
-
-    let midpoint_expl_counter = AtomicUsize::new(0);
-    let midpoints_with_expls = midpoint_samples.chunks(cli.batch_size()).enumerate().fold(
-        Vec::new(),
-        |mut acc, (batch_id, sample_batch)| {
-            info!("Starting explenations on midpoint batch {batch_id}...");
-            let midpoints = par_expls(
-                &start_expr,
-                last_midpoint_eqsat.egraph(),
-                &midpoint_expl_counter,
-                sample_batch,
-            );
-            info!("Finished work on midpoint batch {batch_id}!");
-            acc.par_extend(midpoints);
-            acc
-        },
-    );
+    let data_maker = |midpoint, goals| DataEntry::new(&start_expr, midpoint, goals, &metadata);
 
     let goal_expl_counter = AtomicUsize::new(0);
-    for (midpoint_id, (midpoint, midpoint_expl)) in midpoints_with_expls.into_iter().enumerate() {
-        info!("Starting Goal Eqsat {midpoint_id}...");
-        let (last_goal_eqsat, second_to_last_goal_eqsat) =
-            run_eqsat(&start_expr, &eqsat_conf, rules.as_slice());
-        info!("Finished Goal Eqsat!");
-
-        let raw_goal_samples = sample_egraph(
+    for (midpoint_id, midpoint) in midpoints_with_expls.iter().enumerate() {
+        info!("Now working on the goals for midpoint {midpoint_id}:");
+        let goal_samples = goals_sampling(
+            &eqsat_conf,
             cli,
-            &midpoint,
-            last_goal_eqsat.egraph(),
-            last_goal_eqsat.roots()[0],
-        );
-        let goal_samples: Vec<_> = if let Some(e) = second_to_last_goal_eqsat {
-            raw_goal_samples
-                .filter(|sample| {
-                    last_midpoint_eqsat.egraph().lookup_expr(sample).is_none()
-                        && e.egraph().lookup_expr(sample).is_none()
-                })
-                .collect()
-        } else {
-            warn!("Only one iteration was possible in the goal eqsat");
-            raw_goal_samples
-                .filter(|sample| last_midpoint_eqsat.egraph().lookup_expr(sample).is_none())
-                .collect()
-        };
-        info!(
-            "Took {} unique goal samples for midpoint {}.",
-            goal_samples.len(),
-            midpoint_id
+            &rules,
+            &start_expr,
+            midpoint_eqsat.egraph(),
+            &midpoint.expr,
         );
 
         for (batch_id, sample_batch) in goal_samples.chunks(cli.batch_size()).enumerate() {
-            info!("Generating explanations for goal batch {midpoint_id}-{batch_id}...");
-            let goal = par_expls(
-                &midpoint,
-                last_midpoint_eqsat.egraph(),
+            info!("  Generating explanations for goal batch {batch_id}...");
+            let goals = par_expls(
+                &midpoint.expr,
+                midpoint_eqsat.egraph(),
                 &goal_expl_counter,
                 sample_batch,
             )
             .map(|(expr, expl)| Goal::new(expr, expl))
-            .collect();
-            info!("Finished work on goal batch {midpoint_id}-{batch_id}!");
+            .collect::<Vec<_>>();
+            info!("  Finished work on goal batch {midpoint_id}-{batch_id}!");
+            info!("  Took {} unique goal samples.", goals.len(),);
 
-            let data = DataEntry {
-                start_expr: start_expr.clone(),
-                midpoint: Midpoint::new(midpoint.clone(), midpoint_expl.clone(), goal),
-                metadata: MetaData::new(
-                    cli.to_owned(),
-                    start_time.to_rfc3339(),
-                    eqsat_conf.clone(),
-                    rules.iter().map(|r| r.name.to_string()).collect(),
-                ),
-            };
-
-            let batch_file = term_folder
-                .join(format!("{midpoint_id}-{batch_id}"))
-                .with_extension("json");
-            info!("Writing batch to {}...", batch_file.to_string_lossy());
-
-            let mut f = BufWriter::new(File::create(batch_file).unwrap());
-            serde_json::to_writer(&mut f, &data).unwrap();
-            f.flush().unwrap();
-            drop(data);
-            info!("Results for batch {midpoint_id}-{batch_id} written to disk!");
+            let data = data_maker(&midpoint, goals);
+            save_batch(&term_folder, midpoint_id, batch_id, data);
         }
     }
 
     info!("Work on expr {} done!", cli.expr_id());
 }
+
+fn midpoints<L, N>(
+    eqsat_conf: &EqsatConf,
+    cli: &Cli,
+    rules: &Vec<Rewrite<L, N>>,
+    start_expr: &RecExpr<L>,
+) -> (EqsatResult<L, N>, Vec<Midpoint<L>>)
+where
+    L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
+    L::Discriminant: Send + Sync,
+    N: Analysis<L> + Clone + Debug + Default + Send + Sync + Serialize + 'static,
+    N::Data: Serialize + Clone + Send + Sync,
+{
+    info!("Starting Midpoint Eqsat...");
+    let (eqsat, penultimate_eqsat) = run_eqsat(start_expr, eqsat_conf, rules.as_slice());
+    info!("Finished Midpoint Eqsat!");
+
+    info!("Starting sampling...");
+    let raw_samples = sample_egraph(cli, start_expr, eqsat.egraph(), eqsat.roots()[0]);
+    info!("Finished sampling, now filtering...");
+    let filtered_samples: Vec<_> = if let Some(e) = penultimate_eqsat {
+        raw_samples
+            .filter(|sample| e.egraph().lookup_expr(sample).is_none())
+            .collect()
+    } else {
+        warn!("Only one iteration was possible in the midpoint eqsat");
+        raw_samples.collect()
+    };
+    info!("Took {} unique midpoint samples.", filtered_samples.len());
+
+    let expl_counter = AtomicUsize::new(0);
+    let mut samples_with_expls = Vec::new();
+    for (batch_id, sample_batch) in filtered_samples.chunks(cli.batch_size()).enumerate() {
+        info!("Starting explenations on midpoint batch {batch_id}...");
+        let midpoints = par_expls(start_expr, eqsat.egraph(), &expl_counter, sample_batch)
+            .map(|(expr, expl)| Midpoint::new(expr, expl));
+        info!("Finished work on midpoint batch {batch_id}!");
+        samples_with_expls.par_extend(midpoints);
+    }
+
+    (eqsat, samples_with_expls)
+}
+
+fn goals_sampling<L, N>(
+    eqsat_conf: &EqsatConf,
+    cli: &Cli,
+    rules: &[Rewrite<L, N>],
+    start_expr: &RecExpr<L>,
+    midpoint_egraph: &EGraph<L, N>,
+    midpoint: &RecExpr<L>,
+) -> Vec<RecExpr<L>>
+where
+    L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
+    L::Discriminant: Send + Sync,
+    N: Analysis<L> + Clone + Debug + Default + Send + Sync + Serialize + 'static,
+    N::Data: Serialize + Clone + Send + Sync,
+{
+    info!("  Starting Goal Eqsat...");
+    let (last_goal_eqsat, penultimate_eqsat) = run_eqsat(start_expr, eqsat_conf, rules);
+    info!("  Finished Goal Eqsat!");
+
+    let raw_samples = sample_egraph(
+        cli,
+        midpoint,
+        last_goal_eqsat.egraph(),
+        last_goal_eqsat.roots()[0],
+    );
+    let filtered_samples: Vec<_> = if let Some(e) = penultimate_eqsat {
+        raw_samples
+            .filter(|sample| {
+                midpoint_egraph.lookup_expr(sample).is_none()
+                    && e.egraph().lookup_expr(sample).is_none()
+            })
+            .collect()
+    } else {
+        warn!("  Only one iteration was possible in this goal eqsat");
+        raw_samples
+            .filter(|sample| midpoint_egraph.lookup_expr(sample).is_none())
+            .collect()
+    };
+
+    filtered_samples
+}
+
 fn run_eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
@@ -331,6 +346,23 @@ where
         })
 }
 
+fn save_batch<L: Language + FromOp + Display + Serialize>(
+    term_folder: &PathBuf,
+    midpoint_id: usize,
+    batch_id: usize,
+    data: DataEntry<L>,
+) {
+    let batch_file = term_folder
+        .join(format!("{midpoint_id}-{batch_id}"))
+        .with_extension("json");
+    info!("  Writing batch to {}...", batch_file.to_string_lossy());
+
+    let mut f = BufWriter::new(File::create(batch_file).unwrap());
+    serde_json::to_writer(&mut f, &data).unwrap();
+    f.flush().unwrap();
+    info!("  Results for batch written to disk!");
+}
+
 fn print_delta(delta: TimeDelta) {
     info!(
         "Runtime: {:0>2}:{:0>2}:{:0>2}",
@@ -341,17 +373,24 @@ fn print_delta(delta: TimeDelta) {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct DataEntry<L: Language + FromOp + Display> {
-    start_expr: RecExpr<L>,
-    midpoint: Midpoint<L>,
-    metadata: MetaData,
+pub struct DataEntry<'a, L: Language + FromOp + Display> {
+    start_expr: &'a RecExpr<L>,
+    midpoint: &'a Midpoint<L>,
+    goals: Vec<Goal<L>>,
+    metadata: &'a MetaData,
 }
 
-impl<L: Language + FromOp + Display> DataEntry<L> {
-    pub fn new(start_expr: RecExpr<L>, midpoint: Midpoint<L>, metadata: MetaData) -> Self {
+impl<'a, L: Language + FromOp + Display> DataEntry<'a, L> {
+    pub fn new(
+        start_expr: &'a RecExpr<L>,
+        midpoint: &'a Midpoint<L>,
+        goals: Vec<Goal<L>>,
+        metadata: &'a MetaData,
+    ) -> Self {
         Self {
             start_expr,
             midpoint,
+            goals,
             metadata,
         }
     }
@@ -380,16 +419,11 @@ impl MetaData {
 pub struct Midpoint<L: Language + FromOp + Display> {
     expr: RecExpr<L>,
     expl: ExplanationData<L>,
-    second_legs: Vec<Goal<L>>,
 }
 
 impl<L: Language + FromOp + Display> Midpoint<L> {
-    pub fn new(expr: RecExpr<L>, expl: ExplanationData<L>, second_legs: Vec<Goal<L>>) -> Self {
-        Self {
-            expr,
-            expl,
-            second_legs,
-        }
+    pub fn new(expr: RecExpr<L>, expl: ExplanationData<L>) -> Self {
+        Self { expr, expl }
     }
 }
 
