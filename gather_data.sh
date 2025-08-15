@@ -7,7 +7,8 @@ END=1
 N_SAMPLES=20000
 
 for i in $(seq $START $END); do
-    logfile=logs/$i-$(date +%H:%M:%S).log
+    date=$(date --iso-8601=seconds)
+    logfile=logs/$i-$date.log
     echo "Logfile: $logfile"
 
     RUST_LOG=info cargo run --release -- \
@@ -16,7 +17,7 @@ for i in $(seq $START $END); do
         --memory-limit 1000000000 \
         --rewrite-system rise \
         --expr-id $i \
-        &>$logfile # --random-guide-generation 3 \
+        &>$logfile #
 
     echo "Finished $i"
 done

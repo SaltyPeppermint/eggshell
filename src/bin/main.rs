@@ -103,7 +103,7 @@ fn run<R: RewriteSystem>(
         );
 
         for (batch_id, sample_batch) in goal_samples.chunks(cli.batch_size()).enumerate() {
-            info!("  Generating explanations for goal batch {batch_id}...");
+            info!("Generating explanations for goal batch {batch_id}...");
             let goals = par_expls(
                 &midpoint.expression,
                 midpoint_eqsat.egraph(),
@@ -112,8 +112,8 @@ fn run<R: RewriteSystem>(
             )
             .map(|(expr, expl)| SampleWithExpl::new(expr, expl))
             .collect::<Vec<_>>();
-            info!("  Finished work on goal batch {midpoint_id}-{batch_id}!");
-            info!("  Took {} unique goal samples.", goals.len(),);
+            info!("Finished work on goal batch {midpoint_id}-{batch_id}!");
+            info!("Took {} unique goal samples.", goals.len(),);
 
             let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
             let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
@@ -183,9 +183,9 @@ where
     N: Analysis<L> + Clone + Debug + Default + Send + Sync + Serialize + 'static,
     N::Data: Serialize + Clone + Send + Sync,
 {
-    info!("  Starting Goal Eqsat...");
+    info!("Starting Goal Eqsat...");
     let (last_goal_eqsat, penultimate_eqsat, iterations) = run_eqsat(start_expr, eqsat_conf, rules);
-    info!("  Finished Goal Eqsat!");
+    info!("Finished Goal Eqsat!");
 
     let raw_samples = sample_egraph(
         cli,
@@ -201,7 +201,7 @@ where
             })
             .collect()
     } else {
-        warn!("  Only one iteration was possible in this goal eqsat");
+        warn!("Only one iteration was possible in this goal eqsat");
         raw_samples
             .filter(|sample| midpoint_egraph.lookup_expr(sample).is_none())
             .collect()
@@ -349,12 +349,12 @@ fn save_batch<L: Language + FromOp + Display + Serialize>(
     let batch_file = term_folder
         .join(format!("{midpoint_id}-{batch_id}"))
         .with_extension("json");
-    info!("  Writing batch to {}...", batch_file.to_string_lossy());
+    info!("Writing batch to {}...", batch_file.to_string_lossy());
 
     let mut f = BufWriter::new(File::create(batch_file).unwrap());
     serde_json::to_writer(&mut f, &data).unwrap();
     f.flush().unwrap();
-    info!("  Results for batch written to disk!");
+    info!("Results for batch written to disk!");
 }
 
 fn print_delta(delta: TimeDelta) {
@@ -407,7 +407,7 @@ impl<'a> MetaData<'a> {
     ) -> Self {
         Self {
             cli,
-            start_time: start_time.to_string(),
+            start_time: start_time.to_rfc3339(),
             eqsat_conf,
             rule_names: rules,
         }
