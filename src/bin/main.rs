@@ -18,7 +18,7 @@ use num::BigUint;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use eggshell::cli::{Cli, RewriteSystemName, SampleStrategy};
 use eggshell::eqsat::{self, EqsatConf, EqsatResult};
@@ -86,41 +86,39 @@ fn run<R: RewriteSystem>(
 ) {
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
     let rules = R::full_rules();
-    let (midpoint_eqsat, midpoints_with_expls) = midpoints(&eqsat_conf, cli, &rules, &start_expr);
-    let metadata = MetaData::new(
-        cli.to_owned(),
-        start_time.to_rfc3339(),
-        eqsat_conf.clone(),
-        rules.iter().map(|r| r.name.to_string()).collect(),
-    );
-    let data_maker = |midpoint, goals| DataEntry::new(&start_expr, midpoint, goals, &metadata);
+    let (midpoint_eqsat, midpoints, midpoint_iterations) =
+        midpoints(&eqsat_conf, cli, &rules, &start_expr);
+    let rule_names = rules.iter().map(|r| r.name.to_string()).collect::<Vec<_>>();
 
     let goal_expl_counter = AtomicUsize::new(0);
-    for (midpoint_id, midpoint) in midpoints_with_expls.iter().enumerate() {
+    for (midpoint_id, midpoint) in midpoints.iter().enumerate() {
         info!("Now working on the goals for midpoint {midpoint_id}:");
-        let goal_samples = goals_sampling(
+        let (goal_samples, goals_iterations) = goals_sampling(
             &eqsat_conf,
             cli,
             &rules,
             &start_expr,
             midpoint_eqsat.egraph(),
-            &midpoint.expr,
+            &midpoint.expression,
         );
 
         for (batch_id, sample_batch) in goal_samples.chunks(cli.batch_size()).enumerate() {
             info!("  Generating explanations for goal batch {batch_id}...");
             let goals = par_expls(
-                &midpoint.expr,
+                &midpoint.expression,
                 midpoint_eqsat.egraph(),
                 &goal_expl_counter,
                 sample_batch,
             )
-            .map(|(expr, expl)| Goal::new(expr, expl))
+            .map(|(expr, expl)| SampleWithExpl::new(expr, expl))
             .collect::<Vec<_>>();
             info!("  Finished work on goal batch {midpoint_id}-{batch_id}!");
             info!("  Took {} unique goal samples.", goals.len(),);
 
-            let data = data_maker(&midpoint, goals);
+            let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
+            let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
+            let data = DataEntry::new(&start_expr, midpoint_iterations, midpoint, &metadata);
+
             save_batch(&term_folder, midpoint_id, batch_id, data);
         }
     }
@@ -133,7 +131,7 @@ fn midpoints<L, N>(
     cli: &Cli,
     rules: &Vec<Rewrite<L, N>>,
     start_expr: &RecExpr<L>,
-) -> (EqsatResult<L, N>, Vec<Midpoint<L>>)
+) -> (EqsatResult<L, N>, Vec<SampleWithExpl<L>>, usize)
 where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
     L::Discriminant: Send + Sync,
@@ -141,7 +139,8 @@ where
     N::Data: Serialize + Clone + Send + Sync,
 {
     info!("Starting Midpoint Eqsat...");
-    let (eqsat, penultimate_eqsat) = run_eqsat(start_expr, eqsat_conf, rules.as_slice());
+    let (eqsat, penultimate_eqsat, iterations) =
+        run_eqsat(start_expr, eqsat_conf, rules.as_slice());
     info!("Finished Midpoint Eqsat!");
 
     info!("Starting sampling...");
@@ -162,12 +161,12 @@ where
     for (batch_id, sample_batch) in filtered_samples.chunks(cli.batch_size()).enumerate() {
         info!("Starting explenations on midpoint batch {batch_id}...");
         let midpoints = par_expls(start_expr, eqsat.egraph(), &expl_counter, sample_batch)
-            .map(|(expr, expl)| Midpoint::new(expr, expl));
+            .map(|(expr, expl)| SampleWithExpl::new(expr, expl));
         info!("Finished work on midpoint batch {batch_id}!");
         samples_with_expls.par_extend(midpoints);
     }
 
-    (eqsat, samples_with_expls)
+    (eqsat, samples_with_expls, iterations)
 }
 
 fn goals_sampling<L, N>(
@@ -177,7 +176,7 @@ fn goals_sampling<L, N>(
     start_expr: &RecExpr<L>,
     midpoint_egraph: &EGraph<L, N>,
     midpoint: &RecExpr<L>,
-) -> Vec<RecExpr<L>>
+) -> (Vec<RecExpr<L>>, usize)
 where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
     L::Discriminant: Send + Sync,
@@ -185,7 +184,7 @@ where
     N::Data: Serialize + Clone + Send + Sync,
 {
     info!("  Starting Goal Eqsat...");
-    let (last_goal_eqsat, penultimate_eqsat) = run_eqsat(start_expr, eqsat_conf, rules);
+    let (last_goal_eqsat, penultimate_eqsat, iterations) = run_eqsat(start_expr, eqsat_conf, rules);
     info!("  Finished Goal Eqsat!");
 
     let raw_samples = sample_egraph(
@@ -208,62 +207,54 @@ where
             .collect()
     };
 
-    filtered_samples
+    (filtered_samples, iterations)
 }
 
 fn run_eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
     rules: &[Rewrite<L, N>],
-) -> (EqsatResult<L, N>, Option<EqsatResult<L, N>>)
+) -> (EqsatResult<L, N>, Option<EqsatResult<L, N>>, usize)
 where
     L: Language + Display + Serialize + 'static,
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
     N::Data: Serialize + Clone,
 {
-    let mut result = eqsat::eqsat(
-        eqsat_conf.to_owned(),
-        start_expr.into(),
-        rules,
-        None,
-        &[],
-        SimpleScheduler,
-    );
-    let mut second_to_last_eqsat = None;
+    let mut start_material = start_expr.into();
+    let mut last_eqsat = None;
+    let mut penultimate_eqsat = None;
     let mut iter_count = 0;
 
-    let last_eqsat = loop {
-        iter_count += 1;
-        info!("Iteration {iter_count} stopped.");
+    loop {
+        let result = eqsat::eqsat(
+            eqsat_conf.to_owned(),
+            start_material,
+            rules,
+            None,
+            &[],
+            SimpleScheduler,
+        );
+        if let StopReason::IterationLimit(_) = result.report().stop_reason {
+            iter_count += 1;
+            penultimate_eqsat = last_eqsat;
+            last_eqsat = Some(result.clone());
+            start_material = result.into()
+        } else {
+            let mem_use = result
+                .iterations()
+                .last()
+                .expect("Should be at least one")
+                .mem_usage;
 
-        assert!(result.egraph().clean);
-        match result.report().stop_reason {
-            StopReason::IterationLimit(_) => {
-                second_to_last_eqsat = Some(result.clone());
-                result = eqsat::eqsat(
-                    eqsat_conf.to_owned(),
-                    result.into(),
-                    rules,
-                    None,
-                    &[],
-                    SimpleScheduler,
-                );
-            }
-            _ => {
-                info!("Limits reached after {} full iterations!", iter_count - 1);
-                info!(
-                    "Max Memory Consumption: {:?}",
-                    result
-                        .iterations()
-                        .last()
-                        .expect("Should be at least one")
-                        .mem_usage
-                );
-                break result;
-            }
+            info!("Limits reached after {iter_count} full iterations!");
+            info!("Max Memory Consumption: {mem_use:?}",);
+            break (
+                last_eqsat.expect("At least one iteration eqsat has to be run"),
+                penultimate_eqsat,
+                iter_count,
+            );
         }
-    };
-    (last_eqsat, second_to_last_eqsat)
+    }
 }
 
 fn sample_egraph<L, N>(
@@ -291,23 +282,26 @@ where
                 .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
                 .unwrap()
         }
-        SampleStrategy::CountWeightedSizeAdjusted => (min_size..max_size)
-            .into_par_iter()
-            .enumerate()
-            .map({
-                |(thread_idx, limit)| {
-                    debug!("Sampling for size {limit}...");
-                    let mut inner_rng = rng.clone();
-                    inner_rng.set_stream((thread_idx + 1) as u64);
-                    CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size)
-                        .sample_eclass(&inner_rng, n_samples, eclass_id, limit, parallelism)
-                        .unwrap()
-                }
-            })
-            .reduce(HashSet::new, |mut a, b| {
-                a.extend(b);
-                a
-            }),
+        SampleStrategy::CountWeightedSizeRange => {
+            let sampler = CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size);
+            (min_size..max_size)
+                .into_par_iter()
+                .enumerate()
+                .map({
+                    |(thread_idx, limit)| {
+                        debug!("Sampling for size {limit}...");
+                        let mut inner_rng = rng.clone();
+                        inner_rng.set_stream((thread_idx + 1) as u64);
+                        sampler
+                            .sample_eclass(&inner_rng, n_samples, eclass_id, limit, parallelism)
+                            .unwrap()
+                    }
+                })
+                .reduce(HashSet::new, |mut a, b| {
+                    a.extend(b);
+                    a
+                })
+        }
         SampleStrategy::CountWeightedGreedy => {
             CountWeightedGreedy::<BigUint, _, _>::new(egraph, max_size)
                 .sample_eclass(&rng, n_samples, eclass_id, start_expr.len(), parallelism)
@@ -375,68 +369,82 @@ fn print_delta(delta: TimeDelta) {
 #[derive(Serialize, Clone, Debug)]
 pub struct DataEntry<'a, L: Language + FromOp + Display> {
     start_expr: &'a RecExpr<L>,
-    midpoint: &'a Midpoint<L>,
-    goals: Vec<Goal<L>>,
-    metadata: &'a MetaData,
+    iterations: usize,
+    midpoint: Midpoint<'a, L>,
+    metadata: &'a MetaData<'a>,
 }
 
 impl<'a, L: Language + FromOp + Display> DataEntry<'a, L> {
     pub fn new(
         start_expr: &'a RecExpr<L>,
-        midpoint: &'a Midpoint<L>,
-        goals: Vec<Goal<L>>,
+        iterations: usize,
+        midpoint: Midpoint<'a, L>,
         metadata: &'a MetaData,
     ) -> Self {
         Self {
             start_expr,
+            iterations,
             midpoint,
-            goals,
             metadata,
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq)]
-pub struct MetaData {
-    cli: Cli,
+#[derive(Serialize, Clone, Debug, Eq, PartialEq)]
+pub struct MetaData<'a> {
+    cli: &'a Cli,
     start_time: String,
-    eqsat_conf: EqsatConf,
-    rules: Vec<String>,
+    eqsat_conf: &'a EqsatConf,
+    rule_names: &'a [String],
 }
 
-impl MetaData {
-    pub fn new(cli: Cli, start_time: String, eqsat_conf: EqsatConf, rules: Vec<String>) -> Self {
+impl<'a> MetaData<'a> {
+    pub fn new(
+        cli: &'a Cli,
+        start_time: &DateTime<Local>,
+        eqsat_conf: &'a EqsatConf,
+        rules: &'a [String],
+    ) -> Self {
         Self {
             cli,
-            start_time,
+            start_time: start_time.to_string(),
             eqsat_conf,
-            rules,
+            rule_names: rules,
         }
     }
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct Midpoint<L: Language + FromOp + Display> {
-    expr: RecExpr<L>,
-    expl: ExplanationData<L>,
+pub struct Midpoint<'a, L: Language + FromOp + Display> {
+    midpoint: &'a SampleWithExpl<L>,
+    iterations: usize,
+    goals: Vec<SampleWithExpl<L>>,
 }
 
-impl<L: Language + FromOp + Display> Midpoint<L> {
-    pub fn new(expr: RecExpr<L>, expl: ExplanationData<L>) -> Self {
-        Self { expr, expl }
+impl<'a, L: Language + FromOp + Display> Midpoint<'a, L> {
+    pub fn new(
+        midpoint: &'a SampleWithExpl<L>,
+        iterations: usize,
+        goals: Vec<SampleWithExpl<L>>,
+    ) -> Self {
+        Self {
+            midpoint,
+            iterations,
+            goals,
+        }
     }
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct Goal<L: Language + FromOp + Display> {
-    sample: RecExpr<L>,
+pub struct SampleWithExpl<L: Language + FromOp + Display> {
+    expression: RecExpr<L>,
     explanation: ExplanationData<L>,
 }
 
-impl<L: Language + FromOp + Display> Goal<L> {
-    pub fn new(sample: RecExpr<L>, explanation: ExplanationData<L>) -> Self {
+impl<L: Language + FromOp + Display> SampleWithExpl<L> {
+    pub fn new(expression: RecExpr<L>, explanation: ExplanationData<L>) -> Self {
         Self {
-            sample,
+            expression,
             explanation,
         }
     }

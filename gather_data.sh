@@ -5,9 +5,6 @@ set -e
 START=0
 END=1
 N_SAMPLES=20000
-uuid=$(uuidgen)
-
-echo "UUID of run: $uuid"
 
 for i in $(seq $START $END); do
     logfile=logs/$i-$(date +%H:%M:%S).log
@@ -17,8 +14,6 @@ for i in $(seq $START $END); do
         --file data/rise/start_and_goal.csv \
         --eclass-samples $N_SAMPLES \
         --memory-limit 1000000000 \
-        --time-limit 120 \
-        --uuid $uuid \
         --rewrite-system rise \
         --expr-id $i \
         &>$logfile # --random-guide-generation 3 \

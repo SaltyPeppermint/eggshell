@@ -85,7 +85,7 @@ where
         let root_eclass = &self.egraph()[root];
 
         let ranges = batch_ranges(n_samples, parallelism);
-        debug!("Running sampling in {} batches", ranges.len());
+        info!("Running sampling in {} batches", ranges.len());
         if !self.extractable(root, size_limit) {
             return Err(SampleError::SizeLimit(size_limit));
         }
@@ -104,10 +104,8 @@ where
                 a.extend(b);
                 Ok(a)
             })?;
-        debug!(
-            "Sampled {} expressions from {root} wiht size_limit {size_limit}",
-            samples.len()
-        );
+        let n_samples = samples.len();
+        info!("Sampled {n_samples} expressions from eclass {root} with size_limit {size_limit}");
         Ok(samples)
     }
 
