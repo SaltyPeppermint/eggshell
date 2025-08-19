@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::RwLock;
 
+use dashmap::DashMap;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
@@ -36,7 +36,7 @@ where
         _egraph: &EGraph<L, N>,
         _eclass_id: Id,
         enode: &L,
-        analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
+        analysis_of: &Arc<DashMap<Id, Self::Data>>,
     ) -> Self::Data {
         // fn rec<
         //     CC: Debug
@@ -105,9 +105,8 @@ where
 
         let mut children_data = Vec::new();
         {
-            let a_o = analysis_of.read().unwrap();
             for child_id in enode.children() {
-                children_data.push(a_o[child_id].clone());
+                children_data.push(analysis_of.get(child_id).unwrap().clone());
             }
         }
 

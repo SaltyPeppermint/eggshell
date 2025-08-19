@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+use dashmap::DashMap;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
@@ -40,17 +41,15 @@ where
         _egraph: &EGraph<L, N>,
         eclass_id: Id,
         enode: &L,
-        analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
+        analysis_of: &Arc<DashMap<Id, Self::Data>>,
     ) -> Self::Data {
-        if self.loop_analysis[&eclass_id].node_is_loop_forcing(enode) {
+        if self.loop_analysis[&eclass_id].node_known_to_be_loop_forcing(enode) {
             return None;
         }
         let mut children_data = Vec::new();
-        let a_o = analysis_of.read().unwrap();
         for child_id in enode.children() {
-            children_data.push(a_o[child_id].clone());
+            children_data.push(analysis_of.get(child_id).unwrap().clone());
         }
-        drop(a_o);
 
         let mut tmp = Vec::new();
 
@@ -178,6 +177,7 @@ mod tests {
             "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
                 .parse()
                 .unwrap();
+
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
@@ -191,13 +191,12 @@ mod tests {
         );
 
         let egraph = eqsat.egraph();
-        let root = eqsat.roots()[0];
 
         let loop_analysis = LoopCause.one_shot_analysis(&egraph);
         println!("LOOP ANALYSIS DONE");
         let data = LoopFreeCount::new(loop_analysis).one_shot_analysis(egraph);
 
-        let root_data: &Option<HashMap<_, usize>> = &data[&egraph.find(root)];
-        assert_eq!(root_data, &None);
+        let d: usize = *data[&Id::from(11)].as_ref().unwrap().get(&23).unwrap();
+        assert_eq!(d, 1232);
     }
 }

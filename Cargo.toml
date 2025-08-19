@@ -22,7 +22,9 @@ crate-type = ["cdylib", "rlib"]
 bon = "3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
 csv = "1"
+dashmap = { version = "6.1.0", features = ["rayon"] }
 dot-generator = "0.2.0"
 dot-structures = "0.1.2"
 egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = [

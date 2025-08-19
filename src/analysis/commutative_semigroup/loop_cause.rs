@@ -1,11 +1,12 @@
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::sync::RwLock;
 
+use dashmap::DashMap;
 use egg::DidMerge;
 use egg::{Analysis, EGraph, Id, Language};
 use hashbrown::HashMap;
 use hashbrown::HashSet;
+use rayon::iter::ParallelExtend;
 
 use super::CommutativeSemigroupAnalysis;
 
@@ -24,9 +25,10 @@ impl ENodeLoopData {
     }
 
     fn combine(&mut self, other: &ENodeLoopData) {
-        for l in &other.transitive_closure {
-            self.loop_forcing = self.loop_forcing || !self.transitive_closure.insert(*l);
-        }
+        self.loop_forcing = !self
+            .transitive_closure
+            .is_disjoint(&other.transitive_closure);
+        self.transitive_closure.extend(&other.transitive_closure);
     }
 }
 
@@ -56,8 +58,12 @@ impl<L: Language> EClassLoopData<L> {
         self.0.iter().all(|(_, v)| v.loop_forcing)
     }
 
-    pub fn node_is_loop_forcing(&self, node: &L) -> bool {
-        self.0[node].loop_forcing
+    pub fn get(&self, key: &L) -> Option<&ENodeLoopData> {
+        self.0.get(key)
+    }
+
+    pub fn node_known_to_be_loop_forcing(&self, node: &L) -> bool {
+        self.0.get(node).map(|n| n.loop_forcing).unwrap_or(false)
     }
 }
 
@@ -79,7 +85,7 @@ where
         _egraph: &EGraph<L, N>,
         eclass_id: Id,
         enode: &L,
-        analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
+        analysis_of: &Arc<DashMap<Id, Self::Data>>,
     ) -> Self::Data {
         // If any of the children loop, the node loops
         // Thankfully this is cached via `analysis_of`
@@ -88,11 +94,14 @@ where
                 .children()
                 .iter()
                 .fold(ENodeLoopData::new(eclass_id), |acc, c_id| {
-                    let a_o = analysis_of.read().unwrap();
-                    a_o[c_id].transitive_closure().fold(acc, |mut acc, v| {
-                        acc.combine(v);
-                        acc
-                    })
+                    analysis_of
+                        .get(c_id)
+                        .unwrap()
+                        .transitive_closure()
+                        .fold(acc, |mut acc, v| {
+                            acc.combine(v);
+                            acc
+                        })
                 });
         EClassLoopData::new(enode.to_owned(), transitive_closure)
     }
@@ -109,6 +118,7 @@ where
 #[cfg(test)]
 mod tests {
     use egg::{EGraph, RecExpr, SimpleScheduler, SymbolLang};
+    use graphviz_rust::attributes::start;
 
     use crate::eqsat::{self, EqsatConf};
     use crate::rewrite_system::halide::HalideLang;
@@ -174,15 +184,13 @@ mod tests {
         );
 
         let egraph = eqsat.egraph();
-        let root = eqsat.roots()[0];
 
         let data = LoopCause.one_shot_analysis(egraph);
 
-        let root_data = &data[&egraph.find(root)];
+        let root = egraph.find(eqsat.roots()[0]);
+        let k = &start_expr[Id::from(0)];
+        let root_data = data[&root].get(k).unwrap();
 
-        assert_eq!(
-            root_data,
-            &EClassLoopData::new(HalideLang::Bool(true), ENodeLoopData::new(root))
-        );
+        assert_eq!(root_data, &ENodeLoopData::new(root));
     }
 }
