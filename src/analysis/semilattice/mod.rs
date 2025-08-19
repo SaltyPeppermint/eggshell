@@ -7,8 +7,8 @@ use std::fmt::Debug;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
-use super::UniqueQueue;
 use super::old_parents_iter;
+use crate::utils::UniqueQueue;
 
 pub(crate) use contains::SatisfiesContainsAnalysis;
 pub use extract::ExtractAnalysis;

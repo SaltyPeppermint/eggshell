@@ -4,7 +4,7 @@ set -e
 
 START=0
 END=1
-N_SAMPLES=20000
+N_SAMPLES=1500
 
 for i in $(seq $START $END); do
     date=$(date --iso-8601=seconds)

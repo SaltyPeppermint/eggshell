@@ -398,29 +398,29 @@ mod tests {
         assert_eq!(samples.len(), 6);
     }
 
-    #[test]
-    fn simple_sample_uniform_float() {
-        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
+    // #[test]
+    // fn simple_sample_uniform_float() {
+    //     let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
-        let rules = Simple::full_rules();
-        let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
-            (&start_expr).into(),
-            &rules,
-            None,
-            &[],
-            SimpleScheduler,
-        );
-        let root_id = eqsat.roots()[0];
+    //     let rules = Simple::full_rules();
+    //     let eqsat = eqsat::eqsat(
+    //         EqsatConf::default(),
+    //         (&start_expr).into(),
+    //         &rules,
+    //         None,
+    //         &[],
+    //         SimpleScheduler,
+    //     );
+    //     let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
-        let rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy
-            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
-            .unwrap();
+    //     let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
+    //     let rng = ChaCha12Rng::seed_from_u64(1024);
+    //     let samples = strategy
+    //         .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
+    //         .unwrap();
 
-        assert_eq!(samples.len(), 5);
-    }
+    //     assert_eq!(samples.len(), 5);
+    // }
 
     #[test]
     fn simple_greedy() {

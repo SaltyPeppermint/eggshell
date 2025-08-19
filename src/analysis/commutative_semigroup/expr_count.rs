@@ -20,7 +20,7 @@ impl ExprCount {
     }
 }
 
-impl<C, L, N> CommutativeSemigroupAnalysis<C, L, N> for ExprCount
+impl<C, L, N> CommutativeSemigroupAnalysis<L, N, C> for ExprCount
 where
     L: Language + Sync + Send,
     L::Discriminant: Sync,
@@ -31,16 +31,13 @@ where
     // Size and number of programs of that size
     type Data = HashMap<usize, C>;
 
-    fn make<'a>(
+    fn make(
         &self,
         _egraph: &EGraph<L, N>,
+        _eclass_id: Id,
         enode: &L,
         analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
-    ) -> Self::Data
-    where
-        Self::Data: 'a,
-        C: 'a,
-    {
+    ) -> Self::Data {
         // fn rec<
         //     CC: Debug
         //         + Clone

@@ -1,22 +1,25 @@
 mod expr_count;
+mod loop_cause;
+mod loop_free_count;
 
 use std::fmt::Debug;
 use std::iter::{Product, Sum};
-
-use num_traits::{NumAssignRef, NumRef};
-use rand::distributions::uniform::SampleUniform;
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 use log::debug;
+use num_traits::{NumAssignRef, NumRef};
+use rand::distributions::uniform::SampleUniform;
 
-use super::UniqueQueue;
+use crate::utils::UniqueQueue;
 
 pub use expr_count::ExprCount;
+pub use loop_cause::LoopCause;
+pub use loop_free_count::LoopFreeCount;
 
-pub trait CommutativeSemigroupAnalysis<C, L, N>: Sized + Debug + Sync + Send
+pub trait CommutativeSemigroupAnalysis<L, N, C = ()>: Sized + Debug + Sync + Send
 where
     L: Language + Sync + Send,
     L::Discriminant: Sync,
@@ -25,20 +28,18 @@ where
 {
     type Data: PartialEq + Debug + Sync + Send;
 
-    fn make<'a>(
+    fn make(
         &self,
         egraph: &EGraph<L, N>,
+        eclass_id: Id,
         enode: &L,
         analysis_of: &Arc<RwLock<HashMap<Id, Self::Data>>>,
-    ) -> Self::Data
-    where
-        Self::Data: 'a,
-        C: 'a;
+    ) -> Self::Data;
 
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
     fn one_shot_analysis(&self, egraph: &EGraph<L, N>) -> HashMap<Id, Self::Data> {
-        fn resolve_pending_analysis<CC, L, N, B>(
+        fn resolve_pending_analysis<'aa, L, N, B, CC>(
             egraph: &EGraph<L, N>,
             analysis: &B,
             data: &Arc<RwLock<HashMap<Id, B::Data>>>,
@@ -48,15 +49,13 @@ where
             L::Discriminant: Sync,
             N: Analysis<L> + Debug + Sync,
             N::Data: Debug + Sync,
-            B: CommutativeSemigroupAnalysis<CC, L, N> + Sync + Send,
+            B: CommutativeSemigroupAnalysis<L, N, CC> + Sync + Send,
             B::Data: PartialEq + Debug,
         {
             while let Some(id) = {
                 // Potentially, this might lead to a situation where only one thread is working on the queue.
                 // This has not been observed in practice, but it is a potential bottleneck.
-                let mut lock = analysis_pending.lock().unwrap();
-                let id = lock.pop();
-                drop(lock);
+                let id = { analysis_pending.lock().unwrap().pop() }; // Drop lock at the end of the scope
                 id
             } {
                 let canonical_id = egraph.find(id);
@@ -74,7 +73,7 @@ where
                             drop(lock);
                             a
                         })
-                        .then(|| analysis.make(egraph, &u_node, data))
+                        .then(|| analysis.make(egraph, canonical_id, &u_node, data))
                 });
 
                 // If we have some info, we add that info to our storage.
