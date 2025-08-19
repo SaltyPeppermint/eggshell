@@ -31,39 +31,33 @@ impl ENodeLoopData {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct EClassLoopData<L: Language> {
-    transitive_closure_by_node: HashMap<L, ENodeLoopData>,
-}
+pub struct EClassLoopData<L: Language>(HashMap<L, ENodeLoopData>);
 
 impl<L: Language> EClassLoopData<L> {
     pub fn new(enode: L, transitive_closure: ENodeLoopData) -> Self {
-        Self {
-            transitive_closure_by_node: HashMap::from([(enode, transitive_closure)]),
-        }
+        Self(HashMap::from([(enode, transitive_closure)]))
     }
 
     pub fn combine(&mut self, other: EClassLoopData<L>) {
-        for (k, v_other) in other.transitive_closure_by_node {
-            if let Some(v_self) = self.transitive_closure_by_node.get_mut(&k) {
+        for (k, v_other) in other.0 {
+            if let Some(v_self) = self.0.get_mut(&k) {
                 v_self.combine(&v_other);
             } else {
-                self.transitive_closure_by_node.insert(k, v_other);
+                self.0.insert(k, v_other);
             }
         }
     }
 
     pub fn transitive_closure(&self) -> impl Iterator<Item = &ENodeLoopData> {
-        self.transitive_closure_by_node.iter().map(|(_, v)| v)
+        self.0.iter().map(|(_, v)| v)
     }
 
     pub fn loop_forcing(&self) -> bool {
-        self.transitive_closure_by_node
-            .iter()
-            .all(|(_, v)| v.loop_forcing)
+        self.0.iter().all(|(_, v)| v.loop_forcing)
     }
 
     pub fn node_is_loop_forcing(&self, node: &L) -> bool {
-        self.transitive_closure_by_node[node].loop_forcing
+        self.0[node].loop_forcing
     }
 }
 

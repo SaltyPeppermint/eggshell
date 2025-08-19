@@ -67,12 +67,7 @@ where
                     let u_node = n.clone().map_children(|child_id| egraph.find(child_id));
                     // If all the childs eclass_children have data, we can calculate it!
                     u_node
-                        .all(|child_id| {
-                            let lock = data.read().unwrap();
-                            let a = lock.contains_key(&child_id);
-                            drop(lock);
-                            a
-                        })
+                        .all(|child_id| data.read().unwrap().contains_key(&child_id))
                         .then(|| analysis.make(egraph, canonical_id, &u_node, data))
                 });
 
