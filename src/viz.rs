@@ -122,9 +122,9 @@ mod tests {
             false,
         );
 
-        let svg = crate::viz::dot_to_svg(&dot);
-        let path = std::env::current_dir().unwrap().join("test1.svg");
-        std::fs::write(path, svg).unwrap();
+        // let svg = crate::viz::dot_to_svg(&dot);
+        // let path = std::env::current_dir().unwrap().join("test1.svg");
+        // std::fs::write(path, svg).unwrap();
 
         assert_eq!(
             &dot,
