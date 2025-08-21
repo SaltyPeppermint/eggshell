@@ -1,6 +1,6 @@
 mod expr_count;
-mod loop_cause;
-mod loop_free_count;
+mod forced_loops;
+mod loop_count_terms;
 
 use std::fmt::Debug;
 use std::iter::{Product, Sum};
@@ -19,8 +19,7 @@ use rayon::iter::ParallelIterator;
 use crate::utils::UniqueQueue;
 
 pub use expr_count::ExprCount;
-pub use loop_cause::LoopCause;
-pub use loop_free_count::LoopFreeCount;
+pub use forced_loops::LoopFreeCount;
 
 pub trait CommutativeSemigroupAnalysis<L, N, C = ()>: Sized + Debug + Sync + Send
 where
