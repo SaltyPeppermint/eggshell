@@ -33,7 +33,7 @@ pub struct Cli {
     sample_batch_size: Option<usize>,
 
     /// Sampling strategy
-    #[arg(long, default_value_t = SampleStrategy::CountUniformly)]
+    #[arg(long, default_value_t = SampleStrategy::Greedy)]
     strategy: SampleStrategy,
 
     /// Memory limit for eqsat in bytes
