@@ -33,7 +33,7 @@ pub struct Cli {
     sample_batch_size: Option<usize>,
 
     /// Sampling strategy
-    #[arg(long, default_value_t = SampleStrategy::CountWeightedUniformly)]
+    #[arg(long, default_value_t = SampleStrategy::CountUniformly)]
     strategy: SampleStrategy,
 
     /// Memory limit for eqsat in bytes
@@ -98,20 +98,18 @@ impl Cli {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum SampleStrategy {
-    CountWeightedUniformly,
-    CountWeightedSizeRange,
-    CountWeightedGreedy,
+    CountUniformly,
+    CountSizeRange,
+    Greedy,
     CostWeighted,
 }
 
 impl Display for SampleStrategy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SampleStrategy::CountWeightedUniformly => write!(f, "CountWeightedUniformly"),
-            SampleStrategy::CountWeightedSizeRange => {
-                write!(f, "CountWeightedSizeRange")
-            }
-            SampleStrategy::CountWeightedGreedy => write!(f, "CountWeightedGreedy"),
+            SampleStrategy::CountUniformly => write!(f, "CountUniformly"),
+            SampleStrategy::CountSizeRange => write!(f, "CountSizeRange"),
+            SampleStrategy::Greedy => write!(f, "Greedy"),
             SampleStrategy::CostWeighted => write!(f, "CostWeighted"),
         }
     }
@@ -122,9 +120,9 @@ impl FromStr for SampleStrategy {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().replace('_', "").as_str() {
-            "countweighteduniformly" => Ok(Self::CountWeightedUniformly),
-            "countweightedsizerange" => Ok(Self::CountWeightedSizeRange),
-            "countweightedgreedy" => Ok(Self::CountWeightedGreedy),
+            "countuniformly" => Ok(Self::CountUniformly),
+            "countsizerange" => Ok(Self::CountSizeRange),
+            "greedy" => Ok(Self::Greedy),
             "costweighted" => Ok(Self::CostWeighted),
             _ => Err(Error::new(ErrorKind::InvalidValue)),
         }

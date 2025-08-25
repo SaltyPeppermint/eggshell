@@ -74,10 +74,6 @@ where
         Extractor::new(self.egraph, AstSize).find_best_cost(id) <= size_limit
     }
 
-    fn analysis_depth(&self) -> Option<usize> {
-        None
-    }
-
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }

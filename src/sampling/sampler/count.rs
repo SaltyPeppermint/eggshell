@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display};
 use egg::{Analysis, AstSize, EClass, EGraph, Id, Language};
 use hashbrown::HashMap;
 use log::{debug, info};
-use rand::distributions::WeightedError;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
@@ -13,159 +12,8 @@ use crate::sampling::choices::PartialRecExpr;
 
 use super::Sampler;
 
-/// Buggy budget consideration
 #[derive(Debug)]
-pub struct CountWeightedGreedy<'a, C, L, N>
-where
-    L: Language + Sync + Send,
-    L::Discriminant: Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Sync,
-    C: Counter,
-{
-    egraph: &'a EGraph<L, N>,
-    size_counts: HashMap<Id, HashMap<usize, C>>,
-    // flattened_size_counts: HashMap<Id, C>,
-    ast_sizes: HashMap<Id, usize>,
-    analysis_depth: usize,
-}
-
-impl<'a, C, L, N> CountWeightedGreedy<'a, C, L, N>
-where
-    L: Language + Sync + Send,
-    L::Discriminant: Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Sync,
-    C: Counter,
-{
-    /// Creates a new [`CountWeighted<C, L, N>`].
-    ///
-    /// Terms are weighted according to the number of terms up to the size
-    /// cutoff limit
-    ///
-    ///
-    /// # Panics
-    ///
-    /// Panics if given an empty Hashset of term sizes.
-    pub fn new(egraph: &'a EGraph<L, N>, analysis_depth: usize) -> Self {
-        info!("Using analysis_depth {analysis_depth}");
-
-        // Make one big size count analysis for all eclasses
-        info!("Starting size count oneshot analysis...");
-        let size_counts = ExprCount::new(analysis_depth).one_shot_analysis(egraph);
-        info!("Size count oneshot analysis finsished!");
-
-        let mut ast_sizes = HashMap::new();
-        // Make one big ast size analysis for all eclasses
-        info!("Starting ast size oneshot analysis...");
-        AstSize.one_shot_analysis(egraph, &mut ast_sizes);
-        info!("Ast size oneshot analysis finsished!");
-
-        info!("Sampler ready to start sampling!");
-        CountWeightedGreedy {
-            egraph,
-            size_counts,
-            ast_sizes,
-            analysis_depth,
-        }
-    }
-
-    fn pick_by_size_counts<'c>(
-        &self,
-        rng: &mut ChaCha12Rng,
-        eclass: &'c EClass<L, <N as Analysis<L>>::Data>,
-    ) -> &'c L {
-        eclass
-            .nodes
-            .choose_weighted(rng, |node| {
-                node.children()
-                    .iter()
-                    .map(|child_id| {
-                        self.size_counts[child_id]
-                            .iter()
-                            .map(|(_, count)| count)
-                            .sum::<C>()
-                    })
-                    .product::<C>()
-            })
-            .or_else(|e| match e {
-                // If all weights are zero, we are already way too big and we don't have
-                // any data about the options to pick we are reasoning about.
-                // We need to pick according to AstSize now to "close out" the expr as fast
-                // as possible to prevent it from growing even more.
-                WeightedError::AllWeightsZero => {
-                    Ok(pick_by_ast_size::<L, N>(&self.ast_sizes, eclass))
-                }
-                _ => Err(e),
-            })
-            .expect("NoItem, InvalidWeight and TooMany variants should never trigger.")
-    }
-}
-
-impl<'a, C, L, N> Sampler<'a, L, N> for CountWeightedGreedy<'a, C, L, N>
-where
-    L: Language + Display + Sync + Send,
-    L::Discriminant: Sync,
-    N: Analysis<L> + Debug + Sync,
-    N::Data: Sync,
-    C: Counter,
-{
-    fn pick<'c: 'a>(
-        &self,
-        rng: &mut ChaCha12Rng,
-        eclass: &'c EClass<L, N::Data>,
-        size_limit: usize,
-        partial_rec_expr: &PartialRecExpr<L>,
-    ) -> &'c L {
-        if partial_rec_expr.len() <= size_limit {
-            self.pick_by_size_counts(rng, eclass)
-        } else {
-            pick_by_ast_size::<L, N>(&self.ast_sizes, eclass)
-        }
-    }
-
-    fn extractable(&self, id: Id, size_limit: usize) -> bool {
-        let canonical_id = self.egraph.find(id);
-        self.size_counts
-            .get(&canonical_id)
-            .is_some_and(|eclass_size_counts| {
-                eclass_size_counts
-                    .iter()
-                    .any(|(size, _)| size <= &size_limit)
-            })
-    }
-
-    fn analysis_depth(&self) -> Option<usize> {
-        Some(self.analysis_depth)
-    }
-
-    fn egraph(&self) -> &'a EGraph<L, N> {
-        self.egraph
-    }
-}
-
-fn pick_by_ast_size<'a, L: Language, N: Analysis<L>>(
-    ast_sizes: &HashMap<Id, usize>,
-    eclass: &'a EClass<L, <N as Analysis<L>>::Data>,
-) -> &'a L {
-    eclass
-        .nodes
-        .iter()
-        .map(|node| {
-            let cost = node
-                .children()
-                .iter()
-                .map(|child_id| ast_sizes[child_id])
-                .sum::<usize>();
-            (node, cost)
-        })
-        .min_by(|a, b| a.1.cmp(&b.1))
-        .expect("EClasses can't have 0 members")
-        .0
-}
-
-#[derive(Debug)]
-pub struct CountWeightedUniformly<'a, C, L, N>
+pub struct CountUniformly<'a, C, L, N>
 where
     L: Language + Sync + Send,
     L::Discriminant: Sync,
@@ -176,10 +24,9 @@ where
     egraph: &'a EGraph<L, N>,
     size_counts: HashMap<Id, HashMap<usize, C>>,
     min_ast_sizes: HashMap<Id, usize>,
-    analysis_depth: usize,
 }
 
-impl<'a, C, L, N> CountWeightedUniformly<'a, C, L, N>
+impl<'a, C, L, N> CountUniformly<'a, C, L, N>
 where
     L: Language + Display + Sync + Send,
     L::Discriminant: Sync,
@@ -210,11 +57,10 @@ where
         info!("Ast size oneshot analysis finsished!");
 
         info!("Sampler ready to start sampling!");
-        CountWeightedUniformly {
+        CountUniformly {
             egraph,
             size_counts,
             min_ast_sizes,
-            analysis_depth,
         }
     }
 
@@ -246,7 +92,7 @@ where
     }
 }
 
-impl<'a, C, L, N> Sampler<'a, L, N> for CountWeightedUniformly<'a, C, L, N>
+impl<'a, C, L, N> Sampler<'a, L, N> for CountUniformly<'a, C, L, N>
 where
     L: Language + Display + Sync + Send,
     L::Discriminant: Sync,
@@ -316,10 +162,6 @@ where
             })
     }
 
-    fn analysis_depth(&self) -> Option<usize> {
-        Some(self.analysis_depth)
-    }
-
     fn egraph(&self) -> &'a EGraph<L, N> {
         self.egraph
     }
@@ -372,7 +214,6 @@ mod tests {
     use super::*;
     use crate::eqsat::{self, EqsatConf};
     use crate::rewrite_system::{Halide, RewriteSystem, Simple};
-    use crate::sampling::SampleError;
 
     #[test]
     fn simple_sample_uniform() {
@@ -389,61 +230,13 @@ mod tests {
         );
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
+        let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
         let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
             .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
             .unwrap();
 
         assert_eq!(samples.len(), 6);
-    }
-
-    // #[test]
-    // fn simple_sample_uniform_float() {
-    //     let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
-
-    //     let rules = Simple::full_rules();
-    //     let eqsat = eqsat::eqsat(
-    //         EqsatConf::default(),
-    //         (&start_expr).into(),
-    //         &rules,
-    //         None,
-    //         &[],
-    //         SimpleScheduler,
-    //     );
-    //     let root_id = eqsat.roots()[0];
-
-    //     let strategy = CountWeightedUniformly::<f64, _, _>::new(eqsat.egraph(), 5);
-    //     let rng = ChaCha12Rng::seed_from_u64(1024);
-    //     let samples = strategy
-    //         .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
-    //         .unwrap();
-
-    //     assert_eq!(samples.len(), 5);
-    // }
-
-    #[test]
-    fn simple_greedy() {
-        let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
-
-        let rules = Simple::full_rules();
-        let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
-            (&start_expr).into(),
-            &rules,
-            None,
-            &[],
-            SimpleScheduler,
-        );
-        let root_id = eqsat.roots()[0];
-
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 5);
-        let rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy
-            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
-            .unwrap();
-
-        assert_eq!(samples.len(), 8);
     }
 
     #[test]
@@ -464,65 +257,11 @@ mod tests {
         );
         let root_id = eqsat.roots()[0];
 
-        let strategy = CountWeightedUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
+        let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
         let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_eclass(&rng, 10, root_id, 32, 4).unwrap();
 
         assert_eq!(samples.len(), 10);
-    }
-
-    #[test]
-    fn halide_sample_greedy() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse::<RecExpr<_>>()
-            .unwrap();
-        let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
-
-        let rules = Halide::full_rules();
-        let eqsat = eqsat::eqsat(
-            eqsat_conf,
-            (&start_expr).into(),
-            &rules,
-            None,
-            &[],
-            SimpleScheduler,
-        );
-        let root_id = eqsat.roots()[0];
-
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 32);
-        let rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy
-            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
-            .unwrap();
-
-        assert_eq!(samples.len(), 10);
-    }
-
-    #[test]
-    fn halide_low_limit_greedy() {
-        let start_expr = "( >= ( + ( + v0 v1 ) v2 ) ( + ( + ( + v0 v1 ) v2 ) 1 ) )"
-            .parse::<RecExpr<_>>()
-            .unwrap();
-        let eqsat_conf = EqsatConf::builder().iter_limit(2).build();
-
-        let rules = Halide::full_rules();
-        let eqsat = eqsat::eqsat(
-            eqsat_conf,
-            (&start_expr).into(),
-            &rules,
-            None,
-            &[],
-            SimpleScheduler,
-        );
-        let root_id = eqsat.roots()[0];
-
-        let strategy = CountWeightedGreedy::<BigUint, _, _>::new(eqsat.egraph(), 2);
-        let rng = ChaCha12Rng::seed_from_u64(1024);
-
-        assert_eq!(
-            strategy.sample_eclass(&rng, 1000, root_id, start_expr.len(), 4),
-            Err(SampleError::SizeLimit(13))
-        );
     }
 
     #[test]

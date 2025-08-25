@@ -25,9 +25,7 @@ use eggshell::eqsat::{self, EqsatConf, EqsatResult};
 use eggshell::explanation::{self, ExplanationData};
 use eggshell::io::{reader, structs::Entry};
 use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
-use eggshell::sampling::sampler::{
-    CostWeighted, CountWeightedGreedy, CountWeightedUniformly, Sampler,
-};
+use eggshell::sampling::sampler::{CostWeighted, CountUniformly, Greedy, Sampler};
 
 fn main() {
     env_logger::init();
@@ -277,13 +275,11 @@ where
     let max_size = min_size * 2;
     info!("Running sampling ...");
     let samples = match &cli.strategy() {
-        SampleStrategy::CountWeightedUniformly => {
-            CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size)
-                .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
-                .unwrap()
-        }
-        SampleStrategy::CountWeightedSizeRange => {
-            let sampler = CountWeightedUniformly::<BigUint, _, _>::new(egraph, max_size);
+        SampleStrategy::CountUniformly => CountUniformly::<BigUint, _, _>::new(egraph, max_size)
+            .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
+            .unwrap(),
+        SampleStrategy::CountSizeRange => {
+            let sampler = CountUniformly::<BigUint, _, _>::new(egraph, max_size);
             (min_size..max_size)
                 .into_par_iter()
                 .enumerate()
@@ -302,11 +298,9 @@ where
                     a
                 })
         }
-        SampleStrategy::CountWeightedGreedy => {
-            CountWeightedGreedy::<BigUint, _, _>::new(egraph, max_size)
-                .sample_eclass(&rng, n_samples, eclass_id, start_expr.len(), parallelism)
-                .unwrap()
-        }
+        SampleStrategy::Greedy => Greedy::new(egraph)
+            .sample_eclass(&rng, n_samples, eclass_id, start_expr.len(), parallelism)
+            .unwrap(),
         SampleStrategy::CostWeighted => CostWeighted::new(egraph, AstSize)
             .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
             .unwrap(),

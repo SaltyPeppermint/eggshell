@@ -1,4 +1,3 @@
-use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -204,7 +203,6 @@ where
 mod tests {
 
     use egg::{EGraph, RecExpr, SimpleScheduler, SymbolLang};
-    use hashbrown::HashSet;
 
     use crate::eqsat::{self, EqsatConf};
     use crate::rewrite_system::halide::HalideLang;

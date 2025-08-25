@@ -1,5 +1,6 @@
 mod cost;
 mod count;
+mod simple;
 
 use std::{
     fmt::{Debug, Display},
@@ -17,7 +18,8 @@ use super::SampleError;
 use super::choices::PartialRecExpr;
 
 pub use cost::CostWeighted;
-pub use count::{CountWeightedGreedy, CountWeightedUniformly};
+pub use count::CountUniformly;
+pub use simple::Greedy;
 
 pub trait Sampler<'a, L, N>: Debug + Send + Sync
 where
@@ -36,8 +38,6 @@ where
     fn egraph(&self) -> &'a EGraph<L, N>;
 
     fn extractable(&self, id: Id, size_limit: usize) -> bool;
-
-    fn analysis_depth(&self) -> Option<usize>;
 
     #[expect(clippy::missing_errors_doc)]
     fn sample_expr(
