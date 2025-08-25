@@ -32,7 +32,7 @@ fn main() {
     let start_time = Local::now();
     let cli = Cli::parse();
     let eqsat_conf = EqsatConf::builder()
-        .explanation(true)
+        .explanation(cli.explanation())
         .maybe_memory_limit(cli.memory_limit())
         .iter_limit(1) // Important to capture the egraph after every iteration!
         .build();
@@ -95,29 +95,38 @@ fn run<R: RewriteSystem>(
             &eqsat_conf,
             cli,
             &rules,
-            &start_expr,
-            midpoint_eqsat.egraph(),
             &midpoint.expression,
+            midpoint_eqsat.egraph(),
         );
+        if goal_samples.len() == 0 {
+            warn!("No goal samples taken for midpoint {midpoint_id}");
+        }
+        info!("Took {} unique goal samples.", goal_samples.len());
 
         for (batch_id, sample_batch) in goal_samples.chunks(cli.batch_size()).enumerate() {
-            info!("Generating explanations for goal batch {batch_id}...");
-            let goals = par_expls(
-                &midpoint.expression,
-                midpoint_eqsat.egraph(),
-                &goal_expl_counter,
-                sample_batch,
-            )
-            .map(|(expr, expl)| SampleWithExpl::new(expr, expl))
-            .collect::<Vec<_>>();
-            info!("Finished work on goal batch {midpoint_id}-{batch_id}!");
-            info!("Took {} unique goal samples.", goals.len(),);
+            info!("Working on goal batch {batch_id}...");
+            let goals = if cli.explanation() {
+                par_expls(
+                    &midpoint.expression,
+                    midpoint_eqsat.egraph(),
+                    &goal_expl_counter,
+                    sample_batch,
+                )
+                .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)))
+                .collect::<Vec<_>>()
+            } else {
+                sample_batch
+                    .into_iter()
+                    .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
+                    .collect::<Vec<_>>()
+            };
 
             let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
             let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
             let data = DataEntry::new(&start_expr, midpoint_iterations, midpoint, &metadata);
 
             save_batch(&term_folder, midpoint_id, batch_id, data);
+            info!("Finished work on goal batch {midpoint_id}-{batch_id}!");
         }
     }
 
@@ -157,11 +166,19 @@ where
     let expl_counter = AtomicUsize::new(0);
     let mut samples_with_expls = Vec::new();
     for (batch_id, sample_batch) in filtered_samples.chunks(cli.batch_size()).enumerate() {
-        info!("Starting explenations on midpoint batch {batch_id}...");
-        let midpoints = par_expls(start_expr, eqsat.egraph(), &expl_counter, sample_batch)
-            .map(|(expr, expl)| SampleWithExpl::new(expr, expl));
+        if cli.explanation() {
+            info!("Starting explenations on midpoint batch {batch_id}...");
+            let midpoints = par_expls(start_expr, eqsat.egraph(), &expl_counter, sample_batch)
+                .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)));
+            samples_with_expls.par_extend(midpoints);
+        } else {
+            let midpoints = sample_batch
+                .into_iter()
+                .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
+                .collect::<Vec<_>>();
+            samples_with_expls.par_extend(midpoints);
+        }
         info!("Finished work on midpoint batch {batch_id}!");
-        samples_with_expls.par_extend(midpoints);
     }
 
     (eqsat, samples_with_expls, iterations)
@@ -171,9 +188,8 @@ fn goals_sampling<L, N>(
     eqsat_conf: &EqsatConf,
     cli: &Cli,
     rules: &[Rewrite<L, N>],
-    start_expr: &RecExpr<L>,
-    midpoint_egraph: &EGraph<L, N>,
     midpoint: &RecExpr<L>,
+    midpoint_egraph: &EGraph<L, N>,
 ) -> (Vec<RecExpr<L>>, usize)
 where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
@@ -183,7 +199,7 @@ where
 {
     info!("Starting Goal Eqsat...");
     let (last_goal_eqsat, penultimate_eqsat, iterations) =
-        run_eqsat(start_expr, eqsat_conf, rules, cli.iter_limit());
+        run_eqsat(midpoint, eqsat_conf, rules, cli.iter_limit());
     info!("Finished Goal Eqsat!");
 
     let raw_samples = sample_egraph(
@@ -192,11 +208,13 @@ where
         last_goal_eqsat.egraph(),
         last_goal_eqsat.roots()[0],
     );
-    let filtered_samples: Vec<_> = if let Some(e) = penultimate_eqsat {
+    info!("{} raw samples!", raw_samples.len());
+    let filtered_samples: Vec<_> = if let Some(penultimate_egraph) = penultimate_eqsat {
         raw_samples
             .filter(|sample| {
-                midpoint_egraph.lookup_expr(sample).is_none()
-                    && e.egraph().lookup_expr(sample).is_none()
+                let not_in_midpoint = midpoint_egraph.lookup_expr(sample).is_none();
+                let not_in_penultimate = penultimate_egraph.egraph().lookup_expr(sample).is_none();
+                not_in_midpoint && not_in_penultimate
             })
             .collect()
     } else {
@@ -235,7 +253,7 @@ where
             SimpleScheduler,
         );
         if let StopReason::IterationLimit(_) = result.report().stop_reason
-            && iter_limit.map(|limit| iter_count <= limit).unwrap_or(true)
+            && iter_limit.map(|limit| iter_count < limit).unwrap_or(true)
         {
             iter_count += 1;
             penultimate_eqsat = last_eqsat;
@@ -264,7 +282,7 @@ fn sample_egraph<L, N>(
     start_expr: &RecExpr<L>,
     egraph: &EGraph<L, N>,
     eclass_id: Id,
-) -> impl Iterator<Item = RecExpr<L>>
+) -> impl ExactSizeIterator<Item = RecExpr<L>>
 where
     L: Language + Display + Clone + Send + Sync,
     L::Discriminant: Sync,
@@ -303,7 +321,7 @@ where
                 })
         }
         SampleStrategy::Greedy => Greedy::new(egraph)
-            .sample_eclass(&rng, n_samples, eclass_id, start_expr.len(), parallelism)
+            .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
             .unwrap(),
         SampleStrategy::CostWeighted => CostWeighted::new(egraph, AstSize)
             .sample_eclass(&rng, n_samples, eclass_id, max_size, parallelism)
@@ -436,11 +454,11 @@ impl<'a, L: Language + FromOp + Display> Midpoint<'a, L> {
 #[derive(Serialize, Clone, Debug)]
 pub struct SampleWithExpl<L: Language + FromOp + Display> {
     expression: RecExpr<L>,
-    explanation: ExplanationData<L>,
+    explanation: Option<ExplanationData<L>>,
 }
 
 impl<L: Language + FromOp + Display> SampleWithExpl<L> {
-    pub fn new(expression: RecExpr<L>, explanation: ExplanationData<L>) -> Self {
+    pub fn new(expression: RecExpr<L>, explanation: Option<ExplanationData<L>>) -> Self {
         Self {
             expression,
             explanation,

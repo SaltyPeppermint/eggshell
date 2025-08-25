@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 2024)]
     rng_seed: u64,
 
+    /// Memory limit for eqsat in bytes
+    #[arg(long)]
+    explanation: bool,
+
     /// Number of samples to take per `EClass`
     #[arg(long, default_value_t = 8)]
     eclass_samples: usize,
@@ -73,6 +77,11 @@ impl Cli {
     #[must_use]
     pub fn rng_seed(&self) -> u64 {
         self.rng_seed
+    }
+
+    #[must_use]
+    pub fn explanation(&self) -> bool {
+        self.explanation
     }
 
     #[must_use]
