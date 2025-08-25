@@ -16,22 +16,18 @@ name = "eggshell"
 # To use it from both Python and Rust, you need "cdylib" and "rlib".
 crate-type = ["cdylib", "rlib"]
 
-
-
 [dependencies]
 bon = "3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
-crossbeam = { version = "0.8.4", features = ["crossbeam-channel"] }
+crossbeam = { version = "0.8", features = ["crossbeam-channel"] }
 csv = "1"
-dashmap = { version = "6.1.0", features = ["rayon"] }
-dot-generator = "0.2.0"
-dot-structures = "0.1.2"
-egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = [
-    "serde-1",
-] }
+dashmap = { version = "6", features = ["rayon"] }
+dot-generator = "0.2"
+dot-structures = "0.1"
+egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = ["serde-1"] }
 env_logger = "0.11"
-graphviz-rust = "0.9.4"
+graphviz-rust = "0.9"
 hashbrown = { version = "0.15", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }
 log = "0.4"
@@ -40,7 +36,7 @@ num = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2"
 ordered-float = { version = "5", features = ["serde"] }
 pyo3 = { version = "0.25", features = ["hashbrown", "abi3", "abi3-py312"] }
-pyo3-stub-gen = "0.10"
+pyo3-stub-gen = "0.12"
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1"
@@ -53,6 +49,45 @@ thiserror = "2"
 
 [dev-dependencies]
 criterion = { version = "0.6", features = ["html_reports"] }
+
+[lints.clippy]
+# disallowed-types = ["std::collections::HashMap", "std::collections::HashSet"]
+
+all = { level = "deny", priority = -2 }
+pedantic = { level = "warn", priority = -1 }
+
+redundant_closure_for_method_calls = "allow"
+module_name_repetitions = "allow"
+
+dbg_macro = "warn"
+empty_structs_with_brackets = "warn"
+get_unwrap = "warn"
+map_err_ignore = "warn"
+needless_raw_strings = "warn"
+pub_without_shorthand = "warn"
+redundant_type_annotations = "warn"
+shadow_reuse = "warn"
+shadow_same = "warn"
+str_to_string = "warn"
+string_to_string = "warn"
+string_add = "warn"
+absolute_paths_not_starting_with_crate = "warn"
+create_dir = "warn"
+deref_by_slicing = "warn"
+filetype_is_file = "warn"
+format_push_string = "warn"
+impl_trait_in_params = "warn"
+semicolon_inside_block = "warn"
+tests_outside_test_module = "warn"
+todo = "warn"
+unnecessary_safety_comment = "warn"
+unnecessary_safety_doc = "warn"
+unnecessary_self_imports = "warn"
+verbose_file_reads = "warn"
+shadow_unrelated = "warn"
+# clippy::use_debug,
+# clippy::cfg_not_test,
+# clippy::allow_attributes
 
 [profile.release-with-debug]
 inherits = "release"
