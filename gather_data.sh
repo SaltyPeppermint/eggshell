@@ -14,7 +14,7 @@ for i in $(seq $START $END); do
     RUST_LOG=info cargo run --release -- \
         --file data/rise/start_and_goal.csv \
         --eclass-samples $N_SAMPLES \
-        --memory-limit 1000000000 \
+        --iter-limit 3 \
         --rewrite-system rise \
         --expr-id $i \
         &>$logfile #

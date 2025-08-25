@@ -138,7 +138,7 @@ where
 {
     info!("Starting Midpoint Eqsat...");
     let (eqsat, penultimate_eqsat, iterations) =
-        run_eqsat(start_expr, eqsat_conf, rules.as_slice());
+        run_eqsat(start_expr, eqsat_conf, rules.as_slice(), cli.iter_limit());
     info!("Finished Midpoint Eqsat!");
 
     info!("Starting sampling...");
@@ -182,7 +182,8 @@ where
     N::Data: Serialize + Clone + Send + Sync,
 {
     info!("Starting Goal Eqsat...");
-    let (last_goal_eqsat, penultimate_eqsat, iterations) = run_eqsat(start_expr, eqsat_conf, rules);
+    let (last_goal_eqsat, penultimate_eqsat, iterations) =
+        run_eqsat(start_expr, eqsat_conf, rules, cli.iter_limit());
     info!("Finished Goal Eqsat!");
 
     let raw_samples = sample_egraph(
@@ -212,6 +213,7 @@ fn run_eqsat<L, N>(
     start_expr: &RecExpr<L>,
     eqsat_conf: &EqsatConf,
     rules: &[Rewrite<L, N>],
+    iter_limit: Option<usize>,
 ) -> (EqsatResult<L, N>, Option<EqsatResult<L, N>>, usize)
 where
     L: Language + Display + Serialize + 'static,
@@ -232,7 +234,9 @@ where
             &[],
             SimpleScheduler,
         );
-        if let StopReason::IterationLimit(_) = result.report().stop_reason {
+        if let StopReason::IterationLimit(_) = result.report().stop_reason
+            && iter_limit.map(|limit| iter_count <= limit).unwrap_or(true)
+        {
             iter_count += 1;
             penultimate_eqsat = last_eqsat;
             last_eqsat = Some(result.clone());
