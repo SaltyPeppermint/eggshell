@@ -3,7 +3,6 @@ use std::fmt::{Debug, Display};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 
 use chrono::{DateTime, Local, TimeDelta};
@@ -84,59 +83,52 @@ fn run<R: RewriteSystem>(
 ) {
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
     let rules = R::full_rules();
-    let (midpoint_eqsat, midpoints, midpoint_iterations) =
-        midpoints(&eqsat_conf, cli, &rules, &start_expr);
     let rule_names = rules.iter().map(|r| r.name.to_string()).collect::<Vec<_>>();
 
-    let goal_expl_counter = AtomicUsize::new(0);
+    let (midpoint_eqsat, midpoints, midpoint_iterations) =
+        midpoints(&eqsat_conf, cli, &rules, &start_expr);
+
     let samples_per_midpoint = midpoints
-        .par_iter()
+        .into_par_iter()
         .enumerate()
         .map(|(midpoint_id, midpoint)| {
             info!("Now working on the goals for midpoint {midpoint_id}:");
-            let (goal_samples, goals_iterations) = goals_sampling(
-                &eqsat_conf,
-                cli,
-                &rules,
-                &midpoint.expression,
-                midpoint_eqsat.egraph(),
-            );
+            let (goal_eqsat, goal_samples, goals_iterations) =
+                goals(&eqsat_conf, cli, &rules, &midpoint, midpoint_eqsat.egraph());
             if goal_samples.len() == 0 {
                 warn!("No goal samples taken for midpoint {midpoint_id}");
             }
             info!("Took {} unique goal samples.", goal_samples.len());
+
+            let midpoint_expl = cli
+                .explanation()
+                .then(|| explain(&start_expr, &midpoint, midpoint_eqsat.egraph()));
+            let midpoint_sample = SampleWithExpl::new(&midpoint, midpoint_expl);
 
             goal_samples
                 .chunks(cli.batch_size())
                 .enumerate()
                 .map(|(batch_id, sample_batch)| {
                     info!("Working on goal batch {batch_id}...");
-                    let goals = if cli.explanation() {
-                        par_expls(
-                            &midpoint.expression,
-                            midpoint_eqsat.egraph(),
-                            &goal_expl_counter,
-                            sample_batch,
-                        )
-                        .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)))
-                        .collect::<Vec<_>>()
-                    } else {
-                        sample_batch
-                            .into_iter()
-                            .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
-                            .collect::<Vec<_>>()
-                    };
 
-                    let goals_len = goals.len();
+                    let goals = sample_batch
+                        .into_iter()
+                        .map(|goal| {
+                            let goal_expl = cli
+                                .explanation()
+                                .then(|| explain(&midpoint, &goal, goal_eqsat.egraph()));
+                            SampleWithExpl::new(goal, goal_expl)
+                        })
+                        .collect::<Vec<_>>();
 
                     let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
-                    let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
+                    let midpoint = Midpoint::new(&midpoint_sample, goals_iterations, goals);
                     let data =
                         DataEntry::new(&start_expr, midpoint_iterations, midpoint, &metadata);
 
-                    save_batch(&term_folder, midpoint_id, batch_id, data);
+                    save_batch(&term_folder, midpoint_id, batch_id, &data);
                     info!("Finished work on goal batch {batch_id} of midpoint {midpoint_id}!");
-                    goals_len
+                    data.midpoint.goals.len()
                 })
                 .sum::<usize>()
         })
@@ -153,12 +145,22 @@ fn run<R: RewriteSystem>(
     println!("Midpoints with no samples: {midpoints_no_samples}");
 }
 
+fn explain<L, N>(from: &RecExpr<L>, to: &RecExpr<L>, egraph: &EGraph<L, N>) -> ExplanationData<L>
+where
+    L: Language + Display + FromOp + Clone,
+    N: Analysis<L> + Clone + ToOwned,
+    N::Data: Clone,
+{
+    let mut temp_egraph = egraph.to_owned();
+    explanation::explain_equivalence(&mut temp_egraph, from, to)
+}
+
 fn midpoints<L, N>(
     eqsat_conf: &EqsatConf,
     cli: &Cli,
     rules: &Vec<Rewrite<L, N>>,
     start_expr: &RecExpr<L>,
-) -> (EqsatResult<L, N>, Vec<SampleWithExpl<L>>, usize)
+) -> (EqsatResult<L, N>, Vec<RecExpr<L>>, usize)
 where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
     L::Discriminant: Send + Sync,
@@ -183,34 +185,16 @@ where
     };
     info!("Took {} unique midpoint samples.", filtered_samples.len());
 
-    let expl_counter = AtomicUsize::new(0);
-    let mut samples_with_expls = Vec::new();
-    for (batch_id, sample_batch) in filtered_samples.chunks(cli.batch_size()).enumerate() {
-        if cli.explanation() {
-            info!("Starting explenations on midpoint batch {batch_id}...");
-            let midpoints = par_expls(start_expr, eqsat.egraph(), &expl_counter, sample_batch)
-                .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)));
-            samples_with_expls.par_extend(midpoints);
-        } else {
-            let midpoints = sample_batch
-                .into_iter()
-                .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
-                .collect::<Vec<_>>();
-            samples_with_expls.par_extend(midpoints);
-        }
-        info!("Finished work on midpoint batch {batch_id}!");
-    }
-
-    (eqsat, samples_with_expls, iterations)
+    (eqsat, filtered_samples, iterations)
 }
 
-fn goals_sampling<L, N>(
+fn goals<L, N>(
     eqsat_conf: &EqsatConf,
     cli: &Cli,
     rules: &[Rewrite<L, N>],
     midpoint: &RecExpr<L>,
     midpoint_egraph: &EGraph<L, N>,
-) -> (Vec<RecExpr<L>>, usize)
+) -> (EqsatResult<L, N>, Vec<RecExpr<L>>, usize)
 where
     L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
     L::Discriminant: Send + Sync,
@@ -244,7 +228,7 @@ where
             .collect()
     };
 
-    (filtered_samples, iterations)
+    (last_goal_eqsat, filtered_samples, iterations)
 }
 
 fn run_eqsat<L, N>(
@@ -353,36 +337,11 @@ where
     samples.into_iter()
 }
 
-fn par_expls<L, N>(
-    start_expr: &RecExpr<L>,
-    egraph: &EGraph<L, N>,
-    expl_counter: &AtomicUsize,
-    sample_batch: &[RecExpr<L>],
-) -> impl ParallelIterator<Item = (RecExpr<L>, ExplanationData<L>)>
-where
-    L: Language + Display + FromOp + Send + Sync,
-    L::Discriminant: Send + Sync,
-    N: Analysis<L> + Clone + Send + Sync,
-    N::Data: Clone + Serialize + Send + Sync,
-{
-    sample_batch
-        .par_iter()
-        .map_with(egraph.clone(), |thread_local_egraph, sample| {
-            let explanation =
-                explanation::explain_equivalence(thread_local_egraph, start_expr, sample);
-            let c = expl_counter.fetch_add(1, Ordering::AcqRel);
-            if (c + 1) % 100 == 0 {
-                info!("Generated explanation {}...", c + 1);
-            }
-            (sample.to_owned(), explanation)
-        })
-}
-
 fn save_batch<L: Language + FromOp + Display + Serialize>(
     term_folder: &PathBuf,
     midpoint_id: usize,
     batch_id: usize,
-    data: DataEntry<L>,
+    data: &DataEntry<L>,
 ) {
     let batch_file = term_folder
         .join(format!("{midpoint_id}-{batch_id}"))
@@ -390,7 +349,7 @@ fn save_batch<L: Language + FromOp + Display + Serialize>(
     info!("Writing batch to {}...", batch_file.to_string_lossy());
 
     let mut f = BufWriter::new(File::create(batch_file).unwrap());
-    serde_json::to_writer(&mut f, &data).unwrap();
+    serde_json::to_writer(&mut f, data).unwrap();
     f.flush().unwrap();
     info!("Results for batch written to disk!");
 }
@@ -454,16 +413,16 @@ impl<'a> MetaData<'a> {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct Midpoint<'a, L: Language + FromOp + Display> {
-    midpoint: &'a SampleWithExpl<L>,
+    midpoint: &'a SampleWithExpl<'a, L>,
     iterations: usize,
-    goals: Vec<SampleWithExpl<L>>,
+    goals: Vec<SampleWithExpl<'a, L>>,
 }
 
 impl<'a, L: Language + FromOp + Display> Midpoint<'a, L> {
     pub fn new(
         midpoint: &'a SampleWithExpl<L>,
         iterations: usize,
-        goals: Vec<SampleWithExpl<L>>,
+        goals: Vec<SampleWithExpl<'a, L>>,
     ) -> Self {
         Self {
             midpoint,
@@ -474,13 +433,13 @@ impl<'a, L: Language + FromOp + Display> Midpoint<'a, L> {
 }
 
 #[derive(Serialize, Clone, Debug)]
-pub struct SampleWithExpl<L: Language + FromOp + Display> {
-    expression: RecExpr<L>,
+pub struct SampleWithExpl<'a, L: Language + FromOp + Display> {
+    expression: &'a RecExpr<L>,
     explanation: Option<ExplanationData<L>>,
 }
 
-impl<L: Language + FromOp + Display> SampleWithExpl<L> {
-    pub fn new(expression: RecExpr<L>, explanation: Option<ExplanationData<L>>) -> Self {
+impl<'a, L: Language + FromOp + Display> SampleWithExpl<'a, L> {
+    pub fn new(expression: &'a RecExpr<L>, explanation: Option<ExplanationData<L>>) -> Self {
         Self {
             expression,
             explanation,
