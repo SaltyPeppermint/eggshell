@@ -32,6 +32,10 @@ pub struct Cli {
     #[arg(long, default_value_t = 8)]
     eclass_samples: usize,
 
+    /// Number of samples to take per `EClass`
+    #[arg(long)]
+    sample_parallelism: Option<usize>,
+
     /// Sample batch size
     #[arg(long)]
     sample_batch_size: Option<usize>,
@@ -72,6 +76,11 @@ impl Cli {
     #[must_use]
     pub fn eclass_samples(&self) -> usize {
         self.eclass_samples
+    }
+
+    #[must_use]
+    pub fn sample_parallelism(&self) -> Option<usize> {
+        self.sample_parallelism
     }
 
     #[must_use]

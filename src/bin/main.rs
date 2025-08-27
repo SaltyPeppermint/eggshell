@@ -56,11 +56,11 @@ fn main() {
         .into_iter()
         .nth(cli.expr_id())
         .expect("Entry not found!");
-    info!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
+    println!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
 
     let term_folder = folder.join(cli.expr_id().to_string());
     fs::create_dir_all(&term_folder).unwrap();
-    info!("Will write to folder: {}", term_folder.to_string_lossy());
+    println!("Will write to folder: {}", term_folder.to_string_lossy());
 
     match cli.rewrite_system() {
         RewriteSystemName::Halide => {
@@ -72,7 +72,7 @@ fn main() {
     }
 
     print_delta(Local::now() - start_time);
-    info!("EXPR {} DONE!", cli.expr_id());
+    println!("Work on expression {} done!", cli.expr_id());
 }
 
 fn run<R: RewriteSystem>(
@@ -89,48 +89,68 @@ fn run<R: RewriteSystem>(
     let rule_names = rules.iter().map(|r| r.name.to_string()).collect::<Vec<_>>();
 
     let goal_expl_counter = AtomicUsize::new(0);
-    for (midpoint_id, midpoint) in midpoints.iter().enumerate() {
-        info!("Now working on the goals for midpoint {midpoint_id}:");
-        let (goal_samples, goals_iterations) = goals_sampling(
-            &eqsat_conf,
-            cli,
-            &rules,
-            &midpoint.expression,
-            midpoint_eqsat.egraph(),
-        );
-        if goal_samples.len() == 0 {
-            warn!("No goal samples taken for midpoint {midpoint_id}");
-        }
-        info!("Took {} unique goal samples.", goal_samples.len());
+    let samples_per_midpoint = midpoints
+        .par_iter()
+        .enumerate()
+        .map(|(midpoint_id, midpoint)| {
+            info!("Now working on the goals for midpoint {midpoint_id}:");
+            let (goal_samples, goals_iterations) = goals_sampling(
+                &eqsat_conf,
+                cli,
+                &rules,
+                &midpoint.expression,
+                midpoint_eqsat.egraph(),
+            );
+            if goal_samples.len() == 0 {
+                warn!("No goal samples taken for midpoint {midpoint_id}");
+            }
+            info!("Took {} unique goal samples.", goal_samples.len());
 
-        for (batch_id, sample_batch) in goal_samples.chunks(cli.batch_size()).enumerate() {
-            info!("Working on goal batch {batch_id}...");
-            let goals = if cli.explanation() {
-                par_expls(
-                    &midpoint.expression,
-                    midpoint_eqsat.egraph(),
-                    &goal_expl_counter,
-                    sample_batch,
-                )
-                .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)))
-                .collect::<Vec<_>>()
-            } else {
-                sample_batch
-                    .into_iter()
-                    .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
-                    .collect::<Vec<_>>()
-            };
+            goal_samples
+                .chunks(cli.batch_size())
+                .enumerate()
+                .map(|(batch_id, sample_batch)| {
+                    info!("Working on goal batch {batch_id}...");
+                    let goals = if cli.explanation() {
+                        par_expls(
+                            &midpoint.expression,
+                            midpoint_eqsat.egraph(),
+                            &goal_expl_counter,
+                            sample_batch,
+                        )
+                        .map(|(expr, expl)| SampleWithExpl::new(expr, Some(expl)))
+                        .collect::<Vec<_>>()
+                    } else {
+                        sample_batch
+                            .into_iter()
+                            .map(|expr| SampleWithExpl::new(expr.to_owned(), None))
+                            .collect::<Vec<_>>()
+                    };
 
-            let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
-            let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
-            let data = DataEntry::new(&start_expr, midpoint_iterations, midpoint, &metadata);
+                    let goals_len = goals.len();
 
-            save_batch(&term_folder, midpoint_id, batch_id, data);
-            info!("Finished work on goal batch {midpoint_id}-{batch_id}!");
-        }
-    }
+                    let metadata = MetaData::new(cli, &start_time, &eqsat_conf, &rule_names);
+                    let midpoint = Midpoint::new(midpoint, goals_iterations, goals);
+                    let data =
+                        DataEntry::new(&start_expr, midpoint_iterations, midpoint, &metadata);
 
-    info!("Work on expr {} done!", cli.expr_id());
+                    save_batch(&term_folder, midpoint_id, batch_id, data);
+                    info!("Finished work on goal batch {batch_id} of midpoint {midpoint_id}!");
+                    goals_len
+                })
+                .sum::<usize>()
+        })
+        .collect::<Vec<_>>();
+
+    let total_midpoints = samples_per_midpoint.len();
+    let total_samples = samples_per_midpoint.iter().sum::<usize>();
+    let average_samples = total_samples / samples_per_midpoint.len();
+    let midpoints_no_samples = samples_per_midpoint.iter().filter(|x| **x == 0).count();
+
+    println!("Total Midpoints: {total_midpoints}");
+    println!("Total Samples: {total_samples}");
+    println!("Average Samples per Midpoint: {average_samples}");
+    println!("Midpoints with no samples: {midpoints_no_samples}");
 }
 
 fn midpoints<L, N>(
@@ -291,7 +311,9 @@ where
 {
     let rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
     let n_samples = cli.eclass_samples();
-    let parallelism = usize::from(thread::available_parallelism().unwrap()) / 8;
+    let parallelism = cli
+        .sample_parallelism()
+        .unwrap_or(usize::from(thread::available_parallelism().unwrap()));
 
     let min_size = AstSize.cost_rec(start_expr);
     let max_size = min_size * 2;
