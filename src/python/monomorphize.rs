@@ -66,9 +66,7 @@ macro_rules! monomorphize {
                     transparent,
                 );
                 let svg = $crate::viz::dot_to_svg(&dot);
-                let path = std::env::current_dir()
-                    .unwrap()
-                    .join(path)
+                let path = std::path::PathBuf::from(path)
                     .with_extension("svg");
                 std::fs::write(&path, &svg).unwrap();
             }
