@@ -22,6 +22,8 @@ where
     BadTreeData(#[from] TreeDataError),
     #[error(transparent)]
     PartialLang(#[from] crate::meta_lang::partial::PartialError<L>),
+    #[error(transparent)]
+    Sketch(#[from] egg::RecExprParseError<crate::meta_lang::sketch::SketchError<L>>),
 }
 
 create_exception!(

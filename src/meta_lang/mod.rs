@@ -2,6 +2,5 @@ pub mod partial;
 pub mod probabilistic;
 pub mod sketch;
 
-pub use partial::{PartialLang, PartialRecExpr};
-pub use probabilistic::{ProbabilisticLang, ProbabilisticRecExpr};
-pub use sketch::{Sketch, SketchLang};
+use probabilistic::ProbabilisticLang;
+pub use sketch::{Sketch, SketchError, SketchLang};

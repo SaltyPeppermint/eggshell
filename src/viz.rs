@@ -90,15 +90,12 @@ mod tests {
 
     use egg::RecExpr;
 
-    use crate::meta_lang::PartialLang;
-    use crate::meta_lang::ProbabilisticLang;
     use crate::rewrite_system::halide::HalideLang;
     use crate::rewrite_system::rise::RiseLang;
 
     #[test]
     fn simple_ast_dot() {
-        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "(* (- 2 v1) (+ (- 2 5) v2))".parse().unwrap();
         let dot = to_dot(&expr, "partial_lang_test", &HashSet::new(), false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
@@ -107,14 +104,13 @@ mod tests {
 
         assert_eq!(
             &dot,
-            "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\"]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
+            "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\"]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"2\"]\n  7[label=\"5\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
         );
     }
 
     #[test]
     fn simple_ast_dot_marked_id() {
-        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> =
-            "(* (- 2 v1) (+ (- <pad> <pad>) v2))".parse().unwrap();
+        let expr: RecExpr<HalideLang> = "(* (- 2 v1) (+ (- 2 5) v2))".parse().unwrap();
         let dot = to_dot(
             &expr,
             "partial_lang_test",
@@ -128,53 +124,7 @@ mod tests {
 
         assert_eq!(
             &dot,
-            "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\",color=red]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
-        );
-    }
-
-    #[test]
-    fn with_prob_ast_dot() {
-        let expr: RecExpr<PartialLang<ProbabilisticLang<HalideLang>>> = RecExpr::from(vec![
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Symbol("v1".into()),
-                prob: 0.04.into(),
-            }),
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Number(2),
-                prob: 0.2.into(),
-            }),
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Sub([0.into(), 1.into()]),
-                prob: 0.6.into(),
-            }),
-            PartialLang::Pad,
-            PartialLang::Pad,
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Sub([3.into(), 4.into()]),
-                prob: 0.6.into(),
-            }),
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Symbol("v2".into()),
-                prob: 0.3.into(),
-            }),
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Add([5.into(), 6.into()]),
-                prob: 0.01.into(),
-            }),
-            PartialLang::Finished(ProbabilisticLang::WithProb {
-                inner: HalideLang::Mul([2.into(), 7.into()]),
-                prob: 0.9.into(),
-            }),
-        ]);
-        let dot = to_dot(&expr, "partial_lang_test_probs", &HashSet::new(), false);
-
-        // let svg = crate::viz::dot_to_svg(&dot);
-        // let path = std::env::current_dir().unwrap().join("test1.svg");
-        // std::fs::write(path, svg).unwrap();
-
-        assert_eq!(
-            &dot,
-            "strict graph \"partial_lang_test_probs\" {\n  0[label=\"*\n0.9\"]\n  1[label=\"-\n0.6\"]\n  2[label=\"v1\n0.04\"]\n  3[label=\"2\n0.2\"]\n  4[label=\"+\n0.01\"]\n  5[label=\"-\n0.6\"]\n  6[label=\"<pad>\"]\n  7[label=\"<pad>\"]\n  8[label=\"v2\n0.3\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test_probs\"\n}"
+            "strict graph \"partial_lang_test\" {\n  0[label=\"*\"]\n  1[label=\"-\"]\n  2[label=\"2\",color=red]\n  3[label=\"v1\"]\n  4[label=\"+\"]\n  5[label=\"-\"]\n  6[label=\"2\"]\n  7[label=\"5\"]\n  8[label=\"v2\"]\n  0 -- 1\n  1 -- 2\n  1 -- 3\n  0 -- 4\n  4 -- 5\n  5 -- 6\n  5 -- 7\n  4 -- 8\n  ordering=out\n  labelloc=t\n  label=\"partial_lang_test\"\n}"
         );
     }
 

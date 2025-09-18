@@ -6,12 +6,12 @@ use std::fmt::{Display, Formatter};
 use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
-use error::SketchError;
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
+pub use error::SketchError;
 pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
 pub use guide::SketchGuide;
 
