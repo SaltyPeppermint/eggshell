@@ -23,8 +23,12 @@ features = ["pyo3/extension-module"]
 # python-source = "python"
 
 [project.urls]
-homepage = "https://github.com/SaltyPeppermint/egg-ml/eggshell"
+homepage = "https://github.com/SaltyPeppermint/eggshell"
 
 [tool.uv]
 # Rebuild package when any rust files change
-cache-keys = [{file = "pyproject.toml"}, {file = "rust/Cargo.toml"}, {file = "**/*.rs"}]
+cache-keys = [
+  { file = "pyproject.toml" },
+  { file = "rust/Cargo.toml" },
+  { file = "**/*.rs" },
+]
