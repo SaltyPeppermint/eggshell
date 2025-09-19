@@ -1,5 +1,4 @@
 mod analysis;
-mod node;
 mod utils; //should maybe be deleted
 mod viz;
 
@@ -11,5 +10,4 @@ pub mod meta_lang;
 pub mod python;
 pub mod rewrite_system;
 pub mod sampling;
-pub mod tree_data;
 pub mod tree_distance;

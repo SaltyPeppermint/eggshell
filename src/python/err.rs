@@ -6,8 +6,6 @@ use pyo3::exceptions::PyException;
 use pyo3_stub_gen::create_exception;
 use thiserror::Error;
 
-use super::tree_data::TreeDataError;
-
 #[derive(Debug, Error)]
 pub enum EggshellError<L>
 where
@@ -15,15 +13,11 @@ where
     L: Display + FromOp,
 {
     #[error(transparent)]
-    RecExprParse(#[from] egg::RecExprParseError<egg::FromOpError>),
+    BadRecExprParse(#[from] egg::RecExprParseError<egg::FromOpError>),
     #[error(transparent)]
     BadFromOp(#[from] egg::FromOpError),
     #[error(transparent)]
-    BadTreeData(#[from] TreeDataError),
-    #[error(transparent)]
-    PartialLang(#[from] crate::meta_lang::partial::PartialError<L>),
-    #[error(transparent)]
-    Sketch(#[from] egg::RecExprParseError<crate::meta_lang::sketch::SketchError<L>>),
+    BadSketchParse(#[from] egg::RecExprParseError<crate::meta_lang::sketch::SketchError<L>>),
 }
 
 create_exception!(

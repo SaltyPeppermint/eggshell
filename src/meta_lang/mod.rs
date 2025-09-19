@@ -1,4 +1,3 @@
-pub mod partial;
 pub mod probabilistic;
 pub mod sketch;
 
