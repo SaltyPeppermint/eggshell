@@ -4,7 +4,6 @@ macro_rules! monomorphize {
     ($type: ty, $module_name: tt) => {
         use egg::RecExpr as EggRecExpr;
         use pyo3::prelude::*;
-        use pyo3_stub_gen::derive::*;
 
         use $crate::eqsat::{self, EqsatConf, BudgetScheduler};
         use $crate::meta_lang::Sketch;
@@ -13,13 +12,11 @@ macro_rules! monomorphize {
 
         type L = <$type as RewriteSystem>::Language;
 
-        #[gen_stub_pyclass]
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct RecExpr(EggRecExpr<L>);
 
-        #[gen_stub_pymethods]
         #[pymethods]
         impl RecExpr {
             /// Parse from string
@@ -72,13 +69,11 @@ macro_rules! monomorphize {
             }
         }
 
-        #[gen_stub_pyclass]
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
         pub struct Guide(Sketch<L>);
 
-        #[gen_stub_pymethods]
         #[pymethods]
         impl Guide {
             #[expect(clippy::missing_errors_doc)]
@@ -134,28 +129,24 @@ macro_rules! monomorphize {
             }
         }
 
-        #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
         pub fn operators() -> Vec<String> {
             L::operators().iter().map(|s| s.to_string()).collect()
         }
 
-        #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
         pub fn name_to_id(s: String) -> Option<usize> {
             L::operators().iter().position(|o| o == &s)
         }
 
-        #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[must_use]
         pub fn num_symbols() -> usize {
             L::NUM_SYMBOLS
         }
 
-        #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, guides=Vec::new()))]
         #[must_use]
@@ -188,7 +179,6 @@ macro_rules! monomorphize {
             (report_json, guide_used)
         }
 
-        #[gen_stub_pyfunction(module = $module_name)]
         #[pyfunction]
         #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, ordered_rules=Vec::new()))]
         #[must_use]

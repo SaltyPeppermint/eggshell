@@ -39,7 +39,3 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     Ok(())
 }
-
-use pyo3_stub_gen::define_stub_info_gatherer;
-
-define_stub_info_gatherer!(stub_info);

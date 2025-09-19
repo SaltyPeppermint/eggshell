@@ -1,7 +1,6 @@
 use egg::{Id, Language, RecExpr};
 use hashbrown::HashMap;
 use pyo3::prelude::*;
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use serde::Serialize;
 
 use crate::{
@@ -9,7 +8,6 @@ use crate::{
     rewrite_system::{LangExtras, SymbolType},
 };
 
-#[gen_stub_pyclass]
 #[pyclass(module = "eggshell", frozen)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct FirstErrorDistance {
@@ -32,7 +30,6 @@ impl Default for FirstErrorDistance {
     }
 }
 
-#[gen_stub_pymethods]
 #[pymethods]
 impl FirstErrorDistance {
     #[new]

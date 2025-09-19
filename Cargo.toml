@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 exclude = ["test.log", "data/", ".*"]
 license = "GPL-3.0-or-later"
-default-run = "main"
+# default-run = "main"
 
 [lib]
 # The name of the native library.
@@ -38,7 +38,6 @@ num = { version = "0.4", features = ["serde", "rand"] }
 num-traits = "0.2"
 ordered-float = { version = "5", features = ["serde"] }
 pyo3 = { version = "0.26", features = ["hashbrown", "abi3", "abi3-py312"] }
-pyo3-stub-gen = "0.13"
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1"

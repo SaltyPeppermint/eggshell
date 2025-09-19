@@ -2,8 +2,8 @@ use std::fmt::Display;
 
 use egg::FromOp;
 use pyo3::PyErr;
+use pyo3::create_exception;
 use pyo3::exceptions::PyException;
-use pyo3_stub_gen::create_exception;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
