@@ -156,7 +156,7 @@ macro_rules! monomorphize {
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
-            guides: Vec<RecExpr>,
+            guides: Vec<Guide>,
         ) -> (String, bool) {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)

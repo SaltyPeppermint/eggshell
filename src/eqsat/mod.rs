@@ -14,10 +14,9 @@ use log::info;
 use serde::Serialize;
 
 use crate::meta_lang::Sketch;
-use crate::meta_lang::sketch;
+use crate::meta_lang::sketch::{self, SketchGuide};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
-use hooks::ConcreteGuide;
 pub use scheduler::BudgetScheduler;
 
 /// Runs single cycle of to prove an expression to be equal to the goals
@@ -29,7 +28,7 @@ pub fn eqsat<'a, L, N, S>(
     start_material: StartMaterial<L, N>,
     rules: &'a [Rewrite<L, N>],
     goal: Option<RecExpr<L>>,
-    guides: &'a [RecExpr<L>],
+    guides: &'a [Sketch<L>],
     scheduler: S,
 ) -> EqsatResult<L, N>
 where
@@ -64,7 +63,7 @@ where
         info!("Adding goals");
         let guides = guides
             .into_iter()
-            .map(|g| Box::new(ConcreteGuide::new(g.clone())) as Box<dyn Guide<L, N>>)
+            .map(|g| Box::new(SketchGuide::new(g.clone())) as Box<dyn Guide<L, N>>)
             .collect();
         runner = runner.with_goals(goal, guides);
     }
