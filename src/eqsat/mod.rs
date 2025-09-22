@@ -29,7 +29,6 @@ pub fn eqsat<'a, L, N, S>(
     start_material: StartMaterial<L, N>,
     rules: &'a [Rewrite<L, N>],
     goal: Option<RecExpr<L>>,
-    guide: Option<Sketch<L>>,
     scheduler: S,
 ) -> EqsatResult<L, N>
 where
@@ -59,9 +58,9 @@ where
         runner = runner.with_hook(hooks::memory_log_hook());
     }
 
-    if goal.is_some() || guide.is_some() {
-        info!("Adding goals and guides");
-        runner = runner.with_hook(goals_check_hook(guide, goal));
+    if let Some(g) = goal {
+        info!("Adding goals");
+        runner = runner.with_hook(goals_check_hook(g));
     }
 
     let egraph_roots = match start_material {

@@ -253,7 +253,6 @@ where
             start_material,
             rules,
             None,
-            None,
             SimpleScheduler,
         );
         if let StopReason::IterationLimit(_) = result.report().stop_reason

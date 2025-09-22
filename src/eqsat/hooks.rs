@@ -1,8 +1,6 @@
-use egg::{Analysis, AstSize, Language, RecExpr, Runner};
+use egg::{Analysis, Language, RecExpr, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
-
-use crate::meta_lang::{Sketch, sketch};
 
 pub const fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
@@ -20,29 +18,18 @@ where
 }
 
 pub const fn goals_check_hook<L, N>(
-    guide: Option<Sketch<L>>,
-    goal: Option<RecExpr<L>>,
+    goal: RecExpr<L>,
 ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language + std::fmt::Display + 'static,
     N: Analysis<L> + Default,
 {
     move |r: &mut Runner<L, N>| {
-        if let Some(g) = &goal
-            && let Some(ids) = r.egraph.lookup_expr_ids(g)
-        {
+        if let Some(ids) = r.egraph.lookup_expr_ids(&goal) {
             if ids.iter().any(|id| r.roots.contains(id)) {
                 return Err("Goal found".into());
             }
         }
-        for root in &r.roots {
-            if let Some(s) = &guide
-                && let Some((_, extracted)) = sketch::eclass_extract(s, AstSize, &r.egraph, *root)
-            {
-                return Err(format!("Guide found: {extracted}"));
-            }
-        }
-
         Ok(())
     }
 }

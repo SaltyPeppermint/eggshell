@@ -23,7 +23,6 @@ mod tests {
             (&true_expr).into(),
             &rules,
             None,
-            None,
             SimpleScheduler,
         );
         let root = result.roots().first().unwrap();
@@ -44,7 +43,6 @@ mod tests {
             EqsatConf::default(),
             (&false_expr).into(),
             &rules,
-            None,
             None,
             SimpleScheduler,
         );

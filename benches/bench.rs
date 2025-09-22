@@ -48,7 +48,6 @@ fn sampling(c: &mut Criterion) {
         (&start_expr).into(),
         &rules,
         None,
-        None,
         SimpleScheduler,
     );
 

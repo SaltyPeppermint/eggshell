@@ -58,8 +58,7 @@ macro_rules! monomorphize {
                     transparent,
                 );
                 let svg = $crate::viz::dot_to_svg(&dot);
-                let path = std::path::PathBuf::from(path)
-                    .with_extension("svg");
+                let path = std::path::PathBuf::from(path).with_extension("svg");
                 std::fs::write(&path, &svg).unwrap();
             }
 
@@ -78,9 +77,7 @@ macro_rules! monomorphize {
         impl Guide {
             #[expect(clippy::missing_errors_doc)]
             #[new]
-            pub fn new(
-                s_expr_str: String,
-            ) -> PyResult<Guide> {
+            pub fn new(s_expr_str: String) -> PyResult<Guide> {
                 let sketch: Sketch<L> = s_expr_str
                     .parse()
                     .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
@@ -148,15 +145,14 @@ macro_rules! monomorphize {
         }
 
         #[pyfunction]
-        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, guide=None))]
+        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None))]
         #[must_use]
-        pub fn eqsat_guide_check(
+        pub fn eqsat_check(
             start: &RecExpr,
             goal: &RecExpr,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
-            guide: Option<Guide>,
         ) -> String {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
@@ -169,13 +165,62 @@ macro_rules! monomorphize {
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(goal.0.clone()),
-                guide.map(|g|g.0),
                 egg::SimpleScheduler,
             );
             serde_json::to_string(&eqsat_result).unwrap()
         }
 
+        #[pyfunction]
+        #[pyo3(signature = (start, goal, guide, iter_limit=None, node_limit=None, time_limit=None))]
+        #[must_use]
+        pub fn eqsat_guide_check(
+            start: &RecExpr,
+            goal: &RecExpr,
+            guide: Guide,
+            iter_limit: Option<usize>,
+            node_limit: Option<usize>,
+            time_limit: Option<f64>,
+        ) -> (String, Option<String>) {
+            let conf = EqsatConf::builder()
+                .maybe_iter_limit(iter_limit)
+                .maybe_node_limit(node_limit)
+                .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
+                .build();
 
+            let eqsat_result = eqsat::eqsat(
+                conf.clone(),
+                (&start.0).into(),
+                &<$type as RewriteSystem>::full_rules(),
+                Some(goal.0.clone()),
+                egg::SimpleScheduler,
+            );
+            let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
+            if let egg::StopReason::Other(s) = &eqsat_result.report().stop_reason
+                && s.contains("Goal found")
+            {
+                return (first_report_str, None);
+            }
+
+            for root in eqsat_result.roots() {
+                if let Some((_, extracted)) = $crate::meta_lang::sketch::eclass_extract(
+                    &guide.0,
+                    egg::AstSize,
+                    &eqsat_result.egraph(),
+                    *root,
+                ) {
+                    let eqsat_result_2 = eqsat::eqsat(
+                        conf.clone(),
+                        (&extracted).into(),
+                        &<$type as RewriteSystem>::full_rules(),
+                        Some(goal.0.clone()),
+                        egg::SimpleScheduler,
+                    );
+                    let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
+                    return (first_report_str, Some(second_report_str));
+                }
+            }
+            (first_report_str, None)
+        }
 
         pub(crate) fn add_mod(
             m: &pyo3::Bound<'_, pyo3::prelude::PyModule>,
@@ -191,6 +236,7 @@ macro_rules! monomorphize {
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
 
+            module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_guide_check, m)?)?;
 
             m.add_submodule(&module)?;
