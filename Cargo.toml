@@ -25,9 +25,10 @@ csv = "1"
 dashmap = { version = "6", features = ["rayon"] }
 dot-generator = "0.2"
 dot-structures = "0.1"
-egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = [
-    "serde-1",
-] }
+# egg = { git = "https://github.com/SaltyPeppermint/egg.git", branch = "memory-limit", features = [
+#     "serde-1",
+# ] }
+egg = { version = "0.10", features = ["serde-1"] }
 env_logger = "0.11"
 graphviz-rust = "0.9"
 hashbrown = { version = "0.15", features = ["rayon", "serde"] }

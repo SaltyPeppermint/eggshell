@@ -256,7 +256,7 @@ mod tests {
             (&true_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
         let root = result.roots().first().unwrap();
@@ -274,7 +274,7 @@ mod tests {
             (&false_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
         let root = result.roots().first().unwrap();
@@ -291,7 +291,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, None, SimpleScheduler);
     }
 
     #[test]
@@ -302,7 +302,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, None, SimpleScheduler);
     }
 
     #[test]
@@ -312,6 +312,6 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, &[], SimpleScheduler);
+        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, None, SimpleScheduler);
     }
 }

@@ -218,7 +218,7 @@ mod tests {
             (&start_expr).into(),
             rules.as_slice(),
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 

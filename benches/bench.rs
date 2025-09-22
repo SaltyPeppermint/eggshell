@@ -10,11 +10,11 @@ use eggshell::rewrite_system::simple::SimpleLang;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
-use eggshell::meta_lang::sketch;
 use eggshell::meta_lang::Sketch;
+use eggshell::meta_lang::sketch;
 use eggshell::rewrite_system::{RewriteSystem, Simple};
-use eggshell::sampling::sampler;
 use eggshell::sampling::Sampler;
+use eggshell::sampling::sampler;
 
 fn extraction(c: &mut Criterion) {
     let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
@@ -48,7 +48,7 @@ fn sampling(c: &mut Criterion) {
         (&start_expr).into(),
         &rules,
         None,
-        &[],
+        None,
         SimpleScheduler,
     );
 

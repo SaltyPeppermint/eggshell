@@ -253,7 +253,7 @@ where
             start_material,
             rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
         if let StopReason::IterationLimit(_) = result.report().stop_reason
@@ -264,14 +264,7 @@ where
             last_eqsat = Some(result.clone());
             start_material = result.into()
         } else {
-            let mem_use = result
-                .iterations()
-                .last()
-                .expect("Should be at least one")
-                .mem_usage;
-
             info!("Limits reached after {iter_count} full iterations!");
-            info!("Max Memory Consumption: {mem_use:?}",);
             break (
                 last_eqsat.expect("At least one iteration eqsat has to be run"),
                 penultimate_eqsat,

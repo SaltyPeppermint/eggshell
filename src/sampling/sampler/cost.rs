@@ -125,7 +125,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 
@@ -148,7 +148,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 
@@ -180,7 +180,7 @@ mod tests {
             StartMaterial::RecExprs(vec![&start_expr_a, &start_expr_b]),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 
@@ -206,7 +206,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 
@@ -233,7 +233,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
 

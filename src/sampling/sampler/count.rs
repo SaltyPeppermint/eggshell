@@ -225,7 +225,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
         let root_id = eqsat.roots()[0];
@@ -252,7 +252,7 @@ mod tests {
             (&start_expr).into(),
             &rules,
             None,
-            &[],
+            None,
             SimpleScheduler,
         );
         let root_id = eqsat.roots()[0];

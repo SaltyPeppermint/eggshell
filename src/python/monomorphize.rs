@@ -5,7 +5,7 @@ macro_rules! monomorphize {
         use egg::RecExpr as EggRecExpr;
         use pyo3::prelude::*;
 
-        use $crate::eqsat::{self, EqsatConf, BudgetScheduler};
+        use $crate::eqsat::{self, EqsatConf};
         use $crate::meta_lang::Sketch;
         use $crate::python::err::EggshellError;
         use $crate::rewrite_system::{LangExtras, RewriteSystem};
@@ -148,7 +148,7 @@ macro_rules! monomorphize {
         }
 
         #[pyfunction]
-        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, guides=Vec::new()))]
+        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, guide=None))]
         #[must_use]
         pub fn eqsat_guide_check(
             start: &RecExpr,
@@ -156,56 +156,32 @@ macro_rules! monomorphize {
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
-            guides: Vec<Guide>,
+            guide: Option<Guide>,
         ) -> (String, bool) {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
                 .maybe_node_limit(node_limit)
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
-            let guides = guides.into_iter().map(|r| r.0).collect::<Vec<_>>();
 
             let eqsat_result = eqsat::eqsat(
                 conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(goal.0.clone()),
-                &guides,
+                guide.map(|g|g.0),
                 egg::SimpleScheduler,
             );
 
             let report_json = serde_json::to_string(&eqsat_result).unwrap();
-            let guide_used = matches!(eqsat_result.report().stop_reason, egg::StopReason::GuideFound(_,_));
+            let guide_used = if let egg::StopReason::Other(report_string) = &eqsat_result.report().stop_reason  {
+                report_string.contains("Guide found")
+            } else {
+                false
+            };
             (report_json, guide_used)
         }
 
-        #[pyfunction]
-        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None, ordered_rules=Vec::new()))]
-        #[must_use]
-        pub fn eqsat_ordered_rules_check(
-            start: &RecExpr,
-            goal: &RecExpr,
-            iter_limit: Option<usize>,
-            node_limit: Option<usize>,
-            time_limit: Option<f64>,
-            ordered_rules: Vec<String>,
-        ) -> String {
-            let conf = EqsatConf::builder()
-                .maybe_iter_limit(iter_limit)
-                .maybe_node_limit(node_limit)
-                .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
-                .build();
-
-            let eqsat_result = eqsat::eqsat(
-                conf,
-                (&start.0).into(),
-                &<$type as RewriteSystem>::full_rules(),
-                Some(goal.0.clone()),
-                &[],
-                BudgetScheduler::from_expl(ordered_rules.into_iter().map(|r|r.into()).collect()),
-            );
-            serde_json::to_string(&eqsat_result).unwrap()
-        }
 
 
         pub(crate) fn add_mod(
@@ -218,14 +194,11 @@ macro_rules! monomorphize {
             module.add_class::<RecExpr>()?;
             module.add_class::<Guide>()?;
 
-            // module.add_function(pyo3::wrap_pyfunction!(first_miss_distance, m)?)?;
-
             module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
 
             module.add_function(pyo3::wrap_pyfunction!(eqsat_guide_check, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(eqsat_ordered_rules_check, m)?)?;
 
             m.add_submodule(&module)?;
             Ok(())

@@ -7,14 +7,15 @@ use std::fmt::{Debug, Display};
 
 use egg::{
     Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
-    Runner,
+    RewriteScheduler, Runner,
 };
-use egg::{Guide, RewriteScheduler};
 use log::info;
 use serde::Serialize;
 
-use crate::meta_lang::Sketch;
-use crate::meta_lang::sketch::{self, SketchGuide};
+use crate::{
+    eqsat::hooks::goals_check_hook,
+    meta_lang::sketch::{self, Sketch},
+};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 pub use scheduler::BudgetScheduler;
@@ -28,7 +29,7 @@ pub fn eqsat<'a, L, N, S>(
     start_material: StartMaterial<L, N>,
     rules: &'a [Rewrite<L, N>],
     goal: Option<RecExpr<L>>,
-    guides: &'a [Sketch<L>],
+    guide: Option<Sketch<L>>,
     scheduler: S,
 ) -> EqsatResult<L, N>
 where
@@ -41,7 +42,6 @@ where
         .with_scheduler(scheduler)
         .with_iter_limit(conf.iter_limit)
         .with_node_limit(conf.node_limit)
-        .with_memory_limit(conf.memory_limit)
         .with_time_limit(conf.time_limit);
 
     if conf.explanation {
@@ -59,13 +59,9 @@ where
         runner = runner.with_hook(hooks::memory_log_hook());
     }
 
-    if let Some(goal) = goal {
-        info!("Adding goals");
-        let guides = guides
-            .into_iter()
-            .map(|g| Box::new(SketchGuide::new(g.clone())) as Box<dyn Guide<L, N>>)
-            .collect();
-        runner = runner.with_goals(goal, guides);
+    if goal.is_some() || guide.is_some() {
+        info!("Adding goals and guides");
+        runner = runner.with_hook(goals_check_hook(guide, goal));
     }
 
     let egraph_roots = match start_material {
@@ -109,9 +105,9 @@ where
 {
     // stats_history: Vec<EqsatStats>,
     egraph: EGraph<L, N>,
-    iterations: Vec<Iteration<(), L>>,
+    iterations: Vec<Iteration<()>>,
     roots: Vec<Id>,
-    report: Report<L>,
+    report: Report,
 }
 
 impl<L, N> EqsatResult<L, N>
@@ -157,11 +153,11 @@ where
         &self.roots
     }
 
-    pub fn report(&self) -> &Report<L> {
+    pub fn report(&self) -> &Report {
         &self.report
     }
 
-    pub fn iterations(&self) -> &[Iteration<(), L>] {
+    pub fn iterations(&self) -> &[Iteration<()>] {
         &self.iterations
     }
 
