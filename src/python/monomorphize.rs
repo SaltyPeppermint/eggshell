@@ -157,7 +157,7 @@ macro_rules! monomorphize {
             node_limit: Option<usize>,
             time_limit: Option<f64>,
             guide: Option<Guide>,
-        ) -> (String, bool) {
+        ) -> String {
             let conf = EqsatConf::builder()
                 .maybe_iter_limit(iter_limit)
                 .maybe_node_limit(node_limit)
@@ -172,14 +172,7 @@ macro_rules! monomorphize {
                 guide.map(|g|g.0),
                 egg::SimpleScheduler,
             );
-
-            let report_json = serde_json::to_string(&eqsat_result).unwrap();
-            let guide_used = if let egg::StopReason::Other(report_string) = &eqsat_result.report().stop_reason  {
-                report_string.contains("Guide found")
-            } else {
-                false
-            };
-            (report_json, guide_used)
+            serde_json::to_string(&eqsat_result).unwrap()
         }
 
 
