@@ -17,7 +17,7 @@ where
     #[error(transparent)]
     BadFromOp(#[from] egg::FromOpError),
     #[error(transparent)]
-    BadSketchParse(#[from] egg::RecExprParseError<crate::meta_lang::sketch::SketchError<L>>),
+    BadSketchParse(#[from] egg::RecExprParseError<crate::sketch::SketchError<L>>),
 }
 
 create_exception!(

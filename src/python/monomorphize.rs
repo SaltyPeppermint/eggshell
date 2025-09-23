@@ -6,7 +6,7 @@ macro_rules! monomorphize {
         use pyo3::prelude::*;
 
         use $crate::eqsat::{self, EqsatConf};
-        use $crate::meta_lang::Sketch;
+        use $crate::sketch::Sketch;
         use $crate::python::err::EggshellError;
         use $crate::rewrite_system::RewriteSystem;
 
@@ -189,7 +189,7 @@ macro_rules! monomorphize {
             }
 
             for root in eqsat_result.roots() {
-                if let Some((_, extracted_guide)) = $crate::meta_lang::sketch::eclass_extract(
+                if let Some((_, extracted_guide)) = $crate::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
                     &eqsat_result.egraph(),
@@ -252,7 +252,7 @@ macro_rules! monomorphize {
             let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
 
             for root in eqsat_result.roots() {
-                if let Some((_, extracted_guide)) = $crate::meta_lang::sketch::eclass_extract(
+                if let Some((_, extracted_guide)) = $crate::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
                     &eqsat_result.egraph(),
@@ -266,7 +266,7 @@ macro_rules! monomorphize {
                         egg::SimpleScheduler,
                     );
                     let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
-                    if let Some((_, extracted_target)) = $crate::meta_lang::sketch::eclass_extract(
+                    if let Some((_, extracted_target)) = $crate::sketch::eclass_extract(
                         &target.0,
                         egg::AstSize,
                         &eqsat_result.egraph(),

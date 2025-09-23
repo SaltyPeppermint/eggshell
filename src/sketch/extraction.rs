@@ -205,7 +205,8 @@ where
 mod tests {
     use egg::{AstSize, RecExpr, SymbolLang};
 
-    use crate::{meta_lang::sketch::contains, rewrite_system::rise::RiseLang};
+    use crate::rewrite_system::rise::RiseLang;
+    use crate::sketch::contains;
 
     use super::*;
 

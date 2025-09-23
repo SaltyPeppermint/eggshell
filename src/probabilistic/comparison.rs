@@ -3,7 +3,7 @@ use hashbrown::HashMap;
 use pyo3::prelude::*;
 use serde::Serialize;
 
-use crate::meta_lang::ProbabilisticLang;
+use super::ProbabilisticLang;
 
 #[pyclass(module = "eggshell", frozen)]
 #[derive(Debug, PartialEq, Clone, Serialize)]

@@ -13,7 +13,7 @@ use log::info;
 use serde::Serialize;
 
 use crate::eqsat::hooks::targe_hook;
-use crate::meta_lang::sketch::{self, Sketch};
+use crate::sketch::{self, Sketch};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 pub use scheduler::BudgetScheduler;

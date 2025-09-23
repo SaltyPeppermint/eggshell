@@ -1,5 +1,4 @@
 mod containment;
-mod error;
 mod extraction;
 
 use std::fmt::{Display, Formatter};
