@@ -7,7 +7,7 @@ macro_rules! monomorphize {
 
         use $crate::eqsat::{self, EqsatConf};
         use $crate::sketch::Sketch;
-        use $crate::python::err::EggshellError;
+        use $crate::python::EggshellError;
         use $crate::rewrite_system::RewriteSystem;
 
         type L = <$type as RewriteSystem>::Language;
