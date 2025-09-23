@@ -205,25 +205,61 @@ where
 mod tests {
     use egg::{AstSize, RecExpr, SymbolLang};
 
+    use crate::{meta_lang::sketch::satisfies, rewrite_system::rise::RiseLang};
+
     use super::*;
 
     #[test]
-    fn simple_extract_cost() {
+    fn simple_extract() {
         let sketch = "(contains (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
 
         let a_expr = "(g (f (v x)))".parse::<RecExpr<SymbolLang>>().unwrap();
         let b_expr = "(h (g (f (u x))))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let c_expr = "(h (g x))".parse::<RecExpr<SymbolLang>>().unwrap();
 
         let mut egraph = EGraph::<SymbolLang, ()>::default();
-        let root_a = egraph.add_expr(&a_expr);
-        let root_b = egraph.add_expr(&b_expr);
+        let a = egraph.add_expr(&a_expr);
+        let b = egraph.add_expr(&b_expr);
+        let c = egraph.add_expr(&c_expr);
 
         egraph.rebuild();
-        egraph.union(root_a, root_b);
+
+        let sat1 = satisfies(&sketch, &egraph);
+        assert_eq!(sat1.len(), 5);
+        assert!(sat1.contains(&a));
+        assert!(sat1.contains(&b));
+        assert!(!sat1.contains(&c));
+
+        egraph.union(a, b);
         egraph.rebuild();
 
-        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root_a).unwrap();
+        let sat2 = satisfies(&sketch, &egraph);
+        assert_eq!(sat2.len(), 4);
+        assert!(sat2.contains(&a));
+        assert!(sat2.contains(&egraph.find(b)));
+        assert!(!sat2.contains(&c));
+
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a).unwrap();
         assert_eq!(best_cost, 4);
         assert_eq!(best_expr, a_expr);
+    }
+
+    #[test]
+    fn big_extract() {
+        let expr_a = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<RiseLang>>().unwrap();
+
+        let expr_b="(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<RiseLang>>().unwrap();
+
+        let sketch = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam ? (app (var f2) (app (var f1) (var ?))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<Sketch<RiseLang>>().unwrap();
+        let mut egraph = EGraph::<RiseLang, ()>::default();
+        let a_root = egraph.add_expr(&expr_a);
+        let b_root = egraph.add_expr(&expr_b);
+
+        egraph.union(a_root, b_root);
+        egraph.rebuild();
+
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a_root).unwrap();
+        assert_eq!(best_cost, 108);
+        assert_eq!(best_expr.to_string(), expr_a.to_string());
     }
 }

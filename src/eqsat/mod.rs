@@ -12,15 +12,13 @@ use egg::{
 use log::info;
 use serde::Serialize;
 
-use crate::{
-    eqsat::hooks::goals_check_hook,
-    meta_lang::sketch::{self, Sketch},
-};
+use crate::eqsat::hooks::targe_hook;
+use crate::meta_lang::sketch::{self, Sketch};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 pub use scheduler::BudgetScheduler;
 
-/// Runs single cycle of to prove an expression to be equal to the goals
+/// Runs single cycle of to prove an expression to be equal to the target
 /// (most often true or false) with the given ruleset
 #[expect(clippy::missing_panics_doc)]
 #[must_use]
@@ -28,7 +26,7 @@ pub fn eqsat<'a, L, N, S>(
     conf: EqsatConf,
     start_material: StartMaterial<L, N>,
     rules: &'a [Rewrite<L, N>],
-    goal: Option<RecExpr<L>>,
+    target: Option<RecExpr<L>>,
     scheduler: S,
 ) -> EqsatResult<L, N>
 where
@@ -58,9 +56,9 @@ where
         runner = runner.with_hook(hooks::memory_log_hook());
     }
 
-    if let Some(g) = goal {
-        info!("Adding goals");
-        runner = runner.with_hook(goals_check_hook(g));
+    if let Some(t) = target {
+        info!("Adding target");
+        runner = runner.with_hook(targe_hook(t));
     }
 
     let egraph_roots = match start_material {

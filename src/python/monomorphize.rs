@@ -145,11 +145,11 @@ macro_rules! monomorphize {
         }
 
         #[pyfunction]
-        #[pyo3(signature = (start, goal, iter_limit=None, node_limit=None, time_limit=None))]
         #[must_use]
+        #[pyo3(signature = (start, target, iter_limit=None, node_limit=None, time_limit=None))]
         pub fn eqsat_check(
             start: &RecExpr,
-            goal: &RecExpr,
+            target: &RecExpr,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
@@ -164,11 +164,11 @@ macro_rules! monomorphize {
                 conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
-                Some(goal.0.clone()),
+                Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
             if let egg::StopReason::Other(stop_message) = &eqsat_result.report().stop_reason
-                && stop_message.contains("Goal")
+                && stop_message.contains("Target")
             {
                 return (serde_json::to_string(&eqsat_result).unwrap(), true);
             }
@@ -176,12 +176,12 @@ macro_rules! monomorphize {
         }
 
         #[pyfunction]
-        #[pyo3(signature = (start, goal, guide, iter_limit=None, node_limit=None, time_limit=None))]
         #[must_use]
+        #[pyo3(signature = (start, guide, target, iter_limit=None, node_limit=None, time_limit=None))]
         pub fn eqsat_guide_check(
             start: &RecExpr,
-            goal: &RecExpr,
             guide: Guide,
+            target: &RecExpr,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
@@ -196,18 +196,18 @@ macro_rules! monomorphize {
                 conf.clone(),
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
-                Some(goal.0.clone()),
+                Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
             let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
             if let egg::StopReason::Other(s) = &eqsat_result.report().stop_reason
-                && s.contains("Goal found")
+                && s.contains("Target")
             {
                 return (first_report_str, None, false);
             }
 
             for root in eqsat_result.roots() {
-                if let Some((_, extracted)) = $crate::meta_lang::sketch::eclass_extract(
+                if let Some((_, extracted_guide)) = $crate::meta_lang::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
                     &eqsat_result.egraph(),
@@ -215,26 +215,26 @@ macro_rules! monomorphize {
                 ) {
                     let eqsat_result_2 = eqsat::eqsat(
                         conf.clone(),
-                        (&extracted).into(),
+                        (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
-                        Some(goal.0.clone()),
+                        Some(target.0.clone()),
                         egg::SimpleScheduler,
                     );
                     let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
 
                     if let egg::StopReason::Other(stop_message) =
                         &eqsat_result_2.report().stop_reason
-                        && stop_message.contains("Goal")
+                        && stop_message.contains("Target")
                     {
                         return (
                             first_report_str,
-                            Some((second_report_str, extracted.to_string())),
+                            Some((second_report_str, extracted_guide.to_string())),
                             true,
                         );
                     } else {
                         return (
                             first_report_str,
-                            Some((second_report_str, extracted.to_string())),
+                            Some((second_report_str, extracted_guide.to_string())),
                             false,
                         );
                     }
@@ -244,12 +244,12 @@ macro_rules! monomorphize {
         }
 
         #[pyfunction]
-        #[pyo3(signature = (start, goal, guide, iter_limit=None, node_limit=None, time_limit=None))]
         #[must_use]
+        #[pyo3(signature = (start, guide, target, iter_limit=None, node_limit=None, time_limit=None))]
         pub fn eqsat_two_guide_check(
             start: &RecExpr,
-            goal: Guide,
             guide: Guide,
+            target: Guide,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
@@ -270,7 +270,7 @@ macro_rules! monomorphize {
             let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
 
             for root in eqsat_result.roots() {
-                if let Some((_, extracted)) = $crate::meta_lang::sketch::eclass_extract(
+                if let Some((_, extracted_guide)) = $crate::meta_lang::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
                     &eqsat_result.egraph(),
@@ -278,27 +278,27 @@ macro_rules! monomorphize {
                 ) {
                     let eqsat_result_2 = eqsat::eqsat(
                         conf.clone(),
-                        (&extracted).into(),
+                        (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
                         None,
                         egg::SimpleScheduler,
                     );
                     let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
-                    if let Some((_, extracted_2)) = $crate::meta_lang::sketch::eclass_extract(
-                        &goal.0,
+                    if let Some((_, extracted_target)) = $crate::meta_lang::sketch::eclass_extract(
+                        &target.0,
                         egg::AstSize,
                         &eqsat_result.egraph(),
                         *root,
                     ) {
                         return (
                             first_report_str,
-                            Some((second_report_str, extracted.to_string())),
-                            Some(extracted_2.to_string()),
+                            Some((second_report_str, extracted_guide.to_string())),
+                            Some(extracted_target.to_string()),
                         );
                     } else {
                         return (
                             first_report_str,
-                            Some((second_report_str, extracted.to_string())),
+                            Some((second_report_str, extracted_guide.to_string())),
                             None,
                         );
                     }

@@ -32,24 +32,20 @@ where
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
     fn one_shot_analysis(&mut self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>) {
-        fn resolve_pending_analysis<'a, L, N, B>(
-            egraph: &'a EGraph<L, N>,
+        fn resolve_pending_analysis<L: Language, A: Analysis<L>, B: SemiLatticeAnalysis<L, A>>(
+            egraph: &EGraph<L, A>,
             analysis: &mut B,
             data: &mut HashMap<Id, B::Data>,
             analysis_pending: &mut UniqueQueue<Id>,
-        ) where
-            L: Language,
-            N: Analysis<L>,
-            B: SemiLatticeAnalysis<L, N>,
-        {
-            while let Some(current_id) = analysis_pending.pop() {
-                let node = egraph.nodes()[usize::from(current_id)].clone();
-                let u_node = node.map_children(|id| egraph.find(id)); // find_mut?
+        ) {
+            while let Some(id) = analysis_pending.pop() {
+                let node = egraph.nodes()[usize::from(id)].clone();
+                let u_node = node.map_children(|id| egraph.find(id));
 
                 if u_node.all(|id| data.contains_key(&id)) {
-                    let canonical_id = egraph.find(current_id); // find_mut?
+                    let canonical_id = egraph.find(id);
                     let eclass = &egraph[canonical_id];
-                    let node_data = analysis.make(egraph, &u_node, data);
+                    let node_data = analysis.make(egraph, &u_node, &data);
                     let new_data = match data.remove(&canonical_id) {
                         None => {
                             analysis_pending.extend(eclass.parents());
@@ -66,11 +62,10 @@ where
                     };
                     data.insert(canonical_id, new_data);
                 } else {
-                    analysis_pending.insert(current_id);
+                    analysis_pending.insert(id);
                 }
             }
         }
-
         assert!(egraph.clean);
         let mut analysis_pending = UniqueQueue::default();
 

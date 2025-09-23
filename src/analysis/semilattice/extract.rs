@@ -178,26 +178,6 @@ where
     }
 }
 
-fn merge_best_option<Cost>(a: &mut Option<(Cost, Id)>, b: Option<(Cost, Id)>) -> DidMerge
-where
-    Cost: 'static + Ord,
-{
-    let ord = match (&a, &b) {
-        (None, None) => Ordering::Equal,
-        (Some(_), None) => Ordering::Less,
-        (None, Some(_)) => Ordering::Greater,
-        (Some((ca, _)), Some((cb, _))) => ca.cmp(cb),
-    };
-    match ord {
-        Ordering::Equal => DidMerge(false, false),
-        Ordering::Less => DidMerge(false, true),
-        Ordering::Greater => {
-            *a = b;
-            DidMerge(true, false)
-        }
-    }
-}
-
 impl<'a, L, A, CF> SemiLatticeAnalysis<L, A> for ExtractOnlyContainsAnalysis<'a, L, CF>
 where
     L: Language,
@@ -244,5 +224,25 @@ where
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
         merge_best_option(a, b)
+    }
+}
+
+fn merge_best_option<Cost>(a: &mut Option<(Cost, Id)>, b: Option<(Cost, Id)>) -> DidMerge
+where
+    Cost: 'static + Ord,
+{
+    let ord = match (&a, &b) {
+        (None, None) => Ordering::Equal,
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (Some((ca, _)), Some((cb, _))) => ca.cmp(cb),
+    };
+    match ord {
+        Ordering::Equal => DidMerge(false, false),
+        Ordering::Less => DidMerge(false, true),
+        Ordering::Greater => {
+            *a = b;
+            DidMerge(true, false)
+        }
     }
 }

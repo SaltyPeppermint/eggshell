@@ -17,17 +17,17 @@ where
     }
 }
 
-pub const fn goals_check_hook<L, N>(
-    goal: RecExpr<L>,
+pub const fn targe_hook<L, N>(
+    target: RecExpr<L>,
 ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language + std::fmt::Display + 'static,
     N: Analysis<L> + Default,
 {
     move |r: &mut Runner<L, N>| {
-        if let Some(ids) = r.egraph.lookup_expr_ids(&goal) {
+        if let Some(ids) = r.egraph.lookup_expr_ids(&target) {
             if ids.iter().any(|id| r.roots.contains(id)) {
-                return Err("Goal found".into());
+                return Err("Target found".into());
             }
         }
         Ok(())
