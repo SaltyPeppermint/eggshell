@@ -140,7 +140,7 @@ where
     /// Check if sketch is satisfied
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
         let root = self.roots[root_index];
-        sketch::eclass_satisfies(sketch, &self.egraph, root)
+        sketch::eclass_contains(sketch, &self.egraph, root)
     }
 
     /// Returns the root `egg::Id`

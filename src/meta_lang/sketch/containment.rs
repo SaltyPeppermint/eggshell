@@ -7,19 +7,19 @@ use crate::analysis::semilattice::{
 };
 
 /// Is the `id` e-class of `egraph` representing at least one program satisfying `s`?
-pub fn eclass_satisfies<L: Language, A: Analysis<L>>(
+pub fn eclass_contains<L: Language, A: Analysis<L>>(
     sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
     id: Id,
 ) -> bool {
-    satisfies(sketch, egraph).contains(&id)
+    contains(sketch, egraph).contains(&id)
 }
 
 /// Returns the set of e-classes of `egraph` that represent at least one program satisfying `s`.
 /// # Panics
 /// Panics if the egraph isn't clean.
 /// Only give it clean egraphs!
-pub fn satisfies<L: Language, A: Analysis<L>>(
+pub fn contains<L: Language, A: Analysis<L>>(
     sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
 ) -> HashSet<Id> {
@@ -132,7 +132,7 @@ mod tests {
 
         egraph.rebuild();
 
-        let sat = satisfies(&sketch, &egraph);
+        let sat = contains(&sketch, &egraph);
 
         assert!(sat.contains(&a));
         assert!(sat.contains(&b));

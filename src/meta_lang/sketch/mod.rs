@@ -4,14 +4,14 @@ mod extraction;
 
 use std::fmt::{Display, Formatter};
 
-use egg::{Id, Language, RecExpr};
+use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
 use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
+use thiserror::Error;
 
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
-pub use containment::{eclass_satisfies, satisfies};
-pub use error::SketchError;
+pub use containment::{contains, eclass_contains};
 pub use extraction::eclass_extract;
 
 /// Simple alias
@@ -54,6 +54,18 @@ pub enum SketchLang<L> {
     ///
     /// Corresponds to the `(or s1 .. sn)` syntax.
     Or(Vec<Id>),
+}
+
+#[derive(Debug, Error)]
+pub enum SketchError<L>
+where
+    L: FromOp,
+    L::Error: Display,
+{
+    #[error(transparent)]
+    BadChildren(#[from] egg::FromOpError),
+    #[error(transparent)]
+    BadOp(L::Error),
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]

@@ -23,8 +23,8 @@ macro_rules! monomorphize {
             #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: &str) -> PyResult<RecExpr> {
-                let rec_expr: egg::RecExpr<L> = s_expr_str
-                    .parse()
+                let rec_expr = s_expr_str
+                    .parse::<egg::RecExpr<L>>()
                     .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
                 Ok(RecExpr(rec_expr))
             }
@@ -78,8 +78,8 @@ macro_rules! monomorphize {
             #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: String) -> PyResult<Guide> {
-                let sketch: Sketch<L> = s_expr_str
-                    .parse()
+                let sketch = s_expr_str
+                    .parse::<Sketch<L>>()
                     .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
                 Ok(Guide(sketch))
             }
@@ -180,7 +180,7 @@ macro_rules! monomorphize {
         #[pyo3(signature = (start, guide, target, iter_limit=None, node_limit=None, time_limit=None))]
         pub fn eqsat_guide_check(
             start: &RecExpr,
-            guide: Guide,
+            guide: &Guide,
             target: &RecExpr,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
@@ -248,8 +248,8 @@ macro_rules! monomorphize {
         #[pyo3(signature = (start, guide, target, iter_limit=None, node_limit=None, time_limit=None))]
         pub fn eqsat_two_guide_check(
             start: &RecExpr,
-            guide: Guide,
-            target: Guide,
+            guide: &Guide,
+            target: &Guide,
             iter_limit: Option<usize>,
             node_limit: Option<usize>,
             time_limit: Option<f64>,
