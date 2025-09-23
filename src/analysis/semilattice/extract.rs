@@ -101,89 +101,61 @@ where
     where
         Self::Data: 'b,
     {
-        let candidates = push_extract_contains_candidates(
-            self.exprs,
-            self.cost_fn,
-            self.extracted,
-            egraph,
-            enode,
-            analysis_of,
-        );
-        candidates.into_iter().min_by(|x, y| x.0.cmp(&y.0))
+        {
+            // Children that satisfy '?'
+            let children_any: Vec<_> = enode
+                .children()
+                .iter()
+                .map(|&c| (c, self.extracted[&egraph.find(c)].clone()))
+                .collect();
+
+            let mut index_based_enode = enode.clone();
+            for (index, id) in index_based_enode.children_mut().iter_mut().enumerate() {
+                *id = Id::from(index);
+            }
+
+            // If one child satisfies sketch, it's enough.
+            // Take '?' options for the other children.
+            // Accumulate all combination.
+            enode
+                .children()
+                .iter()
+                .map(|&c| &analysis_of[&c]) // Children that satisfy the sketch
+                .enumerate()
+                .flat_map(|(matching_index, matching_data)| {
+                    matching_data.as_ref().map(|inner| (matching_index, inner))
+                }) // with data
+                .map(|(matching_index, matching_data)| {
+                    let to_selected = children_any
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (_, any_data))| {
+                            let selected = if index == matching_index {
+                                matching_data
+                            } else {
+                                any_data
+                            };
+                            (Id::from(index), selected)
+                        })
+                        .collect::<HashMap<_, _>>();
+
+                    let cost = self
+                        .cost_fn
+                        .cost(&index_based_enode, |c| to_selected[&c].0.clone());
+                    let new_expr = self.exprs.add(
+                        index_based_enode
+                            .clone()
+                            .map_children(|c| to_selected[&c].1),
+                    );
+                    (cost, new_expr)
+                })
+                .min_by(|x, y| x.0.cmp(&y.0))
+        }
     }
 
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge {
         merge_best_option(a, b)
     }
-}
-
-pub(crate) fn push_extract_contains_candidates<L, A, CF>(
-    exprs: &mut ExprHashCons<L>,
-    cost_fn: &mut CF,
-    extracted: &HashMap<Id, (CF::Cost, Id)>,
-    egraph: &EGraph<L, A>,
-    enode: &L,
-    analysis_of: &HashMap<Id, Option<(CF::Cost, Id)>>,
-) -> Vec<(<CF as CostFunction<L>>::Cost, Id)>
-where
-    L: Language,
-    A: Analysis<L>,
-    CF: CostFunction<L>,
-    CF::Cost: 'static + Ord,
-{
-    // TODO: could probably simplify and optimize this code
-
-    // Children that satisfy the sketch
-    let children_matching: Vec<_> = {
-        enode
-            .children()
-            .iter()
-            .map(|&c| (c, &analysis_of[&c]))
-            .collect()
-    };
-
-    // Children that satisfy '?'
-    let children_any: Vec<_> = enode
-        .children()
-        .iter()
-        .map(|&c| (c, extracted[&egraph.find(c)].clone()))
-        .collect();
-
-    let mut index_based_enode = enode.clone();
-    for (index, id) in index_based_enode.children_mut().iter_mut().enumerate() {
-        *id = Id::from(index);
-    }
-
-    let mut candidates = Vec::new();
-
-    // If one child satisfies sketch, it's enough.
-    // Take '?' options for the other children.
-    // Accumulate all combination.
-    for (matching_index, (_matching_id, matching_data)) in children_matching.iter().enumerate() {
-        if let Some(matching_data) = matching_data {
-            let to_selected = children_any
-                .iter()
-                .enumerate()
-                .map(|(index, (_id, any_data))| {
-                    let selected = if index == matching_index {
-                        matching_data
-                    } else {
-                        any_data
-                    };
-                    (Id::from(index), selected)
-                })
-                .collect::<HashMap<_, _>>();
-
-            let cost = cost_fn.cost(&index_based_enode, |c| to_selected[&c].0.clone());
-            let new_expr = exprs.add(
-                index_based_enode
-                    .clone()
-                    .map_children(|c| to_selected[&c].1),
-            );
-            candidates.push((cost, new_expr));
-        }
-    }
-    candidates
 }
 
 #[derive(Debug)]

@@ -45,12 +45,7 @@ impl<L: Language, A: Analysis<L>> SemiLatticeAnalysis<L, A> for SatisfiesOnlyCon
     where
         Self::Data: 'a,
     {
-        // if enode.children().is_empty() {
-        //     false
-        // } else {
-        //     enode.all(|c| analysis_of[&c])
-        // }
-        if enode.children().is_empty() {
+        if enode.is_leaf() {
             return false;
         }
         enode.all(|c| analysis_of[&c])
