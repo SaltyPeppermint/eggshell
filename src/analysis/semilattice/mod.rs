@@ -7,13 +7,16 @@ use std::fmt::Debug;
 use egg::{Analysis, DidMerge, EGraph, Id, Language};
 use hashbrown::HashMap;
 
-use super::old_parents_iter;
 use crate::utils::UniqueQueue;
 
-pub(crate) use contains::SatisfiesContainsAnalysis;
-pub use extract::ExtractAnalysis;
+pub(crate) use contains::{SatisfiesContainsAnalysis, SatisfiesOnlyContainsAnalysis};
+pub(crate) use extract::{ExtractAnalysis, ExtractContainsAnalysis, ExtractOnlyContainsAnalysis};
 
-pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
+pub trait SemiLatticeAnalysis<L, N>: Sized + Debug
+where
+    L: Language,
+    N: Analysis<L>,
+{
     type Data: Debug;
 
     fn make<'a>(
@@ -29,53 +32,53 @@ pub trait SemiLatticeAnalysis<L: Language, N: Analysis<L>>: Sized + Debug {
     fn merge(&mut self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
     fn one_shot_analysis(&mut self, egraph: &EGraph<L, N>, data: &mut HashMap<Id, Self::Data>) {
-        fn resolve_pending_analysis<
-            'a,
-            L: Language,
-            N: Analysis<L>,
-            B: SemiLatticeAnalysis<L, N>,
-        >(
+        fn resolve_pending_analysis<'a, L, N, B>(
             egraph: &'a EGraph<L, N>,
             analysis: &mut B,
             data: &mut HashMap<Id, B::Data>,
-            analysis_pending: &mut UniqueQueue<(&'a L, Id)>,
-        ) {
-            while let Some((node, current_id)) = analysis_pending.pop() {
-                let u_node = node.clone().map_children(|child_id| egraph.find(child_id));
+            analysis_pending: &mut UniqueQueue<Id>,
+        ) where
+            L: Language,
+            N: Analysis<L>,
+            B: SemiLatticeAnalysis<L, N>,
+        {
+            while let Some(current_id) = analysis_pending.pop() {
+                let node = egraph.nodes()[usize::from(current_id)].clone();
+                let u_node = node.map_children(|id| egraph.find(id)); // find_mut?
 
                 if u_node.all(|id| data.contains_key(&id)) {
-                    // No egraph.find since since analysis_pending only contains canonical ids
-                    let eclass = &egraph[current_id];
+                    let canonical_id = egraph.find(current_id); // find_mut?
+                    let eclass = &egraph[canonical_id];
                     let node_data = analysis.make(egraph, &u_node, data);
-                    if let Some(existing) = data.get_mut(&current_id) {
-                        let DidMerge(may_not_be_existing, _) = analysis.merge(existing, node_data);
-                        if may_not_be_existing {
-                            analysis_pending.extend(old_parents_iter(eclass, egraph));
+                    let new_data = match data.remove(&canonical_id) {
+                        None => {
+                            analysis_pending.extend(eclass.parents());
+                            node_data
                         }
-                    } else {
-                        // old_parents_iter returns only canonical ids
-                        analysis_pending.extend(old_parents_iter(eclass, egraph));
-                        data.insert(current_id, node_data);
-                    }
+                        Some(mut existing) => {
+                            let DidMerge(may_not_be_existing, _) =
+                                analysis.merge(&mut existing, node_data);
+                            if may_not_be_existing {
+                                analysis_pending.extend(eclass.parents());
+                            }
+                            existing
+                        }
+                    };
+                    data.insert(canonical_id, new_data);
                 } else {
-                    analysis_pending.insert((node, current_id));
+                    analysis_pending.insert(current_id);
                 }
             }
         }
 
         assert!(egraph.clean);
+        let mut analysis_pending = UniqueQueue::default();
 
-        let mut analysis_pending = egraph
-            .classes()
-            .flat_map(|eclass| {
-                eclass
-                    .nodes
-                    .iter()
-                    .filter(|enode| enode.all(|c| data.contains_key(&egraph.find(c))))
-                    // No egraph.find since we are taking the id directly from the eclass
-                    .map(|enode| (enode, eclass.id))
-            })
-            .collect();
+        for (index, enode) in egraph.nodes().iter().enumerate() {
+            if enode.all(|c| data.contains_key(&egraph.find(c))) {
+                analysis_pending.insert(Id::from(index));
+            }
+        }
 
         resolve_pending_analysis(egraph, self, data, &mut analysis_pending);
 

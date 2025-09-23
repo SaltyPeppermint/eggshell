@@ -134,7 +134,7 @@ where
     ) -> (CF::Cost, RecExpr<L>)
     where
         CF: CostFunction<L> + Debug,
-        CF::Cost: Ord,
+        CF::Cost: Ord + 'static,
     {
         sketch::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
     }
@@ -142,7 +142,7 @@ where
     /// Check if sketch is satisfied
     pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
         let root = self.roots[root_index];
-        sketch::eclass_satisfies_sketch(sketch, &self.egraph, root)
+        sketch::eclass_satisfies(sketch, &self.egraph, root)
     }
 
     /// Returns the root `egg::Id`

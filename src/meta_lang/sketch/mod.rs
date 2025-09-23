@@ -1,8 +1,8 @@
+mod containment;
 mod error;
-mod extract;
+mod extraction;
 
 use std::fmt::{Display, Formatter};
-use std::mem::{Discriminant, discriminant};
 
 use egg::{Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
@@ -10,8 +10,9 @@ use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
 use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
+pub use containment::{eclass_satisfies, satisfies};
 pub use error::SketchError;
-pub use extract::{eclass_extract, eclass_satisfies_sketch, satisfies_sketch};
+pub use extraction::eclass_extract;
 
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
@@ -30,41 +31,56 @@ pub type Sketch<L> = RecExpr<SketchLang<L>>;
     EnumCount,
 )]
 #[strum_discriminants(derive(EnumIter))]
-pub enum SketchLang<L: Language> {
+/// The language of [`Sketch`]es.
+///
+pub enum SketchLang<L> {
     /// Any program of the underlying [`Language`].
     ///
     /// Corresponds to the `?` syntax.
     Any,
-    /// Programs that contain sub-programs satisfying the given sketch.
-    ///
-    /// Corresponds to the `(contains s)` syntax.
-    Contains(Id),
-    /// Programs that satisfy any of these sketches.
-    ///
-    /// Important change from the guided equality saturation: Or can only contain a pair.
-    /// This doesnt hamper the expressivity (or or or chains are possible)
-    /// but makes life much easier
-    /// Corresponds to the `(or s1 .. sn)` syntax.
-    Or([Id; 2]),
     /// Programs made from this [`Language`] node whose children satisfy the given sketches.
     ///
     /// Corresponds to the `(language_node s1 .. sn)` syntax.
     Node(L),
+    /// Programs that contain *at least one* sub-program satisfying the given sketch.
+    ///
+    /// Corresponds to the `(contains s)` syntax.
+    Contains(Id),
+    /// Programs that *only* contain sub-programs satisfying the given sketch.
+    ///
+    /// Corresponds to the `(onlyContains s)` syntax.
+    OnlyContains(Id),
+    /// Programs that satisfy any of these sketches.
+    ///
+    /// Corresponds to the `(or s1 .. sn)` syntax.
+    Or(Vec<Id>),
+}
+
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
+pub enum SketchDiscriminant<L: Language> {
+    Any,
+    Node(L::Discriminant),
+    Contains,
+    OnlyContains,
+    Or,
 }
 
 impl<L: Language> Language for SketchLang<L> {
-    type Discriminant = (Discriminant<Self>, Option<L::Discriminant>);
+    type Discriminant = SketchDiscriminant<L>;
 
+    #[inline(always)]
     fn discriminant(&self) -> Self::Discriminant {
-        let discr = discriminant(self);
         match self {
-            SketchLang::Node(x) => (discr, Some(x.discriminant())),
-            _ => (discr, None),
+            SketchLang::Any => SketchDiscriminant::Any,
+            SketchLang::Node(n) => SketchDiscriminant::Node(n.discriminant()),
+            SketchLang::Contains(_) => SketchDiscriminant::Contains,
+            SketchLang::OnlyContains(_) => SketchDiscriminant::OnlyContains,
+            SketchLang::Or(_) => SketchDiscriminant::Or,
         }
     }
 
     fn matches(&self, _other: &Self) -> bool {
-        panic!("Comparing sketches to each other does not make sense!")
+        panic!("Should never call this")
     }
 
     fn children(&self) -> &[Id] {
@@ -72,6 +88,7 @@ impl<L: Language> Language for SketchLang<L> {
             Self::Any => &[],
             Self::Node(n) => n.children(),
             Self::Contains(s) => std::slice::from_ref(s),
+            Self::OnlyContains(s) => std::slice::from_ref(s),
             Self::Or(ss) => ss.as_slice(),
         }
     }
@@ -81,6 +98,7 @@ impl<L: Language> Language for SketchLang<L> {
             Self::Any => &mut [],
             Self::Node(n) => n.children_mut(),
             Self::Contains(s) => std::slice::from_mut(s),
+            Self::OnlyContains(s) => std::slice::from_mut(s),
             Self::Or(ss) => ss.as_mut_slice(),
         }
     }
@@ -115,6 +133,7 @@ impl<L: Language + Display> Display for SketchLang<L> {
             Self::Any => write!(f, "?"),
             Self::Node(node) => write!(f, "{node}"),
             Self::Contains(_) => write!(f, "contains"),
+            Self::OnlyContains(_) => write!(f, "onlyContains"),
             Self::Or(_) => write!(f, "or"),
         }
     }
@@ -147,15 +166,17 @@ where
                     )))
                 }
             }
-            "or" | "OR" | "Or" => {
-                if children.len() == 2 {
-                    Ok(Self::Or([children[0], children[1]]))
+            "onlyContains" | "ONLYCONTAINS" | "only_contains" | "ONLY_CONTAINS"
+            | "OnlyContains" => {
+                if children.len() == 1 {
+                    Ok(Self::OnlyContains(children[0]))
                 } else {
                     Err(SketchError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
                 }
             }
+            "or" | "OR" | "Or" => Ok(Self::Or(children)),
             _ => L::from_op(op, children)
                 .map(Self::Node)
                 .map_err(|e| SketchError::BadOp(e)),
