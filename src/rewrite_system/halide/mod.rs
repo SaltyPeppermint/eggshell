@@ -3,9 +3,8 @@ mod rules;
 
 use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, RewriteSystem, RewriteSystemError, SymbolInfo, SymbolType};
+use super::{RewriteSystem, RewriteSystemError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -14,8 +13,7 @@ type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 
 // Definition of the language used.
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
-    #[strum_discriminants(derive(EnumIter))]
+    #[derive(Serialize, Deserialize)]
     pub enum HalideLang {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
@@ -37,32 +35,6 @@ define_language! {
         Number(i64),
         Symbol(Symbol),
     }
-}
-
-impl LangExtras for HalideLang {
-    fn symbol_info(&self) -> SymbolInfo {
-        let id = HalideLangDiscriminants::iter()
-            .position(|x| x == self.into())
-            .unwrap();
-
-        match self {
-            HalideLang::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
-            HalideLang::Bool(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
-            HalideLang::Number(value) => {
-                SymbolInfo::new(id, SymbolType::Constant(value.to_string()))
-            }
-            _ => SymbolInfo::new(id, SymbolType::Operator),
-        }
-    }
-
-    fn operators() -> Vec<&'static str> {
-        vec![
-            "+", "-", "*", "/", "%", "max", "min", "<", ">", "!", "<=", ">=", "==", "!=", "||",
-            "&&",
-        ]
-    }
-
-    const MAX_ARITY: usize = 2;
 }
 
 /// Enabling Constant Folding through the Analysis of egg.

@@ -7,7 +7,6 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, FromOp, Language, Rewrite};
 use serde::Serialize;
-use strum::EnumCount;
 use thiserror::Error;
 
 pub use arithmetic::Arithmetic;
@@ -24,9 +23,9 @@ pub trait RewriteSystem {
     type Language: Language<Discriminant: Send + Sync>
         + Serialize
         + FromOp
+        + Display
         + Send
         + Sync
-        + LangExtras
         + 'static;
     type Analysis: Analysis<Self::Language, Data: Serialize + Clone + Send + Sync>
         + Clone
@@ -77,20 +76,6 @@ pub enum SymbolType {
     Constant(String),
     Variable(String),
     MetaSymbol,
-}
-
-pub trait LangExtras: Display + Language + EnumCount {
-    fn symbol_info(&self) -> SymbolInfo;
-
-    #[must_use]
-    fn operators() -> Vec<&'static str>;
-
-    fn pretty_string(&self) -> String {
-        self.to_string()
-    }
-
-    const NUM_SYMBOLS: usize = Self::COUNT;
-    const MAX_ARITY: usize;
 }
 
 #[derive(Debug, Error)]

@@ -8,7 +8,7 @@ macro_rules! monomorphize {
         use $crate::eqsat::{self, EqsatConf};
         use $crate::meta_lang::Sketch;
         use $crate::python::err::EggshellError;
-        use $crate::rewrite_system::{LangExtras, RewriteSystem};
+        use $crate::rewrite_system::RewriteSystem;
 
         type L = <$type as RewriteSystem>::Language;
 
@@ -124,24 +124,6 @@ macro_rules! monomorphize {
                     .with_extension("svg");
                 std::fs::write(&path, &svg).unwrap();
             }
-        }
-
-        #[pyfunction]
-        #[must_use]
-        pub fn operators() -> Vec<String> {
-            L::operators().iter().map(|s| s.to_string()).collect()
-        }
-
-        #[pyfunction]
-        #[must_use]
-        pub fn name_to_id(s: String) -> Option<usize> {
-            L::operators().iter().position(|o| o == &s)
-        }
-
-        #[pyfunction]
-        #[must_use]
-        pub fn num_symbols() -> usize {
-            L::NUM_SYMBOLS
         }
 
         #[pyfunction]
@@ -316,10 +298,6 @@ macro_rules! monomorphize {
             let module = pyo3::prelude::PyModule::new(m.py(), module_name)?;
             module.add_class::<RecExpr>()?;
             module.add_class::<Guide>()?;
-
-            module.add_function(pyo3::wrap_pyfunction!(operators, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(name_to_id, m)?)?;
-            module.add_function(pyo3::wrap_pyfunction!(num_symbols, m)?)?;
 
             module.add_function(pyo3::wrap_pyfunction!(eqsat_check, m)?)?;
             module.add_function(pyo3::wrap_pyfunction!(eqsat_guide_check, m)?)?;

@@ -3,10 +3,7 @@ use hashbrown::HashMap;
 use pyo3::prelude::*;
 use serde::Serialize;
 
-use crate::{
-    meta_lang::ProbabilisticLang,
-    rewrite_system::{LangExtras, SymbolType},
-};
+use crate::meta_lang::ProbabilisticLang;
 
 #[pyclass(module = "eggshell", frozen)]
 #[derive(Debug, PartialEq, Clone, Serialize)]
@@ -88,11 +85,11 @@ impl<T: Into<FirstErrorDistance>> Extend<T> for FirstErrorDistance {
     }
 }
 
-pub fn compare<L: Language + LangExtras>(
+pub fn compare<L: Language>(
     ground_truth: &RecExpr<L>,
     sample: &RecExpr<ProbabilisticLang<L>>,
 ) -> FirstErrorDistance {
-    fn rec<LL: Language + LangExtras>(
+    fn rec<LL: Language>(
         ground_truth: &RecExpr<LL>,
         gt_id: Id,
         sample: &RecExpr<ProbabilisticLang<LL>>,
@@ -100,13 +97,7 @@ pub fn compare<L: Language + LangExtras>(
     ) -> FirstErrorDistance {
         let gt_node = &ground_truth[gt_id];
         let sample_node = &sample[sample_id];
-        if gt_node.matches(sample_node.inner())
-            || (matches!(gt_node.symbol_info().symbol_type(), SymbolType::Variable(_))
-                && matches!(
-                    sample_node.symbol_info().symbol_type(),
-                    SymbolType::Variable(_)
-                ))
-        {
+        if gt_node.matches(sample_node.inner()) {
             gt_node
                 .children()
                 .iter()

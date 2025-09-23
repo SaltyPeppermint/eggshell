@@ -6,10 +6,7 @@ use std::fmt::{Display, Formatter};
 
 use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 use thiserror::Error;
-
-use crate::rewrite_system::{LangExtras, SymbolInfo, SymbolType};
 
 pub use containment::{contains, eclass_contains};
 pub use extraction::eclass_extract;
@@ -17,20 +14,7 @@ pub use extraction::eclass_extract;
 /// Simple alias
 pub type Sketch<L> = RecExpr<SketchLang<L>>;
 
-#[derive(
-    Debug,
-    Hash,
-    PartialEq,
-    Eq,
-    Clone,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    EnumDiscriminants,
-    EnumCount,
-)]
-#[strum_discriminants(derive(EnumIter))]
+#[derive(Debug, Hash, PartialEq, Eq, Clone, PartialOrd, Ord, Serialize, Deserialize)]
 /// The language of [`Sketch`]es.
 ///
 pub enum SketchLang<L> {
@@ -114,29 +98,6 @@ impl<L: Language> Language for SketchLang<L> {
             Self::Or(ss) => ss.as_mut_slice(),
         }
     }
-}
-
-impl<L: Language + LangExtras> LangExtras for SketchLang<L> {
-    fn symbol_info(&self) -> SymbolInfo {
-        if let SketchLang::Node(l) = self {
-            l.symbol_info()
-        } else {
-            let id = SketchLangDiscriminants::iter()
-                .position(|x| x == self.into())
-                .unwrap();
-            SymbolInfo::new(id + L::NUM_SYMBOLS, SymbolType::MetaSymbol)
-        }
-    }
-
-    fn operators() -> Vec<&'static str> {
-        let mut s = vec!["?", "contains", "or"];
-        s.extend(L::operators());
-        s
-    }
-
-    const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
-
-    const MAX_ARITY: usize = { if L::MAX_ARITY > 2 { L::MAX_ARITY } else { 2 } };
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {

@@ -6,27 +6,12 @@ use std::mem::Discriminant;
 use egg::{Id, Language, RecExpr};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants};
-
-use crate::rewrite_system::{LangExtras, SymbolInfo};
 
 pub use comparison::{FirstErrorDistance, compare};
 
 pub type ProbabilisticRecExpr<L> = RecExpr<ProbabilisticLang<L>>;
 
-#[derive(
-    Debug,
-    PartialEq,
-    Clone,
-    Hash,
-    Ord,
-    Eq,
-    PartialOrd,
-    Serialize,
-    Deserialize,
-    EnumDiscriminants,
-    EnumCount,
-)]
+#[derive(Debug, PartialEq, Clone, Hash, Ord, Eq, PartialOrd, Serialize, Deserialize)]
 pub enum ProbabilisticLang<L: Language> {
     NoProb(L),
     WithProb { inner: L, prob: OrderedFloat<f64> },
@@ -92,29 +77,6 @@ impl<L: Language> Language for ProbabilisticLang<L> {
     fn children_mut(&mut self) -> &mut [Id] {
         self.inner_mut().children_mut()
     }
-}
-
-impl<L: Language + LangExtras> LangExtras for ProbabilisticLang<L> {
-    fn symbol_info(&self) -> SymbolInfo {
-        self.inner().symbol_info()
-    }
-
-    fn operators() -> Vec<&'static str> {
-        L::operators()
-    }
-
-    fn pretty_string(&self) -> String {
-        match self {
-            ProbabilisticLang::WithProb { inner, prob } => {
-                format!("{inner}\n{prob}")
-            }
-            ProbabilisticLang::NoProb(inner) => inner.to_string(),
-        }
-    }
-
-    const NUM_SYMBOLS: usize = L::NUM_SYMBOLS + Self::COUNT;
-
-    const MAX_ARITY: usize = L::MAX_ARITY;
 }
 
 impl<L: Language + Display> Display for ProbabilisticLang<L> {

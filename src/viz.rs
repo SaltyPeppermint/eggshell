@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use dot_generator::{attr, edge, id, node, node_id, stmt};
 use dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Vertex};
 use egg::{Language, RecExpr};
@@ -5,15 +7,13 @@ use egg::{Language, RecExpr};
 use graphviz_rust::printer::{DotPrinter, PrinterContext};
 use hashbrown::HashSet;
 
-use crate::rewrite_system::LangExtras;
-
-pub fn to_dot<L: Language + LangExtras>(
+pub fn to_dot<L: Language + Display>(
     rec_expr: &RecExpr<L>,
     name: &str,
     marked_ids: &HashSet<egg::Id>,
     transparent: bool,
 ) -> String {
-    fn rec<LL: Language + LangExtras>(
+    fn rec<LL: Language + Display>(
         parent_graph_id: usize,
         id: egg::Id,
         rec_expr: &RecExpr<LL>,
@@ -23,17 +23,14 @@ pub fn to_dot<L: Language + LangExtras>(
     ) {
         let node = &rec_expr[id];
         let graph_id = nodes.len();
-        nodes.push((node.pretty_string(), marked_ids.contains(&id)));
+        nodes.push((node.to_string(), marked_ids.contains(&id)));
         edges.push((parent_graph_id, graph_id));
         for c_id in node.children() {
             rec(graph_id, *c_id, rec_expr, nodes, edges, marked_ids);
         }
     }
     let root = &rec_expr[rec_expr.root()];
-    let mut nodes = vec![(
-        root.pretty_string(),
-        marked_ids.contains(&(rec_expr.root())),
-    )];
+    let mut nodes = vec![(root.to_string(), marked_ids.contains(&(rec_expr.root())))];
     let mut edges = Vec::new();
     for c_id in root.children() {
         rec(0, *c_id, rec_expr, &mut nodes, &mut edges, marked_ids);

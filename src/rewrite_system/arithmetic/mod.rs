@@ -3,9 +3,8 @@ mod rules;
 use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol, define_language};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType};
+use super::RewriteSystem;
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -15,8 +14,7 @@ pub type Constant = NotNan<f64>;
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
-    #[strum_discriminants(derive(EnumIter))]
+    #[derive(Serialize, Deserialize)]
     pub enum Math {
         "d" = Diff([Id; 2]),
         "i" = Integral([Id; 2]),
@@ -35,27 +33,6 @@ define_language! {
         Constant(Constant),
         Symbol(Symbol),
     }
-}
-
-impl LangExtras for Math {
-    fn symbol_info(&self) -> SymbolInfo {
-        let id = MathDiscriminants::iter()
-            .position(|x| x == self.into())
-            .unwrap();
-        match self {
-            Math::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
-            Math::Constant(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
-            _ => SymbolInfo::new(id, SymbolType::Operator),
-        }
-    }
-
-    fn operators() -> Vec<&'static str> {
-        vec![
-            "d", "i", "+", "-", "*", "/", "pow", "ln", "sqrt", "sin", "cos",
-        ]
-    }
-
-    const MAX_ARITY: usize = 2;
 }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]

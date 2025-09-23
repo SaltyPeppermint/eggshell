@@ -4,9 +4,8 @@ mod substitute;
 use egg::{Analysis, DidMerge, Id, Language, RecExpr, Symbol, define_language};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
-use strum::{EnumCount, EnumDiscriminants, EnumIter, IntoEnumIterator};
 
-use super::{LangExtras, RewriteSystem, SymbolInfo, SymbolType};
+use super::RewriteSystem;
 
 // Big thanks to @Bastacyclop for implementing this all
 // https://github.com/Bastacyclop/egg-rise/blob/main/src/main.rs
@@ -16,8 +15,7 @@ type EGraph = egg::EGraph<RiseLang, RiseAnalysis>;
 type Rewrite = egg::Rewrite<RiseLang, RiseAnalysis>;
 
 define_language! {
-    #[derive(Serialize, Deserialize, EnumDiscriminants, EnumCount)]
-    #[strum_discriminants(derive(EnumIter))]
+    #[derive(Serialize, Deserialize)]
     pub enum RiseLang {
         "var" = Var(Id),
         "app" = App([Id; 2]),
@@ -53,45 +51,6 @@ define_language! {
         Number(i32),
         Symbol(Symbol),
     }
-}
-
-impl LangExtras for RiseLang {
-    fn symbol_info(&self) -> SymbolInfo {
-        let id = RiseLangDiscriminants::iter()
-            .position(|x| x == self.into())
-            .unwrap();
-        match self {
-            RiseLang::Symbol(name) => SymbolInfo::new(id, SymbolType::Variable(name.to_string())),
-            RiseLang::Number(value) => SymbolInfo::new(id, SymbolType::Constant(value.to_string())),
-            _ => SymbolInfo::new(id, SymbolType::Operator),
-        }
-    }
-
-    fn operators() -> Vec<&'static str> {
-        vec![
-            "var",
-            "app",
-            "lam",
-            "let",
-            ">>",
-            "toMem",
-            "iterateStream",
-            "map",
-            "mapSeq",
-            "split",
-            "join",
-            "transpose",
-            "rotateValues",
-            "slide",
-            "reduce",
-            "reduceSeqUnroll",
-            "zip",
-            "fst",
-            "snd",
-        ]
-    }
-
-    const MAX_ARITY: usize = 3;
 }
 
 #[derive(Default, Debug, Clone, Copy, Serialize)]
@@ -191,71 +150,5 @@ mod tests {
         // assert!(!dot_rec_expr.contains(&RiseLang::Symbol(Symbol::new("snd"))));
         // assert!(!dot_rec_expr.contains(&RiseLang::Symbol(Symbol::new("reduce"))));
         // assert!(!dot_rec_expr.contains(&RiseLang::Symbol(Symbol::new("zip"))));
-    }
-
-    #[test]
-    fn operators() {
-        let known_operators = vec![
-            "var",
-            "app",
-            "lam",
-            "let",
-            ">>",
-            "toMem",
-            "iterateStream",
-            "map",
-            "mapSeq",
-            "split",
-            "join",
-            "transpose",
-            "rotateValues",
-            "slide",
-            "reduce",
-            "reduceSeqUnroll",
-            "zip",
-            "fst",
-            "snd",
-        ];
-        assert_eq!(
-            RiseLang::operators()
-                .iter()
-                .map(|x| (*x).to_owned())
-                .collect::<Vec<_>>(),
-            known_operators
-        );
-    }
-
-    #[test]
-    fn get_var_type() {
-        let symbol = RiseLang::Var(Id::from(0));
-        let symbol_type = symbol.symbol_info();
-        assert_eq!(symbol_type, SymbolInfo::new(0, SymbolType::Operator));
-    }
-
-    #[test]
-    fn get_var_type2() {
-        let symbol = RiseLang::Map;
-        let symbol_type = symbol.symbol_info();
-        assert_eq!(symbol_type, SymbolInfo::new(7, SymbolType::Operator));
-    }
-
-    #[test]
-    fn get_num_type() {
-        let symbol = RiseLang::Number(1);
-        let symbol_type = symbol.symbol_info();
-        assert_eq!(
-            symbol_type,
-            SymbolInfo::new(19, SymbolType::Constant(1.to_string()))
-        );
-    }
-
-    #[test]
-    fn get_symbol_type() {
-        let symbol = RiseLang::Symbol("BLA".into());
-        let symbol_type = symbol.symbol_info();
-        assert_eq!(
-            symbol_type,
-            SymbolInfo::new(20, SymbolType::Variable("BLA".into()))
-        );
     }
 }
