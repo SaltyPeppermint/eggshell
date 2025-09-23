@@ -23,92 +23,95 @@ pub fn contains<L: Language, A: Analysis<L>>(
     sketch: &Sketch<L>,
     egraph: &EGraph<L, A>,
 ) -> HashSet<Id> {
-    fn rec<L: Language, A: Analysis<L>>(
-        s_nodes: &[SketchLang<L>],
-        s_index: Id,
-        egraph: &EGraph<L, A>,
-        memo: &mut HashMap<Id, HashSet<Id>>,
-    ) -> HashSet<Id> {
-        if let Some(value) = memo.get(&s_index) {
-            return value.clone();
-        };
-
-        let result = match &s_nodes[usize::from(s_index)] {
-            SketchLang::Any => egraph.classes().map(|c| c.id).collect(),
-            SketchLang::Node(node) => {
-                let children_matches = node
-                    .children()
-                    .iter()
-                    .map(|sid| rec(s_nodes, *sid, egraph, memo))
-                    .collect::<Vec<_>>();
-
-                if let Some(potential_ids) = egraph.classes_for_op(&node.discriminant()) {
-                    potential_ids
-                        .filter(|&id| {
-                            let eclass = &egraph[id];
-
-                            let mnode = &node.clone().map_children(|_| Id::from(0));
-                            eclass
-                                .for_each_matching_node(mnode, |matched| {
-                                    let children_match = children_matches
-                                        .iter()
-                                        .zip(matched.children())
-                                        .all(|(matches, id)| matches.contains(id));
-                                    if children_match { Err(()) } else { Ok(()) }
-                                })
-                                .is_err()
-                        })
-                        .collect()
-                } else {
-                    HashSet::default()
-                }
-            }
-            SketchLang::Contains(sid) => {
-                let contained_matched = rec(s_nodes, *sid, egraph, memo);
-
-                let mut data = egraph
-                    .classes()
-                    .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
-                    .collect::<HashMap<_, _>>();
-
-                SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
-
-                data.iter()
-                    .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
-                    .collect()
-            }
-            SketchLang::OnlyContains(sid) => {
-                let contained_matched = rec(s_nodes, *sid, egraph, memo);
-
-                let mut data = egraph
-                    .classes()
-                    .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
-                    .collect::<HashMap<_, _>>();
-
-                SatisfiesOnlyContainsAnalysis.one_shot_analysis(egraph, &mut data);
-
-                data.iter()
-                    .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
-                    .collect()
-            }
-            SketchLang::Or(sids) => {
-                let matches = sids.iter().map(|sid| rec(s_nodes, *sid, egraph, memo));
-                matches
-                    .reduce(|a, b| a.union(&b).cloned().collect())
-                    .expect("empty or sketch")
-            }
-        };
-
-        memo.insert(s_index, result.clone());
-        result
-    }
-
     assert!(egraph.clean);
     let mut memo = HashMap::<Id, HashSet<Id>>::default();
     // let sketch_nodes = s.as_ref();
     let sketch_root = Id::from(sketch.as_ref().len() - 1);
-    rec(sketch, sketch_root, egraph, &mut memo)
+    rec_contains(sketch, sketch_root, egraph, &mut memo)
 }
+
+fn rec_contains<L: Language, A: Analysis<L>>(
+    s_nodes: &[SketchLang<L>],
+    s_index: Id,
+    egraph: &EGraph<L, A>,
+    memo: &mut HashMap<Id, HashSet<Id>>,
+) -> HashSet<Id> {
+    if let Some(value) = memo.get(&s_index) {
+        return value.clone();
+    };
+
+    let result = match &s_nodes[usize::from(s_index)] {
+        SketchLang::Any => egraph.classes().map(|c| c.id).collect(),
+        SketchLang::Node(node) => {
+            let children_matches = node
+                .children()
+                .iter()
+                .map(|sid| rec_contains(s_nodes, *sid, egraph, memo))
+                .collect::<Vec<_>>();
+
+            if let Some(potential_ids) = egraph.classes_for_op(&node.discriminant()) {
+                potential_ids
+                    .filter(|&id| {
+                        let eclass = &egraph[id];
+
+                        let mnode = &node.clone().map_children(|_| Id::from(0));
+                        eclass
+                            .for_each_matching_node(mnode, |matched| {
+                                let children_match = children_matches
+                                    .iter()
+                                    .zip(matched.children())
+                                    .all(|(matches, id)| matches.contains(id));
+                                if children_match { Err(()) } else { Ok(()) }
+                            })
+                            .is_err()
+                    })
+                    .collect()
+            } else {
+                HashSet::default()
+            }
+        }
+        SketchLang::Contains(sid) => {
+            let contained_matched = rec_contains(s_nodes, *sid, egraph, memo);
+
+            let mut data = egraph
+                .classes()
+                .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
+                .collect::<HashMap<_, _>>();
+
+            SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
+
+            data.iter()
+                .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
+                .collect()
+        }
+        SketchLang::OnlyContains(sid) => {
+            let contained_matched = rec_contains(s_nodes, *sid, egraph, memo);
+
+            let mut data = egraph
+                .classes()
+                .map(|eclass| (eclass.id, contained_matched.contains(&eclass.id)))
+                .collect::<HashMap<_, _>>();
+
+            SatisfiesOnlyContainsAnalysis.one_shot_analysis(egraph, &mut data);
+
+            data.iter()
+                .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
+                .collect()
+        }
+        SketchLang::Or(sids) => {
+            let matches = sids
+                .iter()
+                .map(|sid| rec_contains(s_nodes, *sid, egraph, memo));
+            matches
+                .reduce(|a, b| a.union(&b).cloned().collect())
+                .expect("empty or sketch")
+        }
+    };
+
+    memo.insert(s_index, result.clone());
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use egg::{RecExpr, SymbolLang};
