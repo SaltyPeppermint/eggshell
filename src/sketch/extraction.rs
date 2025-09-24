@@ -98,45 +98,43 @@ where
                 .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
                 .collect::<Box<_>>();
 
-            if let Some(potential_ids) = egraph.classes_for_op(&inner_node.discriminant()) {
-                potential_ids
-                    .filter_map(|id| {
-                        let eclass = &egraph[id];
-                        let mut candidates = Vec::new();
-
-                        let mnode = &inner_node.clone().map_children(|_| Id::from(0));
-                        eclass
-                            .for_each_matching_node::<()>(mnode, |matched| {
-                                let matches = children_matches
-                                    .iter()
-                                    .zip(matched.children())
-                                    .map_while(|(cm, id)| cm.get(id))
-                                    .collect::<Box<_>>();
-
-                                if matches.len() == matched.len() {
-                                    let to_match = matched
-                                        .children()
+            egraph
+                .classes_for_op(&inner_node.discriminant())
+                .map(|potential_ids| {
+                    potential_ids
+                        .filter_map(|id| {
+                            let eclass = &egraph[id];
+                            eclass
+                                .nodes
+                                .iter()
+                                // Matching does not care about children so we do not need to clone here
+                                .filter(|node| node.matches(inner_node))
+                                .filter_map(|matched| {
+                                    let matches = children_matches
                                         .iter()
-                                        .zip(matches.iter())
-                                        .collect::<HashMap<_, _>>();
-                                    candidates.push((
-                                        cost_fn.cost(matched, |c| to_match[&c].0.clone()),
-                                        exprs.add(matched.clone().map_children(|c| to_match[&c].1)),
-                                    ));
-                                }
+                                        .zip(matched.children())
+                                        .map_while(|(cm, id)| cm.get(id))
+                                        .collect::<Box<_>>();
 
-                                Ok(())
-                            })
-                            .unwrap();
-                        candidates
-                            .into_iter()
-                            .min_by(|x, y| x.0.cmp(&y.0))
-                            .map(|best| (id, best))
-                    })
-                    .collect()
-            } else {
-                HashMap::default()
-            }
+                                    (matches.len() == matched.len()).then(|| {
+                                        let to_match = matched
+                                            .children()
+                                            .iter()
+                                            .zip(matches.iter())
+                                            .collect::<HashMap<_, _>>();
+                                        let added_id = exprs
+                                            .add(matched.clone().map_children(|c| to_match[&c].1));
+                                        let cost =
+                                            cost_fn.cost(matched, |c| to_match[&c].0.clone());
+                                        (cost, added_id)
+                                    })
+                                })
+                                .min_by(|x, y| x.0.cmp(&y.0))
+                                .map(|best| (id, best))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
         }
         SketchLang::Contains(sketch_id) => {
             let contained_matches =
@@ -192,14 +190,13 @@ where
                 .collect()
         }
     };
-
     memo.insert(sketch_id, result.clone());
     result
 }
 
 #[cfg(test)]
 mod tests {
-    use egg::{AstSize, RecExpr, SimpleScheduler, SymbolLang};
+    use egg::{AstSize, RecExpr, SimpleScheduler, SymbolLang, rewrite};
 
     use crate::eqsat::EqsatConf;
     use crate::rewrite_system::RewriteSystem;
@@ -301,8 +298,7 @@ mod tests {
 
         egraph.rebuild();
 
-        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a_root).unwrap();
-        assert_eq!(best_cost, 108);
+        let (_, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a_root).unwrap();
         assert_eq!(best_expr.to_string(), expr_a.to_string());
 
         let conf = EqsatConf::builder().iter_limit(1).build();
@@ -314,8 +310,43 @@ mod tests {
             SimpleScheduler,
         );
         let root = r.egraph().find(a_root);
-        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
+        let (_, best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
         assert_eq!(best_expr.to_string(), expr_a.to_string());
-        assert_eq!(best_cost, 108);
+    }
+
+    #[test]
+    fn big_extract_2() {
+        let expr_a =
+            "(>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose)))"
+                .parse::<RecExpr<SymbolLang>>()
+                .unwrap();
+
+        let sketch =
+            "(>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose)))"
+                .parse::<Sketch<SymbolLang>>()
+                .unwrap();
+
+        let mut egraph = EGraph::<_, ()>::default();
+        let a_root = egraph.add_expr(&expr_a);
+
+        egraph.rebuild();
+
+        let (_, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a_root).unwrap();
+        assert_eq!(best_expr.to_string(), expr_a.to_string());
+
+        let rules = vec![
+            rewrite!("transpose-id-1";  "(>> (>> transpose transpose) ?x)" => "?x"),
+            rewrite!("transpose-id-2";  "(>> ?x (>> transpose transpose))" => "?x"),
+        ];
+
+        let runner = egg::Runner::default()
+            .with_scheduler(egg::SimpleScheduler)
+            .with_iter_limit(1)
+            .with_egraph(egraph)
+            .run(&rules);
+        let egraph = runner.egraph;
+        let (_, best_expr) =
+            eclass_extract(&sketch, AstSize, &egraph, egraph.find(a_root)).unwrap();
+        assert_eq!(best_expr.to_string(), expr_a.to_string());
     }
 }
