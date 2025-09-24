@@ -36,6 +36,8 @@ where
     where
         Self::Data: 'b,
     {
+        // Take a node, add cost it, and add it with the right internal IDs to the
+        // extracted id to cost map
         let expr_node = enode.clone().map_children(|c| analysis_of[&c].1);
         let expr = self.exprs.add(expr_node);
         let cost = self.cost_fn.cost(enode, |c| analysis_of[&c].0.clone());
@@ -103,11 +105,11 @@ where
     {
         {
             // Children that satisfy '?' by index
-            let children_any: Vec<_> = enode
+            let children_any = enode
                 .children()
                 .iter()
                 .map(|c| &self.extracted[&egraph.find(*c)])
-                .collect();
+                .collect::<Box<_>>();
 
             let mut index_based_enode = enode.clone();
             for (index, id) in index_based_enode.children_mut().iter_mut().enumerate() {

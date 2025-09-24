@@ -36,7 +36,7 @@ pub enum SketchLang<L> {
     /// Programs that satisfy any of these sketches.
     ///
     /// Corresponds to the `(or s1 .. sn)` syntax.
-    Or(Vec<Id>),
+    Or(Box<[Id]>),
 }
 
 #[derive(Debug, Error)]
@@ -84,7 +84,7 @@ impl<L: Language> Language for SketchLang<L> {
             Self::Node(n) => n.children(),
             Self::Contains(s) => std::slice::from_ref(s),
             Self::OnlyContains(s) => std::slice::from_ref(s),
-            Self::Or(ss) => ss.as_slice(),
+            Self::Or(ss) => ss,
         }
     }
 
@@ -94,7 +94,7 @@ impl<L: Language> Language for SketchLang<L> {
             Self::Node(n) => n.children_mut(),
             Self::Contains(s) => std::slice::from_mut(s),
             Self::OnlyContains(s) => std::slice::from_mut(s),
-            Self::Or(ss) => ss.as_mut_slice(),
+            Self::Or(ss) => ss,
         }
     }
 }
@@ -148,7 +148,15 @@ where
                     )))
                 }
             }
-            "or" | "OR" | "Or" => Ok(Self::Or(children)),
+            "or" | "OR" | "Or" => {
+                if !children.is_empty() {
+                    Ok(Self::Or(children.into_boxed_slice()))
+                } else {
+                    Err(SketchError::BadChildren(egg::FromOpError::new(
+                        op, children,
+                    )))
+                }
+            }
             _ => L::from_op(op, children)
                 .map(Self::Node)
                 .map_err(|e| SketchError::BadOp(e)),

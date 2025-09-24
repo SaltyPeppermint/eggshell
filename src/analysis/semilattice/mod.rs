@@ -38,30 +38,35 @@ where
             data: &mut HashMap<Id, B::Data>,
             analysis_pending: &mut UniqueQueue<Id>,
         ) {
+            // Take the next node from the worklist
             while let Some(id) = analysis_pending.pop() {
+                // Legal thanks to https://docs.rs/egg/latest/egg/struct.EGraph.html#method.nodes
                 let node = egraph.nodes()[usize::from(id)].clone();
                 let u_node = node.map_children(|id| egraph.find(id));
 
-                if u_node.all(|id| data.contains_key(&id)) {
+                // If we have data for all the children
+                if u_node.all(|child_id| data.contains_key(&child_id)) {
                     let canonical_id = egraph.find(id);
                     let eclass = &egraph[canonical_id];
+                    // We make the analysis for this node
                     let node_data = analysis.make(egraph, &u_node, &data);
-                    let new_data = match data.remove(&canonical_id) {
-                        None => {
+                    if let Some(mut existing) = data.get_mut(&canonical_id) {
+                        // If we already have data about this node, we need to update it
+                        let DidMerge(may_not_be_existing, _) =
+                            analysis.merge(&mut existing, node_data);
+                        // If this changed anything, we need to re-evaluate the parents,
+                        // until we have reached the fixpoint
+                        if may_not_be_existing {
                             analysis_pending.extend(eclass.parents());
-                            node_data
                         }
-                        Some(mut existing) => {
-                            let DidMerge(may_not_be_existing, _) =
-                                analysis.merge(&mut existing, node_data);
-                            if may_not_be_existing {
-                                analysis_pending.extend(eclass.parents());
-                            }
-                            existing
-                        }
+                    } else {
+                        // If we have no data about the node, we add the new data and
+                        // then add the parents to worklist
+                        data.insert(canonical_id, node_data);
+                        analysis_pending.extend(eclass.parents());
                     };
-                    data.insert(canonical_id, new_data);
                 } else {
+                    // If we don't have data about this, put it back on the queue and try later
                     analysis_pending.insert(id);
                 }
             }
@@ -71,6 +76,10 @@ where
 
         for (index, enode) in egraph.nodes().iter().enumerate() {
             if enode.all(|c| data.contains_key(&egraph.find(c))) {
+                // Adding all the enodes to the worklist to start the analysis
+                // If we have perfect knowledge of their children.
+                // This is always true for leave nodes
+                // Legal thanks to https://docs.rs/egg/latest/egg/struct.EGraph.html#method.nodes
                 analysis_pending.insert(Id::from(index));
             }
         }

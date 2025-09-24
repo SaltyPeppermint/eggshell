@@ -43,27 +43,31 @@ fn rec_contains<L: Language, A: Analysis<L>>(
     let result = match &s_nodes[usize::from(s_index)] {
         SketchLang::Any => egraph.classes().map(|c| c.id).collect(),
         SketchLang::Node(node) => {
+            // First check if all the children match
             let children_matches = node
                 .children()
                 .iter()
                 .map(|sid| rec_contains(s_nodes, *sid, egraph, memo))
-                .collect::<Vec<_>>();
+                .collect::<Box<_>>();
 
+            // Then find all the eclasses in the egraph that has that node
             if let Some(potential_ids) = egraph.classes_for_op(&node.discriminant()) {
+                // Filter those down to the ones that have
+                // at least one only matching children in
                 potential_ids
                     .filter(|&id| {
                         let eclass = &egraph[id];
-
-                        let mnode = &node.clone().map_children(|_| Id::from(0));
+                        // Matching does not depend on children
                         eclass
-                            .for_each_matching_node(mnode, |matched| {
+                            .for_each_matching_node(&node, |matched| {
+                                // For each eclass, we check if
                                 let children_match = children_matches
                                     .iter()
                                     .zip(matched.children())
                                     .all(|(matches, id)| matches.contains(id));
-                                if children_match { Err(()) } else { Ok(()) }
+                                if children_match { Ok(()) } else { Err(()) }
                             })
-                            .is_err()
+                            .is_ok()
                     })
                     .collect()
             } else {

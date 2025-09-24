@@ -91,27 +91,27 @@ where
 
     let result = match &sketch[sketch_id] {
         SketchLang::Any => extracted.clone(),
-        SketchLang::Node(sketch_node) => {
-            let children_matches = sketch_node
+        SketchLang::Node(inner_node) => {
+            let children_matches = inner_node
                 .children()
                 .iter()
                 .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
-                .collect::<Vec<_>>();
+                .collect::<Box<_>>();
 
-            if let Some(potential_ids) = egraph.classes_for_op(&sketch_node.discriminant()) {
+            if let Some(potential_ids) = egraph.classes_for_op(&inner_node.discriminant()) {
                 potential_ids
                     .filter_map(|id| {
                         let eclass = &egraph[id];
                         let mut candidates = Vec::new();
 
-                        let mnode = &sketch_node.clone().map_children(|_| Id::from(0));
+                        let mnode = &inner_node.clone().map_children(|_| Id::from(0));
                         eclass
                             .for_each_matching_node::<()>(mnode, |matched| {
                                 let matches = children_matches
                                     .iter()
                                     .zip(matched.children())
                                     .map_while(|(cm, id)| cm.get(id))
-                                    .collect::<Vec<_>>();
+                                    .collect::<Box<_>>();
 
                                 if matches.len() == matched.len() {
                                     let to_match = matched
@@ -138,9 +138,9 @@ where
                 HashMap::default()
             }
         }
-        SketchLang::Contains(sid) => {
+        SketchLang::Contains(sketch_id) => {
             let contained_matches =
-                rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo);
+                rec_extract(sketch, *sketch_id, cost_fn, egraph, exprs, extracted, memo);
 
             let mut data = egraph
                 .classes()
@@ -155,9 +155,9 @@ where
                 .flat_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchLang::OnlyContains(sid) => {
+        SketchLang::OnlyContains(sketch_id) => {
             let contained_matches =
-                rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo);
+                rec_extract(sketch, *sketch_id, cost_fn, egraph, exprs, extracted, memo);
 
             let mut data = egraph
                 .classes()
@@ -173,11 +173,11 @@ where
                 .flat_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchLang::Or(sids) => {
-            let matches = sids
+        SketchLang::Or(sketch_ids) => {
+            let matches = sketch_ids
                 .iter()
                 .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
-                .collect::<Vec<_>>();
+                .collect::<Box<_>>();
             matches
                 .iter()
                 .flat_map(|m| m.keys())
@@ -199,8 +199,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use egg::{AstSize, RecExpr, SymbolLang};
+    use egg::{AstSize, RecExpr, SimpleScheduler, SymbolLang};
 
+    use crate::eqsat::EqsatConf;
+    use crate::rewrite_system::RewriteSystem;
+    use crate::rewrite_system::Rise;
     use crate::rewrite_system::rise::RiseLang;
     use crate::sketch::contains;
 
@@ -243,7 +246,7 @@ mod tests {
 
     #[test]
     fn loop_extract() {
-        let sketch = "(f (g (f ?)))".parse::<Sketch<SymbolLang>>().unwrap();
+        let sketch = "(g (g (g ?)))".parse::<Sketch<SymbolLang>>().unwrap();
 
         let a_expr = "(f x)".parse::<RecExpr<SymbolLang>>().unwrap();
         let b_expr = "(g x)".parse::<RecExpr<SymbolLang>>().unwrap();
@@ -262,26 +265,57 @@ mod tests {
         let root = egraph.find(a);
 
         let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root).unwrap();
-        assert_eq!(&best_expr.to_string(), "(f (g (f x)))");
+        assert_eq!(&best_expr.to_string(), "(g (g (g x)))");
         assert_eq!(best_cost, 4);
+    }
+
+    #[test]
+    fn loop_extract2() {
+        let sketch = "(f (f ?))".parse::<Sketch<SymbolLang>>().unwrap();
+
+        let a_expr = "(f (f x))".parse::<RecExpr<SymbolLang>>().unwrap();
+        let b_expr = "x".parse::<RecExpr<SymbolLang>>().unwrap();
+
+        let mut egraph = EGraph::<SymbolLang, ()>::default();
+        let a = egraph.add_expr(&a_expr);
+        let b = egraph.add_expr(&b_expr);
+
+        egraph.rebuild();
+        egraph.union(a, b);
+        egraph.rebuild();
+
+        let root = egraph.find(a);
+
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root).unwrap();
+        assert_eq!(&best_expr.to_string(), "(f (f x))");
+        assert_eq!(best_cost, 3);
     }
 
     #[test]
     fn big_extract() {
         let expr_a = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<RiseLang>>().unwrap();
 
-        let expr_b="(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<RiseLang>>().unwrap();
-
         let sketch = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam ? (app (var f2) (app (var f1) (var ?))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<Sketch<RiseLang>>().unwrap();
         let mut egraph = EGraph::<RiseLang, ()>::default();
         let a_root = egraph.add_expr(&expr_a);
-        let b_root = egraph.add_expr(&expr_b);
 
-        egraph.union(a_root, b_root);
         egraph.rebuild();
 
         let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a_root).unwrap();
         assert_eq!(best_cost, 108);
         assert_eq!(best_expr.to_string(), expr_a.to_string());
+
+        let conf = EqsatConf::builder().iter_limit(1).build();
+        let r = crate::eqsat::eqsat(
+            conf,
+            (&expr_a).into(),
+            &Rise::full_rules(),
+            None,
+            SimpleScheduler,
+        );
+        let root = r.egraph().find(a_root);
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
+        assert_eq!(best_expr.to_string(), expr_a.to_string());
+        assert_eq!(best_cost, 108);
     }
 }

@@ -21,10 +21,11 @@ impl<L: Language> ExprHashCons<L> {
 
     pub(crate) fn add(&mut self, node: L) -> Id {
         if let Some(id) = self.memo.get(&node) {
-            *id
-        } else {
-            self.expr.add(node)
+            return *id;
         }
+        let new_id = self.expr.add(node.clone());
+        self.memo.insert(node, new_id);
+        new_id
     }
 
     pub(crate) fn extract(&self, id: Id) -> RecExpr<L> {
@@ -34,9 +35,7 @@ impl<L: Language> ExprHashCons<L> {
         used.insert(id);
         for (i, node) in all.iter().enumerate().rev() {
             if used.contains(&Id::from(i)) {
-                for c in node.children() {
-                    used.insert(*c);
-                }
+                used.extend(node.children());
             }
         }
 
