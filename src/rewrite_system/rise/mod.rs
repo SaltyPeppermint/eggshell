@@ -20,33 +20,8 @@ define_language! {
         "var" = Var(Id),
         "app" = App([Id; 2]),
         "lam" = Lambda([Id; 2]),
-
         "let" = Let([Id; 3]),
-        // "fix"
-
         ">>" = Then([Id; 2]),
-
-        // Rise builtins
-        "toMem"= ToMem,
-        "iterateStream"= IterateStream,
-        "map" = Map,
-        "mapSeq" = MapSeq,
-
-        "split" = Split,
-        "join"= Join,
-
-        "transpose" = Transpose,
-
-        "rotateValues" = RotateValues,
-        "slide" = Slide,
-
-        "reduce" = Reduce,
-        "reduceSeqUnroll" = ReduceSeqUnroll,
-
-        "zip" = Zip,
-
-        "fst" = Fst,
-        "snd" = Snd,
 
         Number(i32),
         Symbol(Symbol),
