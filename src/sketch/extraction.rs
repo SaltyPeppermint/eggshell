@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use egg::{Analysis, CostFunction, EGraph, Id, Language, RecExpr};
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 use super::{Sketch, SketchLang};
 use crate::analysis::semilattice::{
@@ -100,35 +100,34 @@ where
 
             if let Some(potential_ids) = egraph.classes_for_op(&sketch_node.discriminant()) {
                 potential_ids
-                    .flat_map(|id| {
+                    .filter_map(|id| {
                         let eclass = &egraph[id];
                         let mut candidates = Vec::new();
 
                         let mnode = &sketch_node.clone().map_children(|_| Id::from(0));
-                        let _ = eclass.for_each_matching_node::<()>(mnode, |matched| {
-                            let mut matches = Vec::new();
-                            for (cm, id) in children_matches.iter().zip(matched.children()) {
-                                if let Some(m) = cm.get(id) {
-                                    matches.push(m);
-                                } else {
-                                    break;
-                                }
-                            }
-
-                            if matches.len() == matched.len() {
-                                let to_match = matched
-                                    .children()
+                        eclass
+                            .for_each_matching_node::<()>(mnode, |matched| {
+                                let matches = children_matches
                                     .iter()
-                                    .zip(matches.iter())
-                                    .collect::<HashMap<_, _>>();
-                                candidates.push((
-                                    cost_fn.cost(matched, |c| to_match[&c].0.clone()),
-                                    exprs.add(matched.clone().map_children(|c| to_match[&c].1)),
-                                ));
-                            }
+                                    .zip(matched.children())
+                                    .map_while(|(cm, id)| cm.get(id))
+                                    .collect::<Vec<_>>();
 
-                            Ok(())
-                        });
+                                if matches.len() == matched.len() {
+                                    let to_match = matched
+                                        .children()
+                                        .iter()
+                                        .zip(matches.iter())
+                                        .collect::<HashMap<_, _>>();
+                                    candidates.push((
+                                        cost_fn.cost(matched, |c| to_match[&c].0.clone()),
+                                        exprs.add(matched.clone().map_children(|c| to_match[&c].1)),
+                                    ));
+                                }
+
+                                Ok(())
+                            })
+                            .unwrap();
                         candidates
                             .into_iter()
                             .min_by(|x, y| x.0.cmp(&y.0))
@@ -179,20 +178,16 @@ where
                 .iter()
                 .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
                 .collect::<Vec<_>>();
-            let matching_ids = matches
+            matches
                 .iter()
                 .flat_map(|m| m.keys())
-                .collect::<HashSet<_>>();
-
-            matching_ids
-                .iter()
-                .flat_map(|id| {
+                .filter_map(|id| {
                     matches
                         .iter()
-                        .flat_map(|ms| ms.get(*id))
+                        .filter_map(|ms| ms.get(id))
                         .into_iter()
                         .min_by(|x, y| x.0.cmp(&y.0))
-                        .map(|best| (**id, best.clone()))
+                        .map(|best| (*id, best.clone()))
                 })
                 .collect()
         }
@@ -244,6 +239,31 @@ mod tests {
         let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, a).unwrap();
         assert_eq!(best_cost, 4);
         assert_eq!(best_expr, a_expr);
+    }
+
+    #[test]
+    fn loop_extract() {
+        let sketch = "(f (g (f ?)))".parse::<Sketch<SymbolLang>>().unwrap();
+
+        let a_expr = "(f x)".parse::<RecExpr<SymbolLang>>().unwrap();
+        let b_expr = "(g x)".parse::<RecExpr<SymbolLang>>().unwrap();
+        let c_expr = "x".parse::<RecExpr<SymbolLang>>().unwrap();
+
+        let mut egraph = EGraph::<SymbolLang, ()>::default();
+        let a = egraph.add_expr(&a_expr);
+        let b = egraph.add_expr(&b_expr);
+        let c = egraph.add_expr(&c_expr);
+
+        egraph.rebuild();
+        egraph.union(a, b);
+        egraph.union(b, c);
+        egraph.rebuild();
+
+        let root = egraph.find(a);
+
+        let (best_cost, best_expr) = eclass_extract(&sketch, AstSize, &egraph, root).unwrap();
+        assert_eq!(&best_expr.to_string(), "(f (g (f x)))");
+        assert_eq!(best_cost, 4);
     }
 
     #[test]

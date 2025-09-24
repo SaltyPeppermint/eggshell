@@ -81,7 +81,7 @@ fn rec_contains<L: Language, A: Analysis<L>>(
             SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
 
             data.iter()
-                .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
+                .flat_map(|(id, is_match)| is_match.then_some(*id))
                 .collect()
         }
         SketchLang::OnlyContains(sid) => {
@@ -95,7 +95,7 @@ fn rec_contains<L: Language, A: Analysis<L>>(
             SatisfiesOnlyContainsAnalysis.one_shot_analysis(egraph, &mut data);
 
             data.iter()
-                .flat_map(|(&id, &is_match)| if is_match { Some(id) } else { None })
+                .filter_map(|(id, is_match)| is_match.then_some(*id))
                 .collect()
         }
         SketchLang::Or(sids) => {
@@ -103,7 +103,10 @@ fn rec_contains<L: Language, A: Analysis<L>>(
                 .iter()
                 .map(|sid| rec_contains(s_nodes, *sid, egraph, memo));
             matches
-                .reduce(|a, b| a.union(&b).cloned().collect())
+                .reduce(|mut a, b| {
+                    a.extend(&b);
+                    a
+                })
                 .expect("empty or sketch")
         }
     };

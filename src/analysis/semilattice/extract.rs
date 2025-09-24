@@ -102,11 +102,11 @@ where
         Self::Data: 'b,
     {
         {
-            // Children that satisfy '?'
+            // Children that satisfy '?' by index
             let children_any: Vec<_> = enode
                 .children()
                 .iter()
-                .map(|&c| (c, self.extracted[&egraph.find(c)].clone()))
+                .map(|c| &self.extracted[&egraph.find(*c)])
                 .collect();
 
             let mut index_based_enode = enode.clone();
@@ -120,16 +120,17 @@ where
             enode
                 .children()
                 .iter()
-                .map(|&c| &analysis_of[&c]) // Children that satisfy the sketch
+                .map(|&c| analysis_of[&c].as_ref())
+                // Children that satisfy the sketch
                 .enumerate()
-                .flat_map(|(matching_index, matching_data)| {
-                    matching_data.as_ref().map(|inner| (matching_index, inner))
+                .filter_map(|(matching_index, matching_data)| {
+                    matching_data.map(|inner| (matching_index, inner))
                 }) // with data
                 .map(|(matching_index, matching_data)| {
                     let to_selected = children_any
                         .iter()
                         .enumerate()
-                        .map(|(index, (_, any_data))| {
+                        .map(|(index, any_data)| {
                             let selected = if index == matching_index {
                                 matching_data
                             } else {
