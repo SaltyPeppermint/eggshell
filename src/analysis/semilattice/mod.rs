@@ -39,18 +39,18 @@ where
             analysis_pending: &mut UniqueQueue<Id>,
         ) {
             // Take the next node from the worklist
-            while let Some(id) = analysis_pending.pop() {
+            while let Some(node_id) = analysis_pending.pop() {
                 // Legal thanks to https://docs.rs/egg/latest/egg/struct.EGraph.html#method.nodes
-                let node = egraph.nodes()[usize::from(id)].clone();
+                let node = egraph.nodes()[usize::from(node_id)].clone();
                 let u_node = node.map_children(|id| egraph.find(id));
 
                 // If we have data for all the children
                 if u_node.all(|child_id| data.contains_key(&child_id)) {
-                    let canonical_id = egraph.find(id);
-                    let eclass = &egraph[canonical_id];
+                    let canonical_eclass_id = egraph.find(node_id);
+                    let eclass = &egraph[canonical_eclass_id];
                     // We make the analysis for this node
                     let node_data = analysis.make(egraph, &u_node, &data);
-                    if let Some(mut existing) = data.get_mut(&canonical_id) {
+                    if let Some(mut existing) = data.get_mut(&canonical_eclass_id) {
                         // If we already have data about this node, we need to update it
                         let DidMerge(may_not_be_existing, _) =
                             analysis.merge(&mut existing, node_data);
@@ -62,12 +62,12 @@ where
                     } else {
                         // If we have no data about the node, we add the new data and
                         // then add the parents to worklist
-                        data.insert(canonical_id, node_data);
+                        data.insert(canonical_eclass_id, node_data);
                         analysis_pending.extend(eclass.parents());
                     };
                 } else {
                     // If we don't have data about this, put it back on the queue and try later
-                    analysis_pending.insert(id);
+                    analysis_pending.insert(node_id);
                 }
             }
         }

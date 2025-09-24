@@ -25,7 +25,7 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: 'static,
 {
-    type Data = (CF::Cost, Id);
+    type Data = (CF::Cost, usize);
 
     fn make<'b>(
         &mut self,
@@ -36,9 +36,8 @@ where
     where
         Self::Data: 'b,
     {
-        // Take a node, add cost it, and add it with the right internal IDs to the
-        // extracted id to cost map
-        let expr_node = enode.clone().map_children(|c| analysis_of[&c].1);
+        // Take a node, calculate it's cost, store it in the egraph_id: (cost, rec_expr_id) map
+        let expr_node = enode.clone().map_children(|c| Id::from(analysis_of[&c].1));
         let expr = self.exprs.add(expr_node);
         let cost = self.cost_fn.cost(enode, |c| analysis_of[&c].0.clone());
         (cost, expr)
@@ -64,7 +63,7 @@ where
 {
     exprs: &'a mut ExprHashCons<L>,
     cost_fn: &'a mut CF,
-    extracted: &'a HashMap<Id, (CF::Cost, Id)>,
+    precomputed_any: &'a HashMap<Id, (CF::Cost, usize)>,
 }
 
 impl<'a, L, CF> ExtractContainsAnalysis<'a, L, CF>
@@ -75,12 +74,12 @@ where
     pub fn new(
         exprs: &'a mut ExprHashCons<L>,
         cost_fn: &'a mut CF,
-        extracted: &'a HashMap<Id, (CF::Cost, Id)>,
+        precomputed_any: &'a HashMap<Id, (CF::Cost, usize)>,
     ) -> Self {
         Self {
             exprs,
             cost_fn,
-            extracted,
+            precomputed_any,
         }
     }
 }
@@ -92,7 +91,7 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: 'static + Ord,
 {
-    type Data = Option<(CF::Cost, Id)>;
+    type Data = Option<(CF::Cost, usize)>;
 
     fn make<'b>(
         &mut self,
@@ -108,7 +107,7 @@ where
             let children_any = enode
                 .children()
                 .iter()
-                .map(|c| &self.extracted[&egraph.find(*c)])
+                .map(|c| &self.precomputed_any[&egraph.find(*c)])
                 .collect::<Box<_>>();
 
             let mut index_based_enode = enode.clone();
@@ -148,7 +147,7 @@ where
                     let new_expr = self.exprs.add(
                         index_based_enode
                             .clone()
-                            .map_children(|c| to_selected[&c].1),
+                            .map_children(|c| Id::from(to_selected[&c].1)),
                     );
                     (cost, new_expr)
                 })
@@ -188,7 +187,7 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: 'static + Ord,
 {
-    type Data = Option<(CF::Cost, Id)>;
+    type Data = Option<(CF::Cost, usize)>;
 
     fn make<'b>(
         &mut self,
@@ -220,7 +219,7 @@ where
         let new_exprs = self.exprs.add(
             enode
                 .clone()
-                .map_children(|c| children_matching[&c].as_ref().unwrap().1),
+                .map_children(|c| Id::from(children_matching[&c].as_ref().unwrap().1)),
         );
         Some((cost, new_exprs))
     }
@@ -230,7 +229,7 @@ where
     }
 }
 
-fn merge_best_option<Cost>(a: &mut Option<(Cost, Id)>, b: Option<(Cost, Id)>) -> DidMerge
+fn merge_best_option<Cost>(a: &mut Option<(Cost, usize)>, b: Option<(Cost, usize)>) -> DidMerge
 where
     Cost: 'static + Ord,
 {

@@ -6,43 +6,42 @@ use hashbrown::{HashMap, HashSet};
 /// hash consed storage for expressions,
 /// cheap replacement for garbage collected expressions
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub(crate) struct ExprHashCons<L: Hash + Eq> {
-    expr: RecExpr<L>,
-    memo: HashMap<L, Id>,
+pub(crate) struct ExprHashCons<L: Hash + Eq + Language> {
+    node_store: Vec<L>,
+    memo: HashMap<L, usize>,
 }
 
 impl<L: Language> ExprHashCons<L> {
     pub fn new() -> Self {
         ExprHashCons {
-            expr: RecExpr::default(),
+            node_store: Vec::new(),
             memo: HashMap::default(),
         }
     }
 
-    pub(crate) fn add(&mut self, node: L) -> Id {
+    pub(crate) fn add(&mut self, node: L) -> usize {
         if let Some(id) = self.memo.get(&node) {
             return *id;
         }
-        let new_id = self.expr.add(node.clone());
+        let new_id = self.node_store.len();
+        self.node_store.push(node.clone());
         self.memo.insert(node, new_id);
         new_id
     }
 
-    pub(crate) fn extract(&self, id: Id) -> RecExpr<L> {
-        let all = self.expr.as_ref();
-
+    pub(crate) fn extract(&self, id: usize) -> RecExpr<L> {
         let mut used = HashSet::new();
         used.insert(id);
-        for (i, node) in all.iter().enumerate().rev() {
-            if used.contains(&Id::from(i)) {
-                used.extend(node.children());
+        for (i, node) in self.node_store.iter().enumerate().rev() {
+            if used.contains(&i) {
+                used.extend(node.children().iter().map(|id| usize::from(*id)));
             }
         }
 
         let mut fresh = RecExpr::default();
         let mut map = HashMap::<Id, Id>::default();
-        for (i, node) in all.iter().enumerate() {
-            if used.contains(&Id::from(i)) {
+        for (i, node) in self.node_store.iter().enumerate() {
+            if used.contains(&i) {
                 let fresh_node = node.clone().map_children(|c| map[&c]);
                 let fresh_id = fresh.add(fresh_node);
                 map.insert(Id::from(i), fresh_id);
@@ -113,7 +112,9 @@ where
 
     pub fn pop(&mut self) -> Option<T> {
         let res = self.queue.pop_front();
-        res.as_ref().map(|t| self.set.remove(t));
+        if let Some(t) = &res {
+            self.set.remove(t);
+        }
         res
     }
 

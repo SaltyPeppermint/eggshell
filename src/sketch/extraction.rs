@@ -40,7 +40,7 @@ fn extract<L, N, CF>(
     sketch: &Sketch<L>,
     mut cost_fn: CF,
     egraph: &EGraph<L, N>,
-) -> (ExprHashCons<L>, HashMap<Id, (CF::Cost, Id)>)
+) -> (ExprHashCons<L>, HashMap<Id, (CF::Cost, usize)>)
 where
     L: Language,
     N: Analysis<L>,
@@ -49,20 +49,18 @@ where
 {
     assert!(egraph.clean);
     let mut memo = HashMap::default();
-    let sketch_root = Id::from(sketch.as_ref().len() - 1);
     let mut exprs = ExprHashCons::new();
 
-    let mut extracted = HashMap::default();
-    let mut analysis = ExtractAnalysis::new(&mut exprs, &mut cost_fn);
-    analysis.one_shot_analysis(egraph, &mut extracted);
+    let mut precomputed_any = HashMap::default();
+    ExtractAnalysis::new(&mut exprs, &mut cost_fn).one_shot_analysis(egraph, &mut precomputed_any);
 
     let res = rec_extract(
         sketch,
-        sketch_root,
+        sketch.root(),
         &mut cost_fn,
         egraph,
         &mut exprs,
-        &extracted,
+        &precomputed_any,
         &mut memo,
     );
 
@@ -76,9 +74,9 @@ fn rec_extract<L, A, CF>(
     cost_fn: &mut CF,
     egraph: &EGraph<L, A>,
     exprs: &mut ExprHashCons<L>,
-    extracted: &HashMap<Id, (CF::Cost, Id)>,
-    memo: &mut HashMap<Id, HashMap<Id, (CF::Cost, Id)>>,
-) -> HashMap<Id, (CF::Cost, Id)>
+    precomputed_any: &HashMap<Id, (CF::Cost, usize)>,
+    memo: &mut HashMap<Id, HashMap<Id, (CF::Cost, usize)>>,
+) -> HashMap<Id, (CF::Cost, usize)>
 where
     L: Language,
     A: Analysis<L>,
@@ -90,45 +88,54 @@ where
     }
 
     let result = match &sketch[sketch_id] {
-        SketchLang::Any => extracted.clone(),
+        SketchLang::Any => precomputed_any.clone(),
         SketchLang::Node(inner_node) => {
             let children_matches = inner_node
                 .children()
                 .iter()
-                .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
+                .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, precomputed_any, memo))
                 .collect::<Box<_>>();
 
             egraph
+                // Get all the eclasses with a matching node
                 .classes_for_op(&inner_node.discriminant())
                 .map(|potential_ids| {
                     potential_ids
                         .filter_map(|id| {
-                            let eclass = &egraph[id];
-                            eclass
+                            egraph[id]
                                 .nodes
                                 .iter()
                                 // Matching does not care about children so we do not need to clone here
+                                // This give us only the nodes in the eclass that match our inner_node
                                 .filter(|node| node.matches(inner_node))
-                                .filter_map(|matched| {
+                                .filter_map(|matched_node| {
+                                    // For each of the nodes in the eclass, we check if each child is viable
                                     let matches = children_matches
                                         .iter()
-                                        .zip(matched.children())
+                                        .zip(matched_node.children())
+                                        // If the child is viable, we get it's stats
                                         .map_while(|(cm, id)| cm.get(id))
                                         .collect::<Box<_>>();
 
-                                    (matches.len() == matched.len()).then(|| {
-                                        let to_match = matched
+                                    // Only if all children are viable, the potential eclass is an actual matching one!
+                                    // We then calculate the cost for all combinations
+                                    (matches.len() == matched_node.len()).then(|| {
+                                        let to_match = matched_node
                                             .children()
                                             .iter()
                                             .zip(matches.iter())
                                             .collect::<HashMap<_, _>>();
-                                        let added_id = exprs
-                                            .add(matched.clone().map_children(|c| to_match[&c].1));
+                                        let added_id = exprs.add(
+                                            matched_node
+                                                .clone()
+                                                .map_children(|c| Id::from(to_match[&c].1)),
+                                        );
                                         let cost =
-                                            cost_fn.cost(matched, |c| to_match[&c].0.clone());
+                                            cost_fn.cost(matched_node, |c| to_match[&c].0.clone());
                                         (cost, added_id)
                                     })
                                 })
+                                // We want the cheapest of all the nodes
                                 .min_by(|x, y| x.0.cmp(&y.0))
                                 .map(|best| (id, best))
                         })
@@ -137,44 +144,54 @@ where
                 .unwrap_or_default()
         }
         SketchLang::Contains(sketch_id) => {
-            let contained_matches =
-                rec_extract(sketch, *sketch_id, cost_fn, egraph, exprs, extracted, memo);
+            let contained_matches = rec_extract(
+                sketch,
+                *sketch_id,
+                cost_fn,
+                egraph,
+                exprs,
+                precomputed_any,
+                memo,
+            );
 
             let mut data = egraph
                 .classes()
                 .map(|eclass| (eclass.id, contained_matches.get(&eclass.id).cloned()))
-                .collect::<HashMap<_, _>>();
+                .collect();
 
-            let mut analysis = ExtractContainsAnalysis::new(exprs, cost_fn, extracted);
-
-            analysis.one_shot_analysis(egraph, &mut data);
+            ExtractContainsAnalysis::new(exprs, cost_fn, precomputed_any)
+                .one_shot_analysis(egraph, &mut data);
 
             data.into_iter()
-                .flat_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
+                .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
         SketchLang::OnlyContains(sketch_id) => {
-            let contained_matches =
-                rec_extract(sketch, *sketch_id, cost_fn, egraph, exprs, extracted, memo);
+            let contained_matches = rec_extract(
+                sketch,
+                *sketch_id,
+                cost_fn,
+                egraph,
+                exprs,
+                precomputed_any,
+                memo,
+            );
 
             let mut data = egraph
                 .classes()
                 .map(|eclass| (eclass.id, contained_matches.get(&eclass.id).cloned()))
-                .collect::<HashMap<_, _>>();
+                .collect();
 
-            let mut analysis: ExtractOnlyContainsAnalysis<'_, L, _> =
-                ExtractOnlyContainsAnalysis::new(exprs, cost_fn);
-
-            analysis.one_shot_analysis(egraph, &mut data);
+            ExtractOnlyContainsAnalysis::new(exprs, cost_fn).one_shot_analysis(egraph, &mut data);
 
             data.into_iter()
-                .flat_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
+                .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
         SketchLang::Or(sketch_ids) => {
             let matches = sketch_ids
                 .iter()
-                .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, extracted, memo))
+                .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, precomputed_any, memo))
                 .collect::<Box<_>>();
             matches
                 .iter()
@@ -190,6 +207,11 @@ where
                 .collect()
         }
     };
+    // DEBUG
+    if let SketchLang::Node(inner) = &sketch[sketch_id] {
+        dbg!(inner);
+        dbg!(&memo);
+    }
     memo.insert(sketch_id, result.clone());
     result
 }
