@@ -100,6 +100,15 @@ where
                 // Get all the eclasses with a matching node
                 .classes_for_op(&inner_node.discriminant())
                 .map(|potential_ids| {
+                    let mut node_to_child_indices = inner_node.clone();
+                    node_to_child_indices
+                        .children_mut()
+                        .into_iter()
+                        .enumerate()
+                        .for_each(|(child_index, id)| {
+                            *id = Id::from(child_index);
+                        });
+
                     potential_ids
                         .filter_map(|id| {
                             egraph[id]
@@ -113,25 +122,21 @@ where
                                     let matches = children_matches
                                         .iter()
                                         .zip(matched_node.children())
-                                        // If the child is viable, we get it's stats
+                                        // If the child is viable, we get it's stats and put it into a map
+                                        // from index_ids to data
                                         .map_while(|(cm, id)| cm.get(id))
                                         .collect::<Box<_>>();
 
                                     // Only if all children are viable, the potential eclass is an actual matching one!
                                     // We then calculate the cost for all combinations
                                     (matches.len() == matched_node.len()).then(|| {
-                                        let to_match = matched_node
-                                            .children()
-                                            .iter()
-                                            .zip(matches.iter())
-                                            .collect::<HashMap<_, _>>();
-                                        let added_id = exprs.add(
-                                            matched_node
-                                                .clone()
-                                                .map_children(|c| Id::from(to_match[&c].1)),
-                                        );
-                                        let cost =
-                                            cost_fn.cost(matched_node, |c| to_match[&c].0.clone());
+                                        let cost = cost_fn.cost(&node_to_child_indices, |c| {
+                                            matches[usize::from(c)].0.clone()
+                                        });
+                                        let added_id =
+                                            exprs.add(node_to_child_indices.clone().map_children(
+                                                |c| Id::from(matches[usize::from(c)].1),
+                                            ));
                                         (cost, added_id)
                                     })
                                 })
@@ -208,10 +213,10 @@ where
         }
     };
     // DEBUG
-    if let SketchLang::Node(inner) = &sketch[sketch_id] {
-        dbg!(inner);
-        dbg!(&memo);
-    }
+    // if let SketchLang::Node(inner) = &sketch[sketch_id] {
+    //     dbg!(inner);
+    //     dbg!(&memo);
+    // }
     memo.insert(sketch_id, result.clone());
     result
 }
