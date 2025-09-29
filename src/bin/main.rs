@@ -32,7 +32,7 @@ fn main() {
     let cli = Cli::parse();
     let eqsat_conf = EqsatConf::builder()
         .explanation(cli.explanation())
-        .maybe_memory_limit(cli.memory_limit())
+        .maybe_node_limit(cli.node_limit())
         .iter_limit(1) // Important to capture the egraph after every iteration!
         .build();
 

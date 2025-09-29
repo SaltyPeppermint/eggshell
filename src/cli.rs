@@ -44,9 +44,9 @@ pub struct Cli {
     #[arg(long, default_value_t = SampleStrategy::Greedy)]
     strategy: SampleStrategy,
 
-    /// Memory limit for eqsat in bytes
+    /// Node limit for eqsat
     #[arg(long)]
-    memory_limit: Option<usize>,
+    node_limit: Option<usize>,
 
     /// Memory limit for eqsat in bytes
     #[arg(long)]
@@ -104,13 +104,12 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn memory_limit(&self) -> Option<usize> {
-        self.memory_limit
-    }
-
-    #[must_use]
     pub fn iter_limit(&self) -> Option<usize> {
         self.iter_limit
+    }
+
+    pub fn node_limit(&self) -> Option<usize> {
+        self.node_limit
     }
 }
 
