@@ -7,7 +7,7 @@ use rand::prelude::*;
 use rand_chacha::ChaCha12Rng;
 
 use crate::analysis::semilattice::SemiLatticeAnalysis;
-use crate::sampling::choices::PartialRecExpr;
+use crate::sampling::PartialRecExpr;
 
 use super::Sampler;
 
@@ -34,16 +34,16 @@ where
     ///
     /// Terms picked randomly from the viable ones
     pub fn new(egraph: &'a EGraph<L, N>) -> Self {
-        let mut ast_sizes = HashMap::new();
+        let mut min_ast_sizes = HashMap::new();
         // Make one big ast size analysis for all eclasses
         info!("Starting ast size oneshot analysis...");
-        AstSize.one_shot_analysis(egraph, &mut ast_sizes);
+        AstSize.one_shot_analysis(egraph, &mut min_ast_sizes);
         info!("Ast size oneshot analysis finsished!");
 
         info!("Sampler ready to start sampling!");
         Greedy {
             egraph,
-            min_ast_sizes: ast_sizes,
+            min_ast_sizes,
         }
     }
 }
@@ -63,8 +63,9 @@ where
         partial_rec_expr: &PartialRecExpr<L>,
     ) -> &'c L {
         let min_to_fill_other_open = partial_rec_expr
-            .other_open_slots()
-            .map(|id| self.min_ast_sizes[&id])
+            .open_ids()
+            .iter()
+            .map(|id| self.min_ast_sizes[id])
             .sum::<usize>();
         debug!("Required to fill rest: {min_to_fill_other_open}");
         // Budget for the children is one less because the node itself has size one at least

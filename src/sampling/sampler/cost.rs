@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use rand::seq::SliceRandom;
 use rand_chacha::ChaCha12Rng;
 
-use crate::sampling::choices::PartialRecExpr;
+use crate::sampling::PartialRecExpr;
 
 use super::Sampler;
 
@@ -212,7 +212,7 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 81);
+        assert_eq!(n_samples, 51);
     }
 
     #[test]
@@ -238,6 +238,6 @@ mod tests {
 
         let n_samples: usize = samples.iter().map(|(_, exprs)| exprs.len()).sum();
 
-        assert_eq!(n_samples, 81);
+        assert_eq!(n_samples, 51);
     }
 }

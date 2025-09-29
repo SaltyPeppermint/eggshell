@@ -8,7 +8,7 @@ use rand_chacha::ChaCha12Rng;
 
 use crate::analysis::commutative_semigroup::{CommutativeSemigroupAnalysis, Counter, ExprCount};
 use crate::analysis::semilattice::SemiLatticeAnalysis;
-use crate::sampling::choices::PartialRecExpr;
+use crate::sampling::PartialRecExpr;
 
 use super::Sampler;
 
@@ -110,16 +110,18 @@ where
         debug!("Current EClass {eclass:?}");
         debug!("Choices: {partial_rec_expr:?}");
         // We need to know what is the minimum size required to fill the rest of the open positions
-        let min_to_fill_other_open = partial_rec_expr
-            .other_open_slots()
+        let min_to_fill_other = partial_rec_expr
+            .open_ids()
+            .into_iter()
             .map(|id| self.min_ast_sizes[&id])
-            .sum::<usize>();
-        debug!("Required to fill rest: {min_to_fill_other_open}");
+            .sum::<usize>()
+            - self.min_ast_sizes[&eclass.id];
+        debug!("Required to fill other: {min_to_fill_other}");
         // Budget for the children is one less because the node itself has size one at least
         // We need to substract the minimum to fill the rest of the open positions in the partial AST
         // so we dont run into a situation where we cant finish the AST
         let budget = size_limit
-            .checked_sub(partial_rec_expr.n_chosen() + min_to_fill_other_open)
+            .checked_sub(partial_rec_expr.n_chosen() + min_to_fill_other)
             .unwrap();
 
         debug!("Size limit: {size_limit}");
@@ -232,7 +234,7 @@ mod tests {
         let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
         let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&rng, 10, root_id, start_expr.len(), 4)
+            .sample_eclass(&rng, 40, root_id, start_expr.len(), 1)
             .unwrap();
 
         assert_eq!(samples.len(), 6);
@@ -257,7 +259,7 @@ mod tests {
 
         let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
         let rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&rng, 10, root_id, 32, 4).unwrap();
+        let samples = strategy.sample_eclass(&rng, 10, root_id, 32, 1).unwrap();
 
         assert_eq!(samples.len(), 10);
     }
