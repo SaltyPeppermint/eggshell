@@ -66,19 +66,18 @@ where
             .open_ids()
             .iter()
             .map(|id| self.min_ast_sizes[id])
-            .sum::<usize>();
+            .sum::<usize>()
+            - self.min_ast_sizes[&eclass.id]; // Subtract cost of this node
         debug!("Required to fill rest: {min_to_fill_other_open}");
-        // Budget for the children is one less because the node itself has size one at least
         // We need to substract the minimum to fill the rest of the open positions in the partial AST
         // so we dont run into a situation where we cant finish the AST
         let budget = size_limit
             .checked_sub(partial_rec_expr.n_chosen() + min_to_fill_other_open)
             .unwrap();
         debug!("Budget for this node: {min_to_fill_other_open}");
-
-        // We filter out all the enodes that are too big for our maximum budget
-        // (strictly smaller since we need to account for the new node itself)
-        // and then pick randomly from those
+        // We filter out all the enodes that are too big for our maximum budget.
+        // Budget for the children is strictly less because the node itself has size 1.
+        // Then we pick randomly from those remaining options.
         eclass
             .nodes
             .iter()
