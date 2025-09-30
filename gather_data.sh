@@ -11,7 +11,7 @@ for i in $(seq $START $END); do
     logfile=logs/$i-$date.log
     echo "Logfile: $logfile"
 
-    RUST_LOG=warn cargo run --release -- \
+    RUST_LOG=warn cargo run --release --bin main -- \
         --file data/rise/start_and_goal.csv \
         --eclass-samples $N_SAMPLES \
         --iter-limit 3 \
