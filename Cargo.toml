@@ -91,10 +91,6 @@ shadow_unrelated = "warn"
 inherits = "release"
 debug = true
 
-[[bench]]
-name = "bench"
-harness = false
-
 [[bin]]
 name = "main"
 path = "src/bin/main.rs"
