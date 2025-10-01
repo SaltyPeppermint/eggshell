@@ -64,8 +64,7 @@ where
     ) -> &'c L {
         let min_to_fill_other_open = partial_rec_expr
             .open_ids()
-            .iter()
-            .map(|id| self.min_ast_sizes[id])
+            .map(|id| self.min_ast_sizes[&id])
             .sum::<usize>()
             - self.min_ast_sizes[&eclass.id]; // Subtract cost of this node
         debug!("Required to fill rest: {min_to_fill_other_open}");

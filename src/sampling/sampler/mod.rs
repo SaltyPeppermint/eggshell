@@ -50,10 +50,10 @@ where
 
         let mut partial_rec_expr = PartialRecExpr::from(canonical_root_id);
 
-        while let Some((id, trace)) = partial_rec_expr.select_next_open(rng) {
+        while let Some((id, key)) = partial_rec_expr.select_next_open(rng) {
             let eclass = &egraph[id];
             let pick = self.pick(rng, eclass, size_limit, &partial_rec_expr);
-            partial_rec_expr.fill_next(trace, pick)?;
+            partial_rec_expr.fill_next(key, pick)?;
             if partial_rec_expr.len() > 10000 && partial_rec_expr.len() % 100 == 0 {
                 warn!(
                     "Building very large sample with {} entries!",
