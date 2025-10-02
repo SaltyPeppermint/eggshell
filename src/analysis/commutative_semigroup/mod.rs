@@ -41,7 +41,7 @@ where
     fn merge(&self, a: &mut Self::Data, b: Self::Data) -> DidMerge;
 
     fn one_shot_analysis(&self, egraph: &EGraph<L, N>) -> HashMap<Id, Self::Data> {
-        fn resolve_pending_analysis<'aa, L, N, B, CC>(
+        fn resolve_pending_analysis<L, N, B, CC>(
             egraph: &EGraph<L, N>,
             analysis: &B,
             data: &Arc<DashMap<Id, B::Data>>,

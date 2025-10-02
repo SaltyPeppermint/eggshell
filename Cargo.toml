@@ -45,47 +45,44 @@ smallvec = { version = "1", features = ["const_generics", "serde"] }
 symbolic_expressions = "5"
 thiserror = "2"
 
-[dev-dependencies]
-criterion = { version = "0.6", features = ["html_reports"] }
+# [lints.clippy]
+# # disallowed-types = ["std::collections::HashMap", "std::collections::HashSet"]
 
-[lints.clippy]
-# disallowed-types = ["std::collections::HashMap", "std::collections::HashSet"]
+# all = { level = "deny", priority = -2 }
+# pedantic = { level = "warn", priority = -1 }
 
-all = { level = "deny", priority = -2 }
-pedantic = { level = "warn", priority = -1 }
+# redundant_closure_for_method_calls = "allow"
+# module_name_repetitions = "allow"
 
-redundant_closure_for_method_calls = "allow"
-module_name_repetitions = "allow"
-
-dbg_macro = "warn"
-empty_structs_with_brackets = "warn"
-get_unwrap = "warn"
-map_err_ignore = "warn"
-needless_raw_strings = "warn"
-pub_without_shorthand = "warn"
-redundant_type_annotations = "warn"
-shadow_reuse = "warn"
-shadow_same = "warn"
-str_to_string = "warn"
-string_to_string = "warn"
-string_add = "warn"
-absolute_paths_not_starting_with_crate = "warn"
-create_dir = "warn"
-deref_by_slicing = "warn"
-filetype_is_file = "warn"
-format_push_string = "warn"
-impl_trait_in_params = "warn"
-semicolon_inside_block = "warn"
-tests_outside_test_module = "warn"
-todo = "warn"
-unnecessary_safety_comment = "warn"
-unnecessary_safety_doc = "warn"
-unnecessary_self_imports = "warn"
-verbose_file_reads = "warn"
-shadow_unrelated = "warn"
-# clippy::use_debug,
-# clippy::cfg_not_test,
-# clippy::allow_attributes
+# dbg_macro = "warn"
+# empty_structs_with_brackets = "warn"
+# get_unwrap = "warn"
+# map_err_ignore = "warn"
+# needless_raw_strings = "warn"
+# pub_without_shorthand = "warn"
+# redundant_type_annotations = "warn"
+# shadow_reuse = "warn"
+# shadow_same = "warn"
+# str_to_string = "warn"
+# string_to_string = "warn"
+# string_add = "warn"
+# absolute_paths_not_starting_with_crate = "warn"
+# create_dir = "warn"
+# deref_by_slicing = "warn"
+# filetype_is_file = "warn"
+# format_push_string = "warn"
+# impl_trait_in_params = "warn"
+# semicolon_inside_block = "warn"
+# tests_outside_test_module = "warn"
+# todo = "warn"
+# unnecessary_safety_comment = "warn"
+# unnecessary_safety_doc = "warn"
+# unnecessary_self_imports = "warn"
+# verbose_file_reads = "warn"
+# shadow_unrelated = "warn"
+# # clippy::use_debug,
+# # clippy::cfg_not_test,
+# # clippy::allow_attributes
 
 [profile.release-with-debug]
 inherits = "release"

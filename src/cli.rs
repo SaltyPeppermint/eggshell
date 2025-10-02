@@ -12,6 +12,10 @@ pub struct Cli {
     #[arg(long)]
     file: PathBuf,
 
+    /// RewriteSystem of the input
+    #[arg(long)]
+    rewrite_system: RewriteSystemName,
+
     /// Id of expr from which to seed egraphs
     #[arg(long)]
     expr_id: usize,
@@ -24,40 +28,34 @@ pub struct Cli {
     #[arg(long, default_value_t = 2024)]
     rng_seed: u64,
 
-    /// Memory limit for eqsat in bytes
+    /// Number of chains
     #[arg(long)]
-    explanation: bool,
-
-    /// Number of samples to take per `EClass`
-    #[arg(long, default_value_t = 8)]
-    eclass_samples: usize,
-
-    /// Number of samples to take per `EClass`
-    #[arg(long)]
-    sample_parallelism: Option<usize>,
-
-    /// Sample batch size
-    #[arg(long)]
-    sample_batch_size: Option<usize>,
-
-    /// Sampling strategy
-    #[arg(long, default_value_t = SampleStrategy::Greedy)]
-    strategy: SampleStrategy,
-
-    /// Node limit for eqsat
-    #[arg(long)]
-    node_limit: Option<usize>,
+    n_chains: u64,
 
     /// Memory limit for eqsat in bytes
     #[arg(long)]
-    iter_limit: Option<usize>,
+    iter_distance: usize,
 
-    /// RewriteSystem of the input
-    #[arg(long)]
-    rewrite_system: RewriteSystemName,
+    /// Memory limit for eqsat in bytes
+    #[arg(long, default_value_t = 128)]
+    max_retries: usize,
+
+    /// Memory limit for eqsat in bytes
+    #[arg(long, default_value_t = 1024)]
+    chain_length: usize,
 }
 
 impl Cli {
+    #[must_use]
+    pub fn file(&self) -> &PathBuf {
+        &self.file
+    }
+
+    #[must_use]
+    pub fn rewrite_system(&self) -> RewriteSystemName {
+        self.rewrite_system
+    }
+
     #[must_use]
     pub fn expr_id(&self) -> usize {
         self.expr_id
@@ -69,47 +67,28 @@ impl Cli {
     }
 
     #[must_use]
-    pub fn strategy(&self) -> SampleStrategy {
-        self.strategy
-    }
-
-    #[must_use]
-    pub fn eclass_samples(&self) -> usize {
-        self.eclass_samples
-    }
-
-    #[must_use]
-    pub fn sample_parallelism(&self) -> Option<usize> {
-        self.sample_parallelism
-    }
-
-    #[must_use]
     pub fn rng_seed(&self) -> u64 {
         self.rng_seed
     }
 
     #[must_use]
-    pub fn explanation(&self) -> bool {
-        self.explanation
+    pub fn n_chains(&self) -> u64 {
+        self.n_chains
     }
 
     #[must_use]
-    pub fn rewrite_system(&self) -> RewriteSystemName {
-        self.rewrite_system
+    pub fn iter_distance(&self) -> usize {
+        self.iter_distance
     }
 
     #[must_use]
-    pub fn file(&self) -> &PathBuf {
-        &self.file
+    pub fn max_retries(&self) -> usize {
+        self.max_retries
     }
 
     #[must_use]
-    pub fn iter_limit(&self) -> Option<usize> {
-        self.iter_limit
-    }
-
-    pub fn node_limit(&self) -> Option<usize> {
-        self.node_limit
+    pub fn chain_length(&self) -> usize {
+        self.chain_length
     }
 }
 
