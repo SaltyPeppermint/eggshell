@@ -41,7 +41,7 @@ pub struct Cli {
     max_retries: usize,
 
     /// Memory limit for eqsat in bytes
-    #[arg(long, default_value_t = 1024)]
+    #[arg(long)]
     chain_length: usize,
 }
 

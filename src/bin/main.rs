@@ -8,7 +8,7 @@ use chrono::{DateTime, Local, TimeDelta};
 use clap::Parser;
 use egg::{Analysis, FromOp, Language, RecExpr, Rewrite, SimpleScheduler, StopReason};
 use eggshell::sampling::SampleError;
-use log::info;
+use log::{info, warn};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
@@ -56,49 +56,85 @@ fn main() {
     println!("Work on expression {} done!", cli.expr_id());
 }
 
-fn run<R: RewriteSystem>(
-    entry: &Entry,
-    term_folder: &Path,
-    start_time: DateTime<Local>,
-    cli: &Cli,
-) {
+fn run<R: RewriteSystem>(entry: &Entry, folder: &Path, start_time: DateTime<Local>, cli: &Cli) {
     let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
     let rules = R::full_rules();
     let rule_names = rules.iter().map(|r| r.name.to_string()).collect::<Vec<_>>();
     let size_limit = start_expr.len() * 2;
 
-    let metadata = MetaData::new(cli, &start_time, &rule_names);
+    let metadata = MetaData::new(cli, &start_time, &rule_names, &start_expr);
     let rng = ChaCha12Rng::seed_from_u64(cli.rng_seed());
 
-    (0..cli.n_chains())
+    let (chain_lengths, stop_reasons) = (0..cli.n_chains())
         .into_par_iter()
-        .for_each_with(rng, |thread_rng, chain_id| {
+        .map_with(rng, |thread_rng, chain_id| {
             thread_rng.set_word_pos(0); // For reproducibility
             thread_rng.set_stream(chain_id);
             let mut chain = vec![start_expr.clone()];
-            for i in 0..cli.chain_length() {
-                let sample = sample(thread_rng, &rules, &chain[i], cli, size_limit).unwrap();
-                chain.push(sample);
-                if chain.len() >= cli.batch_size() {
-                    let data = DataEntry::new(
-                        &start_expr,
-                        cli.iter_distance(),
-                        chain.as_slice(),
-                        &metadata,
-                    );
-                    save_batch(term_folder, 0, i / cli.batch_size(), &data);
-                    chain = vec![chain.pop().unwrap()];
-                }
-            }
-        });
+            continue_chain(
+                folder, cli, &rules, size_limit, &metadata, thread_rng, chain_id, &mut chain, 0,
+            )
+        })
+        .unzip::<_, _, Vec<_>, Vec<_>>();
 
-    // let total_midpoints = samples_per_midpoint.len();
-    // let average_samples = total_samples / samples_per_midpoint.len();
-    // let midpoints_no_samples = samples_per_midpoint.iter().filter(|x| **x == 0).count();
+    let total_samples = chain_lengths.iter().sum::<usize>();
+    let average_samples = total_samples / chain_lengths.len();
+    let ended_with_error = stop_reasons.iter().filter(|x| x.is_some()).count();
 
-    // println!("Total Midpoints: {total_midpoints}");
-    // println!("Average Samples per Midpoint: {average_samples}");
-    // println!("Midpoints with no samples: {midpoints_no_samples}");
+    println!("Total Samples: {total_samples}");
+    println!("Average Samples per Chain: {average_samples}");
+    println!("Ended early: {ended_with_error}");
+}
+
+#[expect(clippy::too_many_arguments)]
+fn continue_chain<L, N>(
+    folder: &Path,
+    cli: &Cli,
+    rules: &[Rewrite<L, N>],
+    size_limit: usize,
+    metadata: &MetaData<'_, L>,
+    thread_rng: &mut ChaCha12Rng,
+    chain_id: u64,
+    chain: &mut Vec<RecExpr<L>>,
+    i: usize,
+) -> (usize, Option<SampleError>)
+where
+    L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
+    L::Discriminant: Send + Sync,
+    N: Analysis<L> + Clone + Debug + Default + Send + Sync + Serialize + 'static,
+    N::Data: Serialize + Clone + Send + Sync,
+{
+    if i > cli.chain_length() {
+        return (i, None);
+    }
+
+    let sample = match sample(thread_rng, rules, chain.last().unwrap(), cli, size_limit) {
+        Ok(sample) => sample,
+        Err(e) => {
+            warn!("Chain {chain_id} ended after {i} terms with error: {e}");
+            let data = DataEntry::new(cli.iter_distance(), chain.as_slice(), metadata);
+            save_batch(folder, chain_id, i / cli.batch_size(), &data);
+            return (i, Some(e));
+        }
+    };
+    chain.push(sample);
+    if chain.len() >= cli.batch_size() {
+        let data = DataEntry::new(cli.iter_distance(), chain.as_slice(), metadata);
+        save_batch(folder, chain_id, i / cli.batch_size(), &data);
+        *chain = vec![chain.pop().unwrap()];
+    }
+
+    continue_chain(
+        folder,
+        cli,
+        rules,
+        size_limit,
+        metadata,
+        thread_rng,
+        chain_id,
+        chain,
+        i + 1,
+    )
 }
 
 fn sample<L, N>(
@@ -179,7 +215,7 @@ where
 
 fn save_batch<L: Language + FromOp + Display + Serialize>(
     term_folder: &Path,
-    chain_id: usize,
+    chain_id: u64,
     batch_id: usize,
     data: &DataEntry<L>,
 ) {
@@ -205,22 +241,15 @@ fn print_delta(delta: TimeDelta) {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct DataEntry<'a, L: Language + FromOp + Display> {
-    start_expr: &'a RecExpr<L>,
     iterations: usize,
     chain: &'a [RecExpr<L>],
-    metadata: &'a MetaData<'a>,
+    metadata: &'a MetaData<'a, L>,
 }
 
 impl<'a, L: Language + FromOp + Display> DataEntry<'a, L> {
     #[must_use]
-    pub fn new(
-        start_expr: &'a RecExpr<L>,
-        iterations: usize,
-        chain: &'a [RecExpr<L>],
-        metadata: &'a MetaData,
-    ) -> Self {
+    pub fn new(iterations: usize, chain: &'a [RecExpr<L>], metadata: &'a MetaData<'a, L>) -> Self {
         Self {
-            start_expr,
             iterations,
             chain,
             metadata,
@@ -229,19 +258,26 @@ impl<'a, L: Language + FromOp + Display> DataEntry<'a, L> {
 }
 
 #[derive(Serialize, Clone, Debug, Eq, PartialEq)]
-pub struct MetaData<'a> {
+pub struct MetaData<'a, L: Language + Display> {
     cli: &'a Cli,
     start_time: String,
     rule_names: &'a [String],
+    start_expr: &'a RecExpr<L>,
 }
 
-impl<'a> MetaData<'a> {
+impl<'a, L: Language + Display> MetaData<'a, L> {
     #[must_use]
-    pub fn new(cli: &'a Cli, start_time: &DateTime<Local>, rules: &'a [String]) -> Self {
+    pub fn new(
+        cli: &'a Cli,
+        start_time: &DateTime<Local>,
+        rules: &'a [String],
+        start_expr: &'a RecExpr<L>,
+    ) -> Self {
         Self {
             cli,
             start_time: start_time.to_rfc3339(),
             rule_names: rules,
+            start_expr,
         }
     }
 }

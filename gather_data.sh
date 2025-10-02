@@ -13,10 +13,10 @@ for i in $(seq $START $END); do
 
     RUST_LOG=warn cargo run --release --bin main -- \
         --file data/rise/start_and_goal.csv \
-        --eclass-samples $N_SAMPLES \
-        --iter-limit 3 \
+        --iter-distance 3 \
         --rewrite-system rise \
-        --sample-parallelism 16 \
+        --n-chains 1024 \
+        --chain-length 1024 \
         --expr-id $i \
         &>$logfile #
 

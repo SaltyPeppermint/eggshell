@@ -21,6 +21,6 @@ pub enum SampleError {
     RetryLimit(usize),
     #[error("Could not run to appropriate iter distance!")]
     IterDistance(usize),
-    #[error("Found stop reason other than IterLimit")]
+    #[error("Found stop reason other than IterLimit: {0:?}")]
     OtherStop(StopReason),
 }
