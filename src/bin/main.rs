@@ -24,13 +24,10 @@ fn main() {
     env_logger::init();
     let start_time = Local::now();
     let cli = Cli::parse();
-    let folder: PathBuf = format!(
-        "data/generated_samples/{}/{}-{}",
-        cli.rewrite_system(),
-        cli.file().file_stem().unwrap().to_str().unwrap(),
-        start_time.to_rfc3339()
-    )
-    .into();
+    let file_stem_str = cli.file().file_stem().unwrap().to_str().unwrap();
+    let folder = PathBuf::from("data/generated_samples")
+        .join(cli.rewrite_system().to_string())
+        .join(format!("{file_stem_str}-{}", start_time.to_rfc3339()));
     fs::create_dir_all(&folder).unwrap();
 
     let exprs = match cli.file().extension().unwrap().to_str().unwrap() {
@@ -39,10 +36,7 @@ fn main() {
         extension => panic!("Unknown file extension {}", extension),
     };
 
-    let entry = exprs
-        .into_iter()
-        .nth(cli.expr_id())
-        .expect("Entry not found!");
+    let entry = &exprs[cli.expr_id()];
     println!("Starting work on expr {}: {}...", cli.expr_id(), entry.expr);
 
     let term_folder = folder.join(cli.expr_id().to_string());
@@ -51,10 +45,10 @@ fn main() {
 
     match cli.rewrite_system() {
         RewriteSystemName::Halide => {
-            run::<Halide>(&entry, &term_folder, start_time, &cli);
+            run::<Halide>(entry, &term_folder, start_time, &cli);
         }
         RewriteSystemName::Rise => {
-            run::<Rise>(&entry, &term_folder, start_time, &cli);
+            run::<Rise>(entry, &term_folder, start_time, &cli);
         }
     }
 
