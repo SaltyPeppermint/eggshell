@@ -119,8 +119,7 @@ where
     where
         CF: CostFunction<L>,
     {
-        let extractor = Extractor::new(&self.egraph, cost_fn);
-        extractor.find_best(root)
+        Extractor::new(&self.egraph, cost_fn).find_best(root)
     }
 
     /// Extract with a sketch

@@ -85,7 +85,8 @@ fn run<R: RewriteSystem>(entry: &Entry, folder: &Path, start_time: DateTime<Loca
         .unzip::<_, _, Vec<_>, Vec<_>>();
 
     let total_samples = chain_lengths.iter().sum::<usize>();
-    let average_samples = total_samples / chain_lengths.len();
+    #[expect(clippy::cast_precision_loss)]
+    let average_samples = total_samples as f64 / chain_lengths.len() as f64;
     let ended_with_error = stop_reasons.iter().filter(|x| x.is_some()).count();
 
     println!("Total Samples: {total_samples}");
@@ -167,39 +168,33 @@ where
     N::Data: Serialize + Clone,
 {
     let penultimate_result = eqsat::eqsat(
-        &EqsatConf::builder()
-            .iter_limit(iter_distance - 1) // Important to capture the egraph after every iteration!
-            .build(),
+        &EqsatConf::builder().iter_limit(iter_distance - 1).build(),
         start_expr.into(),
         rules,
         None,
         SimpleScheduler,
     );
 
-    let penultimate_stop_reason = &penultimate_result.report().stop_reason;
-    match penultimate_stop_reason {
-        StopReason::IterationLimit(i) => {
-            if *i < iter_distance - 1 {
-                return Err(SampleError::IterDistance(*i));
-            }
+    if let StopReason::IterationLimit(i) = penultimate_result.report().stop_reason {
+        if i < iter_distance - 1 {
+            return Err(SampleError::IterDistance(i));
         }
-        _ => return Err(SampleError::OtherStop(penultimate_stop_reason.clone())),
+    } else {
+        return Err(SampleError::OtherStop(
+            penultimate_result.report().stop_reason.clone(),
+        ));
     }
-
     let result = eqsat::eqsat(
-        &EqsatConf::builder()
-            .iter_limit(1) // Important to capture the egraph after every iteration!
-            .build(),
+        &EqsatConf::builder().iter_limit(1).build(),
         penultimate_result.clone().into(),
         rules,
         None,
         SimpleScheduler,
     );
-
-    match &result.report().stop_reason {
-        StopReason::IterationLimit(_) => Ok((result, penultimate_result)),
-        _ => Err(SampleError::OtherStop(result.report().stop_reason.clone())),
+    if let StopReason::IterationLimit(_) = &result.report().stop_reason {
+        return Ok((result, penultimate_result));
     }
+    Err(SampleError::OtherStop(result.report().stop_reason.clone()))
 }
 
 fn save<L: Language + FromOp + Display + Serialize>(
