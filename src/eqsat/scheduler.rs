@@ -8,10 +8,12 @@ pub struct BudgetScheduler(HashMap<Symbol, usize>);
 
 impl BudgetScheduler {
     /// Build a new Stack Scheduler from a sequence of rewrites
+    #[must_use]
     pub fn new(budget: HashMap<Symbol, usize>) -> Self {
         Self(budget)
     }
 
+    #[must_use]
     pub fn from_expl(mut names: Vec<Symbol>) -> Self {
         names.reverse();
         let budget = names

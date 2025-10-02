@@ -4,6 +4,7 @@ use dot_generator::{attr, edge, id, node, node_id, stmt};
 use dot_structures::{Attribute, Edge, EdgeTy, Graph, Id, Node, NodeId, Stmt, Vertex};
 use egg::{Language, RecExpr};
 
+use graphviz_rust::cmd::Format;
 use graphviz_rust::printer::{DotPrinter, PrinterContext};
 use hashbrown::HashSet;
 
@@ -40,11 +41,11 @@ pub fn to_dot<L: Language + Display>(
         .into_iter()
         .enumerate()
         .map(|(idx, (label, marked))| {
-            let label = format!("\"{label}\"");
+            let label_str = format!("\"{label}\"");
             if marked {
-                node!(idx; attr!("label", label), attr!("color", "red"))
+                node!(idx; attr!("label", label_str), attr!("color", "red"))
             } else {
-                node!(idx; attr!("label", label))
+                node!(idx; attr!("label", label_str))
             }
         })
         .map(Stmt::Node)
@@ -57,7 +58,7 @@ pub fn to_dot<L: Language + Display>(
         .collect::<Vec<_>>();
 
     // let escaped_name = format!("\\\"{name}\\\"");
-    let escaped_name = format!("\"{}\"", name.replace("\"", "\\\""));
+    let escaped_name = format!("\"{}\"", name.replace('"', "\\\""));
     stmts.extend([
         stmt!(attr!("ordering", "out")),
         stmt!(attr!("labelloc", "t")),
@@ -76,7 +77,7 @@ pub fn to_dot<L: Language + Display>(
 }
 
 pub fn dot_to_svg(dot: &str) -> Vec<u8> {
-    let format = graphviz_rust::cmd::Format::Svg;
+    let format = Format::Svg;
     graphviz_rust::exec_dot(dot.into(), vec![format.into()]).unwrap()
 }
 

@@ -19,7 +19,7 @@ mod tests {
         let rules = Halide::full_rules();
 
         let result = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&true_expr).into(),
             &rules,
             None,
@@ -40,7 +40,7 @@ mod tests {
             .unwrap();
         let rules = Halide::full_rules();
         let result = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&false_expr).into(),
             &rules,
             None,

@@ -2,10 +2,8 @@ mod cost;
 mod count;
 mod simple;
 
-use std::{
-    fmt::{Debug, Display},
-    ops::Range,
-};
+use std::fmt::{Debug, Display};
+use std::ops::Range;
 
 use egg::{Analysis, EClass, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
@@ -76,14 +74,14 @@ where
     fn sample_eclass(
         &self,
         rng: &ChaCha12Rng,
-        n_samples: usize,
+        goal_n_samples: usize,
         root: Id,
         size_limit: usize,
         parallelism: usize,
     ) -> Result<HashSet<RecExpr<L>>, SampleError> {
         let root_eclass = &self.egraph()[root];
 
-        let ranges = batch_ranges(n_samples, parallelism);
+        let ranges = batch_ranges(goal_n_samples, parallelism);
         info!("Running sampling in {} batches", ranges.len());
         if !self.extractable(root, size_limit) {
             return Err(SampleError::SizeLimit(size_limit));

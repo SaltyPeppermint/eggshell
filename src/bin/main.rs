@@ -1,48 +1,14 @@
-#![deny(clippy::all)]
-#![warn(clippy::pedantic)]
-
-#![allow(clippy::redundant_closure_for_method_calls)]
-#![allow(clippy::module_name_repetitions)]
-#![warn(clippy::dbg_macro)]
-#![warn(clippy::empty_structs_with_brackets)]
-#![warn(clippy::get_unwrap)]
-#![warn(clippy::map_err_ignore)]
-#![warn(clippy::needless_raw_strings)]
-#![warn(clippy::pub_without_shorthand)]
-#![warn(clippy::redundant_type_annotations)]
-#![warn(clippy::shadow_reuse)]
-#![warn(clippy::shadow_same)]
-#![warn(clippy::str_to_string)]
-#![warn(clippy::string_to_string)]
-#![warn(clippy::string_add)]
-#![warn(clippy::absolute_paths_not_starting_with_crate)]
-#![warn(clippy::create_dir)]
-#![warn(clippy::deref_by_slicing)]
-#![warn(clippy::filetype_is_file)]
-#![warn(clippy::format_push_string)]
-#![warn(clippy::impl_trait_in_params)]
-#![warn(clippy::semicolon_inside_block)]
-#![warn(clippy::tests_outside_test_module)]
-#![warn(clippy::todo)]
-#![warn(clippy::unnecessary_safety_comment)]
-#![warn(clippy::unnecessary_safety_doc)]
-#![warn(clippy::unnecessary_self_imports)]
-#![warn(clippy::verbose_file_reads)]
-#![warn(clippy::shadow_unrelated)]
-#![warn(clippy::use_debug)]
-// Note: use_debug, cfg_not_test, and allow_attributes are not valid Clippy lints
-
 use core::panic;
 use std::fmt::{Debug, Display};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, TimeDelta};
 use clap::Parser;
 use egg::{Analysis, FromOp, Language, RecExpr, Rewrite, SimpleScheduler, StopReason};
 use eggshell::sampling::SampleError;
-use log::{info, warn};
+use log::info;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use rayon::prelude::*;
@@ -58,7 +24,6 @@ fn main() {
     env_logger::init();
     let start_time = Local::now();
     let cli = Cli::parse();
-    dbg!("afasdf");
     let folder: PathBuf = format!(
         "data/generated_samples/{}/{}-{}",
         cli.rewrite_system(),
@@ -86,10 +51,10 @@ fn main() {
 
     match cli.rewrite_system() {
         RewriteSystemName::Halide => {
-            run::<Halide>(entry, term_folder, start_time, &cli);
+            run::<Halide>(&entry, &term_folder, start_time, &cli);
         }
         RewriteSystemName::Rise => {
-            run::<Rise>(entry, term_folder, start_time, &cli);
+            run::<Rise>(&entry, &term_folder, start_time, &cli);
         }
     }
 
@@ -98,8 +63,8 @@ fn main() {
 }
 
 fn run<R: RewriteSystem>(
-    entry: Entry,
-    term_folder: PathBuf,
+    entry: &Entry,
+    term_folder: &Path,
     start_time: DateTime<Local>,
     cli: &Cli,
 ) {
@@ -114,6 +79,7 @@ fn run<R: RewriteSystem>(
     (0..cli.n_chains())
         .into_par_iter()
         .for_each_with(rng, |thread_rng, chain_id| {
+            thread_rng.set_word_pos(0); // For reproducibility
             thread_rng.set_stream(chain_id);
             let mut chain = vec![start_expr.clone()];
             for i in 0..cli.chain_length() {
@@ -126,7 +92,7 @@ fn run<R: RewriteSystem>(
                         chain.as_slice(),
                         &metadata,
                     );
-                    save_batch(&term_folder, 0, i / cli.batch_size(), &data);
+                    save_batch(term_folder, 0, i / cli.batch_size(), &data);
                     chain = vec![chain.pop().unwrap()];
                 }
             }
@@ -170,6 +136,7 @@ where
     Err(SampleError::RetryLimit(cli.max_retries()))
 }
 
+#[expect(clippy::type_complexity)]
 fn run_eqsat<L, N>(
     start_expr: &RecExpr<L>,
     rules: &[Rewrite<L, N>],
@@ -181,7 +148,7 @@ where
     N::Data: Serialize + Clone,
 {
     let penultimate_result = eqsat::eqsat(
-        EqsatConf::builder()
+        &EqsatConf::builder()
             .iter_limit(iter_distance - 1) // Important to capture the egraph after every iteration!
             .build(),
         start_expr.into(),
@@ -201,7 +168,7 @@ where
     }
 
     let result = eqsat::eqsat(
-        EqsatConf::builder()
+        &EqsatConf::builder()
             .iter_limit(1) // Important to capture the egraph after every iteration!
             .build(),
         penultimate_result.clone().into(),
@@ -217,7 +184,7 @@ where
 }
 
 fn save_batch<L: Language + FromOp + Display + Serialize>(
-    term_folder: &PathBuf,
+    term_folder: &Path,
     chain_id: usize,
     batch_id: usize,
     data: &DataEntry<L>,
@@ -251,6 +218,7 @@ pub struct DataEntry<'a, L: Language + FromOp + Display> {
 }
 
 impl<'a, L: Language + FromOp + Display> DataEntry<'a, L> {
+    #[must_use]
     pub fn new(
         start_expr: &'a RecExpr<L>,
         iterations: usize,
@@ -274,6 +242,7 @@ pub struct MetaData<'a> {
 }
 
 impl<'a> MetaData<'a> {
+    #[must_use]
     pub fn new(cli: &'a Cli, start_time: &DateTime<Local>, rules: &'a [String]) -> Self {
         Self {
             cli,

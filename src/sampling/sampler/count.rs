@@ -112,7 +112,6 @@ where
         // We need to know what is the minimum size required to fill the rest of the open positions
         let min_to_fill_other = partial_rec_expr
             .open_ids()
-            .into_iter()
             .map(|id| self.min_ast_sizes[&id])
             .sum::<usize>()
             - self.min_ast_sizes[&eclass.id];
@@ -223,7 +222,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
             None,
@@ -249,7 +248,7 @@ mod tests {
 
         let rules = Halide::full_rules();
         let eqsat = eqsat::eqsat(
-            eqsat_conf,
+            &eqsat_conf,
             (&start_expr).into(),
             &rules,
             None,

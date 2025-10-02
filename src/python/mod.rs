@@ -9,6 +9,8 @@ use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use thiserror::Error;
 
+use crate::sketch::SketchError;
+
 #[derive(Debug, Error)]
 pub enum EggshellError<L>
 where
@@ -20,7 +22,7 @@ where
     #[error(transparent)]
     BadFromOp(#[from] egg::FromOpError),
     #[error(transparent)]
-    BadSketchParse(#[from] egg::RecExprParseError<crate::sketch::SketchError<L>>),
+    BadSketchParse(#[from] egg::RecExprParseError<SketchError<L>>),
 }
 
 create_exception!(
@@ -41,19 +43,27 @@ where
 }
 
 pub mod simple {
-    super::monomorphize::monomorphize!(crate::rewrite_system::Simple, "eggshell.simple");
+    use crate::rewrite_system::Simple;
+
+    super::monomorphize::monomorphize!(Simple, "eggshell.simple");
 }
 
 pub mod arithmetic {
-    super::monomorphize::monomorphize!(crate::rewrite_system::Arithmetic, "eggshell.arithmetic");
+    use crate::rewrite_system::Arithmetic;
+
+    super::monomorphize::monomorphize!(Arithmetic, "eggshell.arithmetic");
 }
 
 pub mod halide {
-    super::monomorphize::monomorphize!(crate::rewrite_system::Halide, "eggshell.halide");
+    use crate::rewrite_system::Halide;
+
+    super::monomorphize::monomorphize!(Halide, "eggshell.halide");
 }
 
 pub mod rise {
-    super::monomorphize::monomorphize!(crate::rewrite_system::Rise, "eggshell.rise");
+    use crate::rewrite_system::Rise;
+
+    super::monomorphize::monomorphize!(Rise, "eggshell.rise");
 }
 
 /// A Python module implemented in Rust.

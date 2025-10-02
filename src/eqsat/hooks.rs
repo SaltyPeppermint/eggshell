@@ -1,3 +1,6 @@
+use std::fmt::Display;
+use std::fs;
+
 use egg::{Analysis, Language, RecExpr, Runner};
 use hashbrown::HashSet;
 use log::{info, warn};
@@ -21,14 +24,14 @@ pub const fn targe_hook<L, N>(
     target: RecExpr<L>,
 ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
-    L: Language + std::fmt::Display + 'static,
+    L: Language + Display + 'static,
     N: Analysis<L> + Default,
 {
     move |r: &mut Runner<L, N>| {
-        if let Some(ids) = r.egraph.lookup_expr_ids(&target) {
-            if ids.iter().any(|id| r.roots.contains(id)) {
-                return Err("Target found".into());
-            }
+        if let Some(ids) = r.egraph.lookup_expr_ids(&target)
+            && ids.iter().any(|id| r.roots.contains(id))
+        {
+            return Err("Target found".into());
         }
         Ok(())
     }
@@ -40,7 +43,7 @@ where
     L: Language,
     N: Analysis<L> + Default,
 {
-    let contents = std::fs::read_to_string("/proc/meminfo").expect("Could not read /proc/meminfo");
+    let contents = fs::read_to_string("/proc/meminfo").expect("Could not read /proc/meminfo");
     let mem_info = contents
         .lines()
         .find(|line| line.starts_with("MemTotal"))

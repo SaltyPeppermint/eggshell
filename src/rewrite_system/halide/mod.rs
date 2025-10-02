@@ -1,6 +1,8 @@
 mod data;
 mod rules;
 
+use std::cmp;
+
 use egg::{Analysis, DidMerge, Id, Symbol, define_language};
 use serde::{Deserialize, Serialize};
 
@@ -72,8 +74,8 @@ impl Analysis<HalideLang> for ConstantFold {
                     return None;
                 }
             }
-            HalideLang::Max([a, b]) => std::cmp::max(xi(a)?, xi(b)?).into(),
-            HalideLang::Min([a, b]) => std::cmp::min(xi(a)?, xi(b)?).into(),
+            HalideLang::Max([a, b]) => cmp::max(xi(a)?, xi(b)?).into(),
+            HalideLang::Min([a, b]) => cmp::min(xi(a)?, xi(b)?).into(),
             HalideLang::Mod([a, b]) => {
                 if xi(b)? == 0 {
                     HalideData::Int(0)
@@ -224,7 +226,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::Full);
 
         let result = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&true_expr).into(),
             &rules,
             None,
@@ -241,7 +243,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::Full);
 
         let result = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&false_expr).into(),
             &rules,
             None,
@@ -261,7 +263,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, SimpleScheduler);
+        let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);
     }
 
     #[test]
@@ -272,7 +274,7 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, SimpleScheduler);
+        let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);
     }
 
     #[test]
@@ -282,6 +284,6 @@ mod tests {
         let rules = Halide::rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
-        let _ = eqsat::eqsat(conf, (&expr).into(), &rules, None, SimpleScheduler);
+        let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);
     }
 }

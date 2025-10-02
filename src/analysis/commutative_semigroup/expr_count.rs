@@ -214,7 +214,7 @@ mod tests {
 
         let rules = Halide::full_rules();
         let eqsat = eqsat::eqsat(
-            eqsat_conf,
+            &eqsat_conf,
             (&start_expr).into(),
             rules.as_slice(),
             None,

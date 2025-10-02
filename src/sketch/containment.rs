@@ -38,7 +38,7 @@ fn rec_contains<L: Language, A: Analysis<L>>(
 ) -> HashSet<Id> {
     if let Some(value) = memo.get(&s_index) {
         return value.clone();
-    };
+    }
 
     let result = match &s_nodes[usize::from(s_index)] {
         SketchLang::Any => egraph.classes().map(|c| c.id).collect(),
@@ -59,12 +59,12 @@ fn rec_contains<L: Language, A: Analysis<L>>(
                         let eclass = &egraph[id];
                         // Matching does not depend on children
                         eclass
-                            .for_each_matching_node(&node, |matched| {
+                            .for_each_matching_node(node, |matched| {
                                 // For each eclass, we check if
                                 let children_match = children_matches
                                     .iter()
                                     .zip(matched.children())
-                                    .all(|(matches, id)| matches.contains(id));
+                                    .all(|(matches, m_id)| matches.contains(m_id));
                                 if children_match { Ok(()) } else { Err(()) }
                             })
                             .is_ok()
@@ -85,7 +85,7 @@ fn rec_contains<L: Language, A: Analysis<L>>(
             SatisfiesContainsAnalysis.one_shot_analysis(egraph, &mut data);
 
             data.iter()
-                .flat_map(|(id, is_match)| is_match.then_some(*id))
+                .filter_map(|(id, is_match)| is_match.then_some(*id))
                 .collect()
         }
         SketchLang::OnlyContains(sid) => {

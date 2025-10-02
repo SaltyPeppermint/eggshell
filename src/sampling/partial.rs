@@ -1,6 +1,6 @@
 use core::panic;
 use std::fmt::Debug;
-use std::usize;
+use std::mem;
 
 use egg::{Id, Language, RecExpr};
 use hashbrown::HashSet;
@@ -17,17 +17,12 @@ pub struct PartialRecExpr<L: Language> {
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Key(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 enum Slot<L: Language> {
     Open(Id),
     Picked(L),
+    #[default]
     Dummy,
-}
-
-impl<L: Language> Default for Slot<L> {
-    fn default() -> Self {
-        Slot::Dummy
-    }
 }
 
 impl<L: Language> PartialRecExpr<L> {
@@ -46,7 +41,7 @@ impl<L: Language> PartialRecExpr<L> {
         // let slot = self.get_slot_by_trace(&trace.0);
         if matches!(self.slots[key.0], Slot::Picked(_)) {
             return Err(SampleError::DoublePick);
-        };
+        }
         let old_len = self.slots.len();
         self.slots
             .extend(pick.children().iter().map(|id| Slot::Open(*id)));
@@ -64,7 +59,7 @@ impl<L: Language> PartialRecExpr<L> {
         self.open_slot_idx.remove(&key);
 
         self.open_slot_idx
-            .extend((old_len..self.slots.len()).map(|i| Key(i)));
+            .extend((old_len..self.slots.len()).map(Key));
         Ok(())
     }
 
@@ -108,7 +103,7 @@ impl<L: Language> TryFrom<PartialRecExpr<L>> for RecExpr<L> {
             idx: usize,
             rec_expr: &mut RecExpr<LL>,
         ) -> Result<Id, SampleError> {
-            let Slot::Picked(mut node) = std::mem::take(&mut partial_rec_expr.slots[idx]) else {
+            let Slot::Picked(mut node) = mem::take(&mut partial_rec_expr.slots[idx]) else {
                 return Err(SampleError::UnfinishedChoice);
             };
 

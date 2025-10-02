@@ -22,10 +22,10 @@ pub use scheduler::BudgetScheduler;
 /// (most often true or false) with the given ruleset
 #[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn eqsat<'a, L, N, S>(
-    conf: EqsatConf,
+pub fn eqsat<L, N, S>(
+    conf: &EqsatConf,
     start_material: StartMaterial<L, N>,
-    rules: &'a [Rewrite<L, N>],
+    rules: &[Rewrite<L, N>],
     target: Option<RecExpr<L>>,
     scheduler: S,
 ) -> EqsatResult<L, N>
@@ -63,9 +63,10 @@ where
 
     let egraph_roots = match start_material {
         StartMaterial::RecExprs(vec) => {
-            if vec.len() == 0 {
-                panic!("Eqsat needs at least one starting material!")
-            }
+            assert!(
+                (!vec.is_empty()),
+                "Eqsat needs at least one starting material!"
+            );
             let expr_strs: Vec<_> = vec.iter().map(|x| x.to_string()).collect();
             info!("Running Eqsat with Expressions: {expr_strs:?}");
             for expr in vec {
@@ -75,7 +76,7 @@ where
         }
         StartMaterial::EGraph { egraph, roots } => {
             info!("Running Eqsat with previous EGraph");
-            runner = runner.with_egraph(egraph);
+            runner = runner.with_egraph(*egraph);
             Some(roots)
         }
     };
@@ -176,7 +177,7 @@ where
 {
     RecExprs(Vec<&'a RecExpr<L>>),
     EGraph {
-        egraph: EGraph<L, N>,
+        egraph: Box<EGraph<L, N>>,
         roots: Vec<Id>,
     },
 }
@@ -189,7 +190,7 @@ where
 {
     fn from(eqsat_result: EqsatResult<L, N>) -> Self {
         StartMaterial::EGraph {
-            egraph: eqsat_result.egraph,
+            egraph: Box::new(eqsat_result.egraph),
             roots: eqsat_result.roots,
         }
     }

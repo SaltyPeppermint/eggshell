@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::hash::Hash;
 
 use egg::{Id, Language, RecExpr};
@@ -34,7 +35,7 @@ impl<L: Language> ExprHashCons<L> {
         used.insert(id);
         for (i, node) in self.node_store.iter().enumerate().rev() {
             if used.contains(&i) {
-                used.extend(node.children().iter().map(|id| usize::from(*id)));
+                used.extend(node.children().iter().map(|c_id| usize::from(*c_id)));
             }
         }
 
@@ -63,7 +64,7 @@ where
     T: Eq + Hash + Clone,
 {
     set: HashSet<T>, // hashbrown::
-    queue: std::collections::VecDeque<T>,
+    queue: VecDeque<T>,
 }
 
 impl<T> Default for UniqueQueue<T>
@@ -73,7 +74,7 @@ where
     fn default() -> Self {
         UniqueQueue {
             set: HashSet::default(),
-            queue: std::collections::VecDeque::default(),
+            queue: VecDeque::default(),
         }
     }
 }

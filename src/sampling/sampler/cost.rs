@@ -29,7 +29,7 @@ where
     CF: CostFunction<L> + Debug,
     CF::Cost: Into<usize> + Debug,
 {
-    /// Creates a new [`CostWeighted<'a, 'b, L, N, CF>`].
+    /// Creates a new [`CostWeighted<'a, L, N, CF>`].
     pub fn new(egraph: &'a EGraph<L, N>, cost_fn: CF) -> Self {
         CostWeighted {
             egraph,
@@ -121,7 +121,7 @@ mod tests {
 
         let rules = Simple::full_rules();
         let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
             None,
@@ -143,7 +143,7 @@ mod tests {
         let rules = Simple::full_rules();
 
         let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
             None,
@@ -174,7 +174,7 @@ mod tests {
         let rules = Simple::full_rules();
 
         let eqsat = eqsat::eqsat(
-            EqsatConf::default(),
+            &EqsatConf::default(),
             StartMaterial::RecExprs(vec![&start_expr_a, &start_expr_b]),
             &rules,
             None,
@@ -199,7 +199,7 @@ mod tests {
         let rules = Halide::full_rules();
 
         let eqsat = eqsat::eqsat(
-            eqsat_conf,
+            &eqsat_conf,
             (&start_expr).into(),
             &rules,
             None,
@@ -225,7 +225,7 @@ mod tests {
         let rules = Halide::full_rules();
 
         let eqsat = eqsat::eqsat(
-            eqsat_conf,
+            &eqsat_conf,
             (&start_expr).into(),
             &rules,
             None,

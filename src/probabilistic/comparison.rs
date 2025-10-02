@@ -34,6 +34,7 @@ impl FirstErrorDistance {
         FirstErrorDistance::default()
     }
 
+    #[must_use]
     pub fn hit_ids(&self) -> Vec<usize> {
         self.hits.iter().map(|hit| (*hit.0).into()).collect()
     }
@@ -43,29 +44,35 @@ impl FirstErrorDistance {
     }
 
     #[getter(n_hits)]
+    #[must_use]
     pub fn n_hits(&self) -> usize {
         self.hits.len()
     }
 
+    #[must_use]
     pub fn miss_ids(&self) -> Vec<usize> {
         self.misses.iter().map(|miss| (*miss.0).into()).collect()
     }
 
+    #[must_use]
     pub fn miss_probabilities(&self) -> Vec<Option<f64>> {
         self.misses.iter().map(|miss| *miss.1).collect()
     }
 
     #[getter(n_misses)]
+    #[must_use]
     pub fn n_misses(&self) -> usize {
         self.misses.len()
     }
 }
 
 impl FirstErrorDistance {
+    #[must_use]
     pub fn hits(&self) -> &HashMap<Id, Option<f64>> {
         &self.hits
     }
 
+    #[must_use]
     pub fn misses(&self) -> &HashMap<Id, Option<f64>> {
         &self.misses
     }
@@ -80,11 +87,12 @@ impl FirstErrorDistance {
 impl<T: Into<FirstErrorDistance>> Extend<T> for FirstErrorDistance {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for el in iter {
-            self.combine(el)
+            self.combine(el);
         }
     }
 }
 
+#[must_use]
 pub fn compare<L: Language>(
     ground_truth: &RecExpr<L>,
     sample: &RecExpr<ProbabilisticLang<L>>,
@@ -119,7 +127,7 @@ pub fn compare<L: Language>(
             }
         }
     }
-    rec(&ground_truth, ground_truth.root(), &sample, sample.root())
+    rec(ground_truth, ground_truth.root(), sample, sample.root())
 }
 
 // fn combine_probs_options(lhs: Option<f64>, rhs: Option<f64>) -> Option<f64> {

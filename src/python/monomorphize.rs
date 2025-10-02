@@ -143,7 +143,7 @@ macro_rules! monomorphize {
                 .build();
 
             let eqsat_result = eqsat::eqsat(
-                conf,
+                &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(target.0.clone()),
@@ -175,7 +175,7 @@ macro_rules! monomorphize {
                 .build();
 
             let eqsat_result = eqsat::eqsat(
-                conf.clone(),
+                &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(target.0.clone()),
@@ -196,7 +196,7 @@ macro_rules! monomorphize {
                     *root,
                 ) {
                     let eqsat_result_2 = eqsat::eqsat(
-                        conf.clone(),
+                        &conf,
                         (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
                         Some(target.0.clone()),
@@ -213,13 +213,12 @@ macro_rules! monomorphize {
                             Some((second_report_str, extracted_guide.to_string())),
                             true,
                         );
-                    } else {
-                        return (
-                            first_report_str,
-                            Some((second_report_str, extracted_guide.to_string())),
-                            false,
-                        );
                     }
+                    return (
+                        first_report_str,
+                        Some((second_report_str, extracted_guide.to_string())),
+                        false,
+                    );
                 }
             }
             (first_report_str, None, false)
@@ -243,7 +242,7 @@ macro_rules! monomorphize {
                 .build();
 
             let eqsat_result = eqsat::eqsat(
-                conf.clone(),
+                &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 None,
@@ -259,7 +258,7 @@ macro_rules! monomorphize {
                     *root,
                 ) {
                     let eqsat_result_2 = eqsat::eqsat(
-                        conf.clone(),
+                        &conf,
                         (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
                         None,
@@ -277,13 +276,12 @@ macro_rules! monomorphize {
                             Some((second_report_str, extracted_guide.to_string())),
                             Some(extracted_target.to_string()),
                         );
-                    } else {
-                        return (
-                            first_report_str,
-                            Some((second_report_str, extracted_guide.to_string())),
-                            None,
-                        );
                     }
+                    return (
+                        first_report_str,
+                        Some((second_report_str, extracted_guide.to_string())),
+                        None,
+                    );
                 }
             }
             (first_report_str, None, None)

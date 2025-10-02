@@ -2,7 +2,6 @@ mod partial;
 pub mod sampler;
 
 use std::fmt::Debug;
-use std::usize;
 
 use egg::StopReason;
 use partial::PartialRecExpr;

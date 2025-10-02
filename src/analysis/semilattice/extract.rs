@@ -18,7 +18,7 @@ impl<'a, L: Language, CF> ExtractAnalysis<'a, L, CF> {
     }
 }
 
-impl<'a, L, A, CF> SemiLatticeAnalysis<L, A> for ExtractAnalysis<'a, L, CF>
+impl<L, A, CF> SemiLatticeAnalysis<L, A> for ExtractAnalysis<'_, L, CF>
 where
     L: Language,
     A: Analysis<L>,
@@ -27,14 +27,14 @@ where
 {
     type Data = (CF::Cost, usize);
 
-    fn make<'b>(
+    fn make<'a>(
         &mut self,
         _egraph: &EGraph<L, A>,
         enode: &L,
         analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
-        Self::Data: 'b,
+        Self::Data: 'a,
     {
         // Take a node, calculate it's cost, store it in the egraph_id: (cost, rec_expr_id) map
         let expr_node = enode.clone().map_children(|c| Id::from(analysis_of[&c].1));
@@ -84,7 +84,7 @@ where
     }
 }
 
-impl<'a, L, A, CF> SemiLatticeAnalysis<L, A> for ExtractContainsAnalysis<'a, L, CF>
+impl<L, A, CF> SemiLatticeAnalysis<L, A> for ExtractContainsAnalysis<'_, L, CF>
 where
     L: Language,
     A: Analysis<L>,
@@ -93,14 +93,14 @@ where
 {
     type Data = Option<(CF::Cost, usize)>;
 
-    fn make<'b>(
+    fn make<'a>(
         &mut self,
         egraph: &EGraph<L, A>,
         enode: &L,
         analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
-        Self::Data: 'b,
+        Self::Data: 'a,
     {
         {
             // Children that satisfy '?' by index
@@ -180,7 +180,7 @@ where
     }
 }
 
-impl<'a, L, A, CF> SemiLatticeAnalysis<L, A> for ExtractOnlyContainsAnalysis<'a, L, CF>
+impl<L, A, CF> SemiLatticeAnalysis<L, A> for ExtractOnlyContainsAnalysis<'_, L, CF>
 where
     L: Language,
     A: Analysis<L>,
@@ -189,14 +189,14 @@ where
 {
     type Data = Option<(CF::Cost, usize)>;
 
-    fn make<'b>(
+    fn make<'a>(
         &mut self,
         _egraph: &EGraph<L, A>,
         enode: &L,
         analysis_of: &HashMap<Id, Self::Data>,
     ) -> Self::Data
     where
-        Self::Data: 'b,
+        Self::Data: 'a,
     {
         if enode.is_leaf() {
             return None;
@@ -211,7 +211,7 @@ where
 
         if children_matching.iter().any(|(_, data)| data.is_none()) {
             return None;
-        };
+        }
 
         let cost = self
             .cost_fn

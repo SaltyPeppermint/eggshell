@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{self, Display, Formatter};
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -12,7 +12,7 @@ pub struct Cli {
     #[arg(long)]
     file: PathBuf,
 
-    /// RewriteSystem of the input
+    /// `RewriteSystem` of the input
     #[arg(long)]
     rewrite_system: RewriteSystemName,
 
@@ -101,7 +101,7 @@ pub enum SampleStrategy {
 }
 
 impl Display for SampleStrategy {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             SampleStrategy::CountUniformly => write!(f, "CountUniformly"),
             SampleStrategy::CountSizeRange => write!(f, "CountSizeRange"),
@@ -132,7 +132,7 @@ pub enum RewriteSystemName {
 }
 
 impl Display for RewriteSystemName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Halide => write!(f, "halide"),
             Self::Rise => write!(f, "rise"),

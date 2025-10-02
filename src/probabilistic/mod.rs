@@ -1,7 +1,7 @@
 mod comparison;
 
-use std::fmt::{Debug, Display, Formatter};
-use std::mem::Discriminant;
+use std::fmt::{self, Debug, Display, Formatter};
+use std::mem::{self, Discriminant};
 
 use egg::{Id, Language, RecExpr};
 use ordered_float::OrderedFloat;
@@ -21,7 +21,7 @@ impl<L: Language> ProbabilisticLang<L> {
     pub fn new(inner: L, prob: Option<f64>) -> Self {
         match prob {
             Some(f) => Self::WithProb {
-                inner: inner,
+                inner,
                 prob: f.into(),
             },
             None => Self::NoProb(inner),
@@ -30,15 +30,13 @@ impl<L: Language> ProbabilisticLang<L> {
 
     pub fn inner(&self) -> &L {
         match self {
-            Self::NoProb(inner) => inner,
-            Self::WithProb { inner, .. } => inner,
+            Self::NoProb(inner) | Self::WithProb { inner, .. } => inner,
         }
     }
 
     pub fn inner_mut(&mut self) -> &mut L {
         match self {
-            Self::NoProb(inner) => inner,
-            Self::WithProb { inner, .. } => inner,
+            Self::NoProb(inner) | Self::WithProb { inner, .. } => inner,
         }
     }
 
@@ -49,6 +47,7 @@ impl<L: Language> ProbabilisticLang<L> {
         }
     }
 
+    #[must_use]
     pub fn lower(higher: &RecExpr<Self>) -> RecExpr<L> {
         higher
             .into_iter()
@@ -62,7 +61,7 @@ impl<L: Language> Language for ProbabilisticLang<L> {
     type Discriminant = (Discriminant<Self>, <L as Language>::Discriminant);
 
     fn discriminant(&self) -> Self::Discriminant {
-        let discr = std::mem::discriminant(self);
+        let discr = mem::discriminant(self);
         (discr, self.inner().discriminant())
     }
 
@@ -80,7 +79,7 @@ impl<L: Language> Language for ProbabilisticLang<L> {
 }
 
 impl<L: Language + Display> Display for ProbabilisticLang<L> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             ProbabilisticLang::WithProb { inner, prob } => {
                 write!(f, "{inner}: {prob}")

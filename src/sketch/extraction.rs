@@ -10,6 +10,7 @@ use crate::analysis::semilattice::{
 use crate::utils::ExprHashCons;
 
 /// Returns the best program satisfying `s` according to `cost_fn` that is represented in the `id` e-class of `egraph`, if it exists.
+#[expect(clippy::missing_panics_doc)]
 pub fn eclass_extract<L, A, CF>(
     sketch: &Sketch<L>,
     cost_fn: CF,
@@ -35,7 +36,7 @@ where
 ///
 /// Panics if the egraph isn't clean.
 /// Only give it clean egraphs!
-#[expect(clippy::too_many_lines)]
+#[expect(clippy::type_complexity)]
 fn extract<L, N, CF>(
     sketch: &Sketch<L>,
     mut cost_fn: CF,
@@ -68,6 +69,7 @@ where
 }
 
 /// Recursion for `eclass_extract`
+#[expect(clippy::too_many_lines)]
 fn rec_extract<L, A, CF>(
     sketch: &Sketch<L>,
     sketch_id: Id,
@@ -103,7 +105,7 @@ where
                     let mut node_to_child_indices = inner_node.clone();
                     node_to_child_indices
                         .children_mut()
-                        .into_iter()
+                        .iter_mut()
                         .enumerate()
                         .for_each(|(child_index, id)| {
                             *id = Id::from(child_index);
@@ -124,7 +126,7 @@ where
                                         .zip(matched_node.children())
                                         // If the child is viable, we get it's stats and put it into a map
                                         // from index_ids to data
-                                        .map_while(|(cm, id)| cm.get(id))
+                                        .map_while(|(cm, egraph_id)| cm.get(egraph_id))
                                         .collect::<Box<_>>();
 
                                     // Only if all children are viable, the potential eclass is an actual matching one!
@@ -148,10 +150,10 @@ where
                 })
                 .unwrap_or_default()
         }
-        SketchLang::Contains(sketch_id) => {
+        SketchLang::Contains(inner_sketch_id) => {
             let contained_matches = rec_extract(
                 sketch,
-                *sketch_id,
+                *inner_sketch_id,
                 cost_fn,
                 egraph,
                 exprs,
@@ -171,10 +173,10 @@ where
                 .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchLang::OnlyContains(sketch_id) => {
+        SketchLang::OnlyContains(inner_sketch_id) => {
             let contained_matches = rec_extract(
                 sketch,
-                *sketch_id,
+                *inner_sketch_id,
                 cost_fn,
                 egraph,
                 exprs,
@@ -193,8 +195,8 @@ where
                 .filter_map(|(id, maybe_best)| maybe_best.map(|b| (id, b)))
                 .collect()
         }
-        SketchLang::Or(sketch_ids) => {
-            let matches = sketch_ids
+        SketchLang::Or(inner_sketch_ids) => {
+            let matches = inner_sketch_ids
                 .iter()
                 .map(|sid| rec_extract(sketch, *sid, cost_fn, egraph, exprs, precomputed_any, memo))
                 .collect::<Box<_>>();
@@ -205,7 +207,6 @@ where
                     matches
                         .iter()
                         .filter_map(|ms| ms.get(id))
-                        .into_iter()
                         .min_by(|x, y| x.0.cmp(&y.0))
                         .map(|best| (*id, best.clone()))
                 })
@@ -225,6 +226,7 @@ where
 mod tests {
     use egg::{AstSize, RecExpr, SimpleScheduler, SymbolLang, rewrite};
 
+    use crate::eqsat;
     use crate::eqsat::EqsatConf;
     use crate::rewrite_system::RewriteSystem;
     use crate::rewrite_system::Rise;
@@ -329,16 +331,16 @@ mod tests {
         assert_eq!(best_expr.to_string(), expr_a.to_string());
 
         let conf = EqsatConf::builder().iter_limit(1).build();
-        let r = crate::eqsat::eqsat(
-            conf,
+        let r = eqsat::eqsat(
+            &conf,
             (&expr_a).into(),
             &Rise::full_rules(),
             None,
             SimpleScheduler,
         );
         let root = r.egraph().find(a_root);
-        let (_, best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
-        assert_eq!(best_expr.to_string(), expr_a.to_string());
+        let (_, new_best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
+        assert_eq!(new_best_expr.to_string(), expr_a.to_string());
     }
 
     #[test]
@@ -371,9 +373,9 @@ mod tests {
             .with_iter_limit(1)
             .with_egraph(egraph)
             .run(&rules);
-        let egraph = runner.egraph;
-        let (_, best_expr) =
-            eclass_extract(&sketch, AstSize, &egraph, egraph.find(a_root)).unwrap();
-        assert_eq!(best_expr.to_string(), expr_a.to_string());
+        let new_egraph = runner.egraph;
+        let (_, new_best_expr) =
+            eclass_extract(&sketch, AstSize, &new_egraph, new_egraph.find(a_root)).unwrap();
+        assert_eq!(new_best_expr.to_string(), expr_a.to_string());
     }
 }

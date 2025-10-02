@@ -1,7 +1,8 @@
 mod containment;
 mod extraction;
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{self, Display, Formatter};
+use std::slice;
 
 use egg::{FromOp, Id, Language, RecExpr};
 use serde::{Deserialize, Serialize};
@@ -63,7 +64,7 @@ pub enum SketchDiscriminant<L: Language> {
 impl<L: Language> Language for SketchLang<L> {
     type Discriminant = SketchDiscriminant<L>;
 
-    #[inline(always)]
+    // Clippy says [inline(always)] on a discriminant is a bad idea
     fn discriminant(&self) -> Self::Discriminant {
         match self {
             SketchLang::Any => SketchDiscriminant::Any,
@@ -82,8 +83,7 @@ impl<L: Language> Language for SketchLang<L> {
         match self {
             Self::Any => &[],
             Self::Node(n) => n.children(),
-            Self::Contains(s) => std::slice::from_ref(s),
-            Self::OnlyContains(s) => std::slice::from_ref(s),
+            Self::Contains(s) | Self::OnlyContains(s) => slice::from_ref(s),
             Self::Or(ss) => ss,
         }
     }
@@ -92,15 +92,14 @@ impl<L: Language> Language for SketchLang<L> {
         match self {
             Self::Any => &mut [],
             Self::Node(n) => n.children_mut(),
-            Self::Contains(s) => std::slice::from_mut(s),
-            Self::OnlyContains(s) => std::slice::from_mut(s),
+            Self::Contains(s) | Self::OnlyContains(s) => slice::from_mut(s),
             Self::Or(ss) => ss,
         }
     }
 }
 
 impl<L: Language + Display> Display for SketchLang<L> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Any => write!(f, "?"),
             Self::Node(node) => write!(f, "{node}"),
@@ -149,12 +148,12 @@ where
                 }
             }
             "or" | "OR" | "Or" => {
-                if !children.is_empty() {
-                    Ok(Self::Or(children.into_boxed_slice()))
-                } else {
+                if children.is_empty() {
                     Err(SketchError::BadChildren(egg::FromOpError::new(
                         op, children,
                     )))
+                } else {
+                    Ok(Self::Or(children.into_boxed_slice()))
                 }
             }
             _ => L::from_op(op, children)

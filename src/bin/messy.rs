@@ -14,7 +14,7 @@
 #![warn(clippy::str_to_string)]
 #![warn(clippy::string_to_string)]
 #![warn(clippy::string_add)]
-#![warn(clippy::absolute_paths_not_starting_with_crate)]
+#![warn(clippy::absolute_paths)]
 #![warn(clippy::create_dir)]
 #![warn(clippy::deref_by_slicing)]
 #![warn(clippy::filetype_is_file)]
@@ -45,7 +45,7 @@ fn main() {
     let rules = Rise::full_rules();
 
     let mut penultimate_result = eqsat::eqsat(
-        EqsatConf::builder()
+        &EqsatConf::builder()
             .node_limit(100_000_000_000)
             .iter_limit(6)
             .build(),
@@ -56,7 +56,7 @@ fn main() {
     );
 
     let final_result = eqsat::eqsat(
-        EqsatConf::builder()
+        &EqsatConf::builder()
             .node_limit(100_000_000_000)
             .iter_limit(7)
             .build(),

@@ -49,11 +49,10 @@ where
                     let canonical_eclass_id = egraph.find(node_id);
                     let eclass = &egraph[canonical_eclass_id];
                     // We make the analysis for this node
-                    let node_data = analysis.make(egraph, &u_node, &data);
-                    if let Some(mut existing) = data.get_mut(&canonical_eclass_id) {
+                    let node_data = analysis.make(egraph, &u_node, data);
+                    if let Some(existing) = data.get_mut(&canonical_eclass_id) {
                         // If we already have data about this node, we need to update it
-                        let DidMerge(may_not_be_existing, _) =
-                            analysis.merge(&mut existing, node_data);
+                        let DidMerge(may_not_be_existing, _) = analysis.merge(existing, node_data);
                         // If this changed anything, we need to re-evaluate the parents,
                         // until we have reached the fixpoint
                         if may_not_be_existing {
@@ -64,7 +63,7 @@ where
                         // then add the parents to worklist
                         data.insert(canonical_eclass_id, node_data);
                         analysis_pending.extend(eclass.parents());
-                    };
+                    }
                 } else {
                     // If we don't have data about this, put it back on the queue and try later
                     analysis_pending.insert(node_id);
