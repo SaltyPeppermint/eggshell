@@ -15,8 +15,8 @@ for i in $(seq $START $END); do
         --file data/rise/start_and_goal.csv \
         --iter-distance 3 \
         --rewrite-system rise \
-        --n-chains 1024 \
-        --chain-length 1024 \
+        --n-chains 100000 \
+        --chain-length 100 \
         --expr-id $i \
         &>$logfile #
 

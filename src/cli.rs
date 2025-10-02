@@ -20,10 +20,6 @@ pub struct Cli {
     #[arg(long)]
     expr_id: usize,
 
-    /// Id of expr from which to seed egraphs
-    #[arg(long, default_value_t = 128)]
-    batch_size: usize,
-
     /// RNG Seed
     #[arg(long, default_value_t = 2024)]
     rng_seed: u64,
@@ -59,11 +55,6 @@ impl Cli {
     #[must_use]
     pub fn expr_id(&self) -> usize {
         self.expr_id
-    }
-
-    #[must_use]
-    pub fn batch_size(&self) -> usize {
-        self.batch_size
     }
 
     #[must_use]
