@@ -267,19 +267,22 @@ macro_rules! monomorphize {
                         egg::SimpleScheduler,
                     );
                     let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
-                    let second_canonical_root = eqsat_result_2.egraph().find(*root);
-                    if let Some((_, extracted_target)) = $crate::sketch::eclass_extract(
-                        &target.0,
-                        egg::AstSize,
-                        &eqsat_result.egraph(),
-                        second_canonical_root,
-                    ) {
-                        return (
-                            first_report_str,
-                            Some((second_report_str, extracted_guide.to_string())),
-                            Some(extracted_target.to_string()),
-                        );
+                    for second_root in eqsat_result_2.roots() {
+                        let second_canonical_root = eqsat_result_2.egraph().find(*second_root);
+                        if let Some((_, extracted_target)) = $crate::sketch::eclass_extract(
+                            &target.0,
+                            egg::AstSize,
+                            &eqsat_result_2.egraph(),
+                            second_canonical_root,
+                        ) {
+                            return (
+                                first_report_str,
+                                Some((second_report_str, extracted_guide.to_string())),
+                                Some(extracted_target.to_string()),
+                            );
+                        }
                     }
+
                     return (
                         first_report_str,
                         Some((second_report_str, extracted_guide.to_string())),
