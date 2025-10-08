@@ -213,7 +213,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
         let rules = Halide::full_rules();
-        let eqsat = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),
             rules.as_slice(),
@@ -221,12 +221,9 @@ mod tests {
             SimpleScheduler,
         );
 
-        let egraph = eqsat.egraph();
-        let root = eqsat.roots()[0];
+        let data = ExprCount::new(16).one_shot_analysis(&runner.egraph);
 
-        let data = ExprCount::new(16).one_shot_analysis(egraph);
-
-        let root_data: &HashMap<usize, BigUint> = &data[&egraph.find(root)];
+        let root_data: &HashMap<usize, BigUint> = &data[&runner.egraph.find(roots[0])];
 
         assert_eq!(root_data[&16], 40512usize.into());
     }

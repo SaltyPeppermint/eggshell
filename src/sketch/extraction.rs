@@ -331,15 +331,15 @@ mod tests {
         assert_eq!(best_expr.to_string(), expr_a.to_string());
 
         let conf = EqsatConf::builder().iter_limit(1).build();
-        let r = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &conf,
             (&expr_a).into(),
             &Rise::full_rules(),
             None,
             SimpleScheduler,
         );
-        let root = r.egraph().find(a_root);
-        let (_, new_best_expr) = eclass_extract(&sketch, AstSize, r.egraph(), root).unwrap();
+        let root = &runner.egraph.find(a_root);
+        let (_, new_best_expr) = eclass_extract(&sketch, AstSize, &runner.egraph, *root).unwrap();
         assert_eq!(new_best_expr.to_string(), expr_a.to_string());
     }
 

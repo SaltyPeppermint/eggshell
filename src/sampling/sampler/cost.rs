@@ -120,7 +120,7 @@ mod tests {
         let start_expr: RecExpr<SimpleLang> = "(* (+ a b) 1)".parse().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
@@ -128,7 +128,7 @@ mod tests {
             SimpleScheduler,
         );
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
+        let strategy = CostWeighted::new(&runner.egraph, AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
@@ -142,7 +142,7 @@ mod tests {
 
         let rules = Simple::full_rules();
 
-        let eqsat = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
@@ -150,7 +150,7 @@ mod tests {
             SimpleScheduler,
         );
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
+        let strategy = CostWeighted::new(&runner.egraph, AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
@@ -173,7 +173,7 @@ mod tests {
 
         let rules = Simple::full_rules();
 
-        let eqsat = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
             StartMaterial::RecExprs(vec![&start_expr_a, &start_expr_b]),
             &rules,
@@ -181,7 +181,7 @@ mod tests {
             SimpleScheduler,
         );
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
+        let strategy = CostWeighted::new(&runner.egraph, AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_egraph(&mut rng, 1000, 4, 4).unwrap();
 
@@ -198,7 +198,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
         let rules = Halide::full_rules();
 
-        let eqsat = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),
             &rules,
@@ -206,7 +206,7 @@ mod tests {
             SimpleScheduler,
         );
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
+        let strategy = CostWeighted::new(&runner.egraph, AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_egraph(&mut rng, 1000, 64, 4).unwrap();
 
@@ -224,7 +224,7 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
         let rules = Halide::full_rules();
 
-        let eqsat = eqsat::eqsat(
+        let (runner, _) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),
             &rules,
@@ -232,7 +232,7 @@ mod tests {
             SimpleScheduler,
         );
 
-        let strategy = CostWeighted::new(eqsat.egraph(), AstSize);
+        let strategy = CostWeighted::new(&runner.egraph, AstSize);
         let mut rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy.sample_egraph(&mut rng, 1000, 64, 4).unwrap();
 

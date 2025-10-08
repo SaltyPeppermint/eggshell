@@ -142,19 +142,19 @@ macro_rules! monomorphize {
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
 
-            let eqsat_result = eqsat::eqsat(
+            let (runner, _) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
-            if let egg::StopReason::Other(stop_message) = &eqsat_result.report().stop_reason
+            if let egg::StopReason::Other(stop_message) = &runner.report().stop_reason
                 && stop_message.contains("Target")
             {
-                return (serde_json::to_string(&eqsat_result).unwrap(), true);
+                return (serde_json::to_string(&runner.report()).unwrap(), true);
             }
-            (serde_json::to_string(&eqsat_result).unwrap(), false)
+            (serde_json::to_string(&runner.report()).unwrap(), false)
         }
 
         #[pyfunction]
@@ -174,39 +174,39 @@ macro_rules! monomorphize {
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
 
-            let eqsat_result = eqsat::eqsat(
+            let (runner, roots) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
-            let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
-            if let egg::StopReason::Other(s) = &eqsat_result.report().stop_reason
+            let first_report_str = serde_json::to_string(&runner.report()).unwrap();
+            if let egg::StopReason::Other(s) = &runner.report().stop_reason
                 && s.contains("Target")
             {
                 return (first_report_str, None, false);
             }
 
-            for root in eqsat_result.roots() {
-                let canonical_root = eqsat_result.egraph().find(*root);
+            for root in roots {
+                let canonical_root = runner.egraph.find(root);
                 if let Some((_, extracted_guide)) = $crate::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
-                    &eqsat_result.egraph(),
+                    &runner.egraph,
                     canonical_root,
                 ) {
-                    let eqsat_result_2 = eqsat::eqsat(
+                    let (runner_2, _roots_2) = eqsat::eqsat(
                         &conf,
                         (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
                         Some(target.0.clone()),
                         egg::SimpleScheduler,
                     );
-                    let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
+                    let second_report_str = serde_json::to_string(&runner_2.report()).unwrap();
 
                     if let egg::StopReason::Other(stop_message) =
-                        &eqsat_result_2.report().stop_reason
+                        &runner_2.report().stop_reason
                         && stop_message.contains("Target")
                     {
                         return (
@@ -242,37 +242,37 @@ macro_rules! monomorphize {
                 .maybe_time_limit(time_limit.map(std::time::Duration::from_secs_f64))
                 .build();
 
-            let eqsat_result = eqsat::eqsat(
+            let (runner, roots) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
                 &<$type as RewriteSystem>::full_rules(),
                 None,
                 egg::SimpleScheduler,
             );
-            let first_report_str = serde_json::to_string(&eqsat_result).unwrap();
+            let first_report_str = serde_json::to_string(&runner.report()).unwrap();
 
-            for root in eqsat_result.roots() {
-                let canonical_root = eqsat_result.egraph().find(*root);
+            for root in roots {
+                let canonical_root = runner.egraph.find(root);
                 if let Some((_, extracted_guide)) = $crate::sketch::eclass_extract(
                     &guide.0,
                     egg::AstSize,
-                    &eqsat_result.egraph(),
+                    &runner.egraph,
                     canonical_root,
                 ) {
-                    let eqsat_result_2 = eqsat::eqsat(
+                    let (second_runner, second_roots) = eqsat::eqsat(
                         &conf,
                         (&extracted_guide).into(),
                         &<$type as RewriteSystem>::full_rules(),
                         None,
                         egg::SimpleScheduler,
                     );
-                    let second_report_str = serde_json::to_string(&eqsat_result_2).unwrap();
-                    for second_root in eqsat_result_2.roots() {
-                        let second_canonical_root = eqsat_result_2.egraph().find(*second_root);
+                    let second_report_str = serde_json::to_string(&second_runner.report()).unwrap();
+                    for second_root in second_roots {
+                        let second_canonical_root = second_runner.egraph.find(second_root);
                         if let Some((_, extracted_target)) = $crate::sketch::eclass_extract(
                             &target.0,
                             egg::AstSize,
-                            &eqsat_result_2.egraph(),
+                            &second_runner.egraph,
                             second_canonical_root,
                         ) {
                             return (

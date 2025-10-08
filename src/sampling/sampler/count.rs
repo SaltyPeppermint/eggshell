@@ -221,19 +221,18 @@ mod tests {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
         let rules = Simple::full_rules();
-        let eqsat = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&start_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root_id = eqsat.roots()[0];
 
-        let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 5);
+        let strategy = CountUniformly::<BigUint, _, _>::new(&runner.egraph, 5);
         let rng = ChaCha12Rng::seed_from_u64(1024);
         let samples = strategy
-            .sample_eclass(&rng, 40, root_id, start_expr.len(), 1)
+            .sample_eclass(&rng, 40, roots[0], start_expr.len(), 1)
             .unwrap();
 
         assert_eq!(samples.len(), 6);
@@ -247,18 +246,17 @@ mod tests {
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
         let rules = Halide::full_rules();
-        let eqsat = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root_id = eqsat.roots()[0];
 
-        let strategy = CountUniformly::<BigUint, _, _>::new(eqsat.egraph(), 32);
+        let strategy = CountUniformly::<BigUint, _, _>::new(&runner.egraph, 32);
         let rng = ChaCha12Rng::seed_from_u64(1024);
-        let samples = strategy.sample_eclass(&rng, 10, root_id, 32, 1).unwrap();
+        let samples = strategy.sample_eclass(&rng, 10, roots[0], 32, 1).unwrap();
 
         assert_eq!(samples.len(), 10);
     }

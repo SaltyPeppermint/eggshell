@@ -215,7 +215,7 @@ impl RewriteSystem for Halide {
 
 #[cfg(test)]
 mod tests {
-    use egg::{AstSize, RecExpr, SimpleScheduler};
+    use egg::{AstSize, Extractor, RecExpr, SimpleScheduler};
 
     use super::*;
     use crate::eqsat::{self, EqsatConf};
@@ -225,15 +225,15 @@ mod tests {
         let true_expr: RecExpr<HalideLang> = "( == 0 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&true_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root = result.roots().first().unwrap();
-        let (_, expr) = result.classic_extract(*root, AstSize);
+        let root = roots.first().unwrap();
+        let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
         assert_eq!(HalideLang::Bool(true), expr[0.into()]);
     }
 
@@ -242,15 +242,15 @@ mod tests {
         let false_expr: RecExpr<HalideLang> = "( == 1 0 )".parse().unwrap();
         let rules = Halide::rules(HalideRuleset::Full);
 
-        let result = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&false_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root = result.roots().first().unwrap();
-        let (_, expr) = result.classic_extract(*root, AstSize);
+        let root = roots.first().unwrap();
+        let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
         assert_eq!(HalideLang::Bool(false), expr[0.into()]);
     }
 

@@ -2,6 +2,7 @@
 mod tests {
     use egg::AstSize;
 
+    use egg::Extractor;
     use egg::RecExpr;
     use egg::SimpleScheduler;
     use eggshell::eqsat;
@@ -18,15 +19,15 @@ mod tests {
             .unwrap();
         let rules = Halide::full_rules();
 
-        let result = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&true_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root = result.roots().first().unwrap();
-        let (_, expr) = result.classic_extract(*root, AstSize);
+        let root = roots.first().unwrap();
+        let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
         assert_eq!(
             <Halide as RewriteSystem>::Language::Bool(true),
             expr[0.into()]
@@ -39,15 +40,15 @@ mod tests {
             .parse()
             .unwrap();
         let rules = Halide::full_rules();
-        let result = eqsat::eqsat(
+        let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&false_expr).into(),
             &rules,
             None,
             SimpleScheduler,
         );
-        let root = result.roots().first().unwrap();
-        let (_, expr) = result.classic_extract(*root, AstSize);
+        let root = roots.first().unwrap();
+        let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
         assert_eq!(
             <Halide as RewriteSystem>::Language::Bool(false),
             expr[0.into()]

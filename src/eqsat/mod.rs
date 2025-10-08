@@ -5,15 +5,11 @@ pub mod conf;
 
 use std::fmt::{Debug, Display};
 
-use egg::{
-    Analysis, CostFunction, EGraph, Extractor, Id, Iteration, Language, RecExpr, Report, Rewrite,
-    RewriteScheduler, Runner,
-};
+use egg::{Analysis, EGraph, Id, Language, RecExpr, Rewrite, RewriteScheduler, Runner};
 use log::info;
 use serde::Serialize;
 
 use crate::eqsat::hooks::targe_hook;
-use crate::sketch::{self, Sketch};
 
 pub use conf::{EqsatConf, EqsatConfBuilder};
 pub use scheduler::BudgetScheduler;
@@ -28,7 +24,7 @@ pub fn eqsat<L, N, S>(
     rules: &[Rewrite<L, N>],
     target: Option<RecExpr<L>>,
     scheduler: S,
-) -> EqsatResult<L, N>
+) -> (Runner<L, N>, Vec<Id>)
 where
     L: Language + Display + 'static,
     S: RewriteScheduler<L, N> + 'static,
@@ -83,88 +79,8 @@ where
 
     runner = runner.run(rules);
 
-    let report = runner.report();
-    info!("{}", &report);
-    EqsatResult {
-        egraph: runner.egraph,
-        iterations: runner.iterations,
-        roots: egraph_roots.unwrap_or(runner.roots),
-        report,
-    }
-}
-
-/// API accessible struct holding the equality Saturation
-#[derive(Clone, Debug, Serialize)]
-pub struct EqsatResult<L, N>
-where
-    L: Language + Display,
-    N: Analysis<L> + Clone,
-    N::Data: Serialize + Clone,
-{
-    // stats_history: Vec<EqsatStats>,
-    egraph: EGraph<L, N>,
-    iterations: Vec<Iteration<()>>,
-    roots: Vec<Id>,
-    report: Report,
-}
-
-impl<L, N> EqsatResult<L, N>
-where
-    L: Language + Display,
-    N: Analysis<L> + Clone,
-    N::Data: Serialize + Clone,
-{
-    // Extract via a classic cost function
-    pub fn classic_extract<CF>(&self, root: Id, cost_fn: CF) -> (CF::Cost, RecExpr<L>)
-    where
-        CF: CostFunction<L>,
-    {
-        Extractor::new(&self.egraph, cost_fn).find_best(root)
-    }
-
-    /// Extract with a sketch
-    #[expect(clippy::missing_panics_doc)]
-    pub fn sketch_extract<CF>(
-        &self,
-        root: Id,
-        cost_fn: CF,
-        sketch: &Sketch<L>,
-    ) -> (CF::Cost, RecExpr<L>)
-    where
-        CF: CostFunction<L> + Debug,
-        CF::Cost: Ord + 'static,
-    {
-        sketch::eclass_extract(sketch, cost_fn, &self.egraph, root).unwrap()
-    }
-
-    /// Check if sketch is satisfied
-    pub fn satisfies_sketch(&self, root_index: usize, sketch: &Sketch<L>) -> bool {
-        let root = self.roots[root_index];
-        sketch::eclass_contains(sketch, &self.egraph, root)
-    }
-
-    /// Returns the root `egg::Id`
-    ///
-    /// Warning: Those are not necessarily canonical!
-    pub fn roots(&self) -> &[Id] {
-        &self.roots
-    }
-
-    pub fn report(&self) -> &Report {
-        &self.report
-    }
-
-    pub fn iterations(&self) -> &[Iteration<()>] {
-        &self.iterations
-    }
-
-    pub fn egraph(&self) -> &EGraph<L, N> {
-        &self.egraph
-    }
-
-    pub fn egraph_mut(&mut self) -> &mut EGraph<L, N> {
-        &mut self.egraph
-    }
+    let roots = egraph_roots.unwrap_or(runner.roots.clone());
+    (runner, roots)
 }
 
 #[derive(Clone, Debug)]
@@ -181,16 +97,16 @@ where
     },
 }
 
-impl<L, N> From<EqsatResult<L, N>> for StartMaterial<'_, L, N>
+impl<L, N> StartMaterial<'_, L, N>
 where
     L: Language + Display,
     N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Serialize + Clone,
+    N::Data: Clone,
 {
-    fn from(eqsat_result: EqsatResult<L, N>) -> Self {
+    pub fn from_egraph_and_roots(egraph: EGraph<L, N>, roots: Vec<Id>) -> Self {
         StartMaterial::EGraph {
-            egraph: Box::new(eqsat_result.egraph),
-            roots: eqsat_result.roots,
+            egraph: Box::new(egraph),
+            roots,
         }
     }
 }
@@ -215,4 +131,89 @@ where
     fn from(rec_exprs: Vec<&'a RecExpr<L>>) -> StartMaterial<'a, L, N> {
         StartMaterial::RecExprs(rec_exprs)
     }
+}
+
+#[expect(missing_docs, clippy::missing_panics_doc)]
+pub fn grow_egraph_until<L, A, S>(
+    search_name: &str,
+    egraph: EGraph<L, A>,
+    rules: &[Rewrite<L, A>],
+    mut satisfied: S,
+) -> EGraph<L, A>
+where
+    S: FnMut(&mut Runner<L, A>) -> bool + 'static,
+    L: Language,
+    A: Analysis<L>,
+    A: Default,
+{
+    let search_name_hook = search_name.to_owned();
+    let runner = egg::Runner::default()
+        .with_scheduler(egg::SimpleScheduler)
+        .with_iter_limit(100)
+        .with_node_limit(100_000_000)
+        .with_time_limit(std::time::Duration::from_secs(5 * 60))
+        .with_hook(move |runner| {
+            let mut out_of_memory = false;
+            // hook 0 <- nothing
+            // iteration 0
+            // hook 1 <- #0 size etc after iteration 0 + memory after iteration 0
+            if let Some(it) = runner.iterations.last() {
+                out_of_memory = iteration_stats(&search_name_hook, it, runner.iterations.len());
+            }
+
+            if satisfied(runner) {
+                Err(String::from("Satisfied"))
+            } else if out_of_memory {
+                Err(String::from("Out of Memory"))
+            } else {
+                Ok(())
+            }
+        })
+        .with_egraph(egraph)
+        .run(rules);
+    iteration_stats(
+        search_name,
+        runner.iterations.last().unwrap(),
+        runner.iterations.len(),
+    );
+    runner.print_report();
+    runner.egraph
+}
+
+// search name,
+// iteration number,
+// physical memory,
+// virtual memory,
+// e-graph nodes,
+// e-graph classes,
+// applied rules,
+// total time,
+// hook time,
+// search time,
+// apply time,
+// rebuild time
+fn iteration_stats(search_name: &str, it: &egg::Iteration<()>, it_number: usize) -> bool {
+    let memory = memory_stats::memory_stats().expect("could not get current memory usage");
+    let out_of_memory = memory.virtual_mem > 8_000_000_000;
+    let found = match &it.stop_reason {
+        Some(egg::StopReason::Other(s)) => s == "Satisfied",
+        _ => false,
+    };
+    eprintln!(
+        "{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}",
+        search_name,
+        it_number,
+        memory.physical_mem,
+        memory.virtual_mem,
+        it.egraph_nodes,
+        it.egraph_classes,
+        it.applied.iter().map(|(_, &n)| n).sum::<usize>(),
+        it.total_time,
+        it.hook_time,
+        it.search_time,
+        it.apply_time,
+        it.rebuild_time,
+        found
+    );
+    out_of_memory
 }

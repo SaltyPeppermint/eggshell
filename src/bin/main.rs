@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, TimeDelta};
 use clap::Parser;
-use egg::{Analysis, FromOp, Language, RecExpr, Rewrite, SimpleScheduler, StopReason};
+use egg::{Analysis, FromOp, Id, Language, RecExpr, Rewrite, Runner, SimpleScheduler, StopReason};
 use eggshell::sampling::SampleError;
 use log::{debug, info};
 use rand::SeedableRng;
@@ -15,7 +15,7 @@ use rayon::prelude::*;
 use serde::Serialize;
 
 use eggshell::cli::{Cli, RewriteSystemName};
-use eggshell::eqsat::{self, EqsatConf, EqsatResult};
+use eggshell::eqsat::{self, EqsatConf, StartMaterial};
 use eggshell::io::{reader, structs::Entry};
 use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
 use eggshell::sampling::sampler::{Greedy, Sampler};
@@ -143,12 +143,12 @@ where
     info!("Starting Eqsat...");
     let (eqsat, penultimate_eqsat) = run_eqsat(start_expr, rules, cli.iter_distance())?;
     info!("Finished Eqsat!");
-    let sampler = Greedy::new(eqsat.egraph());
+    let sampler = Greedy::new(&eqsat.0.egraph);
 
     info!("Starting sampling...");
     for i in 0..cli.max_retries() {
-        let sample = sampler.sample_expr(rng, &eqsat.egraph()[eqsat.roots()[0]], size_limit)?;
-        if penultimate_eqsat.egraph().lookup_expr(&sample).is_none() {
+        let sample = sampler.sample_expr(rng, &eqsat.0.egraph[eqsat.1[0]], size_limit)?;
+        if penultimate_eqsat.0.egraph.lookup_expr(&sample).is_none() {
             info!("Sample found after {i} tries...");
             return Ok(sample);
         }
@@ -161,7 +161,7 @@ fn run_eqsat<L, N>(
     start_expr: &RecExpr<L>,
     rules: &[Rewrite<L, N>],
     iter_distance: usize,
-) -> Result<(EqsatResult<L, N>, EqsatResult<L, N>), SampleError>
+) -> Result<((Runner<L, N>, Vec<Id>), (Runner<L, N>, Vec<Id>)), SampleError>
 where
     L: Language + Display + Serialize + 'static,
     N: Analysis<L> + Clone + Serialize + Default + Debug + 'static,
@@ -175,26 +175,31 @@ where
         SimpleScheduler,
     );
 
-    if let StopReason::IterationLimit(i) = penultimate_result.report().stop_reason {
+    if let StopReason::IterationLimit(i) = penultimate_result.0.report().stop_reason {
         if i < iter_distance - 1 {
             return Err(SampleError::IterDistance(i));
         }
     } else {
         return Err(SampleError::OtherStop(
-            penultimate_result.report().stop_reason.clone(),
+            penultimate_result.0.report().stop_reason.clone(),
         ));
     }
     let result = eqsat::eqsat(
         &EqsatConf::builder().iter_limit(1).build(),
-        penultimate_result.clone().into(),
+        StartMaterial::from_egraph_and_roots(
+            penultimate_result.0.egraph.clone(),
+            penultimate_result.1.clone(),
+        ),
         rules,
         None,
         SimpleScheduler,
     );
-    if let StopReason::IterationLimit(_) = &result.report().stop_reason {
+    if let StopReason::IterationLimit(_) = &result.0.report().stop_reason {
         return Ok((result, penultimate_result));
     }
-    Err(SampleError::OtherStop(result.report().stop_reason.clone()))
+    Err(SampleError::OtherStop(
+        result.0.report().stop_reason.clone(),
+    ))
 }
 
 fn save<L: Language + FromOp + Display + Serialize>(

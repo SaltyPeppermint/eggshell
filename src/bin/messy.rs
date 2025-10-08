@@ -12,7 +12,7 @@ fn main() {
 
     let rules = Rise::full_rules();
 
-    let mut penultimate_result = eqsat::eqsat(
+    let penultimate_result = eqsat::eqsat(
         &EqsatConf::builder()
             .node_limit(100_000_000_000)
             .iter_limit(6)
@@ -23,7 +23,7 @@ fn main() {
         SimpleScheduler,
     );
 
-    let final_result = eqsat::eqsat(
+    let (final_runner, final_roots) = eqsat::eqsat(
         &EqsatConf::builder()
             .node_limit(100_000_000_000)
             .iter_limit(7)
@@ -34,13 +34,13 @@ fn main() {
         SimpleScheduler,
     );
 
-    println!("Stop reason: {:?}", final_result.report().stop_reason);
+    println!("Stop reason: {:?}", final_runner.report().stop_reason);
 
     let min_size = AstSize.cost_rec(&start_expr);
     let max_size = min_size * 2;
     let rng = ChaCha12Rng::seed_from_u64(0);
-    let samples = Greedy::new(final_result.egraph())
-        .sample_eclass(&rng, 100, final_result.roots()[0], max_size, 1)
+    let samples = Greedy::new(&final_runner.egraph)
+        .sample_eclass(&rng, 100, final_roots[0], max_size, 1)
         .unwrap();
 
     println!("Printing frontier expr");
@@ -48,7 +48,8 @@ fn main() {
         .into_iter()
         .filter_map(|s| {
             penultimate_result
-                .egraph_mut()
+                .0
+                .egraph
                 .lookup_expr(&s)
                 .is_none()
                 .then_some(s)
