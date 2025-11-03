@@ -1,17 +1,14 @@
 pub mod cost;
 mod rules;
 
-use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use egg::{Analysis, DidMerge, ENodeOrVar, Id, Language, Pattern, PatternAst, Subst};
+use egg::{Analysis, DidMerge, ENodeOrVar, Id, Language, PatternAst, Subst};
 use log::warn;
 use num::rational::Ratio;
 use num::traits::Pow;
 use num::{BigInt, BigRational, One, Signed, Zero};
 use serde::{Deserialize, Serialize};
-
-pub use rules::rules;
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
@@ -206,15 +203,18 @@ fn is_zero(id: Id, egraph: &EGraph) -> bool {
         .is_some_and(|data| data.0.is_zero())
 }
 
+#[derive(Debug, Copy, Clone)]
+pub enum HerbieRules {
+    Ruleset121,
+    Ruleset242,
+    Ruleset704,
+}
+
 #[must_use]
-#[expect(clippy::missing_panics_doc)]
-pub fn mk_rules(tuples: &[(&str, &str, &str)]) -> Vec<Rewrite> {
-    tuples
-        .iter()
-        .map(|(name, left, right)| {
-            let l_pattern = Pattern::from_str(left).unwrap();
-            let r_pattern = Pattern::from_str(right).unwrap();
-            Rewrite::new(*name, l_pattern, r_pattern).unwrap()
-        })
-        .collect()
+pub fn rules(ruleset: HerbieRules) -> Vec<Rewrite> {
+    match ruleset {
+        HerbieRules::Ruleset121 => rules::rules_121(),
+        HerbieRules::Ruleset242 => rules::rules_242(),
+        HerbieRules::Ruleset704 => rules::rules_704(),
+    }
 }

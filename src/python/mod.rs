@@ -4,7 +4,6 @@ use std::fmt::Display;
 
 use egg::FromOp;
 use pyo3::PyErr;
-use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 use thiserror::Error;
@@ -25,7 +24,7 @@ where
     SketchParse(#[from] egg::RecExprParseError<SketchError<L>>),
 }
 
-create_exception!(
+pyo3::create_exception!(
     eggshell,
     EggshellException,
     PyException,
@@ -48,9 +47,7 @@ pub mod simple {
 }
 
 pub mod arithmetic {
-
     use crate::rewrite_system::arithmetic;
-
     super::monomorphize::monomorphize!(
         arithmetic::Math,
         arithmetic::ConstantFold,
