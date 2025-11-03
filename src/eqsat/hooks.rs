@@ -1,4 +1,3 @@
-use std::fmt::Display;
 use std::fs;
 
 use egg::{Analysis, Language, RecExpr, Runner};
@@ -24,7 +23,7 @@ pub const fn targe_hook<L, N>(
     target: RecExpr<L>,
 ) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
-    L: Language + Display + 'static,
+    L: Language + 'static,
     N: Analysis<L> + Default,
 {
     move |r: &mut Runner<L, N>| {

@@ -7,7 +7,6 @@ use std::fmt::{Debug, Display};
 
 use egg::{Analysis, EGraph, Id, Language, RecExpr, Rewrite, RewriteScheduler, Runner};
 use log::info;
-use serde::Serialize;
 
 use crate::eqsat::hooks::targe_hook;
 
@@ -29,7 +28,7 @@ where
     L: Language + Display + 'static,
     S: RewriteScheduler<L, N> + 'static,
     N: Analysis<L> + Clone + Default + Debug + 'static,
-    N::Data: Clone + Serialize,
+    N::Data: Clone,
 {
     let mut runner = Runner::default()
         .with_scheduler(scheduler)
@@ -86,8 +85,8 @@ where
 #[derive(Clone, Debug)]
 pub enum StartMaterial<'a, L, N>
 where
-    L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
+    L: Language,
+    N: Analysis<L> + Default + Debug,
     N::Data: Clone,
 {
     RecExprs(Vec<&'a RecExpr<L>>),
@@ -99,8 +98,8 @@ where
 
 impl<L, N> StartMaterial<'_, L, N>
 where
-    L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
+    L: Language,
+    N: Analysis<L> + Default + Debug,
     N::Data: Clone,
 {
     pub fn from_egraph_and_roots(egraph: EGraph<L, N>, roots: Vec<Id>) -> Self {
@@ -113,9 +112,9 @@ where
 
 impl<'a, L, N> From<&'a RecExpr<L>> for StartMaterial<'a, L, N>
 where
-    L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Serialize + Clone,
+    L: Language,
+    N: Analysis<L> + Default + Debug,
+    N::Data: Clone,
 {
     fn from(rec_expr: &'a RecExpr<L>) -> StartMaterial<'a, L, N> {
         StartMaterial::RecExprs(vec![rec_expr])
@@ -124,9 +123,9 @@ where
 
 impl<'a, L, N> From<Vec<&'a RecExpr<L>>> for StartMaterial<'a, L, N>
 where
-    L: Language + Display,
-    N: Analysis<L> + Clone + Default + Debug,
-    N::Data: Serialize + Clone,
+    L: Language,
+    N: Analysis<L> + Default + Debug,
+    N::Data: Clone,
 {
     fn from(rec_exprs: Vec<&'a RecExpr<L>>) -> StartMaterial<'a, L, N> {
         StartMaterial::RecExprs(rec_exprs)
@@ -134,17 +133,17 @@ where
 }
 
 #[expect(missing_docs, clippy::missing_panics_doc)]
-pub fn grow_egraph_until<L, A, S>(
+pub fn grow_egraph_until<L, N, S>(
     search_name: &str,
-    egraph: EGraph<L, A>,
-    rules: &[Rewrite<L, A>],
+    egraph: EGraph<L, N>,
+    rules: &[Rewrite<L, N>],
     mut satisfied: S,
-) -> EGraph<L, A>
+) -> EGraph<L, N>
 where
-    S: FnMut(&mut Runner<L, A>) -> bool + 'static,
+    S: FnMut(&mut Runner<L, N>) -> bool + 'static,
     L: Language,
-    A: Analysis<L>,
-    A: Default,
+    N: Analysis<L>,
+    N: Default,
 {
     let search_name_hook = search_name.to_owned();
     let runner = egg::Runner::default()

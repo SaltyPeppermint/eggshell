@@ -76,6 +76,16 @@ pub mod rise {
     );
 }
 
+pub mod herbie {
+    use crate::rewrite_system::herbie;
+    super::monomorphize::monomorphize!(
+        herbie::Math,
+        herbie::ConstantFold,
+        herbie::rules(herbie::HerbieRules::Ruleset242),
+        "eggshell.herbie"
+    );
+}
+
 /// A Python module implemented in Rust.
 #[pymodule]
 fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -84,6 +94,7 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     arithmetic::add_mod(m, "arithmetic")?;
     halide::add_mod(m, "halide")?;
     rise::add_mod(m, "rise")?;
+    herbie::add_mod(m, "herbie")?;
 
     m.add("EggshellException", m.py().get_type::<EggshellException>())?;
     // m.add_class::<probabilistic::FirstErrorDistance>()?;
