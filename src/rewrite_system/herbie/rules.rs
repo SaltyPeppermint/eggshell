@@ -2,6 +2,7 @@ use super::{ConstantFold, Math};
 use egg::{Rewrite, rewrite as rw};
 
 #[expect(clippy::too_many_lines)]
+#[must_use]
 pub fn rules() -> Vec<Rewrite<Math, ConstantFold>> {
     vec![
         // Commutativity

@@ -7,7 +7,7 @@ pub mod eqsat;
 pub mod explanation;
 pub mod io;
 pub mod probabilistic;
-pub mod python;
+mod python;
 pub mod rewrite_system;
 pub mod sampling;
 pub mod sketch;

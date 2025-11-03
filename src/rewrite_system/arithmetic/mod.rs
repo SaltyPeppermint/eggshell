@@ -1,19 +1,17 @@
 mod rules;
 
-use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol, define_language};
+use egg::{Analysis, DidMerge, Id, PatternAst, Subst, Symbol};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use super::RewriteSystem;
+pub use rules::rules;
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
 
-pub type Constant = NotNan<f64>;
-
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
-define_language! {
+egg::define_language! {
     #[derive(Serialize, Deserialize)]
     pub enum Math {
         "d" = Diff([Id; 2]),
@@ -30,7 +28,7 @@ define_language! {
         "sin" = Sin(Id),
         "cos" = Cos(Id),
 
-        Constant(Constant),
+        Constant(NotNan<f64>),
         Symbol(Symbol),
     }
 }
@@ -39,7 +37,7 @@ define_language! {
 pub struct ConstantFold;
 
 impl Analysis<Math> for ConstantFold {
-    type Data = Option<(Constant, PatternAst<Math>)>;
+    type Data = Option<(NotNan<f64>, PatternAst<Math>)>;
 
     fn make(egraph: &mut EGraph, enode: &Math) -> Self::Data {
         let x = |i: &Id| egraph[*i].data.as_ref().map(|d| d.0);
@@ -92,17 +90,5 @@ impl Analysis<Math> for ConstantFold {
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
         }
-    }
-}
-
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Arithmetic;
-
-impl RewriteSystem for Arithmetic {
-    type Language = Math;
-    type Analysis = ConstantFold;
-
-    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
-        self::rules::rules()
     }
 }

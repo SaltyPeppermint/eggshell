@@ -111,15 +111,14 @@ mod tests {
 
     use super::*;
     use crate::eqsat::{self, EqsatConf, StartMaterial};
-    use crate::rewrite_system::halide::HalideLang;
-    use crate::rewrite_system::simple::SimpleLang;
-    use crate::rewrite_system::{Halide, RewriteSystem, Simple};
+    use crate::rewrite_system::halide::{self, HalideLang, HalideRuleset};
+    use crate::rewrite_system::simple::{self, SimpleLang};
 
     #[test]
     fn simple_sample() {
         let start_expr: RecExpr<SimpleLang> = "(* (+ a b) 1)".parse().unwrap();
 
-        let rules = Simple::full_rules();
+        let rules = simple::rules();
         let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
             (&start_expr).into(),
@@ -140,7 +139,7 @@ mod tests {
     fn stringified_sample_len() {
         let start_expr: RecExpr<SimpleLang> = "(* (+ a b) 1)".parse().unwrap();
 
-        let rules = Simple::full_rules();
+        let rules = simple::rules();
 
         let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
@@ -171,7 +170,7 @@ mod tests {
         let start_expr_a = "(* (+ a b) 1)".parse().unwrap();
         let start_expr_b = "(+ (+ x 0) (* y 1))".parse().unwrap();
 
-        let rules = Simple::full_rules();
+        let rules = simple::rules();
 
         let (runner, _) = eqsat::eqsat(
             &EqsatConf::default(),
@@ -196,7 +195,7 @@ mod tests {
                 .parse()
                 .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
-        let rules = Halide::full_rules();
+        let rules = halide::rules(HalideRuleset::Full);
 
         let (runner, _) = eqsat::eqsat(
             &eqsat_conf,
@@ -222,7 +221,7 @@ mod tests {
                 .parse()
                 .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
-        let rules = Halide::full_rules();
+        let rules = halide::rules(HalideRuleset::Full);
 
         let (runner, _) = eqsat::eqsat(
             &eqsat_conf,

@@ -3,10 +3,9 @@ mod rules;
 
 use std::cmp;
 
-use egg::{Analysis, DidMerge, Id, Symbol, define_language};
+use egg::{Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::{RewriteSystem, RewriteSystemError};
 use data::HalideData;
 
 // Defining aliases to reduce code.
@@ -14,7 +13,7 @@ type EGraph = egg::EGraph<HalideLang, ConstantFold>;
 type Rewrite = egg::Rewrite<HalideLang, ConstantFold>;
 
 // Definition of the language used.
-define_language! {
+egg::define_language! {
     #[derive(Serialize, Deserialize)]
     pub enum HalideLang {
         "+" = Add([Id; 2]),
@@ -126,90 +125,64 @@ pub enum HalideRuleset {
     Full,
 }
 
-impl TryFrom<String> for HalideRuleset {
-    type Error = RewriteSystemError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.as_str() {
-            "full" | "Full" | "FULL" => Ok(Self::Full),
-            "arithmetic" | "Arithmetic" | "ARITHMETIC" => Ok(Self::Arithmetic),
-            _ => Err(Self::Error::BadRulesetName(value)),
-        }
-    }
-}
-
 /// Halide Rewrite System implementation
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Halide;
+#[expect(clippy::similar_names)]
+#[must_use]
+pub fn rules(ruleset: HalideRuleset) -> Vec<Rewrite> {
+    let add_rules = self::rules::add::add();
+    let and_rules = self::rules::and::and();
+    let andor_rules = self::rules::andor::andor();
+    let div_rules = self::rules::div::div();
+    let eq_rules = self::rules::eq::eq();
+    let ineq_rules = self::rules::ineq::ineq();
+    let lt_rules = self::rules::lt::lt();
+    let max_rules = self::rules::max::max();
+    let min_rules = self::rules::min::min();
+    let modulo_rules = self::rules::modulo::modulo();
+    let mul_rules = self::rules::mul::mul();
+    let not_rules = self::rules::not::not();
+    let or_rules = self::rules::or::or();
+    let sub_rules = self::rules::sub::sub();
 
-impl Halide {
-    #[expect(clippy::similar_names)]
-    #[must_use]
-    pub fn rules(ruleset: HalideRuleset) -> Vec<Rewrite> {
-        let add_rules = self::rules::add::add();
-        let and_rules = self::rules::and::and();
-        let andor_rules = self::rules::andor::andor();
-        let div_rules = self::rules::div::div();
-        let eq_rules = self::rules::eq::eq();
-        let ineq_rules = self::rules::ineq::ineq();
-        let lt_rules = self::rules::lt::lt();
-        let max_rules = self::rules::max::max();
-        let min_rules = self::rules::min::min();
-        let modulo_rules = self::rules::modulo::modulo();
-        let mul_rules = self::rules::mul::mul();
-        let not_rules = self::rules::not::not();
-        let or_rules = self::rules::or::or();
-        let sub_rules = self::rules::sub::sub();
-
-        match ruleset {
-            // Class that only contains arithmetic operations' rules
-            HalideRuleset::Arithmetic => [
-                (&*add_rules),
-                (&*div_rules),
-                (&*modulo_rules),
-                (&*mul_rules),
-                (&*sub_rules),
-            ]
-            .concat(),
-            HalideRuleset::BugRules => [
-                (&*add_rules),
-                // (&*div_rules),
-                // (&*modulo_rules),
-                (&*mul_rules),
-                (&*sub_rules),
-                // (&*max_rules),
-                // (&*min_rules),
-                (&*lt_rules),
-            ]
-            .concat(),
-            // All the rules
-            HalideRuleset::Full => [
-                (&*add_rules),
-                (&*and_rules),
-                (&*andor_rules),
-                (&*div_rules),
-                (&*eq_rules),
-                (&*ineq_rules),
-                (&*lt_rules),
-                (&*max_rules),
-                (&*min_rules),
-                (&*modulo_rules),
-                (&*mul_rules),
-                (&*not_rules),
-                (&*or_rules),
-                (&*sub_rules),
-            ]
-            .concat(),
-        }
-    }
-}
-
-impl RewriteSystem for Halide {
-    type Language = HalideLang;
-    type Analysis = ConstantFold;
-
-    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
-        Self::rules(HalideRuleset::Full)
+    match ruleset {
+        // Class that only contains arithmetic operations' rules
+        HalideRuleset::Arithmetic => [
+            (&*add_rules),
+            (&*div_rules),
+            (&*modulo_rules),
+            (&*mul_rules),
+            (&*sub_rules),
+        ]
+        .concat(),
+        HalideRuleset::BugRules => [
+            (&*add_rules),
+            // (&*div_rules),
+            // (&*modulo_rules),
+            (&*mul_rules),
+            (&*sub_rules),
+            // (&*max_rules),
+            // (&*min_rules),
+            (&*lt_rules),
+        ]
+        .concat(),
+        // All the rules
+        HalideRuleset::Full => [
+            (&*add_rules),
+            (&*and_rules),
+            (&*andor_rules),
+            (&*div_rules),
+            (&*eq_rules),
+            (&*ineq_rules),
+            (&*lt_rules),
+            (&*max_rules),
+            (&*min_rules),
+            (&*modulo_rules),
+            (&*mul_rules),
+            (&*not_rules),
+            (&*or_rules),
+            (&*sub_rules),
+        ]
+        .concat(),
     }
 }
 
@@ -223,7 +196,7 @@ mod tests {
     #[test]
     fn eqsat_solved_true() {
         let true_expr: RecExpr<HalideLang> = "( == 0 0 )".parse().unwrap();
-        let rules = Halide::rules(HalideRuleset::Full);
+        let rules = rules(HalideRuleset::Full);
 
         let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
@@ -240,7 +213,7 @@ mod tests {
     #[test]
     fn eqsat_solved_false() {
         let false_expr: RecExpr<HalideLang> = "( == 1 0 )".parse().unwrap();
-        let rules = Halide::rules(HalideRuleset::Full);
+        let rules = rules(HalideRuleset::Full);
 
         let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
@@ -260,7 +233,7 @@ mod tests {
             "( < ( + ( + ( * v0 35 ) v1 ) 35 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
                 .parse()
                 .unwrap();
-        let rules = Halide::rules(HalideRuleset::BugRules);
+        let rules = rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);
@@ -271,7 +244,7 @@ mod tests {
         let expr: RecExpr<HalideLang> = "( < ( + ( * v0 35 ) v1 ) ( + ( * ( + v0 1 ) 35 ) v1 ) )"
             .parse()
             .unwrap();
-        let rules = Halide::rules(HalideRuleset::BugRules);
+        let rules = rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);
@@ -281,7 +254,7 @@ mod tests {
     // #[should_panic(expected = "Different leaves in eclass 1: {Constant(0), Constant(35)}")]
     fn expl_3() {
         let expr: RecExpr<HalideLang> = "( < ( * v0 35 ) ( * ( + v0 1 ) 35 ) )".parse().unwrap();
-        let rules = Halide::rules(HalideRuleset::BugRules);
+        let rules = rules(HalideRuleset::BugRules);
         let conf = EqsatConf::builder().explanation(true).iter_limit(3).build();
 
         let _ = eqsat::eqsat(&conf, (&expr).into(), &rules, None, SimpleScheduler);

@@ -18,11 +18,11 @@ where
     L: Display + FromOp,
 {
     #[error(transparent)]
-    BadRecExprParse(#[from] egg::RecExprParseError<egg::FromOpError>),
+    RecExprParse(#[from] egg::RecExprParseError<egg::FromOpError>),
     #[error(transparent)]
-    BadFromOp(#[from] egg::FromOpError),
+    FromOp(#[from] egg::FromOpError),
     #[error(transparent)]
-    BadSketchParse(#[from] egg::RecExprParseError<SketchError<L>>),
+    SketchParse(#[from] egg::RecExprParseError<SketchError<L>>),
 }
 
 create_exception!(
@@ -43,27 +43,40 @@ where
 }
 
 pub mod simple {
-    use crate::rewrite_system::Simple;
-
-    super::monomorphize::monomorphize!(Simple, "eggshell.simple");
+    use crate::rewrite_system::simple;
+    super::monomorphize::monomorphize!(simple::SimpleLang, (), simple::rules(), "eggshell.simple");
 }
 
 pub mod arithmetic {
-    use crate::rewrite_system::Arithmetic;
 
-    super::monomorphize::monomorphize!(Arithmetic, "eggshell.arithmetic");
+    use crate::rewrite_system::arithmetic;
+
+    super::monomorphize::monomorphize!(
+        arithmetic::Math,
+        arithmetic::ConstantFold,
+        arithmetic::rules(),
+        "eggshell.arithmetic"
+    );
 }
 
 pub mod halide {
-    use crate::rewrite_system::Halide;
-
-    super::monomorphize::monomorphize!(Halide, "eggshell.halide");
+    use crate::rewrite_system::halide;
+    super::monomorphize::monomorphize!(
+        halide::HalideLang,
+        halide::ConstantFold,
+        halide::rules(halide::HalideRuleset::Full),
+        "eggshell.halide"
+    );
 }
 
 pub mod rise {
-    use crate::rewrite_system::Rise;
-
-    super::monomorphize::monomorphize!(Rise, "eggshell.rise");
+    use crate::rewrite_system::rise;
+    super::monomorphize::monomorphize!(
+        rise::RiseLang,
+        rise::RiseAnalysis,
+        rise::full_rules(),
+        "eggshell.rise"
+    );
 }
 
 /// A Python module implemented in Rust.

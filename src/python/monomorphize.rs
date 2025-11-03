@@ -1,31 +1,27 @@
 /// Macro to generate a manuaol monomorphization via a wrapper cause
 /// pyo3 can't handle generics.
 macro_rules! monomorphize {
-    ($type: ty, $module_name: tt) => {
+    ($language: ty, $analysis: ty, $rules: expr, $module_name: tt) => {
         use egg::RecExpr as EggRecExpr;
         use pyo3::prelude::*;
 
         use $crate::eqsat::{self, EqsatConf};
         use $crate::sketch::Sketch;
         use $crate::python::EggshellError;
-        use $crate::rewrite_system::RewriteSystem;
-
-        type L = <$type as RewriteSystem>::Language;
 
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct RecExpr(EggRecExpr<L>);
+        pub struct RecExpr(EggRecExpr<$language>);
 
         #[pymethods]
         impl RecExpr {
             /// Parse from string
-            #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: &str) -> PyResult<RecExpr> {
                 let rec_expr = s_expr_str
-                    .parse::<egg::RecExpr<L>>()
-                    .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
+                    .parse::<egg::RecExpr<$language>>()
+                    .map_err(|e: egg::RecExprParseError<_>| EggshellError::<$language>::from(e))?;
                 Ok(RecExpr(rec_expr))
             }
 
@@ -71,16 +67,15 @@ macro_rules! monomorphize {
         #[pyclass(frozen, module = $module_name)]
         #[derive(Debug, Clone, PartialEq)]
         /// Wrapper type for Python
-        pub struct Guide(Sketch<L>);
+        pub struct Guide(Sketch<$language>);
 
         #[pymethods]
         impl Guide {
-            #[expect(clippy::missing_errors_doc)]
             #[new]
             pub fn new(s_expr_str: String) -> PyResult<Guide> {
                 let sketch = s_expr_str
-                    .parse::<Sketch<L>>()
-                    .map_err(|e: egg::RecExprParseError<_>| EggshellError::<L>::from(e))?;
+                    .parse::<Sketch<$language>>()
+                    .map_err(|e: egg::RecExprParseError<_>| EggshellError::<$language>::from(e))?;
                 Ok(Guide(sketch))
             }
 
@@ -145,7 +140,7 @@ macro_rules! monomorphize {
             let (runner, _) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
-                &<$type as RewriteSystem>::full_rules(),
+                &$rules,
                 Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
@@ -177,7 +172,7 @@ macro_rules! monomorphize {
             let (runner, roots) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
-                &<$type as RewriteSystem>::full_rules(),
+                &$rules,
                 Some(target.0.clone()),
                 egg::SimpleScheduler,
             );
@@ -199,7 +194,7 @@ macro_rules! monomorphize {
                     let (runner_2, _roots_2) = eqsat::eqsat(
                         &conf,
                         (&extracted_guide).into(),
-                        &<$type as RewriteSystem>::full_rules(),
+                        &$rules,
                         Some(target.0.clone()),
                         egg::SimpleScheduler,
                     );
@@ -245,7 +240,7 @@ macro_rules! monomorphize {
             let (runner, roots) = eqsat::eqsat(
                 &conf,
                 (&start.0).into(),
-                &<$type as RewriteSystem>::full_rules(),
+                &$rules,
                 None,
                 egg::SimpleScheduler,
             );
@@ -262,7 +257,7 @@ macro_rules! monomorphize {
                     let (second_runner, second_roots) = eqsat::eqsat(
                         &conf,
                         (&extracted_guide).into(),
-                        &<$type as RewriteSystem>::full_rules(),
+                        &$rules,
                         None,
                         egg::SimpleScheduler,
                     );

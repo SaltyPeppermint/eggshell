@@ -1,58 +1,24 @@
+pub mod cost;
 mod rules;
 
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use egg::{
-    Analysis, CostFunction, DidMerge, ENodeOrVar, Id, Language, Pattern, PatternAst, Subst,
-    define_language,
-};
+use egg::{Analysis, DidMerge, ENodeOrVar, Id, Language, Pattern, PatternAst, Subst};
 use log::warn;
 use num::rational::Ratio;
 use num::traits::Pow;
-use num::{BigInt, BigRational, Integer, One, Signed, Zero};
-
+use num::{BigInt, BigRational, One, Signed, Zero};
 use serde::{Deserialize, Serialize};
 
-use super::RewriteSystem;
+pub use rules::rules;
 
 type EGraph = egg::EGraph<Math, ConstantFold>;
 type Rewrite = egg::Rewrite<Math, ConstantFold>;
 
 // Taken from https://github.com/herbie-fp/herbie/blob/main/egg-herbie/src/math.rs
 
-// cost function similar to AstSize except it will
-// penalize `(pow _ p)` where p is a fraction
-pub struct AltCost<'a> {
-    pub egraph: &'a EGraph,
-}
-
-impl<'a> AltCost<'a> {
-    pub fn new(egraph: &'a EGraph) -> Self {
-        Self { egraph }
-    }
-}
-
-impl CostFunction<Math> for AltCost<'_> {
-    type Cost = usize;
-
-    fn cost<C>(&mut self, enode: &Math, mut costs: C) -> Self::Cost
-    where
-        C: FnMut(Id) -> Self::Cost,
-    {
-        if let Math::Pow([_, i]) = enode
-            && let Some((n, _reason)) = &self.egraph[*i].data
-            && !n.denom().is_one()
-            && n.denom().is_odd()
-        {
-            return usize::MAX;
-        }
-
-        enode.fold(1, |sum, id| usize::saturating_add(sum, costs(id)))
-    }
-}
-
-define_language! {
+egg::define_language! {
     #[derive(Serialize, Deserialize)]
     pub enum Math {
 
@@ -251,16 +217,4 @@ pub fn mk_rules(tuples: &[(&str, &str, &str)]) -> Vec<Rewrite> {
             Rewrite::new(*name, l_pattern, r_pattern).unwrap()
         })
         .collect()
-}
-
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Arithmetic;
-
-impl RewriteSystem for Arithmetic {
-    type Language = Math;
-    type Analysis = ConstantFold;
-
-    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
-        self::rules::rules()
-    }
 }

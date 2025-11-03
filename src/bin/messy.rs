@@ -3,14 +3,13 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 
 use eggshell::eqsat::{self, EqsatConf};
-use eggshell::rewrite_system::rise::RiseLang;
-use eggshell::rewrite_system::{RewriteSystem, Rise};
+use eggshell::rewrite_system::rise::{self, RiseLang};
 use eggshell::sampling::sampler::{Greedy, Sampler};
 
 fn main() {
     let start_expr ="(lam f1 (lam f2 (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app map (var f4)) (app (lam x1 (app (app map (var f3)) (app (lam x0 (app (app map (var f2)) (app (app map (var f1)) (var x0)))) (var x1)))) (var x2)))) (var x3)))))))))".parse::<RecExpr<RiseLang>>().unwrap();
 
-    let rules = Rise::full_rules();
+    let rules = rise::full_rules();
 
     let penultimate_result = eqsat::eqsat(
         &EqsatConf::builder()

@@ -4,6 +4,7 @@ use super::{EGraph, Math};
 use crate::rewrite_system::arithmetic::Rewrite;
 
 #[rustfmt::skip]
+#[must_use]
 pub fn rules() -> Vec<Rewrite> { vec![
     rw!("comm-add";  "(+ ?a ?b)"        => "(+ ?b ?a)"),
     rw!("comm-mul";  "(* ?a ?b)"        => "(* ?b ?a)"),

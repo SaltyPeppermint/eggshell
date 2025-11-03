@@ -7,8 +7,7 @@ mod tests {
     use egg::SimpleScheduler;
     use eggshell::eqsat;
     use eggshell::eqsat::EqsatConf;
-    use eggshell::rewrite_system::Halide;
-    use eggshell::rewrite_system::RewriteSystem;
+    use eggshell::rewrite_system::halide;
     use eggshell::rewrite_system::halide::HalideLang;
 
     #[test]
@@ -17,7 +16,7 @@ mod tests {
        "( == ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) ( + ( * v0 256 ) ( + ( * v1 504 ) v2 ) ) )"
             .parse()
             .unwrap();
-        let rules = Halide::full_rules();
+        let rules = halide::rules(halide::HalideRuleset::Full);
 
         let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
@@ -28,10 +27,7 @@ mod tests {
         );
         let root = roots.first().unwrap();
         let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
-        assert_eq!(
-            <Halide as RewriteSystem>::Language::Bool(true),
-            expr[0.into()]
-        );
+        assert_eq!(HalideLang::Bool(true), expr[0.into()]);
     }
 
     #[test]
@@ -39,7 +35,7 @@ mod tests {
         let false_expr: RecExpr<HalideLang> = "( <= ( + 0 ( / ( + ( % v0 8 ) 167 ) 56 ) ) 0 )"
             .parse()
             .unwrap();
-        let rules = Halide::full_rules();
+        let rules = halide::rules(halide::HalideRuleset::Full);
         let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&false_expr).into(),
@@ -49,9 +45,6 @@ mod tests {
         );
         let root = roots.first().unwrap();
         let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
-        assert_eq!(
-            <Halide as RewriteSystem>::Language::Bool(false),
-            expr[0.into()]
-        );
+        assert_eq!(HalideLang::Bool(false), expr[0.into()]);
     }
 }

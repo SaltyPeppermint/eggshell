@@ -228,9 +228,7 @@ mod tests {
 
     use crate::eqsat;
     use crate::eqsat::EqsatConf;
-    use crate::rewrite_system::RewriteSystem;
-    use crate::rewrite_system::Rise;
-    use crate::rewrite_system::rise::RiseLang;
+    use crate::rewrite_system::rise::{self, RiseLang};
     use crate::sketch::contains;
 
     use super::*;
@@ -334,7 +332,7 @@ mod tests {
         let (runner, _) = eqsat::eqsat(
             &conf,
             (&expr_a).into(),
-            &Rise::full_rules(),
+            &rise::full_rules(),
             None,
             SimpleScheduler,
         );

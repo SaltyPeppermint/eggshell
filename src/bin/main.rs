@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, TimeDelta};
 use clap::Parser;
 use egg::{Analysis, FromOp, Id, Language, RecExpr, Rewrite, Runner, SimpleScheduler, StopReason};
+use eggshell::rewrite_system::{halide, rise};
 use eggshell::sampling::SampleError;
 use log::{debug, info};
 use rand::SeedableRng;
@@ -17,7 +18,6 @@ use serde::Serialize;
 use eggshell::cli::{Cli, RewriteSystemName};
 use eggshell::eqsat::{self, EqsatConf, StartMaterial};
 use eggshell::io::{reader, structs::Entry};
-use eggshell::rewrite_system::{Halide, RewriteSystem, Rise};
 use eggshell::sampling::sampler::{Greedy, Sampler};
 
 fn main() {
@@ -45,10 +45,16 @@ fn main() {
 
     match cli.rewrite_system() {
         RewriteSystemName::Halide => {
-            run::<Halide>(entry, &term_folder, start_time, &cli);
+            run(
+                entry,
+                &halide::rules(halide::HalideRuleset::Full),
+                &term_folder,
+                start_time,
+                &cli,
+            );
         }
         RewriteSystemName::Rise => {
-            run::<Rise>(entry, &term_folder, start_time, &cli);
+            run(entry, &rise::full_rules(), &term_folder, start_time, &cli);
         }
     }
 
@@ -56,9 +62,19 @@ fn main() {
     println!("Work on expression {} done!", cli.expr_id());
 }
 
-fn run<R: RewriteSystem>(entry: &Entry, folder: &Path, start_time: DateTime<Local>, cli: &Cli) {
-    let start_expr = entry.expr.parse::<RecExpr<R::Language>>().unwrap();
-    let rules = R::full_rules();
+fn run<L, N>(
+    entry: &Entry,
+    rules: &[Rewrite<L, N>],
+    folder: &Path,
+    start_time: DateTime<Local>,
+    cli: &Cli,
+) where
+    L: Language + Display + FromOp + Clone + Send + Sync + Serialize + 'static,
+    L::Discriminant: Send + Sync,
+    N: Analysis<L> + Clone + Debug + Default + Send + Sync + Serialize + 'static,
+    N::Data: Serialize + Clone + Send + Sync,
+{
+    let start_expr = entry.expr.parse::<RecExpr<L>>().unwrap();
     let rule_names = rules.iter().map(|r| r.name.to_string()).collect::<Vec<_>>();
     let size_limit = start_expr.len() * 2;
 
@@ -72,7 +88,7 @@ fn run<R: RewriteSystem>(entry: &Entry, folder: &Path, start_time: DateTime<Loca
             thread_rng.set_stream(chain_id);
             let (chain, outcome) = chain_rec(
                 cli,
-                &rules,
+                rules,
                 size_limit,
                 thread_rng,
                 chain_id,

@@ -1,13 +1,11 @@
-use egg::{Id, Symbol, define_language, rewrite};
+use egg::{Id, Symbol, rewrite};
 use serde::{Deserialize, Serialize};
 
-use super::RewriteSystem;
-
-pub type Rewrite = egg::Rewrite<SimpleLang, ()>;
+type Rewrite = egg::Rewrite<SimpleLang, ()>;
 
 // Big thanks to egg, this is mostly copy-pasted from their tests folder
 
-define_language! {
+egg::define_language! {
     #[derive(Serialize, Deserialize)]
         pub enum SimpleLang {
         "+" = Add([Id; 2]),
@@ -17,7 +15,8 @@ define_language! {
     }
 }
 
-fn make_rules() -> Vec<Rewrite> {
+#[must_use]
+pub fn rules() -> Vec<Rewrite> {
     vec![
         rewrite!("commute-add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
         rewrite!("commute-mul"; "(* ?a ?b)" => "(* ?b ?a)"),
@@ -25,16 +24,4 @@ fn make_rules() -> Vec<Rewrite> {
         rewrite!("mul-0"; "(* ?a 0)" => "0"),
         rewrite!("mul-1"; "(* ?a 1)" => "?a"),
     ]
-}
-
-#[derive(Default, Debug, Clone, Copy, Serialize)]
-pub struct Simple;
-
-impl RewriteSystem for Simple {
-    type Language = SimpleLang;
-    type Analysis = ();
-
-    fn full_rules() -> Vec<egg::Rewrite<Self::Language, Self::Analysis>> {
-        make_rules()
-    }
 }

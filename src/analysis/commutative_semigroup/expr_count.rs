@@ -165,8 +165,7 @@ mod tests {
     use num::BigUint;
 
     use crate::eqsat::{self, EqsatConf};
-    use crate::rewrite_system::halide::HalideLang;
-    use crate::rewrite_system::{Halide, RewriteSystem};
+    use crate::rewrite_system::halide::{self, HalideLang, HalideRuleset};
 
     use super::*;
 
@@ -212,7 +211,7 @@ mod tests {
                 .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(5).build();
 
-        let rules = Halide::full_rules();
+        let rules = halide::rules(HalideRuleset::Full);
         let (runner, roots) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),

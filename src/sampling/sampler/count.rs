@@ -213,14 +213,16 @@ mod tests {
     use rand::SeedableRng;
 
     use super::*;
-    use crate::eqsat::{self, EqsatConf};
-    use crate::rewrite_system::{Halide, RewriteSystem, Simple};
+    use crate::{
+        eqsat::{self, EqsatConf},
+        rewrite_system::{halide, simple},
+    };
 
     #[test]
     fn simple_sample_uniform() {
         let start_expr = "(* (+ a b) 1)".parse::<RecExpr<_>>().unwrap();
 
-        let rules = Simple::full_rules();
+        let rules = simple::rules();
         let (runner, roots) = eqsat::eqsat(
             &EqsatConf::default(),
             (&start_expr).into(),
@@ -245,7 +247,7 @@ mod tests {
             .unwrap();
         let eqsat_conf = EqsatConf::builder().iter_limit(3).build();
 
-        let rules = Halide::full_rules();
+        let rules = halide::rules(halide::HalideRuleset::Full);
         let (runner, roots) = eqsat::eqsat(
             &eqsat_conf,
             (&start_expr).into(),

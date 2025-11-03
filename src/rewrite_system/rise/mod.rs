@@ -1,11 +1,9 @@
 mod rules;
 mod substitute;
 
-use egg::{Analysis, DidMerge, Id, Language, RecExpr, Symbol, define_language};
+use egg::{Analysis, DidMerge, Id, Language, RecExpr, Symbol};
 use hashbrown::HashSet;
 use serde::{Deserialize, Serialize};
-
-use super::RewriteSystem;
 
 // Big thanks to @Bastacyclop for implementing this all
 // https://github.com/Bastacyclop/egg-rise/blob/main/src/main.rs
@@ -14,7 +12,7 @@ use super::RewriteSystem;
 type EGraph = egg::EGraph<RiseLang, RiseAnalysis>;
 type Rewrite = egg::Rewrite<RiseLang, RiseAnalysis>;
 
-define_language! {
+egg::define_language! {
     #[derive(Serialize, Deserialize)]
     pub enum RiseLang {
         "var" = Var(Id),
@@ -97,20 +95,14 @@ fn unwrap_symbol(n: &RiseLang) -> Symbol {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct Rise;
 
-impl Rise {
-    #[must_use]
-    pub fn rules(names: &[&str], use_explicit_subs: bool) -> Vec<Rewrite> {
-        self::rules::filtered_rules(names, use_explicit_subs)
-    }
+#[must_use]
+pub fn rules(names: &[&str], use_explicit_subs: bool) -> Vec<Rewrite> {
+    self::rules::filtered_rules(names, use_explicit_subs)
 }
 
-impl RewriteSystem for Rise {
-    type Language = RiseLang;
-    type Analysis = RiseAnalysis;
-
-    fn full_rules() -> Vec<Rewrite> {
-        self::rules::rules(true).into_values().collect()
-    }
+#[must_use]
+pub fn full_rules() -> Vec<Rewrite> {
+    self::rules::rules(true).into_values().collect()
 }
 
 #[cfg(test)]
