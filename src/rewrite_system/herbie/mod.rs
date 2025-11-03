@@ -84,20 +84,24 @@ impl Analysis<Math> for ConstantFold {
             Math::Add([a, b]) => x(a)? + x(b)?,
             Math::Sub([a, b]) => x(a)? - x(b)?,
             Math::Mul([a, b]) => x(a)? * x(b)?,
-            Math::Div([a, b]) => {
-                if x(b)?.is_zero() {
-                    return None;
-                }
-                x(a)? / x(b)?
-            }
+            // Math::Div([a, b]) => {
+            //     if x(b)?.is_zero() {
+            //         return None;
+            //     }
+            //     x(a)? / x(b)?
+            // }
+            Math::Div([a, b]) if !x(b)?.is_zero() => x(a)? / x(b)?,
+
             Math::Neg([a]) => -x(a)?,
+
             Math::Pow([a, b]) => {
                 if is_zero(*a, egraph) {
-                    if x(b)?.is_positive() {
-                        Ratio::zero()
-                    } else {
-                        return None;
-                    }
+                    // if x(b)?.is_positive() {
+                    //     Ratio::zero()
+                    // } else {
+                    //     return None;
+                    // }
+                    (x(b)?.is_positive()).then(Ratio::zero)?
                 } else if is_zero(*b, egraph) {
                     Ratio::one()
                 } else if x(b)?.is_integer() && x(b)?.abs() <= egraph.analysis.max_abs_exponent {
@@ -108,32 +112,44 @@ impl Analysis<Math> for ConstantFold {
             }
             Math::Sqrt([a]) => {
                 let inner_a = x(a)?;
-                if *inner_a.numer() > BigInt::zero() && *inner_a.denom() > BigInt::zero() {
-                    let s1 = inner_a.numer().sqrt();
-                    let s2 = inner_a.denom().sqrt();
-                    if &(&s1 * &s1) == inner_a.numer() && &(&s2 * &s2) == inner_a.denom() {
-                        Ratio::new(s1, s2)
-                    } else {
-                        return None;
-                    }
-                } else {
+                // if *inner_a.numer() > BigInt::zero() && *inner_a.denom() > BigInt::zero() {
+                //     let s1 = inner_a.numer().sqrt();
+                //     let s2 = inner_a.denom().sqrt();
+                //     if &(&s1 * &s1) == inner_a.numer() && &(&s2 * &s2) == inner_a.denom() {
+                //         Ratio::new(s1, s2)
+                //     } else {
+                //         return None;
+                //     }
+                // } else {
+                //     return None;
+                // }
+
+                if *inner_a.numer() < BigInt::zero() || *inner_a.denom() < BigInt::zero() {
                     return None;
                 }
-            }
-            Math::Log([a]) => {
-                if x(a)? == Ratio::one() {
-                    Ratio::zero()
-                } else {
+                let s1 = inner_a.numer().sqrt();
+                let s2 = inner_a.denom().sqrt();
+                if &(&s1 * &s1) != inner_a.numer() || &(&s2 * &s2) != inner_a.denom() {
                     return None;
                 }
+                Ratio::new(s1, s2)
             }
-            Math::Cbrt([a]) => {
-                if x(a)? == Ratio::one() {
-                    Ratio::one()
-                } else {
-                    return None;
-                }
-            }
+            // Math::Log([a]) => {
+            //     if x(a)? == Ratio::one() {
+            //         Ratio::zero()
+            //     } else {
+            //         return None;
+            //     }
+            // }
+            Math::Log([a]) => (x(a)? == Ratio::one()).then(Ratio::zero)?,
+            // Math::Cbrt([a]) => {
+            //     if x(a)? == Ratio::one() {
+            //         Ratio::one()
+            //     } else {
+            //         return None;
+            //     }
+            // }
+            Math::Cbrt([a]) => (x(a)? == Ratio::one()).then(Ratio::one)?,
             Math::Fabs([a]) => x(a)?.abs(),
             Math::Floor([a]) => x(a)?.floor(),
             Math::Ceil([a]) => x(a)?.ceil(),
