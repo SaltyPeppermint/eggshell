@@ -66,13 +66,13 @@ pub mod halide {
     );
 }
 
-pub mod rise {
-    use crate::rewrite_system::rise;
+pub mod dummy_rise {
+    use crate::rewrite_system::dummy_rise;
     super::monomorphize::monomorphize!(
-        rise::RiseLang,
-        rise::RiseAnalysis,
-        rise::full_rules(),
-        "eggshell.rise"
+        dummy_rise::DummyRiseLang,
+        dummy_rise::DummyRiseAnalysis,
+        dummy_rise::full_rules(),
+        "eggshell.dummy_rise"
     );
 }
 
@@ -93,11 +93,10 @@ fn eggshell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     simple::add_mod(m, "simple")?;
     arithmetic::add_mod(m, "arithmetic")?;
     halide::add_mod(m, "halide")?;
-    rise::add_mod(m, "rise")?;
+    dummy_rise::add_mod(m, "dummy_rise")?;
     herbie::add_mod(m, "herbie")?;
 
     m.add("EggshellException", m.py().get_type::<EggshellException>())?;
-    // m.add_class::<probabilistic::FirstErrorDistance>()?;
 
     Ok(())
 }

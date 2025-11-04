@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Local, TimeDelta};
 use clap::Parser;
 use egg::{Analysis, FromOp, Id, Language, RecExpr, Rewrite, Runner, SimpleScheduler, StopReason};
-use eggshell::rewrite_system::{halide, rise};
+use eggshell::rewrite_system::{dummy_rise, halide};
 use eggshell::sampling::SampleError;
 use log::{debug, info};
 use rand::SeedableRng;
@@ -54,7 +54,13 @@ fn main() {
             );
         }
         RewriteSystemName::Rise => {
-            run(entry, &rise::full_rules(), &term_folder, start_time, &cli);
+            run(
+                entry,
+                &dummy_rise::full_rules(),
+                &term_folder,
+                start_time,
+                &cli,
+            );
         }
     }
 

@@ -228,7 +228,7 @@ mod tests {
 
     use crate::eqsat;
     use crate::eqsat::EqsatConf;
-    use crate::rewrite_system::rise::{self, RiseLang};
+    use crate::rewrite_system::dummy_rise::{self, DummyRiseLang};
     use crate::sketch::contains;
 
     use super::*;
@@ -317,10 +317,10 @@ mod tests {
 
     #[test]
     fn big_extract() {
-        let expr_a = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<RiseLang>>().unwrap();
+        let expr_a = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam mfu22 (app (var f2) (app (var f1) (var mfu22))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<RecExpr<DummyRiseLang>>().unwrap();
 
-        let sketch = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam ? (app (var f2) (app (var f1) (var ?))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<Sketch<RiseLang>>().unwrap();
-        let mut egraph = EGraph::<RiseLang, ()>::default();
+        let sketch = "(>> (lam (>> f1 (>> transpose transpose)) (lam (>> (>> f2 transpose) transpose) (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app iterateStream (var f4)) (app (lam x1 (app (app iterateStream (var f3)) (app (app map (lam ? (app (var f2) (app (var f1) (var ?))))) (var x1)))) (var x2)))) (var x3))))))))) (>> (>> (>> transpose transpose) (>> (>> (>> (>> (>> transpose transpose) (>> (>> transpose transpose) (>> transpose transpose))) transpose) (>> (>> (>> transpose transpose) (>> transpose transpose)) (>> (>> transpose transpose) transpose))) (>> (>> transpose transpose) (>> transpose transpose)))) (>> (>> transpose transpose) (>> transpose transpose))))".parse::<Sketch<DummyRiseLang>>().unwrap();
+        let mut egraph = EGraph::<DummyRiseLang, ()>::default();
         let a_root = egraph.add_expr(&expr_a);
 
         egraph.rebuild();
@@ -332,7 +332,7 @@ mod tests {
         let (runner, _) = eqsat::eqsat(
             &conf,
             (&expr_a).into(),
-            &rise::full_rules(),
+            &dummy_rise::full_rules(),
             None,
             SimpleScheduler,
         );

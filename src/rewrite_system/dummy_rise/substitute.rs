@@ -1,10 +1,10 @@
 use egg::{Id, Language, RecExpr, Symbol};
 
-use super::{RiseLang, unwrap_symbol};
+use super::{DummyRiseLang, unwrap_symbol};
 
-pub fn expr_contains(e: &[RiseLang], var: Symbol) -> bool {
+pub fn expr_contains(e: &[DummyRiseLang], var: Symbol) -> bool {
     for node in e {
-        if node == &RiseLang::Symbol(var) {
+        if node == &DummyRiseLang::Symbol(var) {
             return true;
         }
     }
@@ -13,24 +13,24 @@ pub fn expr_contains(e: &[RiseLang], var: Symbol) -> bool {
 
 pub fn substitute_expr(
     var: Symbol,
-    expr: &RecExpr<RiseLang>,
-    body: &RecExpr<RiseLang>,
-) -> RecExpr<RiseLang> {
+    expr: &RecExpr<DummyRiseLang>,
+    body: &RecExpr<DummyRiseLang>,
+) -> RecExpr<DummyRiseLang> {
     struct Env<'a> {
         var: Symbol,
-        expr: &'a RecExpr<RiseLang>,
-        body: &'a [RiseLang],
-        result: &'a mut RecExpr<RiseLang>,
+        expr: &'a RecExpr<DummyRiseLang>,
+        body: &'a [DummyRiseLang],
+        result: &'a mut RecExpr<DummyRiseLang>,
     }
 
-    fn add_expr(to: &mut RecExpr<RiseLang>, e: &[RiseLang], id: Id) -> Id {
+    fn add_expr(to: &mut RecExpr<DummyRiseLang>, e: &[DummyRiseLang], id: Id) -> Id {
         let node = e[usize::from(id)]
             .clone()
             .map_children(|c_id| add_expr(to, e, c_id));
         to.add(node)
     }
 
-    fn find_fresh_symbol(a: &[RiseLang], b: &[RiseLang]) -> Symbol {
+    fn find_fresh_symbol(a: &[DummyRiseLang], b: &[DummyRiseLang]) -> Symbol {
         for i in 0..usize::MAX {
             let s = Symbol::from(format!("s{i}"));
             if !expr_contains(a, s) && !expr_contains(b, s) {
@@ -40,17 +40,17 @@ pub fn substitute_expr(
         panic!("could not find fresh symbol")
     }
 
-    fn replace_expr(e: &[RiseLang], id: Id, v: Symbol, v2: Symbol) -> RecExpr<RiseLang> {
+    fn replace_expr(e: &[DummyRiseLang], id: Id, v: Symbol, v2: Symbol) -> RecExpr<DummyRiseLang> {
         fn replace_add(
-            to: &mut RecExpr<RiseLang>,
-            e: &[RiseLang],
+            to: &mut RecExpr<DummyRiseLang>,
+            e: &[DummyRiseLang],
             id: Id,
             v: Symbol,
             v2: Symbol,
         ) -> Id {
             let node = e[usize::from(id)].clone();
-            let result = if node == RiseLang::Symbol(v) {
-                RiseLang::Symbol(v2)
+            let result = if node == DummyRiseLang::Symbol(v) {
+                DummyRiseLang::Symbol(v2)
             } else {
                 node.map_children(|c_id| replace_add(to, e, c_id, v, v2))
             };
@@ -63,37 +63,43 @@ pub fn substitute_expr(
 
     fn rec(index: usize, env: &mut Env) -> Id {
         match &env.body[index] {
-            &RiseLang::Var(v) if env.body[usize::from(v)] == RiseLang::Symbol(env.var) => add_expr(
-                env.result,
-                env.expr.as_ref(),
-                Id::from(env.expr.as_ref().len() - 1),
-            ),
-            RiseLang::Var(_) | RiseLang::Symbol(_) | RiseLang::Number(_) => {
+            &DummyRiseLang::Var(v)
+                if env.body[usize::from(v)] == DummyRiseLang::Symbol(env.var) =>
+            {
+                add_expr(
+                    env.result,
+                    env.expr.as_ref(),
+                    Id::from(env.expr.as_ref().len() - 1),
+                )
+            }
+            DummyRiseLang::Var(_) | DummyRiseLang::Symbol(_) | DummyRiseLang::Number(_) => {
                 add_expr(env.result, env.body, Id::from(index))
             }
-            &RiseLang::Lambda([v, _]) if env.body[usize::from(v)] == RiseLang::Symbol(env.var) => {
+            &DummyRiseLang::Lambda([v, _])
+                if env.body[usize::from(v)] == DummyRiseLang::Symbol(env.var) =>
+            {
                 add_expr(env.result, env.body, Id::from(index))
             }
-            &RiseLang::Lambda([v, e])
+            &DummyRiseLang::Lambda([v, e])
                 if expr_contains(env.expr.as_ref(), unwrap_symbol(&env.body[usize::from(v)])) =>
             {
                 let v2 = find_fresh_symbol(env.body, env.expr.as_ref());
                 let e2 = replace_expr(env.body, e, unwrap_symbol(&env.body[usize::from(v)]), v2);
                 let mut e3 = substitute_expr(env.var, env.expr, &e2);
                 let ide3 = Id::from(e3.as_ref().len() - 1);
-                let v2e3 = e3.add(RiseLang::Symbol(v2));
-                e3.add(RiseLang::Lambda([v2e3, ide3]));
+                let v2e3 = e3.add(DummyRiseLang::Symbol(v2));
+                e3.add(DummyRiseLang::Lambda([v2e3, ide3]));
                 add_expr(env.result, e3.as_ref(), Id::from(e3.as_ref().len() - 1))
             }
-            &RiseLang::Lambda([v, e]) => {
+            &DummyRiseLang::Lambda([v, e]) => {
                 let v2 = rec(usize::from(v), env);
                 let e2 = rec(usize::from(e), env);
-                env.result.add(RiseLang::Lambda([v2, e2]))
+                env.result.add(DummyRiseLang::Lambda([v2, e2]))
             }
-            &RiseLang::App([f, e]) => {
+            &DummyRiseLang::App([f, e]) => {
                 let f2 = rec(usize::from(f), env);
                 let e2 = rec(usize::from(e), env);
-                env.result.add(RiseLang::App([f2, e2]))
+                env.result.add(DummyRiseLang::App([f2, e2]))
             }
             node => panic!("did not expect {node:?}"),
         }
@@ -133,18 +139,18 @@ fn rec_class(eclass: Id, env: &mut Env) -> Id {
                 let enodes = env.egraph[eclass].nodes.clone();
                 // add a dummy node to avoid cycles
                 let dummy = env.egraph.reserve();
-                // env.egraph.add(RiseLang::Symbol(format!("_s_{}_{}_{}", eclass, env.var, env.expr).into()));
+                // env.egraph.add(DummyRiseLang::Symbol(format!("_s_{}_{}_{}", eclass, env.var, env.expr).into()));
                 env.visited.insert(eclass, dummy);
                 let final_id = enodes.into_iter().fold(dummy, |current_id, enode| {
                     let new_id = match enode {
-                        RiseLang::Var(v) if env.egraph.find(v) == env.egraph.find(env.var) => env.expr,
+                        DummyRiseLang::Var(v) if env.egraph.find(v) == env.egraph.find(env.var) => env.expr,
                         // ignore dummies
-                        // RiseLang::Symbol(s) if s.as_str().starts_with("_") => dummy,
-                        RiseLang::Var(_) | RiseLang::Symbol(_) => {
+                        // DummyRiseLang::Symbol(s) if s.as_str().starts_with("_") => dummy,
+                        DummyRiseLang::Var(_) | DummyRiseLang::Symbol(_) => {
                             panic!("{:?}", enode);
                             // keeping same e-node would merge the new class with previous class
                         }
-                        RiseLang::Lambda([v, e]) =>
+                        DummyRiseLang::Lambda([v, e]) =>
                             if env.egraph.find(v) == env.egraph.find(env.var) {
                                 panic!("{:?}", v)
                                 // keeping same e-node would merge the new class with previous class
@@ -153,17 +159,17 @@ fn rec_class(eclass: Id, env: &mut Env) -> Id {
                                 env.egraph.dot().to_svg("/tmp/cap-avoid.svg").unwrap();
                                 panic!("FIXME: capture avoid {:?} {:?}", env.egraph[v], env.egraph[env.var]);
                                 let v2 = env.egraph.add(
-                                    RiseLang::Symbol(format!("subs_{}_{}_{}", eclass, env.var, env.expr).into()));
+                                    DummyRiseLang::Symbol(format!("subs_{}_{}_{}", eclass, env.var, env.expr).into()));
                                 println!("capture avoid {}, {}, {}, {}, {}, {}", eclass, v2, v, e, env.var, env.expr);
                                 let e2 = replace_eclass(env.egraph, v, v2, e);
-                                let r = RiseLang::Lambda([v2, rec_class(e2, env)]);
+                                let r = DummyRiseLang::Lambda([v2, rec_class(e2, env)]);
                                 env.egraph.add(r)
                             } else {
-                                let r = RiseLang::Lambda([v, rec_class(e, env)]);
+                                let r = DummyRiseLang::Lambda([v, rec_class(e, env)]);
                                 env.egraph.add(r)
                             },
-                        RiseLang::App([f, e]) => {
-                            let r = RiseLang::App([rec_class(f, env), rec_class(e, env)]);
+                        DummyRiseLang::App([f, e]) => {
+                            let r = DummyRiseLang::App([rec_class(f, env), rec_class(e, env)]);
                             env.egraph.add(r)
                         }
                         _ => panic!("did not expect {:?}", enode)

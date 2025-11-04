@@ -88,8 +88,8 @@ mod tests {
 
     use egg::RecExpr;
 
+    use crate::rewrite_system::dummy_rise::DummyRiseLang;
     use crate::rewrite_system::halide::HalideLang;
-    use crate::rewrite_system::rise::RiseLang;
 
     #[test]
     fn simple_ast_dot() {
@@ -129,7 +129,7 @@ mod tests {
     #[test]
     fn longer_ast_dot() {
         let s_expr = "(lam f1 (lam f2 (lam f3 (lam f4 (lam f5 (lam x3 (app (app map (var f5)) (app (lam x2 (app (app map (var f4)) (app (lam x1 (app (app map (var f3)) (app (lam x0 (app (app map (var f2)) (app (app map (var f1)) (var x0)))) (var x1)))) (var x2)))) (var x3)))))))))";
-        let expr: RecExpr<RiseLang> = s_expr.parse().unwrap();
+        let expr: RecExpr<DummyRiseLang> = s_expr.parse().unwrap();
         let dot = to_dot(&expr, s_expr, &HashSet::new(), false);
 
         // let svg = crate::viz::dot_to_svg(&dot);
