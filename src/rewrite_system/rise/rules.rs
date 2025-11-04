@@ -1,11 +1,11 @@
 use egg::rewrite as rw;
 
-use super::RiseRewrite;
+use super::Rewrite;
 use super::func::{
     compute_nat_check, not_free_in, pat, shifted, shifted_check, vectorize_scalar_fun,
 };
 
-pub fn mm_rules() -> Vec<RiseRewrite> {
+pub fn mm_rules() -> Vec<Rewrite> {
     vec![
         rw!("map-fission"; "(typeOf (app (typeOf map ?) (typeOf (lam (typeOf (app (typeOf ?e0 ?) (typeOf ?e1 ?dt0)) ?)) (app (app fun ?dt1) ?dt2))) (app (app fun (app (app arrT ?n0) ?dt1)) (app (app arrT ?n0) ?dt2)))" => { not_free_in("?0", 0, shifted("?1", "?2", 1, 1, shifted("?n0", "?n1", 1, 0, shifted("?dt1", "?dt4", 1, 0, shifted("?dt2", "?dt3", 1, 0, shifted("?dt0", "?dt5", 1, 1, pat("(typeOf (lam (typeOf (app (typeOf (app (typeOf map (app (app fun (app (app fun ?dt0) ?dt3)) (app (app fun (app (app arrT ?n1) ?dt0)) (app (app arrT ?n1) ?dt3)))) (typeOf ?e0 (app (app fun ?dt0) ?dt3))) (app (app fun (app (app arrT ?n1) ?dt0)) (app (app arrT ?n1) ?dt3))) (typeOf (app (typeOf (app (typeOf map (app (app fun (app (app fun ?dt4) ?dt0)) (app (app fun (app (app arrT ?n1) ?dt4)) (app (app arrT ?n1) ?dt0)))) (typeOf (lam (typeOf ?e2 ?dt5)) (app (app fun ?dt4) ?dt0))) (app (app fun (app (app arrT ?n1) ?dt4)) (app (app arrT ?n1) ?dt0))) (typeOf %0 (app (app arrT ?n1) ?dt4))) (app (app arrT ?n1) ?dt0))) (app (app arrT ?n1) ?dt3))) (app (app fun (app (app arrT ?n0) ?dt1)) (app (app arrT ?n0) ?dt2)))"))))))) }),
         rw!("reduce-seq"; "(typeOf reduce (app (app fun (app (app fun ?dt0) (app (app fun ?dt0) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt0)) ?dt0))))" => "(typeOf reduceSeq (app (app fun (app (app fun ?dt0) (app (app fun ?dt0) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt0)) ?dt0))))"),
