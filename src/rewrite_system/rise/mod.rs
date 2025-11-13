@@ -1,15 +1,12 @@
-mod func;
 mod rules;
 
-use egg::{Analysis, DidMerge, Id, Symbol};
+use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr, Rewrite, Symbol};
 
+use hashbrown::HashSet;
 use rules::mm_rules;
 
-pub type EGraph = egg::EGraph<Rise, RiseAnalysis>;
-pub type Rewrite = egg::Rewrite<Rise, RiseAnalysis>;
-
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
-pub struct Index(pub usize);
+pub struct Index(pub u32);
 
 impl std::str::FromStr for Index {
     type Err = Option<std::num::ParseIntError>;
@@ -36,6 +33,35 @@ egg::define_language! {
     "lam" = Lambda(Id),
     "typeOf" = TypeOf([Id; 2]),
 
+    "arrT" = ArrType,
+    "vecT" = VecType,
+    "pairT" = PairType,
+    "idxT" = IndexType,
+
+    "f32" = F32,
+
+    "toMem" = ToMem,
+    "split" = Split,
+    "join" = Join,
+
+    "mul" = Mul,
+    "add" = Add,
+    "pow" = Pow,
+
+    "asVector" = AsVector,
+    "asScalar" = AsScalar,
+
+    "snd" = Snd,
+    "fst" = Fst,
+
+    "generate" = Generate,
+    "transpose" = Transpose,
+    "unzip" = Unzip,
+    "zip" = Zip,
+    "mapPar" = MapPar,
+    "reduce" = Reduce,
+    "reduceSeq" = ReduceSeq,
+    "reduceSeqUnroll" = ReduceSeqUnroll,
     // to implement explicit substitution:
     // "sig" = Sigma([Id; 3]),
     // "phi" = Phi([Id; 3]),
@@ -46,21 +72,76 @@ egg::define_language! {
     Symbol(Symbol),
   }
 }
-
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct RiseAnalysis;
 
-type RiseAnalysisData = ();
+#[derive(Default, Debug)]
+pub struct AnalysisData {
+    pub free: HashSet<Index>,
+    pub beta_extract: RecExpr<Rise>,
+}
 
 impl Analysis<Rise> for RiseAnalysis {
-    type Data = RiseAnalysisData;
+    type Data = AnalysisData;
 
-    fn merge(&mut self, _to: &mut RiseAnalysisData, _from: RiseAnalysisData) -> DidMerge {
-        DidMerge(false, false)
+    fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
+        let before_len = to.free.len();
+        to.free.extend(from.free);
+        let mut did_change = before_len != to.free.len();
+        if !from.beta_extract.as_ref().is_empty()
+            && (to.beta_extract.as_ref().is_empty()
+                || to.beta_extract.as_ref().len() > from.beta_extract.as_ref().len())
+        {
+            to.beta_extract = from.beta_extract;
+            did_change = true;
+        }
+        DidMerge(did_change, true) // TODO: more precise second bool
     }
 
-    fn make(_egraph: &mut EGraph, _enode: &Rise) -> RiseAnalysisData {}
+    fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
+        let mut free = HashSet::default();
+        match enode {
+            Rise::Var(v) => {
+                free.insert(*v);
+            }
+            Rise::Lambda(a) => {
+                free.extend(
+                    egraph[*a]
+                        .data
+                        .free
+                        .iter()
+                        .copied()
+                        .filter(|&idx| idx != Index(0))
+                        .map(|idx| Index(idx.0 - 1)),
+                );
+            }
+            _ => {
+                enode.for_each(|c| free.extend(&egraph[c].data.free));
+            }
+        }
+        let empty = enode.any(|id| egraph[id].data.beta_extract.as_ref().is_empty());
+        let beta_extract = if empty {
+            vec![].into()
+        } else {
+            enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
+        };
+        AnalysisData { free, beta_extract }
+    }
 }
+
+// pub fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+//     to.push(e);
+//     Id::from(to.len() - 1)
+// }
+
+// pub fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+//     let offset = to.len();
+//     to.extend(e.iter().map(|n| {
+//         n.clone()
+//             .map_children(|id| Id::from(usize::from(id) + offset))
+//     }));
+//     Id::from(to.len() - 1)
+// }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -68,7 +149,7 @@ pub enum RiseRuleset {
 }
 
 #[must_use]
-pub fn rules(ruleset: RiseRuleset) -> Vec<Rewrite> {
+pub fn rules(ruleset: RiseRuleset) -> Vec<Rewrite<Rise, RiseAnalysis>> {
     match ruleset {
         RiseRuleset::MM => mm_rules(),
     }
@@ -126,6 +207,6 @@ mod test {
     #[test]
     fn rules_test() {
         let rules = mm_rules();
-        assert_eq!(10, rules.len());
+        assert_eq!(27, rules.len());
     }
 }

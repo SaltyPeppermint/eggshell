@@ -1,12 +1,20 @@
-use egg::rewrite as rw;
+mod func;
+mod nat;
+mod shifted;
 
-use super::Rewrite;
-use super::func::{
-    compute_nat_check, not_free_in, pat, shifted, shifted_check, vectorize_scalar_fun,
+use egg::{
+    Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
+    Rewrite, Searcher, Subst, Symbol, Var, rewrite as rw,
 };
 
-pub fn mm_rules() -> Vec<Rewrite> {
-    vec![
+use super::{Index, Rise, RiseAnalysis};
+
+use func::{not_free_in, pat, vectorize_scalar_fun};
+use nat::compute_nat_check;
+use shifted::{shift_mut, shifted, shifted_check};
+
+pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
+    let mut algorithmic = vec![
         rw!("map-fission"; "(typeOf (app (typeOf map ?) (typeOf (lam (typeOf (app (typeOf ?e0 ?) (typeOf ?e1 ?dt0)) ?)) (app (app fun ?dt1) ?dt2))) (app (app fun (app (app arrT ?n0) ?dt1)) (app (app arrT ?n0) ?dt2)))" => { not_free_in("?0", 0, shifted("?1", "?2", 1, 1, shifted("?n0", "?n1", 1, 0, shifted("?dt1", "?dt4", 1, 0, shifted("?dt2", "?dt3", 1, 0, shifted("?dt0", "?dt5", 1, 1, pat("(typeOf (lam (typeOf (app (typeOf (app (typeOf map (app (app fun (app (app fun ?dt0) ?dt3)) (app (app fun (app (app arrT ?n1) ?dt0)) (app (app arrT ?n1) ?dt3)))) (typeOf ?e0 (app (app fun ?dt0) ?dt3))) (app (app fun (app (app arrT ?n1) ?dt0)) (app (app arrT ?n1) ?dt3))) (typeOf (app (typeOf (app (typeOf map (app (app fun (app (app fun ?dt4) ?dt0)) (app (app fun (app (app arrT ?n1) ?dt4)) (app (app arrT ?n1) ?dt0)))) (typeOf (lam (typeOf ?e2 ?dt5)) (app (app fun ?dt4) ?dt0))) (app (app fun (app (app arrT ?n1) ?dt4)) (app (app arrT ?n1) ?dt0))) (typeOf %0 (app (app arrT ?n1) ?dt4))) (app (app arrT ?n1) ?dt0))) (app (app arrT ?n1) ?dt3))) (app (app fun (app (app arrT ?n0) ?dt1)) (app (app arrT ?n0) ?dt2)))"))))))) }),
         rw!("reduce-seq"; "(typeOf reduce (app (app fun (app (app fun ?dt0) (app (app fun ?dt0) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt0)) ?dt0))))" => "(typeOf reduceSeq (app (app fun (app (app fun ?dt0) (app (app fun ?dt0) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt0)) ?dt0))))"),
         rw!("eliminate-map-identity"; "(typeOf (app (typeOf map ?) (typeOf (lam (typeOf %0 ?)) (app (app fun ?dt0) ?dt0))) (app (app fun (app (app arrT ?n0) ?dt0)) (app (app arrT ?n0) ?dt0)))" => { shifted("?n0", "?n1", 1, 0, shifted("?dt0", "?dt1", 1, 0, pat("(typeOf (lam (typeOf %0 (app (app arrT ?n1) ?dt1))) (app (app fun (app (app arrT ?n0) ?dt0)) (app (app arrT ?n0) ?dt0)))"))) }),
@@ -32,5 +40,210 @@ pub fn mm_rules() -> Vec<Rewrite> {
         rw!("vec-before-map-f32x-f32xf32"; "(typeOf (app (typeOf (app (typeOf asVector ?) ?n0) ?) (typeOf (app (typeOf (app (typeOf map ?) (typeOf ?e0 (app (app fun (app (app pairT f32) (app (app pairT f32) f32))) f32))) ?) (typeOf ?e1 (app (app arrT ?n1) (app (app pairT f32) (app (app pairT f32) f32))))) (app (app arrT ?n2) f32))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))" => { vectorize_scalar_fun("?0", "?n0", "?2", shifted("?n3", "?n4", 1, 0, compute_nat_check("?n1", "(app (app mul ?n3) ?n0)", compute_nat_check("?n2", "(app (app mul ?n3) ?n0)", pat("(typeOf (app (typeOf (app (typeOf map (app (app fun (app (app fun (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))) (app (app vecT ?n0) f32))) (app (app fun (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32))))) (app (app arrT ?n3) (app (app vecT ?n0) f32))))) (typeOf ?e2 (app (app fun (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))) (app (app vecT ?n0) f32)))) (app (app fun (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32))))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (typeOf (app (typeOf (app (typeOf zip (app (app fun (app (app arrT ?n3) (app (app vecT ?n0) f32))) (app (app fun (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32))))))) (typeOf (app (typeOf (app (typeOf asVector (lam (app (app fun (app (app arrT (app (app mul %0) ?n4)) f32)) (app (app arrT ?n4) (app (app vecT %0) f32))))) ?n0) (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (typeOf (app (typeOf fst (app (app fun (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (typeOf (app (typeOf unzip (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32)))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (typeOf ?e1 (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32))))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (app (app fun (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))))) (typeOf (app (typeOf (app (typeOf zip (app (app fun (app (app arrT ?n3) (app (app vecT ?n0) f32))) (app (app fun (app (app arrT ?n3) (app (app vecT ?n0) f32))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))))) (typeOf (app (typeOf (app (typeOf asVector (lam (app (app fun (app (app arrT (app (app mul %0) ?n4)) f32)) (app (app arrT ?n4) (app (app vecT %0) f32))))) ?n0) (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (typeOf (app (typeOf fst (app (app fun (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (typeOf (app (typeOf unzip (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32)))) (typeOf (app (typeOf snd (app (app fun (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (typeOf (app (typeOf unzip (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32)))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (typeOf ?e1 (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32))))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32)))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (app (app fun (app (app arrT ?n3) (app (app vecT ?n0) f32))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32))))) (typeOf (app (typeOf (app (typeOf asVector (lam (app (app fun (app (app arrT (app (app mul %0) ?n4)) f32)) (app (app arrT ?n4) (app (app vecT %0) f32))))) ?n0) (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (typeOf (app (typeOf snd (app (app fun (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (typeOf (app (typeOf unzip (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32)))) (typeOf (app (typeOf snd (app (app fun (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (typeOf (app (typeOf unzip (app (app fun (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32)))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (typeOf ?e1 (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) (app (app pairT f32) f32))))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32))))) (app (app arrT (app (app mul ?n3) ?n0)) (app (app pairT f32) f32)))) (app (app pairT (app (app arrT (app (app mul ?n3) ?n0)) f32)) (app (app arrT (app (app mul ?n3) ?n0)) f32)))) (app (app arrT (app (app mul ?n3) ?n0)) f32))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32))))) (app (app arrT ?n3) (app (app pairT (app (app vecT ?n0) f32)) (app (app pairT (app (app vecT ?n0) f32)) (app (app vecT ?n0) f32)))))) (app (app arrT ?n3) (app (app vecT ?n0) f32)))"))))) }),
         rw!("reduce-seq-unroll"; "(typeOf reduceSeq (app (app fun (app (app fun ?dt0) (app (app fun ?dt1) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt1)) ?dt0))))" => "(typeOf reduceSeqUnroll (app (app fun (app (app fun ?dt0) (app (app fun ?dt1) ?dt0))) (app (app fun ?dt0) (app (app fun (app (app arrT ?n0) ?dt1)) ?dt0))))"),
         rw!("map-par"; "(typeOf map (app (app fun (app (app fun ?dt0) ?dt1)) (app (app fun (app (app arrT ?n0) ?dt0)) (app (app arrT ?n0) ?dt1))))" => "(typeOf mapPar (app (app fun (app (app fun ?dt0) ?dt1)) (app (app fun (app (app arrT ?n0) ?dt0)) (app (app arrT ?n0) ?dt1))))"),
-    ]
+    ];
+    let reduce = [
+        // reductions and abstraction
+        rw!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
+        rw!("eta"; "(lam (app ?f %0))" => { not_free_in("?f", 0, shifted("?f", "?fd", -1, 0, pat("?fd"))) }),
+    ];
+    algorithmic.extend(reduce);
+    algorithmic
+}
+
+struct BetaExtractApplier {
+    body: Var,
+    subs: Var,
+}
+
+impl BetaExtractApplier {
+    fn new(body: &str, subs: &str) -> Self {
+        Self {
+            body: body.parse().unwrap(),
+            subs: subs.parse().unwrap(),
+        }
+    }
+}
+
+impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
+    fn apply_one(
+        &self,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        eclass: Id,
+        subst: &Subst,
+        _searcher_ast: Option<&PatternAst<Rise>>,
+        _rule_name: Symbol,
+    ) -> Vec<Id> {
+        let ex_body = &egraph[subst[self.body]].data.beta_extract;
+        let ex_subs = &egraph[subst[self.subs]].data.beta_extract;
+        let result = beta_reduce(ex_body, ex_subs);
+        let id = egraph.add_expr(&result);
+        egraph.union(eclass, id);
+        vec![id]
+    }
+}
+
+pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
+    let arg2 = &mut arg.as_ref().to_owned();
+
+    shift_mut(arg2, 1, Index(0)); // shift up
+    let mut body2 = replace(body.as_ref(), Index(0), arg2);
+    shift_mut(&mut body2, -1, Index(0)); // shift down
+    body2.into()
+}
+
+pub fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
+    fn rec(
+        result: &mut Vec<Rise>,
+        expr: &[Rise],
+        ei: usize,
+        index: Index,
+        subs: &mut [Rise],
+    ) -> Id {
+        match expr[ei] {
+            Rise::Var(index2) => {
+                if index == index2 {
+                    add_expr(result, subs)
+                } else {
+                    add(result, Rise::Var(index2))
+                }
+            }
+            Rise::Lambda(e) => {
+                shift_mut(subs, 1, Index(0)); // shift up
+                let e2 = rec(result, expr, usize::from(e), Index(index.0 + 1), subs);
+                shift_mut(subs, -1, Index(0)); // shift down
+                add(result, Rise::Lambda(e2))
+            }
+            Rise::App([f, e]) => {
+                let f2 = rec(result, expr, usize::from(f), index, subs);
+                let e2 = rec(result, expr, usize::from(e), index, subs);
+                add(result, Rise::App([f2, e2]))
+            }
+            Rise::Symbol(_) => add(result, expr[ei].clone()),
+            Rise::TypeOf(_) => unimplemented!(),
+            Rise::Integer(_) => unimplemented!(),
+            Rise::ArrType
+            | Rise::VecType
+            | Rise::PairType
+            | Rise::IndexType
+            | Rise::F32
+            | Rise::ToMem
+            | Rise::Split
+            | Rise::Join
+            | Rise::Mul
+            | Rise::Add
+            | Rise::Pow
+            | Rise::AsVector
+            | Rise::AsScalar
+            | Rise::Snd
+            | Rise::Fst
+            | Rise::Generate
+            | Rise::Transpose
+            | Rise::Unzip
+            | Rise::Zip
+            | Rise::MapPar
+            | Rise::Reduce
+            | Rise::ReduceSeq
+            | Rise::ReduceSeqUnroll => unimplemented!(),
+        }
+    }
+    let mut result = vec![];
+    rec(&mut result, expr, expr.len() - 1, index, subs);
+    result
+}
+
+fn extract_small(
+    egraph: &EGraph<Rise, RiseAnalysis>,
+    pattern: &Pattern<Rise>,
+    eclass_id: Id,
+) -> Vec<RecExpr<Rise>> {
+    let Some(matches) = pattern.search_eclass(egraph, eclass_id) else {
+        return vec![];
+    };
+
+    let extractor = Extractor::new(egraph, AstSize);
+
+    matches
+        .substs
+        .iter()
+        .map(|subs| {
+            let mut new_ast = Vec::new();
+            let mut shift_starts = vec![(0, 0)];
+            for pattern_node in &pattern.ast {
+                match pattern_node {
+                    ENodeOrVar::Var(w) => {
+                        let subexpr = extractor.find_best(subs[*w]).1.to_vec();
+                        let sub_len = subexpr.len();
+                        let skip_len = shift_starts.last().unwrap().1;
+                        new_ast.extend(subexpr.into_iter().map(|mut node| {
+                            node.update_children(|i| Id::from(usize::from(i) + skip_len));
+                            node
+                        }));
+                        shift_starts.push((new_ast.len(), skip_len + sub_len));
+                    }
+                    ENodeOrVar::ENode(e) => {
+                        let mut new_e = e.clone();
+                        new_e.update_children(|i| {
+                            let this_skip_len = shift_starts
+                                .iter()
+                                .find_map(|(shift_start, skip_len)| {
+                                    (usize::from(i) > *shift_start).then_some(*skip_len)
+                                })
+                                .unwrap_or(0);
+                            Id::from(usize::from(i) + this_skip_len)
+                        });
+                        new_ast.push(new_e);
+                    }
+                }
+            }
+            RecExpr::from(new_ast)
+        })
+        .collect()
+}
+
+fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+    to.push(e);
+    Id::from(to.len() - 1)
+}
+
+fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+    let offset = to.len();
+    to.extend(e.iter().map(|n| {
+        n.clone()
+            .map_children(|id| Id::from(usize::from(id) + offset))
+    }));
+    Id::from(to.len() - 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn beta_reduce_applier() {
+        fn check(body: &str, arg: &str, res: &str) {
+            let b = &body.parse().unwrap();
+            let a = &arg.parse().unwrap();
+            let r = res.parse().unwrap();
+            assert_eq!(beta_reduce(b, a), r);
+        }
+        // (λ. (λ. ((λ. (0 1)) (0 1)))) --> (λ. (λ. ((0 1) 0)))
+        // (λ. (0 1)) (0 1) --> (0 1) 0
+        check("(app %0 %1)", "(app %0 %1)", "(app (app %0 %1) %0)");
+        // r1 = (app (lam (app "%6" (app "%5" "%0"))) "%0")
+        // r2 = (app (lam (app "%6" r1)) "%0")
+        // r3 = (app (lam (app "%6" r2)) %0)
+        // (app map (lam (app "%6" r3)))
+        // --> (app map (lam (app "%6" (app "%5" (app "%4" (app "%3" (app "%2" "%0")))))))
+        check("(app %6 (app %5 %0))", "%0", "(app %5 (app %4 %0))");
+        check(
+            "(app %6 (app %5 (app %4 %0)))",
+            "%0",
+            "(app %5 (app %4 (app %3 %0)))",
+        );
+        check(
+            "(app %6 (app %5 (app %4 (app %3 %0))))",
+            "%0",
+            "(app %5 (app %4 (app %3 (app %2 %0))))",
+        );
+    }
 }
