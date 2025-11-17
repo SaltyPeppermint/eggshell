@@ -1,4 +1,4 @@
-use egg::{Analysis, DidMerge, EGraph, Id, RecExpr, Symbol};
+use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
 use super::super::Index;
@@ -16,7 +16,7 @@ egg::define_language! {
 
         Var(Index),
         Constant(u32),
-        Symbol(Symbol),
+        // Symbol(Symbol),
     }
 }
 
@@ -61,7 +61,6 @@ impl Analysis<RiseMath> for ConstantFold {
     }
 }
 
-// TODO: Cleaner version that does not go through string
 pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseMath> {
     let t = rise_expr
         .into_iter()
@@ -82,7 +81,20 @@ pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseMath> {
     RecExpr::from(t)
 }
 
-// TODO: Cleaner version that does not go through string
 pub fn to_rise_expr(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
-    nat_expr.to_string().parse().unwrap()
+    let t = nat_expr
+        .into_iter()
+        .map(|n| match n {
+            RiseMath::Var(index) => Rise::Var(*index),
+
+            RiseMath::Add([a, b]) => Rise::NatAdd([*a, *b]),
+            RiseMath::Sub([a, b]) => Rise::NatSub([*a, *b]),
+            RiseMath::Mul([a, b]) => Rise::NatMul([*a, *b]),
+            RiseMath::Div([a, b]) => Rise::NatDiv([*a, *b]),
+            RiseMath::Pow([a, b]) => Rise::NatPow([*a, *b]),
+
+            RiseMath::Constant(c) => Rise::Integer((*c).try_into().unwrap()),
+        })
+        .collect::<Vec<_>>();
+    RecExpr::from(t)
 }
