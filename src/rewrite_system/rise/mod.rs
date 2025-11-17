@@ -35,10 +35,11 @@ egg::define_language! {
     "lam" = Lambda(Id),
     "typeOf" = TypeOf([Id; 2]),
 
-    "arrT" = ArrType,
-    "vecT" = VecType,
-    "pairT" = PairType,
-    "idxT" = IndexType,
+    "fun" = FunType([Id; 2]),
+    "arrT" = ArrType([Id; 2]),
+    "vecT" = VecType([Id; 2]),
+    "pairT" = PairType([Id; 2]),
+    "idxT" = IndexType(Id),
     "natT" = NatType,
 
     "f32" = F32,

@@ -136,12 +136,13 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
                 rec(expr, usize::from(e), shift, cutoff);
             }
             Rise::Symbol(_) => (),
-            Rise::TypeOf(_)
+            Rise::FunType(_)
+            | Rise::TypeOf(_)
             | Rise::Integer(_)
-            | Rise::ArrType
-            | Rise::VecType
-            | Rise::PairType
-            | Rise::IndexType
+            | Rise::ArrType(_)
+            | Rise::VecType(_)
+            | Rise::PairType(_)
+            | Rise::IndexType(_)
             | Rise::NatType
             | Rise::F32
             | Rise::ToMem

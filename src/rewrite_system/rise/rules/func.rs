@@ -133,11 +133,12 @@ fn vectorize_expr(
         Rise::Symbol(global_symbol) => todo!(),
         Rise::Integer(_) => todo!(),
 
-        Rise::TypeOf(_)
-        | Rise::ArrType
-        | Rise::VecType
-        | Rise::PairType
-        | Rise::IndexType
+        Rise::FunType(_)
+        | Rise::TypeOf(_)
+        | Rise::ArrType(_)
+        | Rise::VecType(_)
+        | Rise::PairType(_)
+        | Rise::IndexType(_)
         | Rise::NatType
         | Rise::F32
         | Rise::ToMem
