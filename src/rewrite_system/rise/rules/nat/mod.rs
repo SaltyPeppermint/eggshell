@@ -2,11 +2,11 @@ mod lang;
 mod rules;
 
 use egg::{
-    Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
-    Runner, Searcher, Subst, Symbol, Var,
+    Applier, AstSize, EGraph, Extractor, Id, Pattern, PatternAst, RecExpr, Runner, Searcher, Subst,
+    Symbol, Var,
 };
 
-use lang::RiseNat;
+use lang::RiseMath;
 
 use super::{Rise, RiseAnalysis};
 
@@ -44,7 +44,7 @@ where
             return vec![];
         };
         let expr = &egraph[subst[self.var]].data.beta_extract;
-        let simplified_nat = simplify(&to_nat_expr(expr));
+        let simplified_nat = simplify(&lang::to_nat_expr(expr));
         let mut substitution = subst.clone();
         substitution.insert(self.var, egraph.add_expr(&simplified_nat));
         self.applier
@@ -52,12 +52,12 @@ where
     }
 }
 
-fn simplify(nat_expr: &RecExpr<RiseNat>) -> RecExpr<Rise> {
+fn simplify(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
     let rules = rules::rules();
     let runner = Runner::default().with_expr(nat_expr).run(&rules);
     let root = runner.roots.first().unwrap();
     let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
-    to_rise_expr(&expr)
+    lang::to_rise_expr(&expr)
 }
 
 pub fn compute_nat_check<A>(
@@ -97,9 +97,9 @@ where
         let nat_pattern_extracted =
             super::extract_small(egraph, &self.nat_pattern, subst[self.var])
                 .iter()
-                .map(to_nat_expr)
+                .map(lang::to_nat_expr)
                 .collect::<Box<[_]>>();
-        if check_equivalence(&nat_pattern_extracted, &to_nat_expr(extract)) {
+        if check_equivalence(&nat_pattern_extracted, &lang::to_nat_expr(extract)) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -109,8 +109,8 @@ where
 }
 
 fn check_equivalence(
-    nat_pattern_extracted: &[RecExpr<RiseNat>],
-    expected: &RecExpr<RiseNat>,
+    nat_pattern_extracted: &[RecExpr<RiseMath>],
+    expected: &RecExpr<RiseMath>,
 ) -> bool {
     let mut runner = Runner::default().with_expr(expected);
     for npe in nat_pattern_extracted {
@@ -123,14 +123,4 @@ fn check_equivalence(
     npe_roots
         .iter()
         .any(|npe_root| runner.egraph.find(*npe_root) == canonical_expected_root)
-}
-
-// TODO: Cleaner version that does not go through string
-pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseNat> {
-    rise_expr.to_string().parse().unwrap()
-}
-
-// TODO: Cleaner version that does not go through string
-pub fn to_rise_expr(nat_expr: &RecExpr<RiseNat>) -> RecExpr<Rise> {
-    nat_expr.to_string().parse().unwrap()
 }

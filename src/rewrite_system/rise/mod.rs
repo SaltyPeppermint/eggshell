@@ -4,8 +4,9 @@ use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr, Rewrite, Symbol};
 
 use hashbrown::HashSet;
 use rules::mm_rules;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
 pub struct Index(pub u32);
 
 impl std::str::FromStr for Index {
@@ -27,6 +28,7 @@ impl std::fmt::Display for Index {
 }
 
 egg::define_language! {
+  #[derive(Serialize, Deserialize)]
   pub enum Rise {
     Var(Index),
     "app" = App([Id; 2]),
@@ -37,6 +39,7 @@ egg::define_language! {
     "vecT" = VecType,
     "pairT" = PairType,
     "idxT" = IndexType,
+    "natT" = NatType,
 
     "f32" = F32,
 
@@ -44,9 +47,11 @@ egg::define_language! {
     "split" = Split,
     "join" = Join,
 
-    "mul" = Mul,
-    "add" = Add,
-    "pow" = Pow,
+    "natAdd" = NatAdd([Id; 2]),
+    "natSub" = NatSub([Id; 2]),
+    "natMul" = NatMul([Id; 2]),
+    "natDiv" = NatDiv([Id; 2]),
+    "natPow" = NatPow([Id; 2]),
 
     "asVector" = AsVector,
     "asScalar" = AsScalar,
@@ -72,6 +77,7 @@ egg::define_language! {
     Symbol(Symbol),
   }
 }
+
 #[derive(Default, Debug)]
 pub struct RiseAnalysis;
 
@@ -128,20 +134,6 @@ impl Analysis<Rise> for RiseAnalysis {
         AnalysisData { free, beta_extract }
     }
 }
-
-// pub fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
-//     to.push(e);
-//     Id::from(to.len() - 1)
-// }
-
-// pub fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
-//     let offset = to.len();
-//     to.extend(e.iter().map(|n| {
-//         n.clone()
-//             .map_children(|id| Id::from(usize::from(id) + offset))
-//     }));
-//     Id::from(to.len() - 1)
-// }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {

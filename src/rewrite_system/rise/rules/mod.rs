@@ -2,6 +2,8 @@ mod func;
 mod nat;
 mod shifted;
 
+use std::iter;
+
 use egg::{
     Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
     Rewrite, Searcher, Subst, Symbol, Var, rewrite as rw,
@@ -119,19 +121,22 @@ pub fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
                 add(result, Rise::App([f2, e2]))
             }
             Rise::Symbol(_) => add(result, expr[ei].clone()),
-            Rise::TypeOf(_) => unimplemented!(),
-            Rise::Integer(_) => unimplemented!(),
-            Rise::ArrType
+            Rise::TypeOf(_)
+            | Rise::Integer(_)
+            | Rise::ArrType
             | Rise::VecType
             | Rise::PairType
             | Rise::IndexType
+            | Rise::NatType
             | Rise::F32
             | Rise::ToMem
             | Rise::Split
             | Rise::Join
-            | Rise::Mul
-            | Rise::Add
-            | Rise::Pow
+            | Rise::NatAdd(_)
+            | Rise::NatSub(_)
+            | Rise::NatMul(_)
+            | Rise::NatDiv(_)
+            | Rise::NatPow(_)
             | Rise::AsVector
             | Rise::AsScalar
             | Rise::Snd
@@ -167,29 +172,27 @@ fn extract_small(
         .iter()
         .map(|subs| {
             let mut new_ast = Vec::new();
-            let mut shift_starts = vec![(0, 0)];
+            let mut shift_starts: Vec<usize> = Vec::new();
             for pattern_node in &pattern.ast {
                 match pattern_node {
                     ENodeOrVar::Var(w) => {
                         let subexpr = extractor.find_best(subs[*w]).1.to_vec();
                         let sub_len = subexpr.len();
-                        let skip_len = shift_starts.last().unwrap().1;
+                        let skip_len = shift_starts.last().unwrap();
                         new_ast.extend(subexpr.into_iter().map(|mut node| {
                             node.update_children(|i| Id::from(usize::from(i) + skip_len));
                             node
                         }));
-                        shift_starts.push((new_ast.len(), skip_len + sub_len));
+
+                        shift_starts.extend(iter::repeat_n(skip_len + sub_len, sub_len));
                     }
                     ENodeOrVar::ENode(e) => {
                         let mut new_e = e.clone();
                         new_e.update_children(|i| {
-                            let this_skip_len = shift_starts
-                                .iter()
-                                .find_map(|(shift_start, skip_len)| {
-                                    (usize::from(i) > *shift_start).then_some(*skip_len)
-                                })
-                                .unwrap_or(0);
-                            Id::from(usize::from(i) + this_skip_len)
+                            let this_skip_len = shift_starts[usize::from(i)];
+                            let new_i = Id::from(usize::from(i) + this_skip_len);
+                            shift_starts.push(this_skip_len);
+                            new_i
                         });
                         new_ast.push(new_e);
                     }

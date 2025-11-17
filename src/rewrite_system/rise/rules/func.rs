@@ -91,7 +91,7 @@ where
             vectorize_expr(extracted, n, egraph, HashSet::new(), extracted.root())
         {
             let mut substitution = subst.clone();
-            substitution.insert(self.var, egraph.add_expr(&vectorized_expr));
+            substitution.insert(self.vectorized_var, egraph.add_expr(&vectorized_expr));
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -101,7 +101,10 @@ where
 }
 
 fn extracted_to_u32(expr: &RecExpr<Rise>) -> u32 {
-    todo!()
+    if let Rise::Integer(i) = expr[0.into()] {
+        return u32::try_from(i).unwrap();
+    }
+    panic!("Unexpected thing in expr")
 }
 
 fn vectorize_expr(
@@ -115,21 +118,24 @@ fn vectorize_expr(
         Rise::Var(index) => todo!(),
         Rise::App(_) => todo!(),
         Rise::Lambda(id) => todo!(),
-        Rise::TypeOf(_) => todo!(),
-        Rise::Integer(_) => todo!(),
         Rise::Symbol(global_symbol) => todo!(),
+        Rise::Integer(_) => todo!(),
 
-        Rise::ArrType
+        Rise::TypeOf(_)
+        | Rise::ArrType
         | Rise::VecType
         | Rise::PairType
         | Rise::IndexType
+        | Rise::NatType
         | Rise::F32
         | Rise::ToMem
         | Rise::Split
         | Rise::Join
-        | Rise::Mul
-        | Rise::Add
-        | Rise::Pow
+        | Rise::NatAdd(_)
+        | Rise::NatSub(_)
+        | Rise::NatMul(_)
+        | Rise::NatDiv(_)
+        | Rise::NatPow(_)
         | Rise::AsVector
         | Rise::AsScalar
         | Rise::Snd

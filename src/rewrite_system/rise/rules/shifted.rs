@@ -102,9 +102,9 @@ where
 }
 
 pub fn shift_copy(expr: &RecExpr<Rise>, shift: i32, cutoff: Index) -> RecExpr<Rise> {
-    let mut result = expr.as_ref().to_owned();
+    let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
-    result.into()
+    result
 }
 
 pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
@@ -124,19 +124,22 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
                 rec(expr, usize::from(e), shift, cutoff);
             }
             Rise::Symbol(_) => (),
-            Rise::TypeOf(_) => unimplemented!(),
-            Rise::Integer(_) => unimplemented!(),
-            Rise::ArrType
+            Rise::TypeOf(_)
+            | Rise::Integer(_)
+            | Rise::ArrType
             | Rise::VecType
             | Rise::PairType
             | Rise::IndexType
+            | Rise::NatType
             | Rise::F32
             | Rise::ToMem
             | Rise::Split
             | Rise::Join
-            | Rise::Mul
-            | Rise::Add
-            | Rise::Pow
+            | Rise::NatAdd(_)
+            | Rise::NatSub(_)
+            | Rise::NatMul(_)
+            | Rise::NatDiv(_)
+            | Rise::NatPow(_)
             | Rise::AsVector
             | Rise::AsScalar
             | Rise::Snd

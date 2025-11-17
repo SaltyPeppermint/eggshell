@@ -1,15 +1,20 @@
-use egg::{Analysis, DidMerge, EGraph, Id, Symbol};
+use egg::{Analysis, DidMerge, EGraph, Id, RecExpr, Symbol};
 use serde::{Deserialize, Serialize};
+
+use super::super::Index;
+
+use super::Rise;
 
 egg::define_language! {
     #[derive(Serialize, Deserialize)]
-    pub enum RiseNat {
+    pub enum RiseMath {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
         "/" = Div([Id; 2]),
         "pow" = Pow([Id; 2]),
 
+        Var(Index),
         Constant(u32),
         Symbol(Symbol),
     }
@@ -18,18 +23,18 @@ egg::define_language! {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;
 
-impl Analysis<RiseNat> for ConstantFold {
+impl Analysis<RiseMath> for ConstantFold {
     type Data = Option<u32>;
 
-    fn make(egraph: &mut EGraph<RiseNat, ConstantFold>, enode: &RiseNat) -> Self::Data {
+    fn make(egraph: &mut EGraph<RiseMath, ConstantFold>, enode: &RiseMath) -> Self::Data {
         let x = |i: &Id| egraph[*i].data;
         Some(match enode {
-            RiseNat::Constant(c) => *c,
-            RiseNat::Add([a, b]) => x(a)? + x(b)?,
-            RiseNat::Sub([a, b]) => x(a)? - (x(b)?),
-            RiseNat::Mul([a, b]) => x(a)? * x(b)?,
-            RiseNat::Pow([a, b]) => x(a)?.pow(x(b)?),
-            RiseNat::Div([a, b]) if x(a)? % x(b)? == 0 => x(a)? / x(b)?,
+            RiseMath::Constant(c) => *c,
+            RiseMath::Add([a, b]) => x(a)? + x(b)?,
+            RiseMath::Sub([a, b]) => x(a)? - (x(b)?),
+            RiseMath::Mul([a, b]) => x(a)? * x(b)?,
+            RiseMath::Pow([a, b]) => x(a)?.pow(x(b)?),
+            RiseMath::Div([a, b]) if x(a)? % x(b)? == 0 => x(a)? / x(b)?,
             _ => return None,
         })
     }
@@ -41,10 +46,10 @@ impl Analysis<RiseNat> for ConstantFold {
         })
     }
 
-    fn modify(egraph: &mut EGraph<RiseNat, ConstantFold>, id: Id) {
+    fn modify(egraph: &mut EGraph<RiseMath, ConstantFold>, id: Id) {
         let data = egraph[id].data;
         if let Some(c) = data {
-            let added = egraph.add(RiseNat::Constant(c));
+            let added = egraph.add(RiseMath::Constant(c));
             egraph.union(id, added);
 
             // to not prune, comment this out
@@ -54,4 +59,30 @@ impl Analysis<RiseNat> for ConstantFold {
             egraph[id].assert_unique_leaves();
         }
     }
+}
+
+// TODO: Cleaner version that does not go through string
+pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseMath> {
+    let t = rise_expr
+        .into_iter()
+        .map(|n| match n {
+            Rise::Var(index) => Ok(RiseMath::Var(*index)),
+
+            Rise::NatAdd([a, b]) => Ok(RiseMath::Add([*a, *b])),
+            Rise::NatSub([a, b]) => Ok(RiseMath::Sub([*a, *b])),
+            Rise::NatMul([a, b]) => Ok(RiseMath::Mul([*a, *b])),
+            Rise::NatDiv([a, b]) => Ok(RiseMath::Div([*a, *b])),
+            Rise::NatPow([a, b]) => Ok(RiseMath::Pow([*a, *b])),
+
+            Rise::Integer(i) => Ok(RiseMath::Constant((*i).try_into().unwrap())),
+            _ => Err(()),
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    RecExpr::from(t)
+}
+
+// TODO: Cleaner version that does not go through string
+pub fn to_rise_expr(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
+    nat_expr.to_string().parse().unwrap()
 }

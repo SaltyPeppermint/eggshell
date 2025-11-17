@@ -1,9 +1,9 @@
 use egg::{EGraph, Id, Rewrite, Subst, rewrite as rw};
 
-use super::lang::{ConstantFold, RiseNat};
+use super::lang::{ConstantFold, RiseMath};
 
 #[rustfmt::skip]
-pub fn rules() -> Vec<Rewrite<RiseNat,ConstantFold>> { vec![
+pub fn rules() -> Vec<Rewrite<RiseMath,ConstantFold>> { vec![
     rw!("comm-add";  "(+ ?a ?b)"        => "(+ ?b ?a)"),
     rw!("comm-mul";  "(* ?a ?b)"        => "(* ?b ?a)"),
     rw!("assoc-add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
@@ -35,7 +35,7 @@ pub fn rules() -> Vec<Rewrite<RiseNat,ConstantFold>> { vec![
     rw!("recip-mul-div"; "(* ?x (/ 1 ?x))" => "1" if is_not_zero("?x")),
 ]}
 
-fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph<RiseNat, ConstantFold>, Id, &Subst) -> bool {
+fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph<RiseMath, ConstantFold>, Id, &Subst) -> bool {
     let var = var_str.parse().unwrap();
     move |egraph, _, subst| {
         if let Some(n) = &egraph[subst[var]].data {
