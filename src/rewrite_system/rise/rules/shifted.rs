@@ -2,26 +2,23 @@ use egg::{Applier, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
 use super::{EGraph, Index, Rise, RiseAnalysis};
 
-pub fn shifted<A>(
-    var: &str,
-    shifted_var: &str,
-    shift: i32,
-    cutoff: u32,
-    applier: A,
-) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    Shifted {
-        var: var.parse().unwrap(),
-        new_var: shifted_var.parse().unwrap(),
-        shift,
-        cutoff: Index(cutoff),
-        applier,
-    }
-}
+// pub fn shifted<A: Applier<Rise, RiseAnalysis>>(
+//     var: &str,
+//     shifted_var: &str,
+//     shift: i32,
+//     cutoff: u32,
+//     applier: A,
+// ) -> impl Applier<Rise, RiseAnalysis> {
+//     Shifted {
+//         var: var.parse().unwrap(),
+//         new_var: shifted_var.parse().unwrap(),
+//         shift,
+//         cutoff: Index(cutoff),
+//         applier,
+//     }
+// }
 
-struct Shifted<A> {
+pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: i32,
@@ -29,10 +26,19 @@ struct Shifted<A> {
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for Shifted<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
+    pub fn new(var: &str, shifted_var: &str, shift: i32, cutoff: u32, applier: A) -> Self {
+        Shifted {
+            var: var.parse().unwrap(),
+            new_var: shifted_var.parse().unwrap(),
+            shift,
+            cutoff: Index(cutoff),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,
@@ -50,26 +56,23 @@ where
     }
 }
 
-pub fn shifted_check<A>(
-    var: &str,
-    shifted_var: &str,
-    shift: i32,
-    cutoff: u32,
-    applier: A,
-) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    ShiftedCheck {
-        var: var.parse().unwrap(),
-        new_var: shifted_var.parse().unwrap(),
-        shift,
-        cutoff: Index(cutoff),
-        applier,
-    }
-}
+// pub fn shifted_check<A: Applier<Rise, RiseAnalysis>>(
+//     var: &str,
+//     shifted_var: &str,
+//     shift: i32,
+//     cutoff: u32,
+//     applier: A,
+// ) -> impl Applier<Rise, RiseAnalysis> {
+//     ShiftedCheck {
+//         var: var.parse().unwrap(),
+//         new_var: shifted_var.parse().unwrap(),
+//         shift,
+//         cutoff: Index(cutoff),
+//         applier,
+//     }
+// }
 
-struct ShiftedCheck<A> {
+pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: i32,
@@ -77,10 +80,19 @@ struct ShiftedCheck<A> {
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for ShiftedCheck<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
+    pub fn new(var: &str, shifted_var: &str, shift: i32, cutoff: u32, applier: A) -> Self {
+        ShiftedCheck {
+            var: var.parse().unwrap(),
+            new_var: shifted_var.parse().unwrap(),
+            shift,
+            cutoff: Index(cutoff),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedCheck<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,

@@ -9,27 +9,34 @@ pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
 }
 
-pub fn not_free_in<A>(var: &str, index: u32, applier: A) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    NotFreeIn {
-        var: var.parse().unwrap(),
-        index: Index(index),
-        applier,
-    }
-}
+// pub fn not_free_in<A>(var: &str, index: u32, applier: A) -> impl Applier<Rise, RiseAnalysis>
+// where
+//     A: Applier<Rise, RiseAnalysis>,
+// {
+//     NotFreeIn {
+//         var: var.parse().unwrap(),
+//         index: Index(index),
+//         applier,
+//     }
+// }
 
-struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
+pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     index: Index,
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for NotFreeIn<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
+    pub fn new(var: &str, index: u32, applier: A) -> Self {
+        NotFreeIn {
+            var: var.parse().unwrap(),
+            index: Index(index),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,
@@ -48,34 +55,39 @@ where
     }
 }
 
-pub fn vectorize_scalar_fun<A>(
-    var: &str,
-    size_var: &str,
-    vectorized_var: &str,
-    applier: A,
-) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    VectorizeScalaFun {
-        var: var.parse().unwrap(),
-        size_var: size_var.parse().unwrap(),
-        vectorized_var: vectorized_var.parse().unwrap(),
-        applier,
-    }
-}
+// pub fn vectorize_scalar_fun<A: Applier<Rise, RiseAnalysis>>(
+//     var: &str,
+//     size_var: &str,
+//     vectorized_var: &str,
+//     applier: A,
+// ) -> impl Applier<Rise, RiseAnalysis> {
+//     VectorizeScalaFun {
+//         var: var.parse().unwrap(),
+//         size_var: size_var.parse().unwrap(),
+//         vectorized_var: vectorized_var.parse().unwrap(),
+//         applier,
+//     }
+// }
 
-struct VectorizeScalaFun<A: Applier<Rise, RiseAnalysis>> {
+pub struct VectorizeScalaFun<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     size_var: Var,
     vectorized_var: Var,
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for VectorizeScalaFun<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalaFun<A> {
+    pub fn new(var: &str, size_var: &str, vectorized_var: &str, applier: A) -> Self {
+        VectorizeScalaFun {
+            var: var.parse().unwrap(),
+            size_var: size_var.parse().unwrap(),
+            vectorized_var: vectorized_var.parse().unwrap(),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeScalaFun<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,

@@ -10,28 +10,36 @@ use lang::RiseMath;
 
 use super::{Rise, RiseAnalysis};
 
-#[expect(dead_code)]
-pub fn compute_nat<A>(var: &str, nat_pattern: &str, applier: A) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    ComputeNat {
-        var: var.parse().unwrap(),
-        nat_pattern: nat_pattern.parse().unwrap(),
-        applier,
-    }
-}
+// #[expect(dead_code)]
+// pub fn compute_nat<A>(var: &str, nat_pattern: &str, applier: A) -> impl Applier<Rise, RiseAnalysis>
+// where
+//     A: Applier<Rise, RiseAnalysis>,
+// {
+//     ComputeNat {
+//         var: var.parse().unwrap(),
+//         nat_pattern: nat_pattern.parse().unwrap(),
+//         applier,
+//     }
+// }
 
-struct ComputeNat<A> {
+pub struct ComputeNat<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for ComputeNat<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> ComputeNat<A> {
+    #[expect(dead_code)]
+    pub fn new(var: &str, nat_pattern: &str, applier: A) -> Self {
+        ComputeNat {
+            var: var.parse().unwrap(),
+            nat_pattern: nat_pattern.parse().unwrap(),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,
@@ -60,31 +68,38 @@ fn simplify(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
     lang::to_rise_expr(&expr)
 }
 
-pub fn compute_nat_check<A>(
-    var: &str,
-    nat_pattern: &str,
-    applier: A,
-) -> impl Applier<Rise, RiseAnalysis>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
-    ComputeNatCheck {
-        var: var.parse().unwrap(),
-        nat_pattern: nat_pattern.parse().unwrap(),
-        applier,
-    }
-}
+// pub fn compute_nat_check<A>(
+//     var: &str,
+//     nat_pattern: &str,
+//     applier: A,
+// ) -> impl Applier<Rise, RiseAnalysis>
+// where
+//     A: Applier<Rise, RiseAnalysis>,
+// {
+//     ComputeNatCheck {
+//         var: var.parse().unwrap(),
+//         nat_pattern: nat_pattern.parse().unwrap(),
+//         applier,
+//     }
+// }
 
-struct ComputeNatCheck<A> {
+pub struct ComputeNatCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
     applier: A,
 }
 
-impl<A> Applier<Rise, RiseAnalysis> for ComputeNatCheck<A>
-where
-    A: Applier<Rise, RiseAnalysis>,
-{
+impl<A: Applier<Rise, RiseAnalysis>> ComputeNatCheck<A> {
+    pub fn new(var: &str, nat_pattern: &str, applier: A) -> Self {
+        ComputeNatCheck {
+            var: var.parse().unwrap(),
+            nat_pattern: nat_pattern.parse().unwrap(),
+            applier,
+        }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatCheck<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,
