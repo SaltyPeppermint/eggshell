@@ -1,21 +1,23 @@
 use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
-use super::super::Index;
+use super::super::super::lang::RiseNat;
+
+use super::super::TypedIndex;
 
 use super::Rise;
 
 egg::define_language! {
     #[derive(Serialize, Deserialize)]
-    pub enum RiseMath {
+    pub enum Math {
         "+" = Add([Id; 2]),
         "-" = Sub([Id; 2]),
         "*" = Mul([Id; 2]),
         "/" = Div([Id; 2]),
         "pow" = Pow([Id; 2]),
 
-        Var(Index),
-        Constant(u32),
+        Var(TypedIndex),
+        Constant(i32),
         // Symbol(Symbol),
     }
 }
@@ -23,18 +25,18 @@ egg::define_language! {
 #[derive(Default, Debug, Clone, Copy, Serialize)]
 pub struct ConstantFold;
 
-impl Analysis<RiseMath> for ConstantFold {
-    type Data = Option<u32>;
+impl Analysis<Math> for ConstantFold {
+    type Data = Option<i32>;
 
-    fn make(egraph: &mut EGraph<RiseMath, ConstantFold>, enode: &RiseMath) -> Self::Data {
+    fn make(egraph: &mut EGraph<Math, ConstantFold>, enode: &Math) -> Self::Data {
         let x = |i: &Id| egraph[*i].data;
         Some(match enode {
-            RiseMath::Constant(c) => *c,
-            RiseMath::Add([a, b]) => x(a)? + x(b)?,
-            RiseMath::Sub([a, b]) => x(a)? - (x(b)?),
-            RiseMath::Mul([a, b]) => x(a)? * x(b)?,
-            RiseMath::Pow([a, b]) => x(a)?.pow(x(b)?),
-            RiseMath::Div([a, b]) if x(a)? % x(b)? == 0 => x(a)? / x(b)?,
+            Math::Constant(c) => *c,
+            Math::Add([a, b]) => x(a)? + x(b)?,
+            Math::Sub([a, b]) => x(a)? - (x(b)?),
+            Math::Mul([a, b]) => x(a)? * x(b)?,
+            Math::Pow([a, b]) => x(a)?.pow(u32::try_from(x(b)?).unwrap()),
+            Math::Div([a, b]) if x(a)? % x(b)? == 0 => x(a)? / x(b)?,
             _ => return None,
         })
     }
@@ -46,10 +48,10 @@ impl Analysis<RiseMath> for ConstantFold {
         })
     }
 
-    fn modify(egraph: &mut EGraph<RiseMath, ConstantFold>, id: Id) {
+    fn modify(egraph: &mut EGraph<Math, ConstantFold>, id: Id) {
         let data = egraph[id].data;
         if let Some(c) = data {
-            let added = egraph.add(RiseMath::Constant(c));
+            let added = egraph.add(Math::Constant(c));
             egraph.union(id, added);
 
             // to not prune, comment this out
@@ -61,19 +63,19 @@ impl Analysis<RiseMath> for ConstantFold {
     }
 }
 
-pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseMath> {
+pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<Math> {
     let t = rise_expr
         .into_iter()
         .map(|n| match n {
-            Rise::Var(index) => Ok(RiseMath::Var(*index)),
-
-            Rise::NatAdd([a, b]) => Ok(RiseMath::Add([*a, *b])),
-            Rise::NatSub([a, b]) => Ok(RiseMath::Sub([*a, *b])),
-            Rise::NatMul([a, b]) => Ok(RiseMath::Mul([*a, *b])),
-            Rise::NatDiv([a, b]) => Ok(RiseMath::Div([*a, *b])),
-            Rise::NatPow([a, b]) => Ok(RiseMath::Pow([*a, *b])),
-
-            Rise::Integer(i) => Ok(RiseMath::Constant((*i).try_into().unwrap())),
+            Rise::Var(index) => Ok(Math::Var(*index)),
+            Rise::Integer(i) => Ok(Math::Constant(*i)),
+            Rise::Nat(inner) => match inner {
+                RiseNat::NatAdd([a, b]) => Ok(Math::Add([*a, *b])),
+                RiseNat::NatSub([a, b]) => Ok(Math::Sub([*a, *b])),
+                RiseNat::NatMul([a, b]) => Ok(Math::Mul([*a, *b])),
+                RiseNat::NatDiv([a, b]) => Ok(Math::Div([*a, *b])),
+                RiseNat::NatPow([a, b]) => Ok(Math::Pow([*a, *b])),
+            },
             _ => Err(()),
         })
         .collect::<Result<Vec<_>, _>>()
@@ -81,19 +83,19 @@ pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<RiseMath> {
     RecExpr::from(t)
 }
 
-pub fn to_rise_expr(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
+pub fn to_rise_expr(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
     let t = nat_expr
         .into_iter()
         .map(|n| match n {
-            RiseMath::Var(index) => Rise::Var(*index),
+            Math::Var(index) => Rise::Var(*index),
 
-            RiseMath::Add([a, b]) => Rise::NatAdd([*a, *b]),
-            RiseMath::Sub([a, b]) => Rise::NatSub([*a, *b]),
-            RiseMath::Mul([a, b]) => Rise::NatMul([*a, *b]),
-            RiseMath::Div([a, b]) => Rise::NatDiv([*a, *b]),
-            RiseMath::Pow([a, b]) => Rise::NatPow([*a, *b]),
+            Math::Add([a, b]) => Rise::Nat(RiseNat::NatAdd([*a, *b])),
+            Math::Sub([a, b]) => Rise::Nat(RiseNat::NatSub([*a, *b])),
+            Math::Mul([a, b]) => Rise::Nat(RiseNat::NatMul([*a, *b])),
+            Math::Div([a, b]) => Rise::Nat(RiseNat::NatDiv([*a, *b])),
+            Math::Pow([a, b]) => Rise::Nat(RiseNat::NatPow([*a, *b])),
 
-            RiseMath::Constant(c) => Rise::Integer((*c).try_into().unwrap()),
+            Math::Constant(c) => Rise::Integer(*c),
         })
         .collect::<Vec<_>>();
     RecExpr::from(t)

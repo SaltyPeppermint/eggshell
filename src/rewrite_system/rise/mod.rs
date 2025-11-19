@@ -1,90 +1,21 @@
+mod indices;
+mod lang;
 mod rules;
 
-use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr, Rewrite, Symbol};
+use egg::{Analysis, DidMerge, EGraph, Language, RecExpr, Rewrite};
 
 use hashbrown::HashSet;
 use rules::mm_rules;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
-pub struct Index(pub u32);
-
-impl std::str::FromStr for Index {
-    type Err = Option<std::num::ParseIntError>;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if let Some(stripped_s) = s.strip_prefix("%") {
-            stripped_s.parse().map(Index).map_err(Some)
-        } else {
-            Err(None)
-        }
-    }
-}
-
-impl std::fmt::Display for Index {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "%{}", self.0)
-    }
-}
-
-egg::define_language! {
-  #[derive(Serialize, Deserialize)]
-  pub enum Rise {
-    Var(Index),
-    "app" = App([Id; 2]),
-    "lam" = Lambda(Id),
-    "typeOf" = TypeOf([Id; 2]),
-
-    "fun" = FunType([Id; 2]),
-    "arrT" = ArrType([Id; 2]),
-    "vecT" = VecType([Id; 2]),
-    "pairT" = PairType([Id; 2]),
-    "idxT" = IndexType(Id),
-    "natT" = NatType,
-
-    "f32" = F32,
-
-    "toMem" = ToMem,
-    "split" = Split,
-    "join" = Join,
-
-    "natAdd" = NatAdd([Id; 2]),
-    "natSub" = NatSub([Id; 2]),
-    "natMul" = NatMul([Id; 2]),
-    "natDiv" = NatDiv([Id; 2]),
-    "natPow" = NatPow([Id; 2]),
-
-    "asVector" = AsVector,
-    "asScalar" = AsScalar,
-
-    "snd" = Snd,
-    "fst" = Fst,
-
-    "generate" = Generate,
-    "transpose" = Transpose,
-    "unzip" = Unzip,
-    "zip" = Zip,
-    "mapPar" = MapPar,
-    "reduce" = Reduce,
-    "reduceSeq" = ReduceSeq,
-    "reduceSeqUnroll" = ReduceSeqUnroll,
-    // to implement explicit substitution:
-    // "sig" = Sigma([Id; 3]),
-    // "phi" = Phi([Id; 3]),
-
-    Integer(i32),
-    // Float(f32),
-    // Double(f64),
-    Symbol(Symbol),
-  }
-}
+use indices::TypedIndex;
+use lang::Rise;
 
 #[derive(Default, Debug)]
 pub struct RiseAnalysis;
 
 #[derive(Default, Debug)]
 pub struct AnalysisData {
-    pub free: HashSet<Index>,
+    pub free: HashSet<u32>,
     pub beta_extract: RecExpr<Rise>,
 }
 
@@ -109,17 +40,17 @@ impl Analysis<Rise> for RiseAnalysis {
         let mut free = HashSet::default();
         match enode {
             Rise::Var(v) => {
-                free.insert(*v);
+                free.insert(v.value());
             }
-            Rise::Lambda(a) => {
+            Rise::Lambda(_, a) => {
                 free.extend(
                     egraph[*a]
                         .data
                         .free
                         .iter()
                         .copied()
-                        .filter(|&idx| idx != Index(0))
-                        .map(|idx| Index(idx.0 - 1)),
+                        .filter(|&idx| idx != 0)
+                        .map(|idx| idx - 1),
                 );
             }
             _ => {

@@ -6,7 +6,7 @@ use egg::{
     Symbol, Var,
 };
 
-use lang::RiseMath;
+use lang::Math;
 
 use super::{Rise, RiseAnalysis};
 
@@ -60,7 +60,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
     }
 }
 
-fn simplify(nat_expr: &RecExpr<RiseMath>) -> RecExpr<Rise> {
+fn simplify(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
     let rules = rules::rules();
     let runner = Runner::default().with_expr(nat_expr).run(&rules);
     let root = runner.roots.first().unwrap();
@@ -123,10 +123,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
     }
 }
 
-fn check_equivalence(
-    nat_pattern_extracted: &[RecExpr<RiseMath>],
-    expected: &RecExpr<RiseMath>,
-) -> bool {
+fn check_equivalence(nat_pattern_extracted: &[RecExpr<Math>], expected: &RecExpr<Math>) -> bool {
     let mut runner = Runner::default().with_expr(expected);
     for npe in nat_pattern_extracted {
         runner = runner.with_expr(npe);

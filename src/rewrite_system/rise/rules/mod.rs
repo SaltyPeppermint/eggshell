@@ -9,7 +9,7 @@ use egg::{
     Rewrite, Searcher, Subst, Symbol, Var, rewrite,
 };
 
-use super::{Index, Rise, RiseAnalysis};
+use super::{Rise, RiseAnalysis, TypedIndex};
 
 use func::{NotFreeIn, VectorizeScalaFun, pat};
 use nat::ComputeNatCheck;
@@ -114,69 +114,34 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
     let arg2 = &mut arg.as_ref().to_owned();
 
-    shift_mut(arg2, 1, Index(0)); // shift up
-    let mut body2 = replace(body.as_ref(), Index(0), arg2);
-    shift_mut(&mut body2, -1, Index(0)); // shift down
+    shift_mut(arg2, 1, 0); // shift up
+    let mut body2 = replace(body.as_ref(), 0, arg2);
+    shift_mut(&mut body2, -1, 0); // shift down
     body2.into()
 }
 
-pub fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
-    fn rec(
-        result: &mut Vec<Rise>,
-        expr: &[Rise],
-        ei: usize,
-        index: Index,
-        subs: &mut [Rise],
-    ) -> Id {
+pub fn replace(expr: &[Rise], index: u32, subs: &mut [Rise]) -> Vec<Rise> {
+    fn rec(result: &mut Vec<Rise>, expr: &[Rise], ei: usize, index: u32, subs: &mut [Rise]) -> Id {
         match expr[ei] {
             Rise::Var(index2) => {
-                if index == index2 {
+                if index == index2.value() {
                     add_expr(result, subs)
                 } else {
                     add(result, Rise::Var(index2))
                 }
             }
-            Rise::Lambda(e) => {
-                shift_mut(subs, 1, Index(0)); // shift up
-                let e2 = rec(result, expr, usize::from(e), Index(index.0 + 1), subs);
-                shift_mut(subs, -1, Index(0)); // shift down
-                add(result, Rise::Lambda(e2))
+            Rise::Lambda(lam_ty, e) => {
+                shift_mut(subs, 1, 0); // shift up
+                let e2 = rec(result, expr, usize::from(e), index + 1, subs);
+                shift_mut(subs, -1, 0); // shift down
+                add(result, Rise::Lambda(lam_ty, e2))
             }
-            Rise::App([f, e]) => {
+            Rise::App(app_type, [f, e]) => {
                 let f2 = rec(result, expr, usize::from(f), index, subs);
                 let e2 = rec(result, expr, usize::from(e), index, subs);
-                add(result, Rise::App([f2, e2]))
+                add(result, Rise::App(app_type, [f2, e2]))
             }
-            Rise::Symbol(_) => add(result, expr[ei].clone()),
-            Rise::FunType(_)
-            | Rise::TypeOf(_)
-            | Rise::Integer(_)
-            | Rise::ArrType(_)
-            | Rise::VecType(_)
-            | Rise::PairType(_)
-            | Rise::IndexType(_)
-            | Rise::NatType
-            | Rise::F32
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::NatAdd(_)
-            | Rise::NatSub(_)
-            | Rise::NatMul(_)
-            | Rise::NatDiv(_)
-            | Rise::NatPow(_)
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Unzip
-            | Rise::Zip
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll => unimplemented!(),
+            _ => add(result, expr[ei].clone()),
         }
     }
     let mut result = vec![];
@@ -231,12 +196,12 @@ fn extract_small(
         .collect()
 }
 
-fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+pub fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
     to.push(e);
     Id::from(to.len() - 1)
 }
 
-fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+pub fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
     let offset = to.len();
     to.extend(e.iter().map(|n| {
         n.clone()
