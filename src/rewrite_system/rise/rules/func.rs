@@ -69,16 +69,16 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A
 //     }
 // }
 
-pub struct VectorizeScalaFun<A: Applier<Rise, RiseAnalysis>> {
+pub struct VectorizeScalarFun<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     size_var: Var,
     vectorized_var: Var,
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalaFun<A> {
+impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalarFun<A> {
     pub fn new(var: &str, size_var: &str, vectorized_var: &str, applier: A) -> Self {
-        VectorizeScalaFun {
+        VectorizeScalarFun {
             var: var.parse().unwrap(),
             size_var: size_var.parse().unwrap(),
             vectorized_var: vectorized_var.parse().unwrap(),
@@ -87,7 +87,7 @@ impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalaFun<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeScalaFun<A> {
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeScalarFun<A> {
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, RiseAnalysis>,
