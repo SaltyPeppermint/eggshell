@@ -3,9 +3,6 @@ use core::panic;
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use crate::rewrite_system::rise::rules::{add, add_expr};
-
-use super::super::lang::{AppType, RisePrimitives, RiseTypes};
 use super::{Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
@@ -101,8 +98,9 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
     ) -> Vec<Id> {
         let extracted = &egraph[subst[self.var]].data.beta_extract.clone();
         let size_extracted = &egraph[subst[self.size_var]].data.beta_extract.clone();
-        let n = extracted_to_u32(size_extracted);
-        if let Some(vectorized_expr) = vec_type_of(extracted, n, HashSet::new(), extracted.root()) {
+        let n = extracted_int(size_extracted);
+        if let Some((vectorized_expr, _)) = vec_expr(extracted, n, HashSet::new(), extracted.root())
+        {
             let mut substitution = subst.clone();
             substitution.insert(self.vectorized_var, egraph.add_expr(&vectorized_expr));
             self.applier
@@ -113,139 +111,136 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
     }
 }
 
-fn extracted_to_u32(expr: &RecExpr<Rise>) -> i32 {
+fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
     if let Rise::Integer(i) = expr[0.into()] {
         return i;
     }
     panic!("Unexpected thing in expr")
 }
 
-fn vec_type_of(expr: &RecExpr<Rise>, n: i32, v_env: HashSet<u32>, id: Id) -> Option<RecExpr<Rise>> {
-    let Rise::TypeOf([e, ty]) = &expr[id] else {
-        panic!("Not TypeOf! {:?}", expr[id]);
-    };
-    vec_expr(expr, n, v_env, *e, *ty)
-}
-
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
     v_env: HashSet<u32>,
-    expr_id: Id,
-    ty_id: Id,
-) -> Option<RecExpr<Rise>> {
-    match &expr[expr_id] {
-        Rise::TypeOf(_) => panic!("unexpected TypeOf"),
-        Rise::Nat(_) => panic!("unexpected Nat"),
-        Rise::Type(_) => panic!("unexpected Type"),
-
+    type_of_id: Id,
+) -> Option<(RecExpr<Rise>, Id)> {
+    let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
+        panic!("Not TypeOf! {:?}", expr[type_of_id]);
+    };
+    match &expr[*expr_id] {
         // Scala Code:
         // case Var(i) if vEnv(i) =>
-        //   for { tv <- vecDT(expr.t, n, eg) }
+        //     for { tv <- vecDT(expr.t, n, eg) }
         //     yield ExprWithHashCons(Var(i), tv)
         // case Var(_) => None
-        Rise::Var(index) if v_env.contains(&index.value()) => Some(join_2_recexprs(
-            RecExpr::from(vec![Rise::Var(*index)]),
-            build(expr, ty_id),
-            |in_new, out_new| Rise::TypeOf([in_new, out_new]),
-        )),
-        Rise::Var(_) => None,
+        Rise::Var(index) if v_env.contains(&index.value()) => {
+            let mut r = vec_type(expr, n, *ty_id)?;
+            let new_ty_id = r.root();
+            let var_id = r.add(Rise::Var(*index));
+            r.add(Rise::TypeOf([var_id, new_ty_id]));
+            Some((r, new_ty_id))
+        }
         // Scala code:
         // case App(f, e) =>
         // for { fv <- vectorizeExpr(f, n, eg, vEnv); ev <- vectorizeExpr(e, n, eg, vEnv) }
         //   yield ExprWithHashCons(App(fv, ev), eg(fv.t).asInstanceOf[FunType[TypeId]].outT)
-        Rise::App(app_ty, [f, e]) => {
-            let fv = vec_type_of(expr, n, v_env.clone(), *f)?;
-            let ev = vec_type_of(expr, n, v_env.clone(), *e)?;
-            let output_ty_id = output_type(&fv, fv.root());
+        Rise::App([f, e]) => {
+            let (fv, fv_type_id) = vec_expr(expr, n, v_env.clone(), *f)?;
+            let (ev, _) = vec_expr(expr, n, v_env.clone(), *e)?;
 
-            let add_expr =
-                join_2_recexprs(fv, ev, |fv_id, ev_id| Rise::App(*app_ty, [fv_id, ev_id]));
-            Some(join_2_recexprs(
-                add_expr,
-                build(expr, output_ty_id),
-                |app_id, new_ty_id| Rise::TypeOf([app_id, new_ty_id]),
-            ))
+            let Rise::FunType([_, output_ty_id]) = fv[fv_type_id] else {
+                panic!("No Fun type wrapped in here: {:?}", &fv[fv_type_id])
+            };
 
-            // todo!("eg(fv.t).asInstanceOf[FunType[TypeId]].outT");
+            let mut vec_expr = fv;
+            let fv_id = vec_expr.root();
+            let ev_id = add_expr(&mut vec_expr, ev);
+
+            let app_id = vec_expr.add(Rise::App([fv_id, ev_id]));
+
+            // The index for fv is preserved since join_expr only appends the second arg
+            vec_expr.add(Rise::TypeOf([app_id, output_ty_id]));
+            Some((vec_expr, output_ty_id))
         }
-
         // Scala code:
         // case Lambda(e) =>
         // for { ev <- vectorizeExpr(e, n, eg, vEnv.map(_ + 1) + 0);
         //       xtv <- vecDT(eg(expr.t).asInstanceOf[FunType[TypeId]].inT, n, eg) }
         //   yield ExprWithHashCons(Lambda(ev),  eg.add(FunType(xtv, ev.t)))
-        Rise::Lambda(lam_ty, e) => {
-            let mut v_env2 = v_env.into_iter().map(|i| i + 1).collect::<HashSet<_>>();
-            v_env2.insert(0);
-            let mut ev = vec_type_of(expr, n, v_env2, *e)?;
-            ev.add(Rise::Lambda(*lam_ty, ev.root()));
+        Rise::Lambda(e) => {
+            let v_env2 = v_env
+                .into_iter()
+                .map(|i| i + 1)
+                .chain([0])
+                .collect::<HashSet<_>>();
+            // Vectorize e
+            let (mut vec_expr, ev_type_id) = vec_expr(expr, n, v_env2, *e)?;
+            let typed_ev_id = vec_expr.root();
 
-            let input_type_id = input_type(expr, ty_id);
+            // Get input type of the original expr and vectorize it (xtv in scala)
+            let Rise::FunType([input_type_id, _]) = expr[*ty_id] else {
+                panic!("No Fun type wrapped in here: {:?}", &expr[*ty_id])
+            };
             let xtv = vec_type(expr, n, input_type_id)?;
 
-            let Rise::TypeOf([_, evt_id]) = ev[ev.root()] else {
-                panic!("This has to be an typeof");
-            };
-            let evt = build(&ev, evt_id);
+            // Wrap in a lambda and append to the existing recexpr
+            let lam_id = vec_expr.add(Rise::Lambda(typed_ev_id));
+            let xtv_id = add_expr(&mut vec_expr, xtv);
 
-            let fun_expr = join_2_recexprs(xtv, evt, |xtv_id, evt_id| {
-                Rise::Type(RiseTypes::FunType([xtv_id, evt_id]))
-            });
+            // Add the fun type of the new lam and wrap it in a typeof
+            // evt index is valid since add_expr only appends
+            let fun_id = vec_expr.add(Rise::FunType([xtv_id, ev_type_id]));
+            vec_expr.add(Rise::TypeOf([lam_id, vec_expr.root()]));
 
-            Some(join_2_recexprs(ev, fun_expr, |ev_id, fun_id| {
-                Rise::Type(RiseTypes::FunType([ev_id, fun_id]))
-            }))
+            Some((vec_expr, fun_id))
         }
-        // Scala code:
+        // Scala Code:
         // case Literal(_) | NatLiteral(_) | IndexLiteral(_, _) =>
-        // for { tv <- vecDT(expr.t, n, eg) }
-        //   yield ExprWithHashCons(App(
-        //     ExprWithHashCons(Primitive(rcp.vectorFromScalar.primitive), eg.add(FunType(expr.t, tv))),
-        //     expr), tv)
+        //     for { tv <- vecDT(expr.t, n, eg) }
+        //     yield ExprWithHashCons(App(
+        //         ExprWithHashCons(Primitive(rcp.vectorFromScalar.primitive), eg.add(FunType(expr.t, tv))),
+        //         expr), tv)
         Rise::Integer(_) => {
-            let tv = vec_type(expr, n, ty_id)?;
-            let mut nodes = Vec::new();
+            let vectorized_type = vec_type(expr, n, *ty_id)?;
 
-            let vec_t_id = add_expr(&mut nodes, &tv);
+            let mut vec_expr = build(expr, *expr_id);
+            let new_expr_id = vec_expr.root();
 
-            let scalar_t_id = add_expr(&mut nodes, &build(expr, ty_id));
+            let new_ty_id = add_expr(&mut vec_expr, build(expr, *ty_id));
+            let new_typed_expr_id = vec_expr.add(Rise::TypeOf([new_expr_id, new_ty_id]));
 
-            let prim_id = add(
-                &mut nodes,
-                Rise::Primitive(RisePrimitives::VectorFromScalar),
-            );
-            let fun_id = add(
-                &mut nodes,
-                Rise::Type(RiseTypes::FunType([scalar_t_id, vec_t_id])),
-            );
-            let t_of_fun_id = add(&mut nodes, Rise::TypeOf([prim_id, fun_id]));
-            let orig_id = add_expr(&mut nodes, &build(expr, expr_id));
-            let t_of_app_id = add(&mut nodes, Rise::App(AppType::App, [t_of_fun_id, orig_id]));
+            let vec_type_id = add_expr(&mut vec_expr, vectorized_type);
+            let prim_id = vec_expr.add(Rise::VectorFromScalar);
+            let fun_id = vec_expr.add(Rise::FunType([new_ty_id, vec_type_id]));
+            let typed_prim_id = vec_expr.add(Rise::TypeOf([prim_id, fun_id]));
 
-            nodes.push(Rise::TypeOf([t_of_app_id, vec_t_id]));
+            let app_id = vec_expr.add(Rise::App([typed_prim_id, new_typed_expr_id]));
+            let typed_app_id = vec_expr.add(Rise::TypeOf([app_id, vec_type_id]));
 
-            Some(RecExpr::from(nodes))
+            Some((vec_expr, typed_app_id))
         }
-
-        // Scala code:
+        // Scala Code:
         // case Primitive(rcp.add() | rcp.mul() | rcp.fst() | rcp.snd()) =>
-        // for { tv <- vecT(expr.t, n, eg) }
-        //   yield ExprWithHashCons(expr.node, tv)
-        // case Primitive(_) => None
-        Rise::Primitive(p) => match p {
-            RisePrimitives::Snd
-            | RisePrimitives::Fst
-            | RisePrimitives::Add
-            | RisePrimitives::Mul => Some(join_2_recexprs(
-                RecExpr::from(vec![expr[expr_id].clone()]),
-                build(expr, ty_id),
-                |e_new_id, t_new_id| Rise::TypeOf([e_new_id, t_new_id]),
-            )),
-            _ => None,
-        },
+        //   for { tv <- vecT(expr.t, n, eg) }
+        //      yield ExprWithHashCons(expr.node, tv)
+        Rise::Snd | Rise::Fst | Rise::Add | Rise::Mul => {
+            let mut typed_prim = RecExpr::default();
+            let vec_prim_ty_id = add_expr(&mut typed_prim, vec_type(expr, n, *ty_id)?);
+            let prim_id = typed_prim.add(expr[*expr_id].clone());
+            typed_prim.add(Rise::TypeOf([prim_id, vec_prim_ty_id]));
+            Some((typed_prim, vec_prim_ty_id))
+        }
+        Rise::Var(_)
+        | Rise::NatApp(_)
+        | Rise::DataApp(_)
+        | Rise::AddrApp(_)
+        | Rise::NatNatApp(_)
+        | Rise::NatLambda(_)
+        | Rise::DataLambda(_)
+        | Rise::AddrLambda(_)
+        | Rise::NatNatLambda(_) => None,
+        other => panic!("Cannot vectorize this {other:?}"),
     }
-
     //   case Composition(f, g) =>
     //     for { fv <- vectorizeExpr(f, n, eg, vEnv); gv <- vectorizeExpr(g, n, eg, vEnv) }
     //       yield ExprWithHashCons(Composition(fv, gv), eg.add(FunType(
@@ -259,41 +254,42 @@ fn vec_type(rec_expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
     if let Rise::Var(_) = rec_expr[id] {
         return None;
     }
-    let Rise::Type(rise_type) = rec_expr[id] else {
-        panic!("Expected typeof, got {:?}", rec_expr[id]);
-    };
-    match rise_type {
-        RiseTypes::F32 => {
-            let mut vec_t = RecExpr::default();
-            let scalar_ty = vec_t.add(Rise::Type(RiseTypes::F32));
-            let width = vec_t.add(Rise::Integer(n));
-            vec_t.add(Rise::Type(RiseTypes::VecType([width, scalar_ty])));
-            Some(vec_t)
+    match rec_expr[id] {
+        Rise::F32 => {
+            let mut vec_ty = RecExpr::default();
+            let scalar_ty = vec_ty.add(Rise::F32);
+            let width = vec_ty.add(Rise::Integer(n));
+            vec_ty.add(Rise::VecType([width, scalar_ty]));
+            Some(vec_ty)
         }
-        RiseTypes::NatType
-        | RiseTypes::VecType(_)
-        | RiseTypes::IndexType(_)
-        | RiseTypes::ArrType(_) => None,
-        RiseTypes::PairType([a, b]) => {
-            let a2 = vec_type(rec_expr, n, a)?;
-            let b2 = vec_type(rec_expr, n, b)?;
+        Rise::Var(_) | Rise::NatType | Rise::VecType(_) | Rise::IndexType(_) | Rise::ArrType(_) => {
+            None
+        }
+        Rise::PairType([a, b]) => {
+            let vec_fst_ty = vec_type(rec_expr, n, a)?;
+            let vec_snd_ty = vec_type(rec_expr, n, b)?;
 
-            let new_pair_type = join_2_recexprs(a2, b2, |a_new, b_new| {
-                Rise::Type(RiseTypes::PairType([a_new, b_new]))
-            });
-            Some(new_pair_type)
+            let mut vec_pair_ty = RecExpr::default();
+            let vec_fst_ty_id = add_expr(&mut vec_pair_ty, vec_fst_ty);
+            let vec_snd_ty_id = add_expr(&mut vec_pair_ty, vec_snd_ty);
+            vec_pair_ty.add(Rise::PairType([vec_fst_ty_id, vec_snd_ty_id]));
+            Some(vec_pair_ty)
         }
-        RiseTypes::FunType([input_ty, output_ty]) => {
-            let input_ty2 = vec_type(rec_expr, n, input_ty)?;
-            let output_ty2 = vec_type(rec_expr, n, output_ty)?;
-            let new_fun_type = join_2_recexprs(input_ty2, output_ty2, |in_new, out_new| {
-                Rise::Type(RiseTypes::FunType([in_new, out_new]))
-            });
-            Some(new_fun_type)
+        Rise::FunType([input_ty, output_ty]) => {
+            let vec_input_ty = vec_type(rec_expr, n, input_ty)?;
+            let vec_output_ty = vec_type(rec_expr, n, output_ty)?;
+
+            let mut vec_fun_ty = RecExpr::default();
+            let vec_in_ty_id = add_expr(&mut vec_fun_ty, vec_input_ty);
+            let vec_out_ty_id = add_expr(&mut vec_fun_ty, vec_output_ty);
+            vec_fun_ty.add(Rise::FunType([vec_in_ty_id, vec_out_ty_id]));
+
+            Some(vec_fun_ty)
         }
-        RiseTypes::NatFunType(inner_id)
-        | RiseTypes::DataFunType(inner_id)
-        | RiseTypes::NatNatFunType(inner_id) => vec_type(rec_expr, n, inner_id),
+        Rise::NatFunType(_) | Rise::DataFunType(_) | Rise::NatNatFunType(_) => {
+            panic!("Cannot vectorize {:?}", rec_expr[id])
+        }
+        _ => panic!("Expected Rise::Type, got {:?}", rec_expr[id]),
     }
 }
 // private def vecT(t: TypeId, n: NatId, eg: EGraph): Option[TypeId] = {
@@ -333,56 +329,18 @@ fn vec_type(rec_expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
 //     }
 //   }
 
-fn output_type(rec_expr: &RecExpr<Rise>, fun_type_id: Id) -> Id {
-    let node = &rec_expr[fun_type_id];
-    match node {
-        Rise::TypeOf([_, ty]) => output_type(rec_expr, *ty),
-        Rise::Type(ty) => match ty {
-            RiseTypes::FunType([_, output_ty]) => *output_ty,
-            RiseTypes::NatFunType(inner)
-            | RiseTypes::DataFunType(inner)
-            | RiseTypes::NatNatFunType(inner) => output_type(rec_expr, *inner),
-            _ => panic!("Output of fun not found {node:?}"),
-        },
-        _ => panic!("Output of fun not found {node:?}"),
-    }
-}
-
-fn input_type(rec_expr: &RecExpr<Rise>, fun_type_id: Id) -> Id {
-    let node = &rec_expr[fun_type_id];
-    match node {
-        Rise::TypeOf([_, ty]) => input_type(rec_expr, *ty),
-        Rise::Type(ty) => match ty {
-            RiseTypes::FunType([input_ty, _]) => *input_ty,
-            RiseTypes::NatFunType(inner)
-            | RiseTypes::DataFunType(inner)
-            | RiseTypes::NatNatFunType(inner) => input_type(rec_expr, *inner),
-            _ => panic!("Input of fun not found {node:?}"),
-        },
-        _ => panic!("Input of fun not found {node:?}"),
-    }
-}
-
 fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
     rec_expr[id]
         .clone()
         .build_recexpr(|child_id| rec_expr[child_id].clone())
 }
 
-fn join_2_recexprs<L: Language, F>(r1: RecExpr<L>, r2: RecExpr<L>, new: F) -> RecExpr<L>
-where
-    F: Fn(Id, Id) -> L,
-{
-    let mut nodes = Vec::new();
-    let len_r1 = r1.as_ref().len();
-    let len_r2 = r2.as_ref().len();
-    nodes.extend(r1);
-    nodes.extend(
-        r2.into_iter()
-            .map(|n| n.map_children(|i| Id::from(usize::from(i) + len_r1))),
-    );
-    nodes.push(new(Id::from(len_r1), Id::from(len_r1 + len_r2)));
-    RecExpr::from(nodes)
+fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
+    let offset = to.len();
+    for n in e {
+        to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));
+    }
+    to.root()
 }
 
 #[cfg(test)]

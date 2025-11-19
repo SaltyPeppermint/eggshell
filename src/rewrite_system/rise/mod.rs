@@ -42,7 +42,7 @@ impl Analysis<Rise> for RiseAnalysis {
             Rise::Var(v) => {
                 free.insert(v.value());
             }
-            Rise::Lambda(_, a) => {
+            Rise::Lambda(a) => {
                 free.extend(
                     egraph[*a]
                         .data

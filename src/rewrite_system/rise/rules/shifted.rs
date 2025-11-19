@@ -1,6 +1,4 @@
-use egg::{Applier, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
-
-use crate::rewrite_system::rise;
+use egg::{Applier, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
 use super::{EGraph, Rise, RiseAnalysis, TypedIndex};
 
@@ -133,10 +131,10 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: u32) {
                     expr[ei] = Rise::Var(index2);
                 }
             }
-            Rise::Lambda(_, e) => {
+            Rise::Lambda(e) => {
                 rec(expr, usize::from(e), shift, cutoff + 1);
             }
-            Rise::App(_, [f, e]) => {
+            Rise::App([f, e]) => {
                 rec(expr, usize::from(f), shift, cutoff);
                 rec(expr, usize::from(e), shift, cutoff);
             }
@@ -144,13 +142,9 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: u32) {
                 rec(expr, usize::from(e), shift, cutoff);
                 rec(expr, usize::from(t), shift, cutoff);
             }
-            Rise::Nat(rise_nat) => rise_nat.children().iter().for_each(|&id| {
-                rec(expr, usize::from(id), shift, cutoff);
-            }),
-            Rise::Primitive(_) | Rise::Integer(_) => (),
-            Rise::Type(rise_types) => rise_types.children().iter().for_each(|&id| {
-                rec(expr, usize::from(id), shift, cutoff);
-            }),
+            _ => (), // _ => x.children().iter().for_each(|id| {
+                     //     rec(expr, usize::from(*id), shift, cutoff);
+                     // }),
         }
     }
     rec(expr, expr.len() - 1, shift, cutoff);

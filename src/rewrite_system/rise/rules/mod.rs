@@ -125,21 +125,21 @@ pub fn replace(expr: &[Rise], index: u32, subs: &mut [Rise]) -> Vec<Rise> {
         match expr[ei] {
             Rise::Var(index2) => {
                 if index == index2.value() {
-                    add_expr(result, subs)
+                    add_expr_vec(result, subs)
                 } else {
                     add(result, Rise::Var(index2))
                 }
             }
-            Rise::Lambda(lam_ty, e) => {
+            Rise::Lambda(e) => {
                 shift_mut(subs, 1, 0); // shift up
                 let e2 = rec(result, expr, usize::from(e), index + 1, subs);
                 shift_mut(subs, -1, 0); // shift down
-                add(result, Rise::Lambda(lam_ty, e2))
+                add(result, Rise::Lambda(e2))
             }
-            Rise::App(app_type, [f, e]) => {
+            Rise::App([f, e]) => {
                 let f2 = rec(result, expr, usize::from(f), index, subs);
                 let e2 = rec(result, expr, usize::from(e), index, subs);
-                add(result, Rise::App(app_type, [f2, e2]))
+                add(result, Rise::App([f2, e2]))
             }
             _ => add(result, expr[ei].clone()),
         }
@@ -196,12 +196,12 @@ fn extract_small(
         .collect()
 }
 
-pub fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
     to.push(e);
     Id::from(to.len() - 1)
 }
 
-pub fn add_expr(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
     let offset = to.len();
     to.extend(e.iter().map(|n| {
         n.clone()

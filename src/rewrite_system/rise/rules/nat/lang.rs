@@ -1,8 +1,6 @@
 use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
-use super::super::super::lang::RiseNat;
-
 use super::super::TypedIndex;
 
 use super::Rise;
@@ -69,13 +67,13 @@ pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<Math> {
         .map(|n| match n {
             Rise::Var(index) => Ok(Math::Var(*index)),
             Rise::Integer(i) => Ok(Math::Constant(*i)),
-            Rise::Nat(inner) => match inner {
-                RiseNat::NatAdd([a, b]) => Ok(Math::Add([*a, *b])),
-                RiseNat::NatSub([a, b]) => Ok(Math::Sub([*a, *b])),
-                RiseNat::NatMul([a, b]) => Ok(Math::Mul([*a, *b])),
-                RiseNat::NatDiv([a, b]) => Ok(Math::Div([*a, *b])),
-                RiseNat::NatPow([a, b]) => Ok(Math::Pow([*a, *b])),
-            },
+
+            Rise::NatAdd([a, b]) => Ok(Math::Add([*a, *b])),
+            Rise::NatSub([a, b]) => Ok(Math::Sub([*a, *b])),
+            Rise::NatMul([a, b]) => Ok(Math::Mul([*a, *b])),
+            Rise::NatDiv([a, b]) => Ok(Math::Div([*a, *b])),
+            Rise::NatPow([a, b]) => Ok(Math::Pow([*a, *b])),
+
             _ => Err(()),
         })
         .collect::<Result<Vec<_>, _>>()
@@ -89,11 +87,11 @@ pub fn to_rise_expr(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
         .map(|n| match n {
             Math::Var(index) => Rise::Var(*index),
 
-            Math::Add([a, b]) => Rise::Nat(RiseNat::NatAdd([*a, *b])),
-            Math::Sub([a, b]) => Rise::Nat(RiseNat::NatSub([*a, *b])),
-            Math::Mul([a, b]) => Rise::Nat(RiseNat::NatMul([*a, *b])),
-            Math::Div([a, b]) => Rise::Nat(RiseNat::NatDiv([*a, *b])),
-            Math::Pow([a, b]) => Rise::Nat(RiseNat::NatPow([*a, *b])),
+            Math::Add([a, b]) => Rise::NatAdd([*a, *b]),
+            Math::Sub([a, b]) => Rise::NatSub([*a, *b]),
+            Math::Mul([a, b]) => Rise::NatMul([*a, *b]),
+            Math::Div([a, b]) => Rise::NatDiv([*a, *b]),
+            Math::Pow([a, b]) => Rise::NatPow([*a, *b]),
 
             Math::Constant(c) => Rise::Integer(*c),
         })
