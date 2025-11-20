@@ -1,4 +1,5 @@
-use egg::{Id, Symbol};
+use egg::Id;
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 use super::Index;
@@ -18,6 +19,8 @@ egg::define_language! {
     "dataLam" = DataLambda(Id),
     "addrLam" = AddrLambda(Id),
     "natNatLam" = NatNatLambda(Id),
+
+    "let" = Let,
 
     "typeOf" = TypeOf([Id; 2]),
 
@@ -72,8 +75,8 @@ egg::define_language! {
     // "phi" = Phi([Id; 3]),
 
     Integer(i32),
-    // Float(f32),
+    Float(NotNan<f32>),
     // Double(f64),
-    Symbol(Symbol),
+    // Symbol(Symbol),
   }
 }

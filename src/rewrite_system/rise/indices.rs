@@ -63,8 +63,6 @@ pub enum IndexParseError {
     MissingPercentPrefix,
     #[error("Missing Type Prefix")]
     MissingTypePrefix,
-    #[error("Invalide Type Prefix: {0}")]
-    InvalideTypePrefix(#[from] strum::ParseError),
     #[error("Invalide Index: {0}")]
     InvalidIndex(#[from] std::num::ParseIntError),
 }
