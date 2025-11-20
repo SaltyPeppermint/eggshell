@@ -1,13 +1,12 @@
 use egg::{Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::indices::TypedIndex;
+use super::indices::Index;
 
 egg::define_language! {
   #[derive(Serialize, Deserialize)]
   pub enum Rise {
-    TypedVar(TypedIndex, Id),
-    Var(TypedIndex),
+    Var(Index),
     "app" = App([Id; 2]),
     "natApp" = NatApp([Id; 2]),
     "dataApp" = DataApp([Id; 2]),

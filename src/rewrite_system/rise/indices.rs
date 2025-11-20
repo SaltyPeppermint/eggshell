@@ -1,74 +1,42 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
-pub struct TypedIndex {
-    index: u32,
-    ty: IndexType,
-}
+pub struct Index(pub u32);
 
-impl TypedIndex {
-    pub fn new(value: u32, ty: IndexType) -> Self {
-        TypedIndex { index: value, ty }
-    }
-
-    pub fn value(self) -> u32 {
-        self.index
-    }
-
-    pub fn ty(self) -> IndexType {
-        self.ty
-    }
-}
-
-impl std::str::FromStr for TypedIndex {
+impl std::str::FromStr for Index {
     type Err = IndexParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(stripped_s) = s.strip_prefix("%") {
-            if let Some((ty_char, rest)) = stripped_s.split_at_checked(0) {
-                let ty = ty_char.parse()?;
-                let i = rest.parse()?;
-                Ok(TypedIndex { index: i, ty })
-            } else {
-                Err(IndexParseError::MissingTypePrefix)
-            }
+            let i = stripped_s.parse()?;
+            Ok(Index(i))
         } else {
             Err(IndexParseError::MissingPercentPrefix)
         }
     }
 }
 
-impl std::fmt::Display for TypedIndex {
+impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "%{}{}", self.ty, self.index)
+        write!(f, "%{}", self.0)
     }
 }
 
-#[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Clone,
-    Hash,
-    Copy,
-    Serialize,
-    Deserialize,
-    EnumString,
-    Display,
-)]
-pub enum IndexType {
-    #[strum(serialize = "nat", serialize = "n")]
-    Nat,
-    #[strum(serialize = "data", serialize = "d")]
-    Data,
-    #[strum(serialize = "addr", serialize = "a")]
-    Addr,
-    #[strum(serialize = "var", serialize = "v")]
-    Var,
+impl std::ops::Add<u32> for Index {
+    type Output = Self;
+
+    fn add(self, other: u32) -> Self {
+        Index(self.0 + other)
+    }
+}
+
+impl std::ops::Sub<u32> for Index {
+    type Output = Self;
+
+    fn sub(self, other: u32) -> Self {
+        Index(self.0 - other)
+    }
 }
 
 #[derive(Error, Debug)]

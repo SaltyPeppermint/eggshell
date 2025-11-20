@@ -7,7 +7,7 @@ use egg::{Analysis, DidMerge, EGraph, Language, RecExpr, Rewrite};
 use hashbrown::HashSet;
 use rules::mm_rules;
 
-use indices::TypedIndex;
+use indices::Index;
 use lang::Rise;
 
 #[derive(Default, Debug)]
@@ -15,7 +15,7 @@ pub struct RiseAnalysis;
 
 #[derive(Default, Debug)]
 pub struct AnalysisData {
-    pub free: HashSet<u32>,
+    pub free: HashSet<Index>,
     pub beta_extract: RecExpr<Rise>,
 }
 
@@ -40,7 +40,7 @@ impl Analysis<Rise> for RiseAnalysis {
         let mut free = HashSet::default();
         match enode {
             Rise::Var(v) => {
-                free.insert(v.value());
+                free.insert(*v);
             }
             Rise::Lambda(a) => {
                 free.extend(
@@ -49,7 +49,7 @@ impl Analysis<Rise> for RiseAnalysis {
                         .free
                         .iter()
                         .copied()
-                        .filter(|&idx| idx != 0)
+                        .filter(|&idx| idx != Index(0))
                         .map(|idx| idx - 1),
                 );
             }

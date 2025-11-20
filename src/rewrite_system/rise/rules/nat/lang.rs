@@ -1,7 +1,7 @@
 use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
-use super::super::TypedIndex;
+use super::super::Index;
 
 use super::Rise;
 
@@ -14,7 +14,7 @@ egg::define_language! {
         "/" = Div([Id; 2]),
         "pow" = Pow([Id; 2]),
 
-        Var(TypedIndex),
+        Var(Index),
         Constant(i32),
         // Symbol(Symbol),
     }

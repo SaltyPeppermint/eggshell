@@ -1,6 +1,6 @@
 use egg::{Applier, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{EGraph, Rise, RiseAnalysis, TypedIndex};
+use super::{EGraph, Index, Rise, RiseAnalysis};
 
 // pub fn shifted<A: Applier<Rise, RiseAnalysis>>(
 //     var: &str,
@@ -22,7 +22,7 @@ pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: i32,
-    cutoff: u32,
+    cutoff: Index,
     applier: A,
 }
 
@@ -32,7 +32,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
             shift,
-            cutoff,
+            cutoff: Index(cutoff),
             applier,
         }
     }
@@ -76,7 +76,7 @@ pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: i32,
-    cutoff: u32,
+    cutoff: Index,
     applier: A,
 }
 
@@ -86,7 +86,7 @@ impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
             shift,
-            cutoff,
+            cutoff: Index(cutoff),
             applier,
         }
     }
@@ -113,21 +113,18 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: i32, cutoff: u32) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: i32, cutoff: Index) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: u32) {
-    fn rec(expr: &mut [Rise], ei: usize, shift: i32, cutoff: u32) {
+pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
+    fn rec(expr: &mut [Rise], ei: usize, shift: i32, cutoff: Index) {
         match expr[ei] {
             Rise::Var(index) => {
-                if index.value() >= cutoff {
-                    let index2 = TypedIndex::new(
-                        index.value().checked_add_signed(shift).unwrap(),
-                        index.ty(),
-                    );
+                if index >= cutoff {
+                    let index2 = Index(index.0.checked_add_signed(shift).unwrap());
                     expr[ei] = Rise::Var(index2);
                 }
             }

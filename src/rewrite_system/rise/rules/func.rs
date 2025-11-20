@@ -3,7 +3,7 @@ use core::panic;
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::{Rise, RiseAnalysis};
+use super::{Index, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -22,7 +22,7 @@ pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
-    index: u32,
+    index: Index,
     applier: A,
 }
 
@@ -30,7 +30,7 @@ impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
     pub fn new(var: &str, index: u32, applier: A) -> Self {
         NotFreeIn {
             var: var.parse().unwrap(),
-            index,
+            index: Index(index),
             applier,
         }
     }
@@ -121,7 +121,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
-    v_env: HashSet<u32>,
+    v_env: HashSet<Index>,
     type_of_id: Id,
 ) -> Option<(RecExpr<Rise>, Id)> {
     let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
@@ -133,7 +133,7 @@ fn vec_expr(
         //     for { tv <- vecDT(expr.t, n, eg) }
         //     yield ExprWithHashCons(Var(i), tv)
         // case Var(_) => None
-        Rise::Var(index) if v_env.contains(&index.value()) => {
+        Rise::Var(index) if v_env.contains(index) => {
             let mut new = RecExpr::default();
             let vec_ty_id = add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
             let var_id = new.add(Rise::Var(*index));
@@ -171,7 +171,7 @@ fn vec_expr(
             let v_env2 = v_env
                 .into_iter()
                 .map(|i| i + 1)
-                .chain([0])
+                .chain([Index(0)])
                 .collect::<HashSet<_>>();
 
             // Vectorize e
