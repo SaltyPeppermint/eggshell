@@ -2,9 +2,11 @@ mod data;
 mod rules;
 
 use std::cmp;
+use std::fmt::Debug;
 
 use egg::{Analysis, DidMerge, Id, Symbol};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use data::HalideData;
 
@@ -123,6 +125,14 @@ pub enum HalideRuleset {
     Arithmetic,
     BugRules,
     Full,
+}
+
+#[derive(Debug, Error)]
+pub enum HalideError {
+    #[error("Wrong number of children: {0}")]
+    BadAnalysis(String),
+    #[error("Bad ruleset name: {0}")]
+    BadRulesetName(String),
 }
 
 /// Halide Rewrite System implementation

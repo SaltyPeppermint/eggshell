@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::rewrite_system::RewriteSystemError;
+use super::HalideError;
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 pub enum HalideData {
@@ -9,12 +9,12 @@ pub enum HalideData {
 }
 
 impl TryFrom<HalideData> for i64 {
-    type Error = RewriteSystemError;
+    type Error = HalideError;
 
     fn try_from(value: HalideData) -> Result<Self, Self::Error> {
         match value {
             HalideData::Int(x) => Ok(x),
-            HalideData::Bool(_) => Err(RewriteSystemError::BadAnalysis(format!(
+            HalideData::Bool(_) => Err(HalideError::BadAnalysis(format!(
                 "Tried to use {value:?} as integer"
             ))),
         }
@@ -22,11 +22,11 @@ impl TryFrom<HalideData> for i64 {
 }
 
 impl TryFrom<HalideData> for bool {
-    type Error = RewriteSystemError;
+    type Error = HalideError;
 
     fn try_from(value: HalideData) -> Result<Self, Self::Error> {
         match value {
-            HalideData::Int(_) => Err(RewriteSystemError::BadAnalysis(format!(
+            HalideData::Int(_) => Err(HalideError::BadAnalysis(format!(
                 "Tried to use {value:?} as bool"
             ))),
             HalideData::Bool(x) => Ok(x),

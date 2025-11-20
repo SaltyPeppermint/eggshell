@@ -10,7 +10,6 @@ use egg::{
 };
 
 use super::{Index, Rise, RiseAnalysis};
-
 use func::{NotFreeIn, VectorizeScalarFun, pat};
 use nat::ComputeNatCheck;
 use shifted::{Shifted, ShiftedCheck, shift_mut};
@@ -104,23 +103,23 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
         match expr[ei] {
             Rise::Var(index2) => {
                 if index == index2 {
-                    add_expr_vec(result, subs)
+                    super::add_expr_vec(result, subs)
                 } else {
-                    add(result, Rise::Var(index2))
+                    super::add(result, Rise::Var(index2))
                 }
             }
             Rise::Lambda(e) => {
                 shift_mut(subs, 1, Index(0));
                 let e2 = rec(result, expr, usize::from(e), index + 1, subs);
                 shift_mut(subs, -1, Index(0));
-                add(result, Rise::Lambda(e2))
+                super::add(result, Rise::Lambda(e2))
             }
             Rise::App([f, e]) => {
                 let f2 = rec(result, expr, usize::from(f), index, subs);
                 let e2 = rec(result, expr, usize::from(e), index, subs);
-                add(result, Rise::App([f2, e2]))
+                super::add(result, Rise::App([f2, e2]))
             }
-            _ => add(result, expr[ei].clone()),
+            _ => super::add(result, expr[ei].clone()),
         }
     }
     let mut result = vec![];
@@ -173,20 +172,6 @@ fn extract_small(
             RecExpr::from(new_ast)
         })
         .collect()
-}
-
-fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
-    to.push(e);
-    Id::from(to.len() - 1)
-}
-
-fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
-    let offset = to.len();
-    to.extend(e.iter().map(|n| {
-        n.clone()
-            .map_children(|id| Id::from(usize::from(id) + offset))
-    }));
-    Id::from(to.len() - 1)
 }
 
 #[cfg(test)]

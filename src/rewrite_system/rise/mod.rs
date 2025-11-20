@@ -3,7 +3,7 @@ mod indices;
 mod lang;
 mod rules;
 
-use egg::Rewrite;
+use egg::{Id, Language, RecExpr, Rewrite};
 
 use analysis::RiseAnalysis;
 use indices::Index;
@@ -19,6 +19,34 @@ pub fn rules(ruleset: RiseRuleset) -> Vec<Rewrite<Rise, RiseAnalysis>> {
     match ruleset {
         RiseRuleset::MM => rules::mm_rules(),
     }
+}
+
+fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
+    rec_expr[id]
+        .clone()
+        .build_recexpr(|child_id| rec_expr[child_id].clone())
+}
+
+fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+    to.push(e);
+    Id::from(to.len() - 1)
+}
+
+fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
+    let offset = to.len();
+    for n in e {
+        to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));
+    }
+    to.root()
+}
+
+fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+    let offset = to.len();
+    to.extend(e.iter().map(|n| {
+        n.clone()
+            .map_children(|id| Id::from(usize::from(id) + offset))
+    }));
+    Id::from(to.len() - 1)
 }
 
 #[cfg(test)]

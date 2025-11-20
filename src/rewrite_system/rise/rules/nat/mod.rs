@@ -6,9 +6,8 @@ use egg::{
     Symbol, Var,
 };
 
-use lang::Math;
-
 use super::{Rise, RiseAnalysis};
+use lang::Math;
 
 // #[expect(dead_code)]
 // pub fn compute_nat<A>(var: &str, nat_pattern: &str, applier: A) -> impl Applier<Rise, RiseAnalysis>

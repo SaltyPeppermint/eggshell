@@ -1,9 +1,7 @@
 use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
-
 use hashbrown::HashSet;
 
-use super::Index;
-use super::Rise;
+use super::{Index, Rise};
 
 #[derive(Default, Debug)]
 pub struct RiseAnalysis;

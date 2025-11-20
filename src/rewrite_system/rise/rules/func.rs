@@ -1,9 +1,8 @@
-use core::panic;
-
-use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
 use super::{Index, Rise, RiseAnalysis};
+use crate::rewrite_system::rise::{add_expr, build};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -327,20 +326,6 @@ fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
 //       case ArrayType(_, _) => None
 //     }
 //   }
-
-fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
-    rec_expr[id]
-        .clone()
-        .build_recexpr(|child_id| rec_expr[child_id].clone())
-}
-
-fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
-    let offset = to.len();
-    for n in e {
-        to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));
-    }
-    to.root()
-}
 
 #[cfg(test)]
 mod tests {

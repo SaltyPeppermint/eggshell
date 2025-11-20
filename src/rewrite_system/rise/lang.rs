@@ -1,7 +1,7 @@
 use egg::{Id, Symbol};
 use serde::{Deserialize, Serialize};
 
-use super::indices::Index;
+use super::Index;
 
 egg::define_language! {
   #[derive(Serialize, Deserialize)]

@@ -1,9 +1,8 @@
 use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
-use super::super::Index;
-
 use super::Rise;
+use crate::rewrite_system::rise::Index;
 
 egg::define_language! {
     #[derive(Serialize, Deserialize)]
