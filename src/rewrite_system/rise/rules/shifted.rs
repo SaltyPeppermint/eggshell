@@ -96,11 +96,19 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
-            }
-            Rise::Lambda(e) => {
+            } // TODO ALL THE OTHER LAMBDAS
+            Rise::Lambda(e)
+            | Rise::NatLambda(e)
+            | Rise::DataLambda(e)
+            | Rise::AddrLambda(e)
+            | Rise::NatNatLambda(e) => {
                 rec(expr, usize::from(e), shift, cutoff + 1);
             }
-            Rise::App([f, e]) => {
+            Rise::App([f, e])
+            | Rise::NatApp([f, e])
+            | Rise::DataApp([f, e])
+            | Rise::AddrApp([f, e])
+            | Rise::NatNatApp([f, e]) => {
                 rec(expr, usize::from(f), shift, cutoff);
                 rec(expr, usize::from(e), shift, cutoff);
             }
