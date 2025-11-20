@@ -8,17 +8,6 @@ pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
 }
 
-// pub fn not_free_in<A>(var: &str, index: u32, applier: A) -> impl Applier<Rise, RiseAnalysis>
-// where
-//     A: Applier<Rise, RiseAnalysis>,
-// {
-//     NotFreeIn {
-//         var: var.parse().unwrap(),
-//         index: Index(index),
-//         applier,
-//     }
-// }
-
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     index: Index,
@@ -29,7 +18,7 @@ impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
     pub fn new(var: &str, index: u32, applier: A) -> Self {
         NotFreeIn {
             var: var.parse().unwrap(),
-            index: Index(index),
+            index: Index::new(index),
             applier,
         }
     }
@@ -53,20 +42,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A
         }
     }
 }
-
-// pub fn vectorize_scalar_fun<A: Applier<Rise, RiseAnalysis>>(
-//     var: &str,
-//     size_var: &str,
-//     vectorized_var: &str,
-//     applier: A,
-// ) -> impl Applier<Rise, RiseAnalysis> {
-//     VectorizeScalaFun {
-//         var: var.parse().unwrap(),
-//         size_var: size_var.parse().unwrap(),
-//         vectorized_var: vectorized_var.parse().unwrap(),
-//         applier,
-//     }
-// }
 
 pub struct VectorizeScalarFun<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
@@ -170,7 +145,7 @@ fn vec_expr(
             let v_env2 = v_env
                 .into_iter()
                 .map(|i| i + 1)
-                .chain([Index(0)])
+                .chain([Index::zero()])
                 .collect::<HashSet<_>>();
 
             // Vectorize e

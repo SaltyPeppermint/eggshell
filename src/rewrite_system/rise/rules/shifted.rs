@@ -2,22 +2,6 @@ use egg::{Applier, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
 use super::{EGraph, Index, Rise, RiseAnalysis};
 
-// pub fn shifted<A: Applier<Rise, RiseAnalysis>>(
-//     var: &str,
-//     shifted_var: &str,
-//     shift: i32,
-//     cutoff: u32,
-//     applier: A,
-// ) -> impl Applier<Rise, RiseAnalysis> {
-//     Shifted {
-//         var: var.parse().unwrap(),
-//         new_var: shifted_var.parse().unwrap(),
-//         shift,
-//         cutoff: Index(cutoff),
-//         applier,
-//     }
-// }
-
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
@@ -32,7 +16,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
             shift,
-            cutoff: Index(cutoff),
+            cutoff: Index::new(cutoff),
             applier,
         }
     }
@@ -56,22 +40,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
     }
 }
 
-// pub fn shifted_check<A: Applier<Rise, RiseAnalysis>>(
-//     var: &str,
-//     shifted_var: &str,
-//     shift: i32,
-//     cutoff: u32,
-//     applier: A,
-// ) -> impl Applier<Rise, RiseAnalysis> {
-//     ShiftedCheck {
-//         var: var.parse().unwrap(),
-//         new_var: shifted_var.parse().unwrap(),
-//         shift,
-//         cutoff: Index(cutoff),
-//         applier,
-//     }
-// }
-
 pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
@@ -86,7 +54,7 @@ impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
             shift,
-            cutoff: Index(cutoff),
+            cutoff: Index::new(cutoff),
             applier,
         }
     }
@@ -124,7 +92,8 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
         match expr[ei] {
             Rise::Var(index) => {
                 if index >= cutoff {
-                    let index2 = Index(index.0.checked_add_signed(shift).unwrap());
+                    // let index2 = Index(index.0.checked_add_signed(shift).unwrap());
+                    let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
             }

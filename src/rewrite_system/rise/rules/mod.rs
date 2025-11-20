@@ -86,9 +86,9 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
     let arg2 = &mut arg.as_ref().to_owned();
 
-    shift_mut(arg2, 1, Index(0)); // shift up
-    let mut body2 = replace(body.as_ref(), Index(0), arg2);
-    shift_mut(&mut body2, -1, Index(0)); // shift down
+    shift_mut(arg2, 1, Index::zero()); // shift up
+    let mut body2 = replace(body.as_ref(), Index::zero(), arg2);
+    shift_mut(&mut body2, -1, Index::zero()); // shift down
     body2.into()
 }
 
@@ -109,9 +109,9 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
                 }
             }
             Rise::Lambda(e) => {
-                shift_mut(subs, 1, Index(0));
+                shift_mut(subs, 1, Index::zero());
                 let e2 = rec(result, expr, usize::from(e), index + 1, subs);
-                shift_mut(subs, -1, Index(0));
+                shift_mut(subs, -1, Index::zero());
                 super::add(result, Rise::Lambda(e2))
             }
             Rise::App([f, e]) => {
