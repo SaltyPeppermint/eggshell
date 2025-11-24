@@ -101,6 +101,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 }
 
 // Expr, ty_id, expr_id
+#[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
@@ -111,11 +112,6 @@ fn vec_expr(
         panic!("Not TypeOf! {:?}", expr[type_of_id]);
     };
     match &expr[*expr_id] {
-        // Scala Code:
-        // case Var(i) if vEnv(i) =>
-        //     for { tv <- vecDT(expr.t, n, eg) }
-        //     yield ExprWithHashCons(Var(i), tv)
-        // case Var(_) => None
         Rise::Var(index) if v_env.contains(index) => {
             let mut new = RecExpr::default();
             let vec_ty_id = add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
@@ -123,10 +119,6 @@ fn vec_expr(
             new.add(Rise::TypeOf([var_id, vec_ty_id]));
             Some((new, vec_ty_id, var_id))
         }
-        // Scala code:
-        // case App(f, e) =>
-        // for { fv <- vectorizeExpr(f, n, eg, vEnv); ev <- vectorizeExpr(e, n, eg, vEnv) }
-        //   yield ExprWithHashCons(App(fv, ev), eg(fv.t).asInstanceOf[FunType[TypeId]].outT)
         Rise::App([f, e]) => {
             let (fv, fv_ty_id, _) = vec_expr(expr, n, v_env.clone(), *f)?;
             let (ev, _, _) = vec_expr(expr, n, v_env.clone(), *e)?;
@@ -145,11 +137,6 @@ fn vec_expr(
             new.add(Rise::TypeOf([app_id, output_ty_id]));
             Some((new, output_ty_id, app_id))
         }
-        // Scala code:
-        // case Lambda(e) =>
-        // for { ev <- vectorizeExpr(e, n, eg, vEnv.map(_ + 1) + 0);
-        //       xtv <- vecDT(eg(expr.t).asInstanceOf[FunType[TypeId]].inT, n, eg) }
-        //   yield ExprWithHashCons(Lambda(ev),  eg.add(FunType(xtv, ev.t)))
         Rise::Lambda(e) => {
             let v_env2 = v_env
                 .into_iter()
@@ -179,12 +166,6 @@ fn vec_expr(
 
             Some((new, fun_id, lam_id))
         }
-        // Scala Code:
-        // case Literal(_) | NatLiteral(_) | IndexLiteral(_, _) =>
-        //     for { tv <- vecDT(expr.t, n, eg) }
-        //     yield ExprWithHashCons(App(
-        //         ExprWithHashCons(Primitive(rcp.vectorFromScalar.primitive), eg.add(FunType(expr.t, tv))),
-        //         expr), tv)
         Rise::Integer(_) => {
             let vec_ty = vec_ty(expr, n, *ty_id)?;
             let mut new = RecExpr::default();
@@ -195,7 +176,7 @@ fn vec_expr(
             let new_typed_expr_id = new.add(Rise::TypeOf([new_expr_id, new_ty_id]));
 
             let vec_ty_id = add_expr(&mut new, vec_ty);
-            let prim_id = new.add(Rise::VectorFromScalar);
+            let prim_id = new.add(Rise::VectorFromScalar); // asVector ?!
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
@@ -204,10 +185,6 @@ fn vec_expr(
 
             Some((new, vec_ty_id, app_id))
         }
-        // Scala Code:
-        // case Primitive(rcp.add() | rcp.mul() | rcp.fst() | rcp.snd()) =>
-        //   for { tv <- vecT(expr.t, n, eg) }
-        //      yield ExprWithHashCons(expr.node, tv)
         Rise::Snd | Rise::Fst | Rise::Add | Rise::Mul => {
             let mut typed_prim = RecExpr::default();
             let vec_prim_ty_id = add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
@@ -223,8 +200,43 @@ fn vec_expr(
         | Rise::NatLambda(_)
         | Rise::DataLambda(_)
         | Rise::AddrLambda(_)
-        | Rise::NatNatLambda(_) => None,
-        other => panic!("Cannot vectorize this {other:?}"),
+        | Rise::NatNatLambda(_)
+        | Rise::ToMem
+        | Rise::Split
+        | Rise::Join
+        | Rise::Generate
+        | Rise::Transpose
+        | Rise::Zip
+        | Rise::Unzip
+        | Rise::Map
+        | Rise::MapPar
+        | Rise::Reduce
+        | Rise::ReduceSeq
+        | Rise::ReduceSeqUnroll
+        | Rise::Let
+        | Rise::Float(_)
+        | Rise::AsVector
+        | Rise::AsScalar
+        | Rise::VectorFromScalar => None,
+
+        Rise::TypeOf(_)
+        | Rise::FunType(_)
+        | Rise::NatFunType(_)
+        | Rise::DataFunType(_)
+        | Rise::NatNatFunType(_)
+        | Rise::ArrType(_)
+        | Rise::VecType(_)
+        | Rise::PairType(_)
+        | Rise::IndexType(_)
+        | Rise::NatType
+        | Rise::F32
+        | Rise::NatAdd(_)
+        | Rise::NatSub(_)
+        | Rise::NatMul(_)
+        | Rise::NatDiv(_)
+        | Rise::NatPow(_) => {
+            panic!("Cannot vectorize this in this fn: {:?}", &expr[*expr_id])
+        }
     }
     //   case Composition(f, g) =>
     //     for { fv <- vectorizeExpr(f, n, eg, vEnv); gv <- vectorizeExpr(g, n, eg, vEnv) }
