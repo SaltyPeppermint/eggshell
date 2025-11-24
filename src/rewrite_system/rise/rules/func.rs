@@ -77,6 +77,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
         {
             let mut substitution = subst.clone();
             substitution.insert(self.vectorized_var, egraph.add_expr(&vectorized_expr));
+            egraph.rebuild();
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {

@@ -38,6 +38,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let shifted = shift_copy(extract, self.shift, self.cutoff);
         let mut substitution = subst.clone();
         substitution.insert(self.new_var, egraph.add_expr(&shifted));
+        egraph.rebuild();
         self.applier
             .apply_one(egraph, eclass, &substitution, searcher_ast, rule_name)
     }

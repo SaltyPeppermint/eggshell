@@ -52,7 +52,8 @@ impl Analysis<Rise> for RiseAnalysis {
         }
         let empty = enode.any(|id| egraph[id].data.beta_extract.as_ref().is_empty());
         let beta_extract = if empty {
-            vec![].into()
+            // vec![].into()
+            RecExpr::default()
         } else {
             enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
         };
