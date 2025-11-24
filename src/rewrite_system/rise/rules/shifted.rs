@@ -31,16 +31,18 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        // dbg!("oops we are bailing");
-        // dbg!(self.var);
-        // dbg!(subst);
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
-        let mut substitution = subst.clone();
-        substitution.insert(self.new_var, egraph.add_expr(&shifted));
+        let mut new_subst = subst.clone();
+        let added_expr_id = egraph.add_expr(&shifted);
+        new_subst.insert(self.new_var, added_expr_id);
         egraph.rebuild();
-        self.applier
-            .apply_one(egraph, eclass, &substitution, searcher_ast, rule_name)
+        // egraph.clean = true; // Do i know what i'm doing?
+        let mut ids = self
+            .applier
+            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
+        ids.push(added_expr_id);
+        ids
     }
 }
 

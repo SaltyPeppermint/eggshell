@@ -52,10 +52,14 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
         };
         let expr = &egraph[subst[self.var]].data.beta_extract;
         let simplified_nat = simplify(&lang::to_nat_expr(expr));
-        let mut substitution = subst.clone();
-        substitution.insert(self.var, egraph.add_expr(&simplified_nat));
-        self.applier
-            .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
+        let mut new_subst = subst.clone();
+        let added_expr_id = egraph.add_expr(&simplified_nat);
+        new_subst.insert(self.var, added_expr_id);
+        let mut ids = self
+            .applier
+            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
+        ids.push(added_expr_id);
+        ids
     }
 }
 
