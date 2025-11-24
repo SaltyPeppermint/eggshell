@@ -9,25 +9,11 @@ egg::define_language! {
   pub enum Rise {
     Var(Index),
     "app" = App([Id; 2]),
-    "natApp" = NatApp([Id; 2]),
-    "dataApp" = DataApp([Id; 2]),
-    "addrApp" = AddrApp([Id; 2]),
-    "natNatApp" = NatNatApp([Id; 2]),
-
     "lam" = Lambda(Id),
-    "natLam" = NatLambda(Id),
-    "dataLam" = DataLambda(Id),
-    "addrLam" = AddrLambda(Id),
-    "natNatLam" = NatNatLambda(Id),
-
     "let" = Let,
 
     "typeOf" = TypeOf([Id; 2]),
-
     "fun" = FunType([Id; 2]),
-    "natFun" = NatFunType(Id),
-    "dataFun" = DataFunType(Id),
-    "natNatFun" = NatNatFunType(Id),
 
     "arrT" = ArrType([Id; 2]),
     "vecT" = VecType([Id; 2]),

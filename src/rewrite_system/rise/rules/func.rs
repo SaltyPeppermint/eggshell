@@ -85,7 +85,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
             let mut new_subst = subst.clone();
             let added_expr_id = egraph.add_expr(&new_expr);
             new_subst.insert(self.vectorized_var, added_expr_id);
-            egraph.rebuild();
+            // egraph.rebuild();
             let mut ids =
                 self.applier
                     .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
@@ -105,7 +105,6 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 }
 
 // Expr, ty_id, expr_id
-#[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
@@ -197,14 +196,6 @@ fn vec_expr(
             Some((typed_prim, vec_prim_ty_id, prim_id))
         }
         Rise::Var(_)
-        | Rise::NatApp(_)
-        | Rise::DataApp(_)
-        | Rise::AddrApp(_)
-        | Rise::NatNatApp(_)
-        | Rise::NatLambda(_)
-        | Rise::DataLambda(_)
-        | Rise::AddrLambda(_)
-        | Rise::NatNatLambda(_)
         | Rise::ToMem
         | Rise::Split
         | Rise::Join
@@ -225,9 +216,6 @@ fn vec_expr(
 
         Rise::TypeOf(_)
         | Rise::FunType(_)
-        | Rise::NatFunType(_)
-        | Rise::DataFunType(_)
-        | Rise::NatNatFunType(_)
         | Rise::ArrType(_)
         | Rise::VecType(_)
         | Rise::PairType(_)

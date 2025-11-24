@@ -36,8 +36,8 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);
         new_subst.insert(self.new_var, added_expr_id);
-        egraph.rebuild();
-        // egraph.clean = true; // Do i know what i'm doing?
+        // egraph.rebuild();
+        egraph.clean = true; // Do i know what i'm doing? Unless I set this it is unbearably slow => Ask Thomas
         let mut ids = self
             .applier
             .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
@@ -103,18 +103,10 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
                     expr[ei] = Rise::Var(index2);
                 }
             } // TODO ALL THE OTHER LAMBDAS
-            Rise::Lambda(e)
-            | Rise::NatLambda(e)
-            | Rise::DataLambda(e)
-            | Rise::AddrLambda(e)
-            | Rise::NatNatLambda(e) => {
+            Rise::Lambda(e) => {
                 rec(expr, usize::from(e), shift, cutoff + 1);
             }
-            Rise::App([f, e])
-            | Rise::NatApp([f, e])
-            | Rise::DataApp([f, e])
-            | Rise::AddrApp([f, e])
-            | Rise::NatNatApp([f, e]) => {
+            Rise::App([f, e]) => {
                 rec(expr, usize::from(f), shift, cutoff);
                 rec(expr, usize::from(e), shift, cutoff);
             }
