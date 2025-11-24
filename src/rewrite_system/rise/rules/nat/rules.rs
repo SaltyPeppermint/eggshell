@@ -1,4 +1,5 @@
 use egg::{EGraph, Id, Rewrite, Subst, rewrite as rw};
+use fraction::Ratio;
 
 use super::lang::{ConstantFold, Math};
 
@@ -39,7 +40,7 @@ fn is_not_zero(var_str: &str) -> impl Fn(&mut EGraph<Math, ConstantFold>, Id, &S
     let var = var_str.parse().unwrap();
     move |egraph, _, subst| {
         if let Some(n) = &egraph[subst[var]].data {
-            *n != 0
+            *n != Ratio::<i32>::ZERO
         } else {
             true
         }

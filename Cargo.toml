@@ -26,6 +26,7 @@ dot-generator = "0.2"
 dot-structures = "0.1"
 egg = { version = "0.10", features = ["serde-1"] }
 env_logger = "0.11"
+fraction = { version = "0.15.3", features = ["serde", "serde_derive"] }
 graphviz-rust = "0.9"
 hashbrown = { version = "0.16", features = ["rayon", "serde"] }
 indexmap = { version = "2", features = ["serde"] }

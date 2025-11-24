@@ -1,4 +1,7 @@
+use core::panic;
+
 use egg::{Analysis, DidMerge, EGraph, Id, RecExpr};
+use fraction::Ratio;
 use serde::{Deserialize, Serialize};
 
 use super::Rise;
@@ -14,7 +17,7 @@ egg::define_language! {
         "pow" = Pow([Id; 2]),
 
         Var(Index),
-        Constant(i32),
+        Constant(Ratio<i32>),
         // Symbol(Symbol),
     }
 }
@@ -23,7 +26,7 @@ egg::define_language! {
 pub struct ConstantFold;
 
 impl Analysis<Math> for ConstantFold {
-    type Data = Option<i32>;
+    type Data = Option<Ratio<i32>>;
 
     fn make(egraph: &mut EGraph<Math, ConstantFold>, enode: &Math) -> Self::Data {
         let x = |i: &Id| egraph[*i].data;
@@ -32,9 +35,16 @@ impl Analysis<Math> for ConstantFold {
             Math::Add([a, b]) => x(a)? + x(b)?,
             Math::Sub([a, b]) => x(a)? - (x(b)?),
             Math::Mul([a, b]) => x(a)? * x(b)?,
-            Math::Pow([a, b]) => x(a)?.pow(u32::try_from(x(b)?).unwrap()),
-            Math::Div([a, b]) if x(a)? % x(b)? == 0 => x(a)? / x(b)?,
-            _ => return None,
+            Math::Pow([a, b]) => {
+                if x(b)?.is_integer() {
+                    x(a)?.pow(x(b)?.to_integer())
+                } else {
+                    panic!("Trying to raise to a non-integer power, we are not dealing with that")
+                }
+            }
+            // if ((x(a)? % x(b)?) == Ratio::<i32>::ZERO) not needed we got proper ratios
+            Math::Div([a, b]) => x(a)? / x(b)?,
+            Math::Var(_) => return None,
         })
     }
 
@@ -65,7 +75,7 @@ pub fn to_nat_expr(rise_expr: &RecExpr<Rise>) -> RecExpr<Math> {
         .into_iter()
         .map(|n| match n {
             Rise::Var(index) => Ok(Math::Var(*index)),
-            Rise::Integer(i) => Ok(Math::Constant(*i)),
+            Rise::Integer(i) => Ok(Math::Constant((*i).into())),
 
             Rise::NatAdd([a, b]) => Ok(Math::Add([*a, *b])),
             Rise::NatSub([a, b]) => Ok(Math::Sub([*a, *b])),
@@ -92,7 +102,13 @@ pub fn to_rise_expr(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
             Math::Div([a, b]) => Rise::NatDiv([*a, *b]),
             Math::Pow([a, b]) => Rise::NatPow([*a, *b]),
 
-            Math::Constant(c) => Rise::Integer(*c),
+            Math::Constant(c) => {
+                if c.is_integer() {
+                    Rise::Integer(c.to_integer())
+                } else {
+                    panic!("Trying to convert a non-integer fraction back, we are not dealing with that")
+                }
+            }
         })
         .collect::<Vec<_>>();
     RecExpr::from(t)

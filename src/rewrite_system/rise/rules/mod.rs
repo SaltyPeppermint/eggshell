@@ -2,8 +2,6 @@ mod func;
 mod nat;
 mod shifted;
 
-use std::iter;
-
 use egg::{
     Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
     Rewrite, Searcher, Subst, Symbol, Var, rewrite,
@@ -130,45 +128,28 @@ fn extract_small(
     pattern: &Pattern<Rise>,
     eclass_id: Id,
 ) -> Vec<RecExpr<Rise>> {
+    fn rec(
+        ast: &PatternAst<Rise>,
+        id: Id,
+        subst: &Subst,
+        extractor: &Extractor<AstSize, Rise, RiseAnalysis>,
+    ) -> RecExpr<Rise> {
+        match &ast[id] {
+            ENodeOrVar::Var(w) => extractor.find_best(subst[*w]).1,
+            ENodeOrVar::ENode(e) => {
+                let new_e = e.clone();
+                new_e.join_recexprs(|i| rec(ast, i, subst, extractor))
+            }
+        }
+    }
     let Some(matches) = pattern.search_eclass(egraph, eclass_id) else {
         return vec![];
     };
-
     let extractor = Extractor::new(egraph, AstSize);
-
     matches
         .substs
         .iter()
-        .map(|subs| {
-            let mut new_ast = Vec::new();
-            let mut shift_starts: Vec<usize> = Vec::new();
-            for pattern_node in &pattern.ast {
-                match pattern_node {
-                    ENodeOrVar::Var(w) => {
-                        let subexpr = extractor.find_best(subs[*w]).1.to_vec();
-                        let sub_len = subexpr.len();
-                        let skip_len = shift_starts.last().unwrap();
-                        new_ast.extend(subexpr.into_iter().map(|mut node| {
-                            node.update_children(|i| Id::from(usize::from(i) + skip_len));
-                            node
-                        }));
-
-                        shift_starts.extend(iter::repeat_n(skip_len + sub_len, sub_len));
-                    }
-                    ENodeOrVar::ENode(e) => {
-                        let mut new_e = e.clone();
-                        new_e.update_children(|i| {
-                            let this_skip_len = shift_starts[usize::from(i)];
-                            let new_i = Id::from(usize::from(i) + this_skip_len);
-                            shift_starts.push(this_skip_len);
-                            new_i
-                        });
-                        new_ast.push(new_e);
-                    }
-                }
-            }
-            RecExpr::from(new_ast)
-        })
+        .map(|subst| rec(&pattern.ast, pattern.ast.root(), subst, &extractor))
         .collect()
 }
 
