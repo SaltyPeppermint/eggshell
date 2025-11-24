@@ -3,8 +3,8 @@ mod nat;
 mod shifted;
 
 use egg::{
-    Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
-    Rewrite, Searcher, Subst, Symbol, Var, rewrite,
+    Applier, EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Rewrite, Searcher,
+    Subst, Symbol, Var, rewrite,
 };
 
 use super::{Index, Rise, RiseAnalysis};
@@ -74,7 +74,7 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
         let result = beta_reduce(ex_body, ex_subs);
         let id = egraph.add_expr(&result);
         egraph.union(eclass, id);
-        egraph.rebuild();
+        // egraph.rebuild();
         vec![id]
     }
 }
@@ -127,30 +127,27 @@ fn extract_small(
     egraph: &EGraph<Rise, RiseAnalysis>,
     pattern: &Pattern<Rise>,
     eclass_id: Id,
-) -> Vec<RecExpr<Rise>> {
+) -> Option<Vec<RecExpr<Rise>>> {
     fn rec(
         ast: &PatternAst<Rise>,
         id: Id,
         subst: &Subst,
-        extractor: &Extractor<AstSize, Rise, RiseAnalysis>,
+        egraph: &EGraph<Rise, RiseAnalysis>,
     ) -> RecExpr<Rise> {
         match &ast[id] {
-            ENodeOrVar::Var(w) => extractor.find_best(subst[*w]).1,
+            ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
             ENodeOrVar::ENode(e) => {
                 let new_e = e.clone();
-                new_e.join_recexprs(|i| rec(ast, i, subst, extractor))
+                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
             }
         }
     }
-    let Some(matches) = pattern.search_eclass(egraph, eclass_id) else {
-        return vec![];
-    };
-    let extractor = Extractor::new(egraph, AstSize);
-    matches
-        .substs
-        .iter()
-        .map(|subst| rec(&pattern.ast, pattern.ast.root(), subst, &extractor))
-        .collect()
+    pattern.search_eclass(egraph, eclass_id).map(|m| {
+        m.substs
+            .iter()
+            .map(|subst| rec(&pattern.ast, pattern.ast.root(), subst, egraph))
+            .collect()
+    })
 }
 
 #[cfg(test)]

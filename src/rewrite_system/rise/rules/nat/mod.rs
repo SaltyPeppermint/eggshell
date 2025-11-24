@@ -2,8 +2,8 @@ mod lang;
 mod rules;
 
 use egg::{
-    Applier, AstSize, EGraph, Extractor, Id, Pattern, PatternAst, RecExpr, Runner, Searcher, Subst,
-    Symbol, Var,
+    Applier, AstSize, EGraph, Extractor, Id, Language, Pattern, PatternAst, RecExpr, Runner,
+    Searcher, Subst, Symbol, Var,
 };
 
 use super::{Rise, RiseAnalysis};
@@ -108,12 +108,17 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         rule_name: Symbol,
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
-        let nat_pattern_extracted =
+
+        let Some(nat_pattern_extracted) =
             super::extract_small(egraph, &self.nat_pattern, subst[self.var])
-                .iter()
-                .map(lang::to_nat_expr)
-                .collect::<Box<[_]>>();
-        if check_equivalence(&nat_pattern_extracted, &lang::to_nat_expr(extract)) {
+        else {
+            return Vec::new();
+        };
+        let nat_expr = nat_pattern_extracted
+            .iter()
+            .map(lang::to_nat_expr)
+            .collect::<Box<[_]>>();
+        if check_equivalence(&nat_expr, &lang::to_nat_expr(extract)) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -123,6 +128,28 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
 }
 
 fn check_equivalence(nat_pattern_extracted: &[RecExpr<Math>], expected: &RecExpr<Math>) -> bool {
+    // Quick check for trivial cases:
+    fn rec(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
+        lhs[lhs_id].matches(&rhs[rhs_id])
+            && lhs[lhs_id]
+                .children()
+                .iter()
+                .zip(rhs[rhs_id].children())
+                .all(|(lcid, rcid)| rec(lhs, *lcid, rhs, *rcid))
+    }
+    if nat_pattern_extracted
+        .iter()
+        .any(|rhs| rec(expected, expected.root(), rhs, rhs.root()))
+    {
+        return true;
+    }
+    println!(
+        "CHecking equivalence of {expected} and {:?}",
+        nat_pattern_extracted
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+    );
     let mut runner = Runner::default().with_expr(expected);
     for npe in nat_pattern_extracted {
         runner = runner.with_expr(npe);

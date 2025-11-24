@@ -124,9 +124,9 @@ mod test {
             .with_time_limit(Duration::from_secs(60))
             .with_node_limit(100_000)
             .with_iter_limit(300)
-            .with_scheduler(SimpleScheduler)
+            // .with_scheduler(SimpleScheduler)
             .run(&rules(RiseRuleset::MM));
-        println!("{:?}", r.stop_reason);
+        println!("{:?}\n\n\n", r.report());
         let root = &r.roots[0];
         r.egraph.check_goals(*root, &[mm_pattern, baseline_goal]);
     }
