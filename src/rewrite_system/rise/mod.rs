@@ -51,7 +51,9 @@ fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
 
 #[cfg(test)]
 mod test {
-    use egg::{Pattern, RecExpr, Runner};
+    use std::time::Duration;
+
+    use egg::{Pattern, RecExpr, Runner, SimpleScheduler};
 
     use super::*;
 
@@ -113,11 +115,19 @@ mod test {
     #[test]
     pub fn baseline() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
+        let mm_pattern: Pattern<Rise> = MM.parse().unwrap();
         let baseline_goal: Pattern<Rise> = BASELINE_GOAL.parse().unwrap();
 
         let runner = Runner::default();
-        let r = runner.with_expr(&mm).run(&rules(RiseRuleset::MM));
+        let r = runner
+            .with_expr(&mm)
+            .with_time_limit(Duration::from_secs(60))
+            .with_node_limit(100_000)
+            .with_iter_limit(300)
+            .with_scheduler(SimpleScheduler)
+            .run(&rules(RiseRuleset::MM));
+        println!("{:?}", r.stop_reason);
         let root = &r.roots[0];
-        r.egraph.check_goals(*root, &[baseline_goal]);
+        r.egraph.check_goals(*root, &[mm_pattern, baseline_goal]);
     }
 }

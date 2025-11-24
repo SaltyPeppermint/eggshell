@@ -31,6 +31,9 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
+        // dbg!("oops we are bailing");
+        // dbg!(self.var);
+        // dbg!(subst);
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
         let mut substitution = subst.clone();
