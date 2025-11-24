@@ -1,4 +1,4 @@
-use egg::{Applier, EGraph, Id, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
 use super::{Index, Rise, RiseAnalysis};
@@ -70,13 +70,20 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let extracted = &egraph[subst[self.var]].data.beta_extract.clone();
+        let extracted = egraph[egraph[subst[self.var]].parents().next().unwrap()]
+            .data
+            .beta_extract
+            .clone();
         let size_extracted = &egraph[subst[self.size_var]].data.beta_extract.clone();
         let n = extracted_int(size_extracted);
-        if let Some((vectorized_expr, _)) = vec_expr(extracted, n, HashSet::new(), extracted.root())
+        if let Some((vectorized_expr, _, expr_id)) =
+            vec_expr(&extracted, n, HashSet::new(), extracted.root())
         {
+            let new_expr = vectorized_expr[expr_id].build_recexpr(|i| vectorized_expr[i].clone());
+
             let mut substitution = subst.clone();
-            substitution.insert(self.vectorized_var, egraph.add_expr(&vectorized_expr));
+
+            substitution.insert(self.vectorized_var, egraph.add_expr(&new_expr));
             egraph.rebuild();
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
@@ -93,12 +100,13 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
     panic!("Unexpected thing in expr")
 }
 
+// Expr, ty_id, expr_id
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
     v_env: HashSet<Index>,
     type_of_id: Id,
-) -> Option<(RecExpr<Rise>, Id)> {
+) -> Option<(RecExpr<Rise>, Id, Id)> {
     let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
         panic!("Not TypeOf! {:?}", expr[type_of_id]);
     };
@@ -113,15 +121,15 @@ fn vec_expr(
             let vec_ty_id = add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
             let var_id = new.add(Rise::Var(*index));
             new.add(Rise::TypeOf([var_id, vec_ty_id]));
-            Some((new, vec_ty_id))
+            Some((new, vec_ty_id, var_id))
         }
         // Scala code:
         // case App(f, e) =>
         // for { fv <- vectorizeExpr(f, n, eg, vEnv); ev <- vectorizeExpr(e, n, eg, vEnv) }
         //   yield ExprWithHashCons(App(fv, ev), eg(fv.t).asInstanceOf[FunType[TypeId]].outT)
         Rise::App([f, e]) => {
-            let (fv, fv_ty_id) = vec_expr(expr, n, v_env.clone(), *f)?;
-            let (ev, _) = vec_expr(expr, n, v_env.clone(), *e)?;
+            let (fv, fv_ty_id, _) = vec_expr(expr, n, v_env.clone(), *f)?;
+            let (ev, _, _) = vec_expr(expr, n, v_env.clone(), *e)?;
 
             let Rise::FunType([_, output_ty_id]) = fv[fv_ty_id] else {
                 panic!("No Fun type wrapped in here: {:?}", &fv[fv_ty_id])
@@ -135,7 +143,7 @@ fn vec_expr(
 
             // The index for fv is preserved since join_expr only appends the second arg
             new.add(Rise::TypeOf([app_id, output_ty_id]));
-            Some((new, output_ty_id))
+            Some((new, output_ty_id, app_id))
         }
         // Scala code:
         // case Lambda(e) =>
@@ -150,7 +158,7 @@ fn vec_expr(
                 .collect::<HashSet<_>>();
 
             // Vectorize e
-            let (ev, ev_ty_id) = vec_expr(expr, n, v_env2, *e)?;
+            let (ev, ev_ty_id, _) = vec_expr(expr, n, v_env2, *e)?;
             let mut new = RecExpr::default();
             let typed_ev_id = add_expr(&mut new, ev);
 
@@ -169,7 +177,7 @@ fn vec_expr(
             let fun_id = new.add(Rise::FunType([vec_input_ty_id, ev_ty_id]));
             new.add(Rise::TypeOf([lam_id, fun_id]));
 
-            Some((new, fun_id))
+            Some((new, fun_id, lam_id))
         }
         // Scala Code:
         // case Literal(_) | NatLiteral(_) | IndexLiteral(_, _) =>
@@ -192,9 +200,9 @@ fn vec_expr(
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
             let app_id = new.add(Rise::App([typed_prim_id, new_typed_expr_id]));
-            let typed_app_id = new.add(Rise::TypeOf([app_id, vec_ty_id]));
+            new.add(Rise::TypeOf([app_id, vec_ty_id]));
 
-            Some((new, typed_app_id))
+            Some((new, vec_ty_id, app_id))
         }
         // Scala Code:
         // case Primitive(rcp.add() | rcp.mul() | rcp.fst() | rcp.snd()) =>
@@ -205,7 +213,7 @@ fn vec_expr(
             let vec_prim_ty_id = add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
             let prim_id = typed_prim.add(expr[*expr_id].clone());
             typed_prim.add(Rise::TypeOf([prim_id, vec_prim_ty_id]));
-            Some((typed_prim, vec_prim_ty_id))
+            Some((typed_prim, vec_prim_ty_id, prim_id))
         }
         Rise::Var(_)
         | Rise::NatApp(_)

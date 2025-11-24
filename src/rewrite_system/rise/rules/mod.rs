@@ -71,7 +71,6 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
         _searcher_ast: Option<&PatternAst<Rise>>,
         _rule_name: Symbol,
     ) -> Vec<Id> {
-        dbg!("BetaExtractApplier working");
         let ex_body = &egraph[subst[self.body]].data.beta_extract;
         let ex_subs = &egraph[subst[self.subs]].data.beta_extract;
         let result = beta_reduce(ex_body, ex_subs);
