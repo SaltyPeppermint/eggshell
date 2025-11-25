@@ -1,7 +1,7 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::{Index, Rise, RiseAnalysis, add_expr, build};
+use super::{Index, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -113,7 +113,7 @@ fn vec_expr(
     match &expr[*expr_id] {
         Rise::Var(index) if v_env.contains(index) => {
             let mut new = RecExpr::default();
-            let vec_ty_id = add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
+            let vec_ty_id = super::add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
             let var_id = new.add(Rise::Var(*index));
             new.add(Rise::TypeOf([var_id, vec_ty_id]));
             Some((new, vec_ty_id, var_id))
@@ -127,8 +127,8 @@ fn vec_expr(
             };
 
             let mut new = RecExpr::default();
-            let fv_id = add_expr(&mut new, fv);
-            let ev_id = add_expr(&mut new, ev);
+            let fv_id = super::add_expr(&mut new, fv);
+            let ev_id = super::add_expr(&mut new, ev);
 
             let app_id = new.add(Rise::App([fv_id, ev_id]));
 
@@ -146,7 +146,7 @@ fn vec_expr(
             // Vectorize e
             let (ev, ev_ty_id, _) = vec_expr(expr, n, v_env2, *e)?;
             let mut new = RecExpr::default();
-            let typed_ev_id = add_expr(&mut new, ev);
+            let typed_ev_id = super::add_expr(&mut new, ev);
 
             // Get input type of the original expr and vectorize it (xtv in scala)
             let Rise::FunType([input_ty_id, _]) = expr[*ty_id] else {
@@ -156,7 +156,7 @@ fn vec_expr(
 
             // Wrap in a lambda and append to the existing recexpr
             let lam_id = new.add(Rise::Lambda(typed_ev_id));
-            let vec_input_ty_id = add_expr(&mut new, vec_input_ty);
+            let vec_input_ty_id = super::add_expr(&mut new, vec_input_ty);
 
             // Add the fun type of the new lam and wrap it in a typeof
             // evt index is valid since add_expr only appends
@@ -169,12 +169,12 @@ fn vec_expr(
             let vec_ty = vec_ty(expr, n, *ty_id)?;
             let mut new = RecExpr::default();
 
-            let new_expr_id = add_expr(&mut new, build(expr, *expr_id));
+            let new_expr_id = super::add_expr(&mut new, super::build(expr, *expr_id));
 
-            let new_ty_id = add_expr(&mut new, build(expr, *ty_id));
+            let new_ty_id = super::add_expr(&mut new, super::build(expr, *ty_id));
             let new_typed_expr_id = new.add(Rise::TypeOf([new_expr_id, new_ty_id]));
 
-            let vec_ty_id = add_expr(&mut new, vec_ty);
+            let vec_ty_id = super::add_expr(&mut new, vec_ty);
             let prim_id = new.add(Rise::VectorFromScalar); // asVector ?!
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
@@ -186,7 +186,7 @@ fn vec_expr(
         }
         Rise::Snd | Rise::Fst | Rise::Add | Rise::Mul => {
             let mut typed_prim = RecExpr::default();
-            let vec_prim_ty_id = add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
+            let vec_prim_ty_id = super::add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
             let prim_id = typed_prim.add(expr[*expr_id].clone());
             typed_prim.add(Rise::TypeOf([prim_id, vec_prim_ty_id]));
             Some((typed_prim, vec_prim_ty_id, prim_id))
@@ -255,8 +255,8 @@ fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
             let vec_snd_ty = vec_ty(expr, n, b)?;
 
             let mut vec_pair_ty = RecExpr::default();
-            let vec_fst_ty_id = add_expr(&mut vec_pair_ty, vec_fst_ty);
-            let vec_snd_ty_id = add_expr(&mut vec_pair_ty, vec_snd_ty);
+            let vec_fst_ty_id = super::add_expr(&mut vec_pair_ty, vec_fst_ty);
+            let vec_snd_ty_id = super::add_expr(&mut vec_pair_ty, vec_snd_ty);
             vec_pair_ty.add(Rise::PairType([vec_fst_ty_id, vec_snd_ty_id]));
             Some(vec_pair_ty)
         }
@@ -265,8 +265,8 @@ fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
             let vec_output_ty = vec_ty(expr, n, output_ty)?;
 
             let mut vec_fun_ty = RecExpr::default();
-            let vec_in_ty_id = add_expr(&mut vec_fun_ty, vec_input_ty);
-            let vec_out_ty_id = add_expr(&mut vec_fun_ty, vec_output_ty);
+            let vec_in_ty_id = super::add_expr(&mut vec_fun_ty, vec_input_ty);
+            let vec_out_ty_id = super::add_expr(&mut vec_fun_ty, vec_output_ty);
             vec_fun_ty.add(Rise::FunType([vec_in_ty_id, vec_out_ty_id]));
 
             Some(vec_fun_ty)
