@@ -94,6 +94,8 @@ pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<
 
 pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
     fn rec(expr: &mut [Rise], ei: usize, shift: Shift, cutoff: Index) {
+        // dbg!(&expr[ei]);
+        // dbg!(&expr.len());
         match expr[ei] {
             Rise::Var(index) => {
                 if index >= cutoff {
@@ -101,7 +103,7 @@ pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
-            } // TODO ALL THE OTHER LAMBDAS
+            }
             Rise::Lambda(e) => {
                 rec(expr, usize::from(e), shift, cutoff.upshifted());
             }
@@ -109,13 +111,27 @@ pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
                 rec(expr, usize::from(f), shift, cutoff);
                 rec(expr, usize::from(e), shift, cutoff);
             }
-            Rise::TypeOf([e, t]) => {
-                rec(expr, usize::from(e), shift, cutoff);
-                rec(expr, usize::from(t), shift, cutoff);
+            // Rise::TypeOf([e, t]) => {
+            //     rec(expr, usize::from(e), shift, cutoff);
+            //     rec(expr, usize::from(t), shift, cutoff);
+            // }
+            Rise::TypeOf(ids)
+            | Rise::FunType(ids)
+            | Rise::ArrType(ids)
+            | Rise::VecType(ids)
+            | Rise::PairType(ids)
+            | Rise::NatAdd(ids)
+            | Rise::NatSub(ids)
+            | Rise::NatMul(ids)
+            | Rise::NatDiv(ids)
+            | Rise::NatPow(ids) => {
+                for id in ids {
+                    rec(expr, usize::from(id), shift, cutoff);
+                }
             }
-            _ => (), // _ => x.children().iter().for_each(|id| {
-                     //     rec(expr, usize::from(*id), shift, cutoff);
-                     // }),
+            Rise::IndexType(id) => rec(expr, usize::from(id), shift, cutoff),
+            // All the empty ones
+            _ => (),
         }
     }
     rec(expr, expr.len() - 1, shift, cutoff);

@@ -1,4 +1,6 @@
-use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite};
+use egg::{
+    Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
+};
 
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
 use super::nat::ComputeNatCheck;
@@ -35,7 +37,7 @@ pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     ];
     algorithmic.push(
         // rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
-        rewrite!("beta"; "(app (typeOf (lam ?body) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
+        rewrite!("beta"; "(app (typeOf (lam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
     );
     algorithmic
 }
@@ -65,21 +67,21 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
     ) -> Vec<Id> {
         let ex_body = &egraph[subst[self.body]].data.beta_extract;
         let ex_subs = &egraph[subst[self.subs]].data.beta_extract;
+
+        // println!("Attempting beta reduction on\nBody: {ex_body}\nSubs: {ex_subs}");
         let result = beta_reduce(ex_body, ex_subs);
+        // let old_expr = &egraph[eclass].data.beta_extract;
+        // println!("Beta reduced!\nOld: {old_expr}\nNew: {result}\n\n",);
+
         let id = egraph.add_expr(&result);
         egraph.union(eclass, id);
 
-        println!(
-            "Beta Reduced\n{}\nto\n{}\n",
-            &egraph[eclass].data.beta_extract, &result
-        );
         vec![id]
     }
 }
 
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
     let arg2 = &mut arg.as_ref().to_owned();
-
     shift_mut(arg2, Shift::up(), Index::zero()); // shift up
     let mut body2 = replace(body.as_ref(), Index::zero(), arg2);
     shift_mut(&mut body2, Shift::down(), Index::zero()); // shift down
@@ -94,26 +96,32 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
         index: Index,
         subs: &mut [Rise],
     ) -> Id {
-        match expr[ei] {
+        match &expr[ei] {
             Rise::Var(index2) => {
-                if index == index2 {
+                if index == *index2 {
                     super::add_expr_vec(result, subs)
                 } else {
-                    super::add(result, Rise::Var(index2))
+                    super::add(result, Rise::Var(*index2))
                 }
             }
             Rise::Lambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero());
-                let e2 = rec(result, expr, usize::from(e), index.upshifted(), subs);
+                let e2 = rec(result, expr, usize::from(*e), index.upshifted(), subs);
                 shift_mut(subs, Shift::down(), Index::zero());
                 super::add(result, Rise::Lambda(e2))
             }
-            Rise::App([f, e]) => {
-                let f2 = rec(result, expr, usize::from(f), index, subs);
-                let e2 = rec(result, expr, usize::from(e), index, subs);
-                super::add(result, Rise::App([f2, e2]))
+            // Should be covered by default case
+            // Rise::App([f, e]) => {
+            //     let f2 = rec(result, expr, usize::from(*f), index, subs);
+            //     let e2 = rec(result, expr, usize::from(*e), index, subs);
+            //     super::add(result, Rise::App([f2, e2]))
+            // }
+            other => {
+                let new_other = other
+                    .clone()
+                    .map_children(|i| rec(result, expr, usize::from(i), index, subs));
+                super::add(result, new_other)
             }
-            _ => super::add(result, expr[ei].clone()),
         }
     }
     let mut result = vec![];
