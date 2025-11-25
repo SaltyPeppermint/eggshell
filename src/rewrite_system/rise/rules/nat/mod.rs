@@ -2,8 +2,8 @@ mod lang;
 mod rules;
 
 use egg::{
-    Applier, AstSize, EGraph, Extractor, Id, Language, Pattern, PatternAst, RecExpr, Runner,
-    Searcher, Subst, Symbol, Var,
+    Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
+    Runner, Searcher, Subst, Symbol, Var,
 };
 
 use super::{Rise, RiseAnalysis};
@@ -111,18 +111,13 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let extract = &egraph[subst[self.var]].data.beta_extract;
+        let nat_expected = &egraph[subst[self.var]].data.beta_extract;
 
-        let Some(nat_pattern_extracted) =
-            super::extract_small(egraph, &self.nat_pattern, subst[self.var])
-        else {
-            return Vec::new();
-        };
-        let nat_expr = nat_pattern_extracted
-            .iter()
-            .map(lang::to_nat_expr)
-            .collect::<Box<[_]>>();
-        if check_equivalence(&nat_expr, &lang::to_nat_expr(extract)) {
+        let nat_extracted = extract_small(egraph, &self.nat_pattern, subst);
+        if check_equivalence(
+            &lang::to_nat_expr(&nat_extracted),
+            &lang::to_nat_expr(nat_expected),
+        ) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -131,38 +126,54 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
     }
 }
 
-fn check_equivalence(nat_pattern_extracted: &[RecExpr<Math>], expected: &RecExpr<Math>) -> bool {
+fn check_equivalence(extracted: &RecExpr<Math>, expected: &RecExpr<Math>) -> bool {
     // Quick check for trivial cases:
-    fn rec(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
+    fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
         lhs[lhs_id].matches(&rhs[rhs_id])
             && lhs[lhs_id]
                 .children()
                 .iter()
                 .zip(rhs[rhs_id].children())
-                .all(|(lcid, rcid)| rec(lhs, *lcid, rhs, *rcid))
+                .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
     }
-    if nat_pattern_extracted
-        .iter()
-        .any(|rhs| rec(expected, expected.root(), rhs, rhs.root()))
-    {
+
+    if quick_check(expected, expected.root(), extracted, extracted.root()) {
         return true;
     }
-    println!(
-        "CHecking equivalence of {expected} and {:?}",
-        nat_pattern_extracted
-            .iter()
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-    );
-    let mut runner = Runner::default().with_expr(expected);
-    for npe in nat_pattern_extracted {
-        runner = runner.with_expr(npe);
-    }
-    runner = runner.run(&rules::rules());
 
-    let (expected_root, npe_roots) = runner.roots.split_last().unwrap();
-    let canonical_expected_root = runner.egraph.find(*expected_root);
-    npe_roots
-        .iter()
-        .any(|npe_root| runner.egraph.find(*npe_root) == canonical_expected_root)
+    let runner = Runner::default()
+        .with_expr(expected)
+        .with_expr(extracted)
+        .with_hook(move |r| {
+            if r.egraph.find(r.roots[0]) == r.egraph.find(r.roots[1]) {
+                Err("HOOK".to_owned())
+            } else {
+                Ok(())
+            }
+        })
+        .run(&rules::rules());
+
+    runner.egraph.find(runner.roots[0]) == runner.egraph.find(runner.roots[1])
+}
+
+fn extract_small(
+    egraph: &EGraph<Rise, RiseAnalysis>,
+    pattern: &Pattern<Rise>,
+    subst: &Subst,
+) -> RecExpr<Rise> {
+    fn rec(
+        ast: &PatternAst<Rise>,
+        id: Id,
+        subst: &Subst,
+        egraph: &EGraph<Rise, RiseAnalysis>,
+    ) -> RecExpr<Rise> {
+        match &ast[id] {
+            ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
+            ENodeOrVar::ENode(e) => {
+                let new_e = e.clone();
+                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
+            }
+        }
+    }
+    rec(&pattern.ast, pattern.ast.root(), subst, egraph)
 }

@@ -61,8 +61,6 @@ impl std::ops::Sub<u32> for Index {
 pub enum IndexParseError {
     #[error("Missing % Prefix")]
     MissingPercentPrefix,
-    #[error("Missing Type Prefix")]
-    MissingTypePrefix,
     #[error("Invalide Index: {0}")]
     InvalidIndex(#[from] std::num::ParseIntError),
 }

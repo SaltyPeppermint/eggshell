@@ -30,17 +30,19 @@ impl Analysis<Math> for ConstantFold {
             Math::Constant(c) => *c,
             Math::Add([a, b]) => x(a)? + x(b)?,
             Math::Sub([a, b]) => x(a)? - x(b)?,
-            Math::Mul([a, b]) => {
-                // println!("trying {} * {}", x(a)?, x(b)?);
-                x(a)? * x(b)?
+            Math::Mul([a, b]) => x(a)? * x(b)?,
+            Math::Pow([a, b]) => {
+                let exponent = x(b)?.try_into().ok()?;
+                x(a)?.strict_pow(exponent)
             }
-            Math::Pow([a, b]) => x(a)?.pow(x(b)?.try_into().ok()?),
-            // if ((x(a)? % x(b)?) == Ratio::<i32>::ZERO) not needed we got proper ratios
             Math::Div([a, b]) => {
-                // println!("trying {} / {}", x(a)?, x(b)?);
+                if x(b)? == 0 || x(a)? % x(b)? != 0 {
+                    return None;
+                }
                 x(a)? / x(b)?
             }
             Math::Var(_) => return None,
+            // _ => return None,
         })
     }
 
@@ -58,7 +60,7 @@ impl Analysis<Math> for ConstantFold {
             egraph.union(id, added);
 
             // to not prune, comment this out
-            egraph[id].nodes.retain(egg::Language::is_leaf);
+            // egraph[id].nodes.retain(egg::Language::is_leaf);
 
             #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();

@@ -2,10 +2,7 @@ mod func;
 mod nat;
 mod shifted;
 
-use egg::{
-    Applier, EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Rewrite, Searcher,
-    Subst, Symbol, Var, rewrite,
-};
+use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite};
 
 use super::{Index, Rise, RiseAnalysis};
 use func::{NotFreeIn, VectorizeScalarFun, pat};
@@ -120,33 +117,6 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
     let mut result = vec![];
     rec(&mut result, expr, expr.len() - 1, index, subs);
     result
-}
-
-fn extract_small(
-    egraph: &EGraph<Rise, RiseAnalysis>,
-    pattern: &Pattern<Rise>,
-    eclass_id: Id,
-) -> Option<Vec<RecExpr<Rise>>> {
-    fn rec(
-        ast: &PatternAst<Rise>,
-        id: Id,
-        subst: &Subst,
-        egraph: &EGraph<Rise, RiseAnalysis>,
-    ) -> RecExpr<Rise> {
-        match &ast[id] {
-            ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
-            ENodeOrVar::ENode(e) => {
-                let new_e = e.clone();
-                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
-            }
-        }
-    }
-    pattern.search_eclass(egraph, eclass_id).map(|m| {
-        m.substs
-            .iter()
-            .map(|subst| rec(&pattern.ast, pattern.ast.root(), subst, egraph))
-            .collect()
-    })
 }
 
 #[cfg(test)]

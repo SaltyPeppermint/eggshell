@@ -3,7 +3,7 @@ use egg::{EGraph, Id, Rewrite, Subst, rewrite as rw};
 use super::lang::{ConstantFold, Math};
 
 #[rustfmt::skip]
-pub fn rules() -> Vec<Rewrite<Math,ConstantFold>> { vec![
+pub fn rules() -> Vec<Rewrite<Math, ConstantFold>> { vec![
     rw!("comm-add";  "(+ ?a ?b)"        => "(+ ?b ?a)"),
     rw!("comm-mul";  "(* ?a ?b)"        => "(* ?b ?a)"),
     rw!("assoc-add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
@@ -11,8 +11,8 @@ pub fn rules() -> Vec<Rewrite<Math,ConstantFold>> { vec![
 
     rw!("sub-canon"; "(- ?a ?b)" => "(+ ?a (* -1 ?b))"),
     rw!("div-canon"; "(/ ?a ?b)" => "(* ?a (pow ?b -1))" if is_not_zero("?b")),
-    // rw!("canon-sub"; "(+ ?a (* -1 ?b))"   => "(- ?a ?b)"),
-    // rw!("canon-div"; "(* ?a (pow ?b -1))" => "(/ ?a ?b)" if is_not_zero("?b")),
+    rw!("canon-sub"; "(+ ?a (* -1 ?b))"   => "(- ?a ?b)"),
+    rw!("canon-div"; "(* ?a (pow ?b -1))" => "(/ ?a ?b)" if is_not_zero("?b")),
 
     rw!("zero-add"; "(+ ?a 0)" => "?a"),
     rw!("zero-mul"; "(* ?a 0)" => "0"),

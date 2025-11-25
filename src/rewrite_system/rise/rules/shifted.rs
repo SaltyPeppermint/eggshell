@@ -37,7 +37,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let added_expr_id = egraph.add_expr(&shifted);
         new_subst.insert(self.new_var, added_expr_id);
         // egraph.rebuild();
-        egraph.clean = true; // Do i know what i'm doing? Unless I set this it is unbearably slow => Ask Thomas
+        // egraph.clean = true; // Do i know what i'm doing? Unless I set this it is unbearably slow => Ask Thomas
         let mut ids = self
             .applier
             .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
