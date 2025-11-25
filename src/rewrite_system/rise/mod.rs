@@ -1,7 +1,10 @@
 mod analysis;
+mod func;
 mod indices;
 mod lang;
+mod nat;
 mod rules;
+mod shifted;
 
 use egg::{Id, Language, RecExpr, Rewrite};
 
@@ -121,10 +124,10 @@ mod test {
         let runner = Runner::default();
         let r = runner
             .with_expr(&mm)
-            .with_time_limit(Duration::from_secs(120))
+            .with_time_limit(Duration::from_secs(30))
             .with_node_limit(1_000_000)
             .with_iter_limit(300)
-            .with_scheduler(SimpleScheduler)
+            // .with_scheduler(SimpleScheduler)
             .run(&rules(RiseRuleset::MM));
         println!("{:?}\n\n\n", r.report());
         let root = &r.roots[0];

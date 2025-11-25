@@ -1,13 +1,9 @@
-mod func;
-mod nat;
-mod shifted;
-
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite};
 
+use super::func::{NotFreeIn, VectorizeScalarFun, pat};
+use super::nat::ComputeNatCheck;
+use super::shifted::{Shifted, ShiftedCheck, shift_mut};
 use super::{Index, Rise, RiseAnalysis};
-use func::{NotFreeIn, VectorizeScalarFun, pat};
-use nat::ComputeNatCheck;
-use shifted::{Shifted, ShiftedCheck, shift_mut};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![

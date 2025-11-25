@@ -1,8 +1,7 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::{Index, Rise, RiseAnalysis};
-use crate::rewrite_system::rise::{add_expr, build};
+use super::{Index, Rise, RiseAnalysis, add_expr, build};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -85,7 +84,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
             let mut new_subst = subst.clone();
             let added_expr_id = egraph.add_expr(&new_expr);
             new_subst.insert(self.vectorized_var, added_expr_id);
-            // egraph.rebuild();
             let mut ids =
                 self.applier
                     .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);

@@ -1,6 +1,6 @@
-use egg::{Applier, Id, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{EGraph, Index, Rise, RiseAnalysis};
+use super::{Index, Rise, RiseAnalysis};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
@@ -36,8 +36,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);
         new_subst.insert(self.new_var, added_expr_id);
-        // egraph.rebuild();
-        // egraph.clean = true; // Do i know what i'm doing? Unless I set this it is unbearably slow => Ask Thomas
         let mut ids = self
             .applier
             .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);

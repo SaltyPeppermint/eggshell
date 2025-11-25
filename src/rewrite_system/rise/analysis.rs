@@ -1,10 +1,20 @@
 use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
 use hashbrown::HashSet;
 
-use super::{Index, Rise};
+use super::{Index, Rise, nat};
 
 #[derive(Default, Debug)]
-pub struct RiseAnalysis;
+pub struct RiseAnalysis(EGraph<nat::Math, nat::ConstantFold>);
+
+impl RiseAnalysis {
+    pub fn new() -> Self {
+        Self(EGraph::default())
+    }
+
+    pub fn get_mut_math_egraph(&mut self) -> &mut EGraph<nat::Math, nat::ConstantFold> {
+        &mut self.0
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct AnalysisData {

@@ -6,8 +6,10 @@ use egg::{
     Runner, Searcher, Subst, Symbol, Var,
 };
 
+use crate::analysis;
+
 use super::{Rise, RiseAnalysis};
-use lang::Math;
+pub use lang::{ConstantFold, Math};
 
 // #[expect(dead_code)]
 // pub fn compute_nat<A>(var: &str, nat_pattern: &str, applier: A) -> impl Applier<Rise, RiseAnalysis>
@@ -111,13 +113,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let nat_expected = &egraph[subst[self.var]].data.beta_extract;
+        let expected = &lang::to_nat_expr(&egraph[subst[self.var]].data.beta_extract);
 
-        let nat_extracted = extract_small(egraph, &self.nat_pattern, subst);
-        if check_equivalence(
-            &lang::to_nat_expr(&nat_extracted),
-            &lang::to_nat_expr(nat_expected),
-        ) {
+        let extracted = &lang::to_nat_expr(&extract_small(egraph, &self.nat_pattern, subst));
+        if check_equivalence(egraph.analysis.get_mut_math_egraph(), expected, extracted) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -126,22 +125,30 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
     }
 }
 
-fn check_equivalence(extracted: &RecExpr<Math>, expected: &RecExpr<Math>) -> bool {
+fn check_equivalence(
+    cached_egraph: &mut EGraph<Math, ConstantFold>,
+    expected: &RecExpr<Math>,
+    extracted: &RecExpr<Math>,
+) -> bool {
     // Quick check for trivial cases:
-    fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
-        lhs[lhs_id].matches(&rhs[rhs_id])
-            && lhs[lhs_id]
-                .children()
-                .iter()
-                .zip(rhs[rhs_id].children())
-                .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
-    }
+    // fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
+    //     lhs[lhs_id].matches(&rhs[rhs_id])
+    //         && lhs[lhs_id]
+    //             .children()
+    //             .iter()
+    //             .zip(rhs[rhs_id].children())
+    //             .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
+    // }
 
-    if quick_check(expected, expected.root(), extracted, extracted.root()) {
+    // if quick_check(expected, expected.root(), extracted, extracted.root()) {
+    //     return true;
+    // }
+    if !cached_egraph.equivs(expected, extracted).is_empty() {
         return true;
     }
 
     let runner = Runner::default()
+        .with_egraph(cached_egraph.clone())
         .with_expr(expected)
         .with_expr(extracted)
         .with_hook(move |r| {
@@ -152,8 +159,9 @@ fn check_equivalence(extracted: &RecExpr<Math>, expected: &RecExpr<Math>) -> boo
             }
         })
         .run(&rules::rules());
-
-    runner.egraph.find(runner.roots[0]) == runner.egraph.find(runner.roots[1])
+    let result = runner.egraph.find(runner.roots[0]) == runner.egraph.find(runner.roots[1]);
+    *cached_egraph = runner.egraph;
+    result
 }
 
 fn extract_small(
