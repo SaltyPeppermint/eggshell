@@ -9,7 +9,7 @@ mod shifted;
 use egg::{Id, Language, RecExpr, Rewrite};
 
 use analysis::RiseAnalysis;
-use indices::Index;
+use indices::{Index, Shift};
 use lang::Rise;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]

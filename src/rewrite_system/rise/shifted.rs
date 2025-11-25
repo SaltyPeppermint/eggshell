@@ -1,11 +1,12 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
+use super::indices::Shift;
 use super::{Index, Rise, RiseAnalysis};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: i32,
+    shift: Shift,
     cutoff: Index,
     applier: A,
 }
@@ -15,7 +16,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
         Shifted {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
-            shift,
+            shift: shift.try_into().unwrap(),
             cutoff: Index::new(cutoff),
             applier,
         }
@@ -47,7 +48,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
 pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: i32,
+    shift: Shift,
     cutoff: Index,
     applier: A,
 }
@@ -57,7 +58,7 @@ impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
         ShiftedCheck {
             var: var.parse().unwrap(),
             new_var: shifted_var.parse().unwrap(),
-            shift,
+            shift: shift.try_into().unwrap(),
             cutoff: Index::new(cutoff),
             applier,
         }
@@ -85,14 +86,14 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: i32, cutoff: Index) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
-    fn rec(expr: &mut [Rise], ei: usize, shift: i32, cutoff: Index) {
+pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
+    fn rec(expr: &mut [Rise], ei: usize, shift: Shift, cutoff: Index) {
         match expr[ei] {
             Rise::Var(index) => {
                 if index >= cutoff {
@@ -102,7 +103,7 @@ pub fn shift_mut(expr: &mut [Rise], shift: i32, cutoff: Index) {
                 }
             } // TODO ALL THE OTHER LAMBDAS
             Rise::Lambda(e) => {
-                rec(expr, usize::from(e), shift, cutoff + 1);
+                rec(expr, usize::from(e), shift, cutoff.upshifted());
             }
             Rise::App([f, e]) => {
                 rec(expr, usize::from(f), shift, cutoff);

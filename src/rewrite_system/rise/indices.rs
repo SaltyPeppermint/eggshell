@@ -12,17 +12,33 @@ impl Index {
     pub fn zero() -> Self {
         Self(0)
     }
+
+    pub fn upshifted(self) -> Self {
+        self + Shift::up()
+    }
+
+    pub fn downshifted(self) -> Self {
+        self + Shift::down()
+    }
+}
+
+impl std::ops::Add<Shift> for Index {
+    type Output = Self;
+
+    fn add(self, rhs: Shift) -> Self::Output {
+        Self(self.0.checked_add_signed(rhs.0).unwrap())
+    }
 }
 
 impl std::str::FromStr for Index {
-    type Err = IndexParseError;
+    type Err = IndexError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(stripped_s) = s.strip_prefix("%") {
             let i = stripped_s.parse()?;
             Ok(Index(i))
         } else {
-            Err(IndexParseError::MissingPercentPrefix)
+            Err(IndexError::MissingPercentPrefix)
         }
     }
 }
@@ -33,34 +49,36 @@ impl std::fmt::Display for Index {
     }
 }
 
-impl std::ops::Add<u32> for Index {
-    type Output = Self;
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+pub struct Shift(i32);
 
-    fn add(self, other: u32) -> Self {
-        Index(self.0 + other)
+impl Shift {
+    pub fn up() -> Self {
+        Self(1)
+    }
+
+    pub fn down() -> Self {
+        Self(-1)
     }
 }
 
-impl std::ops::Add<i32> for Index {
-    type Output = Self;
+impl TryFrom<i32> for Shift {
+    type Error = IndexError;
 
-    fn add(self, other: i32) -> Self {
-        Index(self.0.checked_add_signed(other).unwrap())
-    }
-}
-
-impl std::ops::Sub<u32> for Index {
-    type Output = Self;
-
-    fn sub(self, other: u32) -> Self {
-        Index(self.0 - other)
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        if value == 0 {
+            return Err(IndexError::ZeroShift);
+        }
+        Ok(Shift(value))
     }
 }
 
 #[derive(Error, Debug)]
-pub enum IndexParseError {
+pub enum IndexError {
     #[error("Missing % Prefix")]
     MissingPercentPrefix,
+    #[error("Invalide zero shift")]
+    ZeroShift,
     #[error("Invalide Index: {0}")]
     InvalidIndex(#[from] std::num::ParseIntError),
 }

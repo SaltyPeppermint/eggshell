@@ -139,7 +139,7 @@ fn vec_expr(
         Rise::Lambda(e) => {
             let v_env2 = v_env
                 .into_iter()
-                .map(|i| i + 1)
+                .map(|i| i.upshifted())
                 .chain([Index::zero()])
                 .collect::<HashSet<_>>();
 

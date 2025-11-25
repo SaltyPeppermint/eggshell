@@ -54,7 +54,7 @@ impl Analysis<Rise> for RiseAnalysis {
                         .iter()
                         .copied()
                         .filter(|&idx| idx != Index::zero())
-                        .map(|idx| idx - 1),
+                        .map(|idx| idx.downshifted()),
                 );
             }
             _ => {

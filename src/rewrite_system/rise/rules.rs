@@ -3,7 +3,7 @@ use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var,
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
 use super::nat::ComputeNatCheck;
 use super::shifted::{Shifted, ShiftedCheck, shift_mut};
-use super::{Index, Rise, RiseAnalysis};
+use super::{Index, Rise, RiseAnalysis, Shift};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![
@@ -34,7 +34,8 @@ pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
         rewrite!("map-par"; "(typeOf map (fun (fun ?dt0 ?dt1) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt1))))" => { pat("(typeOf mapPar (fun (fun ?dt0 ?dt1) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt1))))") }),
     ];
     algorithmic.push(
-        rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
+        // rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
+        rewrite!("beta"; "(app (typeOf (lam ?body) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
     );
     algorithmic
 }
@@ -67,6 +68,11 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
         let result = beta_reduce(ex_body, ex_subs);
         let id = egraph.add_expr(&result);
         egraph.union(eclass, id);
+
+        println!(
+            "Beta Reduced\n{}\nto\n{}\n",
+            &egraph[eclass].data.beta_extract, &result
+        );
         vec![id]
     }
 }
@@ -74,9 +80,9 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
     let arg2 = &mut arg.as_ref().to_owned();
 
-    shift_mut(arg2, 1, Index::zero()); // shift up
+    shift_mut(arg2, Shift::up(), Index::zero()); // shift up
     let mut body2 = replace(body.as_ref(), Index::zero(), arg2);
-    shift_mut(&mut body2, -1, Index::zero()); // shift down
+    shift_mut(&mut body2, Shift::down(), Index::zero()); // shift down
     body2.into()
 }
 
@@ -97,9 +103,9 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
                 }
             }
             Rise::Lambda(e) => {
-                shift_mut(subs, 1, Index::zero());
-                let e2 = rec(result, expr, usize::from(e), index + 1, subs);
-                shift_mut(subs, -1, Index::zero());
+                shift_mut(subs, Shift::up(), Index::zero());
+                let e2 = rec(result, expr, usize::from(e), index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero());
                 super::add(result, Rise::Lambda(e2))
             }
             Rise::App([f, e]) => {
