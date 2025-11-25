@@ -81,34 +81,34 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 }
 
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>) -> RecExpr<Rise> {
-    let arg2 = &mut arg.as_ref().to_owned();
+    let arg2 = &mut arg.to_owned();
     shift_mut(arg2, Shift::up(), Index::zero()); // shift up
-    let mut body2 = replace(body.as_ref(), Index::zero(), arg2);
+    let mut body2 = replace(body, Index::zero(), arg2);
     shift_mut(&mut body2, Shift::down(), Index::zero()); // shift down
-    body2.into()
+    body2
 }
 
-fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
+fn replace(expr: &RecExpr<Rise>, index: Index, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
     fn rec(
-        result: &mut Vec<Rise>,
-        expr: &[Rise],
-        ei: usize,
+        result: &mut RecExpr<Rise>,
+        expr: &RecExpr<Rise>,
+        ei: Id,
         index: Index,
-        subs: &mut [Rise],
+        subs: &mut RecExpr<Rise>,
     ) -> Id {
         match &expr[ei] {
             Rise::Var(index2) => {
                 if index == *index2 {
-                    super::add_expr_vec(result, subs)
+                    super::add_expr(result, subs.clone())
                 } else {
-                    super::add(result, Rise::Var(*index2))
+                    result.add(Rise::Var(*index2))
                 }
             }
             Rise::Lambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero());
-                let e2 = rec(result, expr, usize::from(*e), index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
                 shift_mut(subs, Shift::down(), Index::zero());
-                super::add(result, Rise::Lambda(e2))
+                result.add(Rise::Lambda(e2))
             }
             // Should be covered by default case
             // Rise::App([f, e]) => {
@@ -119,13 +119,13 @@ fn replace(expr: &[Rise], index: Index, subs: &mut [Rise]) -> Vec<Rise> {
             other => {
                 let new_other = other
                     .clone()
-                    .map_children(|i| rec(result, expr, usize::from(i), index, subs));
-                super::add(result, new_other)
+                    .map_children(|i| rec(result, expr, i, index, subs));
+                result.add(new_other)
             }
         }
     }
-    let mut result = vec![];
-    rec(&mut result, expr, expr.len() - 1, index, subs);
+    let mut result = RecExpr::default();
+    rec(&mut result, expr, expr.root(), index, subs);
     result
 }
 

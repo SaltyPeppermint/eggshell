@@ -92,8 +92,8 @@ pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<
     result
 }
 
-pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
-    fn rec(expr: &mut [Rise], ei: usize, shift: Shift, cutoff: Index) {
+pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
+    fn rec(expr: &mut RecExpr<Rise>, ei: Id, shift: Shift, cutoff: Index) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
         match expr[ei] {
@@ -105,11 +105,11 @@ pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
                 }
             }
             Rise::Lambda(e) => {
-                rec(expr, usize::from(e), shift, cutoff.upshifted());
+                rec(expr, e, shift, cutoff.upshifted());
             }
             Rise::App([f, e]) => {
-                rec(expr, usize::from(f), shift, cutoff);
-                rec(expr, usize::from(e), shift, cutoff);
+                rec(expr, f, shift, cutoff);
+                rec(expr, e, shift, cutoff);
             }
             // Rise::TypeOf([e, t]) => {
             //     rec(expr, usize::from(e), shift, cutoff);
@@ -126,13 +126,13 @@ pub fn shift_mut(expr: &mut [Rise], shift: Shift, cutoff: Index) {
             | Rise::NatDiv(ids)
             | Rise::NatPow(ids) => {
                 for id in ids {
-                    rec(expr, usize::from(id), shift, cutoff);
+                    rec(expr, id, shift, cutoff);
                 }
             }
-            Rise::IndexType(id) => rec(expr, usize::from(id), shift, cutoff),
+            Rise::IndexType(id) => rec(expr, id, shift, cutoff),
             // All the empty ones
             _ => (),
         }
     }
-    rec(expr, expr.len() - 1, shift, cutoff);
+    rec(expr, expr.root(), shift, cutoff);
 }

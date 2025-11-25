@@ -30,10 +30,10 @@ fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
         .build_recexpr(|child_id| rec_expr[child_id].clone())
 }
 
-fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
-    to.push(e);
-    Id::from(to.len() - 1)
-}
+// fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
+//     to.push(e);
+//     Id::from(to.len() - 1)
+// }
 
 fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
     let offset = to.len();
@@ -43,20 +43,20 @@ fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
     to.root()
 }
 
-fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
-    let offset = to.len();
-    to.extend(e.iter().map(|n| {
-        n.clone()
-            .map_children(|id| Id::from(usize::from(id) + offset))
-    }));
-    Id::from(to.len() - 1)
-}
+// fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
+//     let offset = to.len();
+//     to.extend(e.iter().map(|n| {
+//         n.clone()
+//             .map_children(|id| Id::from(usize::from(id) + offset))
+//     }));
+//     Id::from(to.len() - 1)
+// }
 
 #[cfg(test)]
 mod test {
     use std::time::Duration;
 
-    use egg::{Pattern, RecExpr, Runner, SimpleScheduler};
+    use egg::{RecExpr, Runner, SimpleScheduler};
 
     use super::*;
 
@@ -126,7 +126,7 @@ mod test {
             .with_time_limit(Duration::from_secs(30))
             .with_node_limit(1_000_000)
             .with_iter_limit(300)
-            // .with_scheduler(SimpleScheduler)
+            .with_scheduler(SimpleScheduler)
             .run(&rules(RiseRuleset::MM));
         println!("{:?}\n\n\n", r.report());
         let root = r.egraph.find(r.roots[0]);
