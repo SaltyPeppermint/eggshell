@@ -118,8 +118,7 @@ mod test {
     #[test]
     pub fn baseline() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
-        let mm_pattern: Pattern<Rise> = MM.parse().unwrap();
-        let baseline_goal: Pattern<Rise> = BASELINE_GOAL.parse().unwrap();
+        let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
 
         let runner = Runner::default();
         let r = runner
@@ -130,7 +129,8 @@ mod test {
             // .with_scheduler(SimpleScheduler)
             .run(&rules(RiseRuleset::MM));
         println!("{:?}\n\n\n", r.report());
-        let root = &r.roots[0];
-        r.egraph.check_goals(*root, &[mm_pattern, baseline_goal]);
+        let root = r.egraph.find(r.roots[0]);
+        assert_eq!(root, r.egraph.lookup_expr(&mm).unwrap());
+        assert_eq!(root, r.egraph.lookup_expr(&baseline_goal).unwrap());
     }
 }
