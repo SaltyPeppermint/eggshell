@@ -78,9 +78,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
         if let Some((vectorized_expr, _, expr_id)) =
             vec_expr(&extracted, n, HashSet::new(), extracted.root())
         {
-            // println!("HOORAY VECTORIZE");
             let new_expr = vectorized_expr[expr_id].build_recexpr(|i| vectorized_expr[i].clone());
-
             let mut new_subst = subst.clone();
             let added_expr_id = egraph.add_expr(&new_expr);
             new_subst.insert(self.vectorized_var, added_expr_id);

@@ -10,18 +10,6 @@ use hashbrown::HashSet;
 use super::{Rise, RiseAnalysis};
 pub use lang::Math;
 
-// #[expect(dead_code)]
-// pub fn compute_nat<A>(var: &str, nat_pattern: &str, applier: A) -> impl Applier<Rise, RiseAnalysis>
-// where
-//     A: Applier<Rise, RiseAnalysis>,
-// {
-//     ComputeNat {
-//         var: var.parse().unwrap(),
-//         nat_pattern: nat_pattern.parse().unwrap(),
-//         applier,
-//     }
-// }
-
 pub struct ComputeNat<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
@@ -72,21 +60,6 @@ fn simplify(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
     lang::to_rise_expr(&expr)
 }
 
-// pub fn compute_nat_check<A>(
-//     var: &str,
-//     nat_pattern: &str,
-//     applier: A,
-// ) -> impl Applier<Rise, RiseAnalysis>
-// where
-//     A: Applier<Rise, RiseAnalysis>,
-// {
-//     ComputeNatCheck {
-//         var: var.parse().unwrap(),
-//         nat_pattern: nat_pattern.parse().unwrap(),
-//         applier,
-//     }
-// }
-
 pub struct ComputeNatCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
@@ -115,7 +88,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         let expected = lang::to_nat_expr(&egraph[subst[self.var]].data.beta_extract);
         let extracted = lang::to_nat_expr(&extract_small(egraph, &self.nat_pattern, subst));
         if check_equivalence(egraph.analysis.get_mut_term_bank(), (expected, extracted)) {
-            println!("They are the same!");
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -128,21 +100,8 @@ fn check_equivalence<'a, 'b: 'a>(
     term_bank: &'b mut HashSet<(RecExpr<Math>, RecExpr<Math>)>,
     pair: (RecExpr<Math>, RecExpr<Math>),
 ) -> bool {
-    // Quick check for trivial cases:
-    // fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
-    //     lhs[lhs_id].matches(&rhs[rhs_id])
-    //         && lhs[lhs_id]
-    //             .children()
-    //             .iter()
-    //             .zip(rhs[rhs_id].children())
-    //             .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
-    // }
-
-    // if quick_check(expected, expected.root(), extracted, extracted.root()) {
-    //     return true;
-    // }
+    // check cache
     if term_bank.contains(&pair) {
-        println!("Found pair early");
         return true;
     }
 
@@ -164,6 +123,20 @@ fn check_equivalence<'a, 'b: 'a>(
     }
     false
 }
+
+// Quick check for trivial cases:
+// fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
+//     lhs[lhs_id].matches(&rhs[rhs_id])
+//         && lhs[lhs_id]
+//             .children()
+//             .iter()
+//             .zip(rhs[rhs_id].children())
+//             .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
+// }
+
+// if quick_check(expected, expected.root(), extracted, extracted.root()) {
+//     return true;
+// }
 
 fn extract_small(
     egraph: &EGraph<Rise, RiseAnalysis>,
