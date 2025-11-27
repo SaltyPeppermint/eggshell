@@ -20,6 +20,7 @@ crate-type = ["cdylib", "rlib"]
 bon = "3"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
+colored = "3"
 csv = "1"
 dashmap = { version = "6", features = ["rayon"] }
 dot-generator = "0.2"
