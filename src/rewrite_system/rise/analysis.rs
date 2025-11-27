@@ -46,9 +46,13 @@ impl Analysis<Rise> for RiseAnalysis {
             Rise::Var(v) => {
                 free.insert(*v);
             }
-            Rise::Lambda(a) => {
+            Rise::Lambda(e)
+            | Rise::NatLambda(e)
+            | Rise::DataLambda(e)
+            | Rise::AddrLambda(e)
+            | Rise::NatNatLambda(e) => {
                 free.extend(
-                    egraph[*a]
+                    egraph[*e]
                         .data
                         .free
                         .iter()

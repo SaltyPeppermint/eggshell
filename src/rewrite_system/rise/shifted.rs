@@ -111,15 +111,21 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             | Rise::NatNatLambda(e) => {
                 rec(expr, e, shift, cutoff.upshifted());
             }
-            Rise::App([f, e])
-            | Rise::NatApp([f, e])
-            | Rise::DataApp([f, e])
-            | Rise::AddrApp([f, e])
-            | Rise::NatNatApp([f, e]) => {
-                rec(expr, f, shift, cutoff);
-                rec(expr, e, shift, cutoff);
-            }
-            Rise::TypeOf(ids)
+            // Should be covered by the iter impl
+            // Rise::App(ids)
+            // | Rise::NatApp(ids)
+            // | Rise::DataApp(ids)
+            // | Rise::AddrApp(ids)
+            // | Rise::NatNatApp(ids)=> {
+            //     rec(expr, f, shift, cutoff);
+            //     rec(expr, e, shift, cutoff);
+            // }
+            Rise::App(ids)
+            | Rise::NatApp(ids)
+            | Rise::DataApp(ids)
+            | Rise::AddrApp(ids)
+            | Rise::NatNatApp(ids)
+            | Rise::TypeOf(ids)
             | Rise::FunType(ids)
             | Rise::ArrType(ids)
             | Rise::VecType(ids)

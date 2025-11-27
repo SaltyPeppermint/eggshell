@@ -125,7 +125,7 @@ mod test {
         let runner = Runner::default();
         let r = runner
             .with_expr(&mm)
-            // .with_expr(&baseline_goal)
+            .with_expr(&baseline_goal)
             .with_time_limit(Duration::from_secs(30))
             .with_node_limit(1_000_000)
             .with_iter_limit(5)
