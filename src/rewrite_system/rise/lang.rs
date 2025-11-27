@@ -1,4 +1,5 @@
-use egg::Id;
+use colored::{ColoredString, Colorize};
+use egg::{Id, Language, RecExpr};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
@@ -81,4 +82,147 @@ egg::define_language! {
     // Double(f64),
     // Symbol(Symbol),
   }
+}
+
+fn pp(expr: &RecExpr<Rise>, skip_wrapper: bool) {
+    let tree = PPTreeNode::new(expr, expr.root(), skip_wrapper);
+    tree.pp();
+}
+
+struct PPTreeNode {
+    children: Box<[PPTreeNode]>,
+    expr: ColoredString,
+    ty: ColoredString,
+}
+
+impl PPTreeNode {
+    fn pp(&self) {
+        fn rec(node: &PPTreeNode, indent: &str, last_child: bool) {
+            match (last_child, indent) {
+                (true | false, "") => {
+                    println!("{}: {}", node.expr, node.ty);
+                }
+                (true, _) => println!("{indent}┗━{}: {}", node.expr, node.ty),
+                (false, _) => {
+                    let shortened = indent.trim_end_matches('┃');
+                    // let shorter_indent = &indent[0..indent.len() - 1];
+                    println!("{shortened}┣━{}: {}", node.expr, node.ty);
+                }
+            }
+            //┣
+            let Some((last, rest)) = node.children.split_last() else {
+                return;
+            };
+
+            for r in rest {
+                rec(r, &format!("{indent}   ┃"), false);
+            }
+            rec(last, &format!("{indent}   "), true);
+        }
+        rec(self, "", false);
+    }
+
+    fn new(expr: &RecExpr<Rise>, id: Id, skip_wrapper: bool) -> PPTreeNode {
+        let Rise::TypeOf([expr_id, ty_id]) = &expr[id] else {
+            panic!("Needs top TypeOf")
+        };
+        Self {
+            children: expr[*expr_id]
+                .children()
+                .iter()
+                .map(|c_id| Self::new(expr, *c_id, skip_wrapper))
+                .collect(),
+            expr: match expr[*expr_id] {
+                Rise::Var(index) => index.to_string().magenta(),
+                Rise::App(_) | Rise::Lambda(_) => expr[*expr_id].to_string().red(),
+                Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
+                    expr[*expr_id].to_string().cyan()
+                }
+                Rise::NatLambda(c_id)
+                | Rise::DataLambda(c_id)
+                | Rise::AddrLambda(c_id)
+                | Rise::NatNatLambda(c_id) => {
+                    if skip_wrapper {
+                        return Self::new(expr, c_id, skip_wrapper);
+                    }
+                    expr[*expr_id].to_string().cyan()
+                }
+                Rise::FunType(_)
+                | Rise::NatFun(_)
+                | Rise::DataFun(_)
+                | Rise::AddrFun(_)
+                | Rise::NatNatFun(_)
+                | Rise::TypeOf(_)
+                | Rise::ArrType(_)
+                | Rise::VecType(_)
+                | Rise::PairType(_)
+                | Rise::IndexType(_)
+                | Rise::NatType
+                | Rise::F32 => panic!("Should not see types here: {}", expr[*expr_id]),
+                Rise::NatAdd(_)
+                | Rise::NatSub(_)
+                | Rise::NatMul(_)
+                | Rise::NatDiv(_)
+                | Rise::NatPow(_) => expr[*expr_id].to_string().white(),
+                Rise::Let
+                | Rise::AsVector
+                | Rise::AsScalar
+                | Rise::VectorFromScalar
+                | Rise::Snd
+                | Rise::Fst
+                | Rise::Add
+                | Rise::Mul
+                | Rise::ToMem
+                | Rise::Split
+                | Rise::Join
+                | Rise::Generate
+                | Rise::Transpose
+                | Rise::Zip
+                | Rise::Unzip
+                | Rise::Map
+                | Rise::MapPar
+                | Rise::Reduce
+                | Rise::ReduceSeq
+                | Rise::ReduceSeqUnroll
+                | Rise::Float(_) => expr[*expr_id].to_string().yellow(),
+                Rise::Integer(i) => format!("int{i}").purple(),
+            },
+            ty: pp_ty(expr, *ty_id),
+        }
+    }
+}
+
+fn pp_ty(expr: &RecExpr<Rise>, id: Id) -> ColoredString {
+    let node = &expr[id];
+    match node {
+        Rise::Var(index) => index.to_string().green(),
+        Rise::FunType([i, o]) => format!("{} -> {}", pp_ty(expr, *i), pp_ty(expr, *o)).blue(),
+        Rise::ArrType([n, ty]) => format!("Arr[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
+        Rise::VecType([n, ty]) => format!("Vec[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
+        Rise::PairType([fst, snd]) => {
+            format!("Pair[{}, {}]", pp_ty(expr, *fst), pp_ty(expr, *snd)).blue()
+        }
+        Rise::IndexType(c) => format!("Index[{}]", pp_ty(expr, *c)).blue(),
+        Rise::NatType => "nat".to_owned().blue(),
+        Rise::F32 => "f32".to_owned().blue(),
+        Rise::NatFun(c) => format!("NatFun[{}]", pp_ty(expr, *c)).blue(),
+        Rise::DataFun(c) => format!("DataFun[{}]", pp_ty(expr, *c)).blue(),
+        Rise::AddrFun(c) => format!("AddrFun[{}]", pp_ty(expr, *c)).blue(),
+        Rise::NatNatFun(c) => format!("NatNatFun[{}]", pp_ty(expr, *c)).blue(),
+        _ => panic!("only for types but found {node}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use super::super::MM;
+
+    #[test]
+    fn pp_test() {
+        let mm: RecExpr<Rise> = MM.parse().unwrap();
+        pp(&mm, true);
+        pp(&mm, false);
+    }
 }
