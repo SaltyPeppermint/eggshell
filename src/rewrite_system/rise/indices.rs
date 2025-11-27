@@ -73,6 +73,12 @@ impl TryFrom<i32> for Shift {
     }
 }
 
+impl std::fmt::Display for Shift {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum IndexError {
     #[error("Missing % Prefix")]

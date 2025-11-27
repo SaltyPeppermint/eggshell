@@ -34,6 +34,12 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
+
+        println!(
+            "Shifting {} to {} by {} with cutoff {}:\n{extract}\n{shifted}\n---",
+            self.var, self.new_var, self.shift, self.cutoff
+        );
+
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);
         new_subst.insert(self.new_var, added_expr_id);
@@ -99,7 +105,6 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
         match expr[ei] {
             Rise::Var(index) => {
                 if index >= cutoff {
-                    // let index2 = Index(index.0.checked_add_signed(shift).unwrap());
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
@@ -171,4 +176,40 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
         }
     }
     rec(expr, expr.root(), shift, cutoff);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shift_applier() {
+        fn check(to_shift: &str, ground_truth: &str, cutoff: u32, shift: i32) {
+            let a = &to_shift.parse().unwrap();
+            let b = &ground_truth.parse().unwrap();
+            let shifted = shift_copy(a, Shift::try_from(shift).unwrap(), Index::new(cutoff));
+            assert_eq!(&shifted, b);
+        }
+        check("(app %0 %1)", "(app %1 %2)", 0, 1);
+        check("(typeOf (app %0 %1) f32)", "(typeOf (app %1 %2) f32)", 0, 1);
+        check("(typeOf (app %0 %1) f32)", "(typeOf (app %0 %2) f32)", 1, 1);
+        check(
+            "(typeOf (lam (typeOf (app %0 %2) f32)) f32)",
+            "(typeOf (lam (typeOf (app %0 %3) f32)) f32)",
+            1,
+            1,
+        );
+        check(
+            "(typeOf (lam (typeOf (app %0 %2) f32)) f32)",
+            "(typeOf (lam (typeOf (app %0 %1) f32)) f32)",
+            1,
+            -1,
+        );
+        check(
+            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %3 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %3 (pairT f32 f32))) f32)) f32))",
+            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %5 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %5 (pairT f32 f32))) f32)) f32))",
+            0,
+            2,
+        );
+    }
 }
