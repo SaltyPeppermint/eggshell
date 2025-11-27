@@ -249,9 +249,6 @@ fn vec_expr(
 }
 
 fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
-    if let Rise::Var(_) = expr[id] {
-        return None;
-    }
     match expr[id] {
         Rise::F32 => {
             let mut vec_ty = RecExpr::default();
