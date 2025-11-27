@@ -163,7 +163,9 @@ impl PPTreeNode {
                 | Rise::NatSub(_)
                 | Rise::NatMul(_)
                 | Rise::NatDiv(_)
-                | Rise::NatPow(_) => expr[*expr_id].to_string().white(),
+                | Rise::NatPow(_) => {
+                    panic!("NatExpr should only appear in types: {}", expr[*expr_id])
+                } //expr[*expr_id].to_string().white()
                 Rise::Let
                 | Rise::AsVector
                 | Rise::AsScalar
@@ -227,6 +229,36 @@ fn pp_ty(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {
         Rise::DataFun(c) => format!("DataFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
         Rise::AddrFun(c) => format!("AddrFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
         Rise::NatNatFun(c) => format!("NatNatFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
+        Rise::NatAdd([a, b]) => format!(
+            "({} + {})",
+            pp_ty(expr, *a, fn_brackets),
+            pp_ty(expr, *b, fn_brackets)
+        )
+        .white(),
+        Rise::NatSub([a, b]) => format!(
+            "({} - {})",
+            pp_ty(expr, *a, fn_brackets),
+            pp_ty(expr, *b, fn_brackets)
+        )
+        .white(),
+        Rise::NatMul([a, b]) => format!(
+            "({} * {})",
+            pp_ty(expr, *a, fn_brackets),
+            pp_ty(expr, *b, fn_brackets)
+        )
+        .white(),
+        Rise::NatDiv([a, b]) => format!(
+            "({} / {})",
+            pp_ty(expr, *a, fn_brackets),
+            pp_ty(expr, *b, fn_brackets)
+        )
+        .white(),
+        Rise::NatPow([a, b]) => format!(
+            "({} ^ {})",
+            pp_ty(expr, *a, fn_brackets),
+            pp_ty(expr, *b, fn_brackets)
+        )
+        .white(),
         _ => panic!("only for types but found {node}"),
     }
 }
