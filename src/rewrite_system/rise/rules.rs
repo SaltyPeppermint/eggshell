@@ -104,7 +104,11 @@ fn replace(expr: &RecExpr<Rise>, index: Index, subs: &mut RecExpr<Rise>) -> RecE
                     result.add(Rise::Var(*index2))
                 }
             }
-            Rise::Lambda(e) => {
+            Rise::Lambda(e)
+            | Rise::NatLambda(e)
+            | Rise::DataLambda(e)
+            | Rise::AddrLambda(e)
+            | Rise::NatNatLambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero());
                 let e2 = rec(result, expr, *e, index.upshifted(), subs);
                 shift_mut(subs, Shift::down(), Index::zero());

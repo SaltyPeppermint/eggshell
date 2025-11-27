@@ -104,10 +104,18 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
                     expr[ei] = Rise::Var(index2);
                 }
             }
-            Rise::Lambda(e) => {
+            Rise::Lambda(e)
+            | Rise::NatLambda(e)
+            | Rise::DataLambda(e)
+            | Rise::AddrLambda(e)
+            | Rise::NatNatLambda(e) => {
                 rec(expr, e, shift, cutoff.upshifted());
             }
-            Rise::App([f, e]) => {
+            Rise::App([f, e])
+            | Rise::NatApp([f, e])
+            | Rise::DataApp([f, e])
+            | Rise::AddrApp([f, e])
+            | Rise::NatNatApp([f, e]) => {
                 rec(expr, f, shift, cutoff);
                 rec(expr, e, shift, cutoff);
             }
@@ -129,7 +137,11 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
                     rec(expr, id, shift, cutoff);
                 }
             }
-            Rise::IndexType(id) => rec(expr, id, shift, cutoff),
+            Rise::IndexType(id)
+            | Rise::NatFun(id)
+            | Rise::DataFun(id)
+            | Rise::AddrFun(id)
+            | Rise::NatNatFun(id) => rec(expr, id, shift, cutoff),
             // All the empty ones
             _ => (),
         }

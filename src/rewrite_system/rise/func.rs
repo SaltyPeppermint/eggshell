@@ -192,6 +192,14 @@ fn vec_expr(
             Some((typed_prim, vec_prim_ty_id, prim_id))
         }
         Rise::Var(_)
+        | Rise::NatApp(_)
+        | Rise::DataApp(_)
+        | Rise::AddrApp(_)
+        | Rise::NatNatApp(_)
+        | Rise::NatLambda(_)
+        | Rise::DataLambda(_)
+        | Rise::AddrLambda(_)
+        | Rise::NatNatLambda(_)
         | Rise::ToMem
         | Rise::Split
         | Rise::Join
@@ -212,6 +220,10 @@ fn vec_expr(
 
         Rise::TypeOf(_)
         | Rise::FunType(_)
+        | Rise::NatFun(_)
+        | Rise::DataFun(_)
+        | Rise::AddrFun(_)
+        | Rise::NatNatFun(_)
         | Rise::ArrType(_)
         | Rise::VecType(_)
         | Rise::PairType(_)
