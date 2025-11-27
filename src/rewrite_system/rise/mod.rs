@@ -123,14 +123,33 @@ mod test {
         let runner = Runner::default();
         let r = runner
             .with_expr(&mm)
+            .with_expr(&baseline_goal)
             .with_time_limit(Duration::from_secs(30))
             .with_node_limit(1_000_000)
-            .with_iter_limit(300)
+            .with_iter_limit(5)
             .with_scheduler(SimpleScheduler)
+            .with_hook(|r| {
+                println!("ITERATION {}:\n", r.iterations.len());
+                println!("Nodes: {}\n", r.egraph.nodes().len());
+                println!("EClasses: {}\n", r.egraph.number_of_classes());
+                print!("Rules:");
+                if let Some(i) = r.iterations.last() {
+                    for rule in &rules(RiseRuleset::MM) {
+                        let name = &rule.name;
+                        let n = i.applied.get(name).unwrap_or(&0);
+                        println!("{name}: {n}");
+                    }
+                }
+                println!("---");
+                Ok(())
+            })
             .run(&rules(RiseRuleset::MM));
         println!("{:?}\n\n\n", r.report());
-        let root = r.egraph.find(r.roots[0]);
-        assert_eq!(root, r.egraph.lookup_expr(&mm).unwrap());
-        assert_eq!(root, r.egraph.lookup_expr(&baseline_goal).unwrap());
+        let root_mm = r.egraph.find(r.roots[0]);
+        let root_baseline = r.egraph.find(r.roots[1]);
+
+        assert_eq!(root_mm, r.egraph.lookup_expr(&mm).unwrap());
+        assert_eq!(root_baseline, r.egraph.lookup_expr(&baseline_goal).unwrap());
+        assert_eq!(root_mm, root_baseline);
     }
 }

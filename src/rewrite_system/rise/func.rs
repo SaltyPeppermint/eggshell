@@ -101,6 +101,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 }
 
 // Expr, ty_id, expr_id
+#[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
