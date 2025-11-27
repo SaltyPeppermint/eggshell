@@ -119,10 +119,6 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
                 rec(expr, f, shift, cutoff);
                 rec(expr, e, shift, cutoff);
             }
-            // Rise::TypeOf([e, t]) => {
-            //     rec(expr, usize::from(e), shift, cutoff);
-            //     rec(expr, usize::from(t), shift, cutoff);
-            // }
             Rise::TypeOf(ids)
             | Rise::FunType(ids)
             | Rise::ArrType(ids)
@@ -142,8 +138,30 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             | Rise::DataFun(id)
             | Rise::AddrFun(id)
             | Rise::NatNatFun(id) => rec(expr, id, shift, cutoff),
-            // All the empty ones
-            _ => (),
+            Rise::Let
+            | Rise::NatType
+            | Rise::F32
+            | Rise::AsVector
+            | Rise::AsScalar
+            | Rise::VectorFromScalar
+            | Rise::Snd
+            | Rise::Fst
+            | Rise::Add
+            | Rise::Mul
+            | Rise::ToMem
+            | Rise::Split
+            | Rise::Join
+            | Rise::Generate
+            | Rise::Transpose
+            | Rise::Zip
+            | Rise::Unzip
+            | Rise::Map
+            | Rise::MapPar
+            | Rise::Reduce
+            | Rise::ReduceSeq
+            | Rise::ReduceSeqUnroll
+            | Rise::Integer(_)
+            | Rise::Float(_) => (),
         }
     }
     rec(expr, expr.root(), shift, cutoff);
