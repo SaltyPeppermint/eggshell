@@ -187,28 +187,46 @@ impl PPTreeNode {
                 | Rise::Float(_) => expr[*expr_id].to_string().yellow(),
                 Rise::Integer(i) => format!("int{i}").purple(),
             },
-            ty: pp_ty(expr, *ty_id),
+            ty: pp_ty(expr, *ty_id, false),
         }
     }
 }
 
-fn pp_ty(expr: &RecExpr<Rise>, id: Id) -> ColoredString {
+fn pp_ty(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {
     let node = &expr[id];
     match node {
         Rise::Var(index) => index.to_string().green(),
-        Rise::FunType([i, o]) => format!("{} -> {}", pp_ty(expr, *i), pp_ty(expr, *o)).blue(),
-        Rise::ArrType([n, ty]) => format!("[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
-        Rise::VecType([n, ty]) => format!("Vec[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
-        Rise::PairType([fst, snd]) => {
-            format!("({}, {})", pp_ty(expr, *fst), pp_ty(expr, *snd)).blue()
+        Rise::FunType([i, o]) => if fn_brackets {
+            format!("({} -> {})", pp_ty(expr, *i, true), pp_ty(expr, *o, true))
+        } else {
+            format!("{} -> {}", pp_ty(expr, *i, true), pp_ty(expr, *o, true))
         }
-        Rise::IndexType(c) => format!("Idx[{}]", pp_ty(expr, *c)).blue(),
+        .blue(),
+        Rise::ArrType([n, ty]) => format!(
+            "[{}: {}]",
+            pp_ty(expr, *ty, fn_brackets),
+            pp_ty(expr, *n, fn_brackets)
+        )
+        .blue(),
+        Rise::VecType([n, ty]) => format!(
+            "Vec[{}: {}]",
+            pp_ty(expr, *ty, fn_brackets),
+            pp_ty(expr, *n, fn_brackets)
+        )
+        .blue(),
+        Rise::PairType([fst, snd]) => format!(
+            "({}, {})",
+            pp_ty(expr, *fst, fn_brackets),
+            pp_ty(expr, *snd, fn_brackets)
+        )
+        .blue(),
+        Rise::IndexType(c) => format!("Idx[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
         Rise::NatType => "nat".to_owned().blue(),
         Rise::F32 => "f32".to_owned().blue(),
-        Rise::NatFun(c) => format!("NatFun[{}]", pp_ty(expr, *c)).blue(),
-        Rise::DataFun(c) => format!("DataFun[{}]", pp_ty(expr, *c)).blue(),
-        Rise::AddrFun(c) => format!("AddrFun[{}]", pp_ty(expr, *c)).blue(),
-        Rise::NatNatFun(c) => format!("NatNatFun[{}]", pp_ty(expr, *c)).blue(),
+        Rise::NatFun(c) => format!("NatFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
+        Rise::DataFun(c) => format!("DataFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
+        Rise::AddrFun(c) => format!("AddrFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
+        Rise::NatNatFun(c) => format!("NatNatFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
         _ => panic!("only for types but found {node}"),
     }
 }
