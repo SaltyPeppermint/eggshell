@@ -197,12 +197,12 @@ fn pp_ty(expr: &RecExpr<Rise>, id: Id) -> ColoredString {
     match node {
         Rise::Var(index) => index.to_string().green(),
         Rise::FunType([i, o]) => format!("{} -> {}", pp_ty(expr, *i), pp_ty(expr, *o)).blue(),
-        Rise::ArrType([n, ty]) => format!("Arr[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
+        Rise::ArrType([n, ty]) => format!("[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
         Rise::VecType([n, ty]) => format!("Vec[{}: {}]", pp_ty(expr, *ty), pp_ty(expr, *n)).blue(),
         Rise::PairType([fst, snd]) => {
-            format!("Pair[{}, {}]", pp_ty(expr, *fst), pp_ty(expr, *snd)).blue()
+            format!("({}, {})", pp_ty(expr, *fst), pp_ty(expr, *snd)).blue()
         }
-        Rise::IndexType(c) => format!("Index[{}]", pp_ty(expr, *c)).blue(),
+        Rise::IndexType(c) => format!("Idx[{}]", pp_ty(expr, *c)).blue(),
         Rise::NatType => "nat".to_owned().blue(),
         Rise::F32 => "f32".to_owned().blue(),
         Rise::NatFun(c) => format!("NatFun[{}]", pp_ty(expr, *c)).blue(),
@@ -220,7 +220,7 @@ mod tests {
     use super::super::MM;
 
     #[test]
-    fn pp_test() {
+    fn pp_mm() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         pp(&mm, true);
         pp(&mm, false);
