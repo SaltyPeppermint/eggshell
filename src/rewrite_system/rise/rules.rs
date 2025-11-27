@@ -173,6 +173,6 @@ mod tests {
     #[test]
     fn count_rules() {
         let rules = mm_rules();
-        assert_eq!(27, rules.len());
+        assert_eq!(30, rules.len());
     }
 }
