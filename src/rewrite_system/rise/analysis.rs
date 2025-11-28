@@ -1,5 +1,7 @@
-use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
+use egg::{Analysis, AstSize, CostFunction, DidMerge, EGraph, Language, RecExpr};
 use hashbrown::HashSet;
+
+use crate::rewrite_system::rise::kind::Kindable;
 
 use super::nat::Math;
 use super::{Index, Rise};
@@ -29,45 +31,41 @@ impl Analysis<Rise> for RiseAnalysis {
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
         let before_len = to.free.len();
         to.free.extend(from.free);
-        let mut did_change = before_len != to.free.len();
-        if !from.beta_extract.as_ref().is_empty()
-            && (to.beta_extract.as_ref().is_empty()
-                || to.beta_extract.as_ref().len() > from.beta_extract.as_ref().len())
+        let did_change = before_len != to.free.len();
+
+        if !from.beta_extract.is_empty()
+            && (to.beta_extract.is_empty()
+                || AstSize.cost_rec(&to.beta_extract) > AstSize.cost_rec(&from.beta_extract))
         {
             to.beta_extract = from.beta_extract;
-            did_change = true;
+            return DidMerge(true, true);
         }
         DidMerge(did_change, true) // TODO: more precise second bool
     }
 
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
-        let mut free = HashSet::default();
-        match enode {
-            Rise::Var(v) => {
-                free.insert(*v);
-            }
+        let free = match enode {
+            Rise::Var(v) => [*v].into(),
             Rise::Lambda(e)
             | Rise::NatLambda(e)
             | Rise::DataLambda(e)
             | Rise::AddrLambda(e)
-            | Rise::NatNatLambda(e) => {
-                free.extend(
-                    egraph[*e]
-                        .data
-                        .free
-                        .iter()
-                        .copied()
-                        .filter(|idx| !idx.is_zero())
-                        .map(|idx| idx.downshifted()),
-                );
-            }
-            _ => {
-                enode.for_each(|c| free.extend(&egraph[c].data.free));
-            }
-        }
+            | Rise::NatNatLambda(e) => egraph[*e]
+                .data
+                .free
+                .iter()
+                .filter(|idx| !idx.is_zero() && idx.kind() == enode.kind())
+                .map(|idx| idx.downshifted())
+                .collect(),
+            _ => enode
+                .children()
+                .iter()
+                .flat_map(|c| egraph[*c].data.free.iter())
+                .copied()
+                .collect(),
+        };
         let empty = enode.any(|id| egraph[id].data.beta_extract.as_ref().is_empty());
         let beta_extract = if empty {
-            // vec![].into()
             RecExpr::default()
         } else {
             enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
