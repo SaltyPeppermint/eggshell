@@ -1,16 +1,25 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+// #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+// pub struct Index(u32);
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
-pub struct Index(u32);
+pub enum Index {
+    Expr(u32),
+    Nat(u32),
+    Data(u32),
+    Addr(u32),
+    Synthetic(u32),
+}
 
 impl Index {
     pub fn new(i: u32) -> Self {
-        Self(i)
+        Self::Synthetic(i)
     }
 
     pub fn zero() -> Self {
-        Self(0)
+        Self::Synthetic(0)
     }
 
     pub fn upshifted(self) -> Self {
@@ -20,13 +29,31 @@ impl Index {
     pub fn downshifted(self) -> Self {
         self + Shift::down()
     }
+
+    fn value(self) -> u32 {
+        match self {
+            Index::Nat(i)
+            | Index::Expr(i)
+            | Index::Data(i)
+            | Index::Addr(i)
+            | Index::Synthetic(i) => i,
+        }
+    }
 }
 
 impl std::ops::Add<Shift> for Index {
     type Output = Self;
 
     fn add(self, rhs: Shift) -> Self::Output {
-        Self(self.0.checked_add_signed(rhs.0).unwrap())
+        let value = self.value().checked_add_signed(rhs.0).unwrap();
+
+        match self {
+            Index::Expr(_) => Index::Expr(value),
+            Index::Nat(_) => Index::Nat(value),
+            Index::Data(_) => Index::Data(value),
+            Index::Addr(_) => Index::Addr(value),
+            Index::Synthetic(_) => Index::Synthetic(value),
+        }
     }
 }
 
@@ -35,17 +62,32 @@ impl std::str::FromStr for Index {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(stripped_s) = s.strip_prefix("%") {
-            let i = stripped_s.parse()?;
-            Ok(Index(i))
+            if let Some((tag, i)) = stripped_s.split_at_checked(1) {
+                match tag {
+                    "e" => Ok(Index::Expr(i.parse()?)),
+                    "n" => Ok(Index::Nat(i.parse()?)),
+                    "d" => Ok(Index::Data(i.parse()?)),
+                    "a" => Ok(Index::Addr(i.parse()?)),
+                    _ => Err(IndexError::ImproperTag(stripped_s.to_owned())),
+                }
+            } else {
+                Err(IndexError::MissingTag(stripped_s.to_owned()))
+            }
         } else {
-            Err(IndexError::MissingPercentPrefix)
+            Err(IndexError::MissingPercentPrefix(s.to_owned()))
         }
     }
 }
 
 impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "%{}", self.0)
+        match self {
+            Index::Expr(i) => write!(f, "%e{i}"),
+            Index::Nat(i) => write!(f, "%n{i}"),
+            Index::Data(i) => write!(f, "%d{i}"),
+            Index::Addr(i) => write!(f, "%a{i}"),
+            Index::Synthetic(i) => write!(f, "%synthetic{i}"),
+        }
     }
 }
 
@@ -81,8 +123,12 @@ impl std::fmt::Display for Shift {
 
 #[derive(Error, Debug)]
 pub enum IndexError {
-    #[error("Missing % Prefix")]
-    MissingPercentPrefix,
+    #[error("Missing % Prefix: {0}")]
+    MissingPercentPrefix(String),
+    #[error("Improper Tag {0}")]
+    ImproperTag(String),
+    #[error("Missing Tag {0}")]
+    MissingTag(String),
     #[error("Invalide zero shift")]
     ZeroShift,
     #[error("Invalide Index: {0}")]

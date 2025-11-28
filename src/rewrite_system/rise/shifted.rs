@@ -35,6 +35,8 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
 
+        // dbg!(extract);
+        // dbg!(&shifted);
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);
 
@@ -78,6 +80,9 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
+
+        dbg!(extract);
+        dbg!(&shifted);
         let expected = &egraph[subst[self.new_var]].data.beta_extract;
         if shifted == *expected {
             self.applier

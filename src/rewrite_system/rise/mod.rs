@@ -118,7 +118,7 @@ mod test {
     }
 
     #[test]
-    pub fn baseline() {
+    pub fn baseline_goal() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
         let bg2 = baseline_goal.clone();
@@ -149,6 +149,8 @@ mod test {
             .run(&rules(RiseRuleset::MM));
         println!("{:?}\n\n\n", r.report());
         let root_mm = r.egraph.find(r.roots[0]);
+
+        println!("{}", r.egraph.dot());
 
         assert_eq!(root_mm, r.egraph.lookup_expr(&mm).unwrap());
 

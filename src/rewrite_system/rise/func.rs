@@ -33,6 +33,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A
         rule_name: Symbol,
     ) -> Vec<Id> {
         let free_in = egraph[subst[self.var]].data.free.contains(&self.index);
+        dbg!(free_in);
         if free_in {
             Vec::new()
         } else {
