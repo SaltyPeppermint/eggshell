@@ -4,6 +4,7 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 use super::Index;
+use super::indices::{Kind, Kindable};
 
 egg::define_language! {
   #[derive(Serialize, Deserialize)]
@@ -84,20 +85,80 @@ egg::define_language! {
   }
 }
 
-pub fn pp(expr: &RecExpr<Rise>, skip_wrapper: bool) {
-    let tree = PPTreeNode::new(expr, expr.root(), skip_wrapper);
-    tree.pp();
+impl Rise {
+    pub fn kind(&self) -> Option<Kind> {
+        Some(match self {
+            Rise::Var(index) => index.kind()?,
+            Rise::App(_)
+            | Rise::Lambda(_)
+            | Rise::Let
+            | Rise::AsVector
+            | Rise::AsScalar
+            | Rise::VectorFromScalar
+            | Rise::Snd
+            | Rise::Fst
+            | Rise::Add
+            | Rise::Mul
+            | Rise::ToMem
+            | Rise::Split
+            | Rise::Join
+            | Rise::Generate
+            | Rise::Transpose
+            | Rise::Zip
+            | Rise::Unzip
+            | Rise::Map
+            | Rise::MapPar
+            | Rise::Reduce
+            | Rise::ReduceSeq
+            | Rise::ReduceSeqUnroll
+            | Rise::Float(_) => Kind::Expr,
+            Rise::NatApp(_)
+            | Rise::NatLambda(_)
+            | Rise::NatAdd(_)
+            | Rise::NatSub(_)
+            | Rise::NatMul(_)
+            | Rise::NatDiv(_)
+            | Rise::NatPow(_) => Kind::Nat,
+            Rise::DataApp(_)
+            | Rise::DataLambda(_)
+            | Rise::FunType(_)
+            | Rise::NatFun(_)
+            | Rise::DataFun(_)
+            | Rise::AddrFun(_)
+            | Rise::NatNatFun(_)
+            | Rise::TypeOf(_)
+            | Rise::ArrType(_)
+            | Rise::VecType(_)
+            | Rise::PairType(_)
+            | Rise::IndexType(_)
+            | Rise::NatType
+            | Rise::F32 => Kind::Data,
+            Rise::AddrApp(_) | Rise::AddrLambda(_) => Kind::Addr,
+            Rise::NatNatApp(_) | Rise::NatNatLambda(_) | Rise::Integer(_) => return None,
+        })
+    }
 }
 
-struct PPTreeNode {
-    children: Box<[PPTreeNode]>,
+pub trait PrettyPrint {
+    fn pp(self, skip_wrapper: bool);
+}
+
+impl PrettyPrint for &RecExpr<Rise> {
+    fn pp(self, skip_wrapper: bool) {
+        let tree = PPNode::new(self, self.root(), skip_wrapper);
+        tree.pp();
+    }
+}
+
+struct PPNode {
+    children: Box<[PPNode]>,
     expr: ColoredString,
     ty: ColoredString,
 }
 
-impl PPTreeNode {
+impl PPNode {
     fn pp(&self) {
-        fn rec(node: &PPTreeNode, indent: &mut String) {
+        fn rec(node: &PPNode, indent: &mut String) {
             if let Some(shortened) = indent.strip_suffix(' ') {
                 println!("{shortened}┗━{}: {}", node.expr, node.ty);
             } else if let Some(shortened) = indent.strip_suffix('┃') {
@@ -121,7 +182,7 @@ impl PPTreeNode {
         rec(self, &mut String::new());
     }
 
-    fn new(expr: &RecExpr<Rise>, id: Id, skip_wrapper: bool) -> PPTreeNode {
+    fn new(expr: &RecExpr<Rise>, id: Id, skip_wrapper: bool) -> PPNode {
         let Rise::TypeOf([expr_id, ty_id]) = &expr[id] else {
             panic!("Needs top TypeOf")
         };
@@ -273,14 +334,14 @@ mod tests {
     #[test]
     fn pp_mm() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
-        pp(&mm, true);
-        pp(&mm, false);
+        mm.pp(true);
+        mm.pp(false);
     }
 
     #[test]
     fn pp_baseline() {
-        let mm: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
-        pp(&mm, true);
-        pp(&mm, false);
+        let baseline: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
+        baseline.pp(true);
+        baseline.pp(false);
     }
 }
