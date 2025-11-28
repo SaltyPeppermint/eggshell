@@ -12,6 +12,8 @@ use analysis::RiseAnalysis;
 use indices::{Index, Shift};
 use lang::Rise;
 
+pub use lang::pp;
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
     MM,
