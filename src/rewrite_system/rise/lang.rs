@@ -268,11 +268,18 @@ fn pp_ty(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {
 mod tests {
     use super::*;
 
-    use super::super::MM;
+    use super::super::{BASELINE_GOAL, MM};
 
     #[test]
     fn pp_mm() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
+        pp(&mm, true);
+        pp(&mm, false);
+    }
+
+    #[test]
+    fn pp_baseline() {
+        let mm: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
         pp(&mm, true);
         pp(&mm, false);
     }
