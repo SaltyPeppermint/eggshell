@@ -54,7 +54,7 @@ impl Analysis<Rise> for RiseAnalysis {
                 .free
                 .iter()
                 .filter(|idx| !idx.is_zero() && idx.kind() == enode.kind())
-                .map(|idx| idx.downshifted())
+                .map(|idx| idx.dec())
                 .collect(),
             _ => enode
                 .children()
@@ -63,7 +63,7 @@ impl Analysis<Rise> for RiseAnalysis {
                 .copied()
                 .collect(),
         };
-        let empty = enode.any(|id| egraph[id].data.beta_extract.as_ref().is_empty());
+        let empty = enode.any(|id| egraph[id].data.beta_extract.is_empty());
         let beta_extract = if empty {
             RecExpr::default()
         } else {

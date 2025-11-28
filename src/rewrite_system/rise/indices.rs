@@ -15,11 +15,11 @@ pub enum Index {
 }
 
 impl Index {
-    pub fn upshifted(self) -> Self {
+    pub fn inc(self) -> Self {
         self + Shift::up()
     }
 
-    pub fn downshifted(self) -> Self {
+    pub fn dec(self) -> Self {
         self + Shift::down()
     }
 
@@ -50,7 +50,7 @@ impl Index {
         }
     }
 
-    fn value(self) -> u32 {
+    pub fn value(self) -> u32 {
         match self {
             Index::Expr(i) | Index::Nat(i) | Index::Data(i) | Index::Addr(i) => i,
         }
@@ -61,18 +61,11 @@ impl Index {
     }
 }
 
-impl PartialEq<u32> for &Index {
-    fn eq(&self, other: &u32) -> bool {
-        self.value().eq(other)
-    }
-}
-
 impl std::ops::Add<Shift> for Index {
     type Output = Self;
 
     fn add(self, rhs: Shift) -> Self::Output {
-        let v = |i: u32| i.checked_add_signed(rhs.0).unwrap();
-
+        let v = |i: u32| i.strict_add_signed(rhs.0);
         match self {
             Index::Expr(i) => Index::Expr(v(i)),
             Index::Nat(i) => Index::Nat(v(i)),

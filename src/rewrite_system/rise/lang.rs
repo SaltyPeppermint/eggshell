@@ -191,90 +191,77 @@ impl PPNode {
                     .map(|c_id| Self::new(expr, *c_id, skip_wrapper))
                     .collect(),
                 expr: expr[id].to_string().into(),
-                ty: format!("NO TYPE INFO AVAILABLE {{{}}}", kind_string(&expr[id])).red(),
+                ty: ("NO TYPE INFO AVAILABLE").red(),
             };
         };
         let node = &expr[*expr_id];
-        match color_expr(node, skip_wrapper) {
-            Ok(expr_string) => Self {
-                children: expr[*expr_id]
-                    .children()
-                    .iter()
-                    .map(|c_id| Self::new(expr, *c_id, skip_wrapper))
-                    .collect(),
-                expr: expr_string,
-                ty: format!(
-                    "{} {{{}}}",
-                    pp_ty(expr, *ty_id, false),
-                    kind_string(&expr[*expr_id])
-                )
-                .into(),
-            },
-            Err(c_id) => Self::new(expr, c_id, skip_wrapper),
+        let colored_string = match node {
+            Rise::Var(index) => index.to_string().magenta(),
+            Rise::App(_) | Rise::Lambda(_) => node.to_string().red(),
+            Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
+                node.to_string().cyan()
+            }
+            Rise::NatLambda(c_id)
+            | Rise::DataLambda(c_id)
+            | Rise::AddrLambda(c_id)
+            | Rise::NatNatLambda(c_id) => {
+                if skip_wrapper {
+                    return Self::new(expr, *c_id, skip_wrapper);
+                }
+                node.to_string().cyan()
+            }
+            Rise::FunType(_)
+            | Rise::NatFun(_)
+            | Rise::DataFun(_)
+            | Rise::AddrFun(_)
+            | Rise::NatNatFun(_)
+            | Rise::TypeOf(_)
+            | Rise::ArrType(_)
+            | Rise::VecType(_)
+            | Rise::PairType(_)
+            | Rise::IndexType(_)
+            | Rise::NatType
+            | Rise::F32 => panic!("Should not see types here: {node}"),
+            Rise::NatAdd(_)
+            | Rise::NatSub(_)
+            | Rise::NatMul(_)
+            | Rise::NatDiv(_)
+            | Rise::NatPow(_) => {
+                panic!("NatExpr should only appear in types: {node}")
+            } // node.to_string().white()
+            Rise::Let
+            | Rise::AsVector
+            | Rise::AsScalar
+            | Rise::VectorFromScalar
+            | Rise::Snd
+            | Rise::Fst
+            | Rise::Add
+            | Rise::Mul
+            | Rise::ToMem
+            | Rise::Split
+            | Rise::Join
+            | Rise::Generate
+            | Rise::Transpose
+            | Rise::Zip
+            | Rise::Unzip
+            | Rise::Map
+            | Rise::MapPar
+            | Rise::Reduce
+            | Rise::ReduceSeq
+            | Rise::ReduceSeqUnroll
+            | Rise::Float(_) => node.to_string().yellow(),
+            Rise::Integer(i) => format!("int{i}").purple(),
+        };
+        Self {
+            children: node
+                .children()
+                .iter()
+                .map(|c_id| Self::new(expr, *c_id, skip_wrapper))
+                .collect(),
+            expr: colored_string,
+            ty: pp_ty(expr, *ty_id, false),
         }
     }
-}
-
-fn kind_string(node: &Rise) -> String {
-    node.kind()
-        .map_or_else(|| String::from("UNKINDABLE"), |k| k.to_string())
-}
-
-fn color_expr(node: &Rise, skip_wrapper: bool) -> Result<ColoredString, Id> {
-    let colored_string = match node {
-        Rise::Var(index) => index.to_string().magenta(),
-        Rise::App(_) | Rise::Lambda(_) => node.to_string().red(),
-        Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
-            node.to_string().cyan()
-        }
-        Rise::NatLambda(c_id)
-        | Rise::DataLambda(c_id)
-        | Rise::AddrLambda(c_id)
-        | Rise::NatNatLambda(c_id) => {
-            if skip_wrapper {
-                return Err(*c_id);
-            }
-            node.to_string().cyan()
-        }
-        Rise::FunType(_)
-        | Rise::NatFun(_)
-        | Rise::DataFun(_)
-        | Rise::AddrFun(_)
-        | Rise::NatNatFun(_)
-        | Rise::TypeOf(_)
-        | Rise::ArrType(_)
-        | Rise::VecType(_)
-        | Rise::PairType(_)
-        | Rise::IndexType(_)
-        | Rise::NatType
-        | Rise::F32 => panic!("Should not see types here: {node}"),
-        Rise::NatAdd(_) | Rise::NatSub(_) | Rise::NatMul(_) | Rise::NatDiv(_) | Rise::NatPow(_) => {
-            panic!("NatExpr should only appear in types: {node}")
-        } // node.to_string().white()
-        Rise::Let
-        | Rise::AsVector
-        | Rise::AsScalar
-        | Rise::VectorFromScalar
-        | Rise::Snd
-        | Rise::Fst
-        | Rise::Add
-        | Rise::Mul
-        | Rise::ToMem
-        | Rise::Split
-        | Rise::Join
-        | Rise::Generate
-        | Rise::Transpose
-        | Rise::Zip
-        | Rise::Unzip
-        | Rise::Map
-        | Rise::MapPar
-        | Rise::Reduce
-        | Rise::ReduceSeq
-        | Rise::ReduceSeqUnroll
-        | Rise::Float(_) => node.to_string().yellow(),
-        Rise::Integer(i) => format!("int{i}").purple(),
-    };
-    Ok(colored_string)
 }
 
 fn pp_ty(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {

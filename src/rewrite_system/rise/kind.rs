@@ -41,7 +41,8 @@ impl Kindable for Var {
             'd' | 't' => Kind::Data,
             'a' => Kind::Addr,
             'n' => Kind::Nat,
-            _ => Kind::Expr,
+            x if x.is_numeric() => Kind::Expr,
+            x => panic!("Wrong format {x}"),
         })
     }
 }

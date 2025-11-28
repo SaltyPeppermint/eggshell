@@ -79,7 +79,7 @@ mod test {
 
     use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
-    use crate::{rewrite_system::rise::lang::PrettyPrint, sketch::eclass_extract};
+    use crate::sketch::eclass_extract;
 
     use super::*;
 
@@ -161,9 +161,12 @@ mod test {
             &baseline_goal,
             baseline_goal.root(),
         );
-        println!("mm: {mm}");
-        println!("baseline_goal: {baseline_goal}");
-        println!("sketch_baseline_extr: {sketch_extracted_baseline}");
+        println!("mm:");
+        mm.pp(false);
+        println!("baseline_goal:");
+        baseline_goal.pp(false);
+        println!("sketch_baseline_extr:");
+        sketch_extracted_baseline.pp(false);
         assert_eq!(diff, None);
         // assert_eq!(root_mm, r.egraph.lookup_expr(&baseline_goal).unwrap());
     }

@@ -125,7 +125,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             | Rise::AddrLambda(e)
             | Rise::NatNatLambda(e) => {
                 if expr[ei].kind() == cutoff.kind() {
-                    rec(expr, e, shift, cutoff.upshifted());
+                    rec(expr, e, shift, cutoff.inc());
                 } else {
                     rec(expr, e, shift, cutoff);
                 }

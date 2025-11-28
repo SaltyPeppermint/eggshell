@@ -131,31 +131,31 @@ fn replace(expr: &RecExpr<Rise>, index: Index, subs: &mut RecExpr<Rise>) -> RecE
             }
             Rise::Lambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.inc(), subs);
                 shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::Lambda(e2))
             }
             Rise::NatLambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.inc(), subs);
                 shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::NatLambda(e2))
             }
             Rise::DataLambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.inc(), subs);
                 shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::DataLambda(e2))
             }
             Rise::AddrLambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.inc(), subs);
                 shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::AddrLambda(e2))
             }
             Rise::NatNatLambda(e) => {
                 shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                let e2 = rec(result, expr, *e, index.inc(), subs);
                 shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::NatNatLambda(e2))
             }
