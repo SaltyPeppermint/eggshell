@@ -34,8 +34,7 @@ impl Analysis<Rise> for RiseAnalysis {
         let did_change = before_len != to.free.len();
 
         if !from.beta_extract.is_empty()
-            && (to.beta_extract.is_empty()
-                || AstSize.cost_rec(&to.beta_extract) > AstSize.cost_rec(&from.beta_extract))
+            && (to.beta_extract.is_empty() || to.beta_extract.len() > from.beta_extract.len())
         {
             to.beta_extract = from.beta_extract;
             return DidMerge(true, true);
