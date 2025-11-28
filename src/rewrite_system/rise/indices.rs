@@ -1,10 +1,11 @@
+use egg::Var;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 // #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
 // pub struct Index(u32);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy, Serialize, Deserialize)]
 pub enum Index {
     Expr(u32),
     Nat(u32),
@@ -19,7 +20,7 @@ impl Index {
     }
 
     pub fn zero() -> Self {
-        Self::Synthetic(0)
+        Index::Synthetic(0)
     }
 
     pub fn upshifted(self) -> Self {
@@ -32,8 +33,8 @@ impl Index {
 
     fn value(self) -> u32 {
         match self {
-            Index::Nat(i)
-            | Index::Expr(i)
+            Index::Expr(i)
+            | Index::Nat(i)
             | Index::Data(i)
             | Index::Addr(i)
             | Index::Synthetic(i) => i,
@@ -41,18 +42,30 @@ impl Index {
     }
 }
 
+impl PartialOrd for Index {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Index {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.value().cmp(&other.value())
+    }
+}
+
 impl std::ops::Add<Shift> for Index {
     type Output = Self;
 
     fn add(self, rhs: Shift) -> Self::Output {
-        let value = self.value().checked_add_signed(rhs.0).unwrap();
+        let v = |i: u32| i.checked_add_signed(rhs.0).unwrap();
 
         match self {
-            Index::Expr(_) => Index::Expr(value),
-            Index::Nat(_) => Index::Nat(value),
-            Index::Data(_) => Index::Data(value),
-            Index::Addr(_) => Index::Addr(value),
-            Index::Synthetic(_) => Index::Synthetic(value),
+            Index::Expr(i) => Index::Expr(v(i)),
+            Index::Nat(i) => Index::Nat(v(i)),
+            Index::Data(i) => Index::Data(v(i)),
+            Index::Addr(i) => Index::Addr(v(i)),
+            Index::Synthetic(i) => Index::Synthetic(v(i)),
         }
     }
 }
@@ -133,4 +146,47 @@ pub enum IndexError {
     ZeroShift,
     #[error("Invalide Index: {0}")]
     InvalidIndex(#[from] std::num::ParseIntError),
+}
+
+pub trait Kindable {
+    fn kind(&self) -> Option<Kind>;
+}
+
+impl<T: Kindable> Kindable for &T {
+    fn kind(&self) -> Option<Kind> {
+        (*self).kind()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy, Serialize, Deserialize)]
+pub enum Kind {
+    Expr,
+    Nat,
+    Data,
+    Addr,
+    Synthetic,
+}
+
+impl Kindable for Var {
+    fn kind(&self) -> Option<Kind> {
+        let var_str = self.to_string();
+        var_str.chars().nth(1).map(|c| match c {
+            'd' | 't' => Kind::Data,
+            'a' => Kind::Addr,
+            'n' => Kind::Nat,
+            _ => Kind::Expr,
+        })
+    }
+}
+
+impl Kindable for Index {
+    fn kind(&self) -> Option<Kind> {
+        Some(match self {
+            Index::Expr(_) => Kind::Expr,
+            Index::Nat(_) => Kind::Nat,
+            Index::Data(_) => Kind::Data,
+            Index::Addr(_) => Kind::Addr,
+            Index::Synthetic(_) => Kind::Synthetic,
+        })
+    }
 }
