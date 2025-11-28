@@ -3,8 +3,7 @@ use egg::{Id, Language, RecExpr};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use super::Index;
-use super::indices::{Kind, Kindable};
+use super::{Index, Kind, Kindable};
 
 egg::define_language! {
   #[derive(Serialize, Deserialize)]

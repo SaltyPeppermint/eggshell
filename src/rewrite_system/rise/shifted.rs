@@ -1,7 +1,8 @@
-use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::indices::{Kind, Kindable, Shift};
-use super::{Index, Rise, RiseAnalysis};
+use crate::rewrite_system::rise::PrettyPrint;
+
+use super::{Index, Kind, Kindable, Rise, RiseAnalysis, Shift};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
@@ -38,12 +39,19 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff, self.var_kind);
 
-        // dbg!(extract);
-        // dbg!(&shifted);
+        println!(
+            "Attempting to shift with shift {} and cutoff {}",
+            self.shift, self.cutoff
+        );
+        println!("Extracted:");
+        extract.pp(false);
+        println!("Shifted");
+        shifted.pp(false);
+
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);
-
         new_subst.insert(self.new_var, added_expr_id);
+
         let mut ids = self
             .applier
             .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);

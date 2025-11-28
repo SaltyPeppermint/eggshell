@@ -5,10 +5,9 @@ use egg::{
 use crate::rewrite_system::rise::lang::PrettyPrint;
 
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
-use super::indices::Kind;
 use super::nat::ComputeNatCheck;
 use super::shifted::{Shifted, ShiftedCheck, shift_mut};
-use super::{Index, Rise, RiseAnalysis, Shift};
+use super::{Index, Kind, Rise, RiseAnalysis, Shift};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![

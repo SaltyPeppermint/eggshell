@@ -1,6 +1,7 @@
 mod analysis;
 mod func;
 mod indices;
+mod kind;
 mod lang;
 mod nat;
 mod rules;
@@ -10,9 +11,10 @@ use egg::{Id, Language, RecExpr, Rewrite};
 
 use analysis::RiseAnalysis;
 use indices::{Index, Shift};
+use kind::{Kind, Kindable};
 use lang::Rise;
 
-use crate::sketch::Sketch;
+pub use lang::PrettyPrint;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -178,7 +180,7 @@ mod test {
         println!("---");
     }
 
-    fn sketchify(term: &str) -> Sketch<Rise> {
+    fn sketchify(term: &str) -> crate::sketch::Sketch<Rise> {
         term.split_inclusive(['(', ')', ' '])
             .flat_map(|s| {
                 s.char_indices().last().map_or(["", s], |(i, _)| {
