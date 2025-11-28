@@ -2,12 +2,14 @@ use egg::{
     Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
 };
 
-use crate::rewrite_system::rise::lang::PrettyPrint;
-
+#[expect(unused_imports)]
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
+#[expect(unused_imports)]
 use super::nat::ComputeNatCheck;
+#[expect(unused_imports)]
 use super::shifted::{Shifted, ShiftedCheck, shift_mut};
-use super::{Index, Kind, Rise, RiseAnalysis, Shift};
+#[expect(unused_imports)]
+use super::{Index, Kind, Kindable, Rise, RiseAnalysis, Shift};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![
@@ -41,12 +43,12 @@ pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     algorithmic.extend([
             //  OLD: rewrite!("eta-reduction"; "(typeOf (lam (typeOf (app (typeOf ?0 ?tAny0) (typeOf %0 ?t0)) ?tAny1)) (fun ?t1 ?t2))" => { NotFreeIn::new("?0", 0, Shifted::new("?0", "?1", -1, 1, ShiftedCheck::new("?t1", "?t0", 1, 0, pat("(typeOf ?1 (fun ?t1 ?t2))")))) }),
             //  OLD: rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
-            rewrite!("beta"; "(app (typeOf (lam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs", Kind::Expr) }),
-            rewrite!("beta-nat"; "(natApp (typeOf (natLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Nat) }),
-            rewrite!("beta-data"; "(dataApp (typeOf (dataLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Data) }),
-            rewrite!("beta-addr"; "(addrApp (typeOf (addrLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Addr) }),
-            // rewrite!("beta-nat-nat"; "(natNatApp (typeOf (natNatLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
-     ]  );
+            // rewrite!("beta"; "(app (typeOf (lam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs", Kind::Expr) }),
+            // rewrite!("beta-nat"; "(natApp (typeOf (natLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Nat) }),
+            // rewrite!("beta-data"; "(dataApp (typeOf (dataLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Data) }),
+            // rewrite!("beta-addr"; "(addrApp (typeOf (addrLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Addr) }),
+            // // rewrite!("beta-nat-nat"; "(natNatApp (typeOf (natNatLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
+     ]);
     algorithmic
 }
 
@@ -105,25 +107,19 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>, kind: Kind) -> RecExpr<Rise> {
     let arg2 = &mut arg.to_owned();
-    shift_mut(arg2, Shift::up(), Index::zero(), kind); // shift up
-    let mut body2 = replace(body, Index::zero(), arg2, kind);
-    shift_mut(&mut body2, Shift::down(), Index::zero(), kind); // shift down
+    shift_mut(arg2, Shift::up(), Index::zero(kind)); // shift up
+    let mut body2 = replace(body, Index::zero(kind), arg2);
+    shift_mut(&mut body2, Shift::down(), Index::zero(kind)); // shift down
     body2
 }
 
-fn replace(
-    expr: &RecExpr<Rise>,
-    index: Index,
-    subs: &mut RecExpr<Rise>,
-    kind: Kind,
-) -> RecExpr<Rise> {
+fn replace(expr: &RecExpr<Rise>, index: Index, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
     fn rec(
         result: &mut RecExpr<Rise>,
         expr: &RecExpr<Rise>,
         ei: Id,
         index: Index,
         subs: &mut RecExpr<Rise>,
-        kind: Kind,
     ) -> Id {
         match &expr[ei] {
             Rise::Var(index2) => {
@@ -133,15 +129,35 @@ fn replace(
                     result.add(Rise::Var(*index2))
                 }
             }
-            Rise::Lambda(e)
-            | Rise::NatLambda(e)
-            | Rise::DataLambda(e)
-            | Rise::AddrLambda(e)
-            | Rise::NatNatLambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero(), kind);
-                let e2 = rec(result, expr, *e, index.upshifted(), subs, kind);
-                shift_mut(subs, Shift::down(), Index::zero(), kind);
+            Rise::Lambda(e) => {
+                shift_mut(subs, Shift::up(), Index::zero_like(index));
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero_like(index));
                 result.add(Rise::Lambda(e2))
+            }
+            Rise::NatLambda(e) => {
+                shift_mut(subs, Shift::up(), Index::zero_like(index));
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero_like(index));
+                result.add(Rise::NatLambda(e2))
+            }
+            Rise::DataLambda(e) => {
+                shift_mut(subs, Shift::up(), Index::zero_like(index));
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero_like(index));
+                result.add(Rise::DataLambda(e2))
+            }
+            Rise::AddrLambda(e) => {
+                shift_mut(subs, Shift::up(), Index::zero_like(index));
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero_like(index));
+                result.add(Rise::AddrLambda(e2))
+            }
+            Rise::NatNatLambda(e) => {
+                shift_mut(subs, Shift::up(), Index::zero_like(index));
+                let e2 = rec(result, expr, *e, index.upshifted(), subs);
+                shift_mut(subs, Shift::down(), Index::zero_like(index));
+                result.add(Rise::NatNatLambda(e2))
             }
             // Should be covered by default case
             // Rise::App([f, e]) => {
@@ -152,13 +168,13 @@ fn replace(
             other => {
                 let new_other = other
                     .clone()
-                    .map_children(|i| rec(result, expr, i, index, subs, kind));
+                    .map_children(|i| rec(result, expr, i, index, subs));
                 result.add(new_other)
             }
         }
     }
     let mut result = RecExpr::default();
-    rec(&mut result, expr, expr.root(), index, subs, kind);
+    rec(&mut result, expr, expr.root(), index, subs);
     result
 }
 
@@ -172,7 +188,7 @@ mod tests {
             let b = &body.parse().unwrap();
             let a = &arg.parse().unwrap();
             let r = res.parse().unwrap();
-            assert_eq!(beta_reduce(b, a, Kind::Synthetic), r);
+            assert_eq!(beta_reduce(b, a, Kind::Expr), r);
         }
         // (λ. (λ. ((λ. (0 1)) (0 1)))) --> (λ. (λ. ((0 1) 0)))
         // (λ. (0 1)) (0 1) --> (0 1) 0

@@ -1,27 +1,20 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::Kind;
+
 // #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
 // pub struct Index(u32);
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
 pub enum Index {
     Expr(u32),
     Nat(u32),
     Data(u32),
     Addr(u32),
-    Synthetic(u32),
 }
 
 impl Index {
-    pub fn new(i: u32) -> Self {
-        Self::Synthetic(i)
-    }
-
-    pub fn zero() -> Self {
-        Index::Synthetic(0)
-    }
-
     pub fn upshifted(self) -> Self {
         self + Shift::up()
     }
@@ -30,13 +23,36 @@ impl Index {
         self + Shift::down()
     }
 
+    pub fn new(value: u32, kind: Kind) -> Self {
+        match kind {
+            Kind::Expr => Index::Expr(value),
+            Kind::Nat => Index::Nat(value),
+            Kind::Data => Index::Data(value),
+            Kind::Addr => Index::Addr(value),
+        }
+    }
+
+    pub fn zero(kind: Kind) -> Self {
+        match kind {
+            Kind::Expr => Index::Expr(0),
+            Kind::Nat => Index::Nat(0),
+            Kind::Data => Index::Data(0),
+            Kind::Addr => Index::Addr(0),
+        }
+    }
+
+    pub fn zero_like(other: Self) -> Self {
+        match other {
+            Index::Expr(_) => Index::Expr(0),
+            Index::Nat(_) => Index::Nat(0),
+            Index::Data(_) => Index::Data(0),
+            Index::Addr(_) => Index::Addr(0),
+        }
+    }
+
     fn value(self) -> u32 {
         match self {
-            Index::Expr(i)
-            | Index::Nat(i)
-            | Index::Data(i)
-            | Index::Addr(i)
-            | Index::Synthetic(i) => i,
+            Index::Expr(i) | Index::Nat(i) | Index::Data(i) | Index::Addr(i) => i,
         }
     }
 
@@ -45,15 +61,9 @@ impl Index {
     }
 }
 
-impl PartialOrd for Index {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Index {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.value().cmp(&other.value())
+impl PartialEq<u32> for &Index {
+    fn eq(&self, other: &u32) -> bool {
+        self.value().eq(other)
     }
 }
 
@@ -68,7 +78,6 @@ impl std::ops::Add<Shift> for Index {
             Index::Nat(i) => Index::Nat(v(i)),
             Index::Data(i) => Index::Data(v(i)),
             Index::Addr(i) => Index::Addr(v(i)),
-            Index::Synthetic(i) => Index::Synthetic(v(i)),
         }
     }
 }
@@ -102,7 +111,6 @@ impl std::fmt::Display for Index {
             Index::Nat(i) => write!(f, "%n{i}"),
             Index::Data(i) => write!(f, "%d{i}"),
             Index::Addr(i) => write!(f, "%a{i}"),
-            Index::Synthetic(i) => write!(f, "%synthetic{i}"),
         }
     }
 }

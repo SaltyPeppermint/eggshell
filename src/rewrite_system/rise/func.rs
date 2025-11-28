@@ -1,7 +1,9 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::{Index, Rise, RiseAnalysis};
+use crate::rewrite_system::rise::kind::Kindable;
+
+use super::{Index, Kind, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -14,10 +16,12 @@ pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
-    pub fn new(var: &str, index: u32, applier: A) -> Self {
+    pub fn new(var_str: &str, index: u32, applier: A) -> Self {
+        let var: Var = var_str.parse().unwrap();
+        let kind = var.kind().unwrap();
         NotFreeIn {
-            var: var.parse().unwrap(),
-            index: Index::new(index),
+            var,
+            index: Index::new(index, kind),
             applier,
         }
     }
@@ -142,7 +146,7 @@ fn vec_expr(
             let v_env2 = v_env
                 .into_iter()
                 .map(|i| i.upshifted())
-                .chain([Index::zero()])
+                .chain([Index::zero(Kind::Expr)])
                 .collect::<HashSet<_>>();
 
             // Vectorize e

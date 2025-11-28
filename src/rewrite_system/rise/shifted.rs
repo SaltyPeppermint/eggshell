@@ -7,7 +7,6 @@ use super::{Index, Kind, Kindable, Rise, RiseAnalysis, Shift};
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    var_kind: Kind,
     shift: Shift,
     cutoff: Index,
     applier: A,
@@ -15,13 +14,13 @@ pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
 
 impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
     pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
-        let var = var_str.parse().unwrap();
+        let var: Var = var_str.parse().unwrap();
+        let kind = var.kind().unwrap();
         Shifted {
             var,
             new_var: shifted_var_str.parse().unwrap(),
-            var_kind: var.kind().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: Index::new(cutoff),
+            cutoff: Index::new(cutoff, kind),
             applier,
         }
     }
@@ -37,11 +36,13 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         rule_name: Symbol,
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
-        let shifted = shift_copy(extract, self.shift, self.cutoff, self.var_kind);
+        let shifted = shift_copy(extract, self.shift, self.cutoff);
 
         println!(
-            "Attempting to shift with shift {} and cutoff {}",
-            self.shift, self.cutoff
+            "Attempting to shift by {} with cutoff {} and kind {}",
+            self.shift,
+            self.cutoff,
+            self.cutoff.kind().unwrap()
         );
         println!("Extracted:");
         extract.pp(false);
@@ -63,7 +64,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
 pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    var_kind: Kind,
     shift: Shift,
     cutoff: Index,
     applier: A,
@@ -71,13 +71,13 @@ pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
 
 impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
     pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
-        let var = var_str.parse().unwrap();
+        let var: Var = var_str.parse().unwrap();
+        let kind = var.kind().unwrap();
         ShiftedCheck {
             var,
             new_var: shifted_var_str.parse().unwrap(),
-            var_kind: var.kind().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: Index::new(cutoff),
+            cutoff: Index::new(cutoff, kind),
             applier,
         }
     }
@@ -94,7 +94,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
         // dbg!(extract);
-        let shifted = shift_copy(extract, self.shift, self.cutoff, self.var_kind);
+        let shifted = shift_copy(extract, self.shift, self.cutoff);
 
         // dbg!(&shifted);
         let expected = &egraph[subst[self.new_var]].data.beta_extract;
@@ -107,20 +107,20 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Kind) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
-    shift_mut(&mut result, shift, cutoff, kind);
+    shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Kind) {
-    fn rec(expr: &mut RecExpr<Rise>, ei: Id, shift: Shift, cutoff: Index, kind: Kind) {
+pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
+    fn rec(expr: &mut RecExpr<Rise>, ei: Id, shift: Shift, cutoff: Index) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
         let node_kind = expr[ei].kind();
         match expr[ei] {
             Rise::Var(index) => {
-                if index > cutoff && node_kind == Some(kind) {
+                if index >= cutoff && node_kind == cutoff.kind() {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
@@ -130,18 +130,21 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Ki
             | Rise::DataLambda(e)
             | Rise::AddrLambda(e)
             | Rise::NatNatLambda(e) => {
-                if node_kind == Some(kind) {
-                    rec(expr, e, shift, cutoff.upshifted(), kind);
+                if node_kind == cutoff.kind() {
+                    rec(expr, e, shift, cutoff.upshifted());
                 } else {
-                    rec(expr, e, shift, cutoff, kind);
+                    rec(expr, e, shift, cutoff);
                 }
             }
-            Rise::App(ids)
-            | Rise::NatApp(ids)
-            | Rise::DataApp(ids)
-            | Rise::AddrApp(ids)
-            | Rise::NatNatApp(ids)
-            | Rise::TypeOf(ids)
+            Rise::App([f, e])
+            | Rise::NatApp([f, e])
+            | Rise::DataApp([f, e])
+            | Rise::AddrApp([f, e])
+            | Rise::NatNatApp([f, e]) => {
+                rec(expr, f, shift, cutoff);
+                rec(expr, e, shift, cutoff);
+            }
+            Rise::TypeOf(ids)
             | Rise::FunType(ids)
             | Rise::ArrType(ids)
             | Rise::VecType(ids)
@@ -152,14 +155,14 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Ki
             | Rise::NatDiv(ids)
             | Rise::NatPow(ids) => {
                 for id in ids {
-                    rec(expr, id, shift, cutoff, kind);
+                    rec(expr, id, shift, cutoff);
                 }
             }
             Rise::IndexType(id)
             | Rise::NatFun(id)
             | Rise::DataFun(id)
             | Rise::AddrFun(id)
-            | Rise::NatNatFun(id) => rec(expr, id, shift, cutoff, kind),
+            | Rise::NatNatFun(id) => rec(expr, id, shift, cutoff),
             Rise::Let
             | Rise::NatType
             | Rise::F32
@@ -186,7 +189,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Ki
             | Rise::Float(_) => (),
         }
     }
-    rec(expr, expr.root(), shift, cutoff, kind);
+    rec(expr, expr.root(), shift, cutoff);
 }
 
 #[cfg(test)]
@@ -201,8 +204,7 @@ mod tests {
             let shifted = shift_copy(
                 a,
                 Shift::try_from(shift).unwrap(),
-                Index::new(cutoff),
-                Kind::Synthetic,
+                Index::new(cutoff, Kind::Expr),
             );
             assert_eq!(&shifted, b);
         }

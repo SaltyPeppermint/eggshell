@@ -21,7 +21,6 @@ pub enum Kind {
     Nat,
     Data,
     Addr,
-    Synthetic,
 }
 
 impl Display for Kind {
@@ -31,7 +30,6 @@ impl Display for Kind {
             Kind::Nat => write!(f, "NAT"),
             Kind::Data => write!(f, "DATA"),
             Kind::Addr => write!(f, "ADDR"),
-            Kind::Synthetic => write!(f, "SYNTHETIC"),
         }
     }
 }
@@ -55,7 +53,6 @@ impl Kindable for Index {
             Index::Nat(_) => Kind::Nat,
             Index::Data(_) => Kind::Data,
             Index::Addr(_) => Kind::Addr,
-            Index::Synthetic(_) => Kind::Synthetic,
         })
     }
 }

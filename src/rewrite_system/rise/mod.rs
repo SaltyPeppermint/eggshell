@@ -150,10 +150,10 @@ mod test {
         let baseline_sketch = sketchify(BASELINE_GOAL);
         let (_, sketch_extracted_baseline) =
             eclass_extract(&baseline_sketch, AstSize, &r.egraph, root_mm).unwrap();
-        println!("SKETCHIFIED AND EXTRACTED BASELINE:");
-        sketch_extracted_baseline.pp(false);
-        println!("BASELINE:");
-        baseline_goal.pp(false);
+        // println!("SKETCHIFIED AND EXTRACTED BASELINE:");
+        // sketch_extracted_baseline.pp(false);
+        // println!("BASELINE:");
+        // baseline_goal.pp(false);
 
         let diff = find_diff(
             &sketch_extracted_baseline,
