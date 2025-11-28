@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use egg::Var;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -39,6 +41,10 @@ impl Index {
             | Index::Addr(i)
             | Index::Synthetic(i) => i,
         }
+    }
+
+    pub fn is_zero(self) -> bool {
+        self.value() == 0
     }
 }
 
@@ -165,6 +171,18 @@ pub enum Kind {
     Data,
     Addr,
     Synthetic,
+}
+
+impl Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Kind::Expr => write!(f, "EXPR"),
+            Kind::Nat => write!(f, "NAT"),
+            Kind::Data => write!(f, "DATA"),
+            Kind::Addr => write!(f, "ADDR"),
+            Kind::Synthetic => write!(f, "SYNTHETIC"),
+        }
+    }
 }
 
 impl Kindable for Var {

@@ -1,4 +1,4 @@
-use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
 
 use super::indices::{Kind, Kindable, Shift};
 use super::{Index, Rise, RiseAnalysis};
@@ -85,10 +85,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
         rule_name: Symbol,
     ) -> Vec<Id> {
         let extract = &egraph[subst[self.var]].data.beta_extract;
+        // dbg!(extract);
         let shifted = shift_copy(extract, self.shift, self.cutoff, self.var_kind);
 
-        dbg!(extract);
-        dbg!(&shifted);
+        // dbg!(&shifted);
         let expected = &egraph[subst[self.new_var]].data.beta_extract;
         if shifted == *expected {
             self.applier
@@ -112,7 +112,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Ki
         let node_kind = expr[ei].kind();
         match expr[ei] {
             Rise::Var(index) => {
-                if index >= cutoff && node_kind == Some(kind) {
+                if index > cutoff && node_kind == Some(kind) {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
@@ -128,15 +128,6 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index, kind: Ki
                     rec(expr, e, shift, cutoff, kind);
                 }
             }
-            // Should be covered by the iter impl
-            // Rise::App(ids)
-            // | Rise::NatApp(ids)
-            // | Rise::DataApp(ids)
-            // | Rise::AddrApp(ids)
-            // | Rise::NatNatApp(ids)=> {
-            //     rec(expr, f, shift, cutoff);
-            //     rec(expr, e, shift, cutoff);
-            // }
             Rise::App(ids)
             | Rise::NatApp(ids)
             | Rise::DataApp(ids)
