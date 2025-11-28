@@ -38,12 +38,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
 
-        println!(
-            "Attempting to shift by {} with cutoff {} and kind {}",
-            self.shift,
-            self.cutoff,
-            self.cutoff.kind().unwrap()
-        );
+        println!("Shifting by {} with cutoff {}", self.shift, self.cutoff,);
         println!("Extracted:");
         extract.pp(false);
         println!("Shifted");
@@ -117,10 +112,9 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
     fn rec(expr: &mut RecExpr<Rise>, ei: Id, shift: Shift, cutoff: Index) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
-        let node_kind = expr[ei].kind();
         match expr[ei] {
             Rise::Var(index) => {
-                if index >= cutoff && node_kind == cutoff.kind() {
+                if index >= cutoff {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }
@@ -130,21 +124,27 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             | Rise::DataLambda(e)
             | Rise::AddrLambda(e)
             | Rise::NatNatLambda(e) => {
-                if node_kind == cutoff.kind() {
+                if expr[ei].kind() == cutoff.kind() {
                     rec(expr, e, shift, cutoff.upshifted());
                 } else {
                     rec(expr, e, shift, cutoff);
                 }
             }
-            Rise::App([f, e])
-            | Rise::NatApp([f, e])
-            | Rise::DataApp([f, e])
-            | Rise::AddrApp([f, e])
-            | Rise::NatNatApp([f, e]) => {
-                rec(expr, f, shift, cutoff);
-                rec(expr, e, shift, cutoff);
-            }
-            Rise::TypeOf(ids)
+            // Should be covered by others
+            // Rise::App([f, e])
+            // | Rise::NatApp([f, e])
+            // | Rise::DataApp([f, e])
+            // | Rise::AddrApp([f, e])
+            // | Rise::NatNatApp([f, e]) => {
+            //     rec(expr, f, shift, cutoff);
+            //     rec(expr, e, shift, cutoff);
+            // }
+            Rise::App(ids)
+            | Rise::NatApp(ids)
+            | Rise::DataApp(ids)
+            | Rise::AddrApp(ids)
+            | Rise::NatNatApp(ids)
+            | Rise::TypeOf(ids)
             | Rise::FunType(ids)
             | Rise::ArrType(ids)
             | Rise::VecType(ids)

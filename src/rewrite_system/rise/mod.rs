@@ -131,10 +131,10 @@ mod test {
         let runner = Runner::default();
         let r = runner
             .with_expr(&mm)
-            .with_iter_limit(4)
+            .with_iter_limit(3)
             .with_scheduler(SimpleScheduler)
             .with_hook(move |r| {
-                iter_printer(r);
+                printer_hook(r);
                 if r.egraph.lookup_expr(&bg2).is_some() {
                     return Err("FOUND IT".to_owned());
                 }
@@ -161,11 +161,14 @@ mod test {
             &baseline_goal,
             baseline_goal.root(),
         );
+        println!("mm: {mm}");
+        println!("baseline_goal: {baseline_goal}");
+        println!("sketch_baseline_extr: {sketch_extracted_baseline}");
         assert_eq!(diff, None);
         // assert_eq!(root_mm, r.egraph.lookup_expr(&baseline_goal).unwrap());
     }
 
-    fn iter_printer(r: &mut Runner<Rise, RiseAnalysis>) {
+    fn printer_hook(r: &mut Runner<Rise, RiseAnalysis>) {
         println!("ITERATION {}:\n", r.iterations.len());
         println!("Nodes: {}\n", r.egraph.nodes().len());
         println!("EClasses: {}\n", r.egraph.number_of_classes());
