@@ -76,6 +76,8 @@ pub fn to_dot<L: Language + Display>(
     .print(&mut PrinterContext::default())
 }
 
+#[expect(clippy::missing_panics_doc)]
+#[must_use]
 pub fn dot_to_svg(dot: &str) -> Vec<u8> {
     let format = Format::Svg;
     graphviz_rust::exec_dot(dot.into(), vec![format.into()]).unwrap()
