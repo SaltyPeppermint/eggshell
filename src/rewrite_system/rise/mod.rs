@@ -77,6 +77,8 @@ const PARALLEL_GOAL: &str = "(typeOf (natLam (typeOf (natLam (typeOf (natLam (ty
 #[cfg(test)]
 mod test {
 
+    use std::time::Duration;
+
     use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
     use crate::sketch::eclass_extract;
@@ -90,7 +92,7 @@ mod test {
     }
 
     #[test]
-    fn mm_full_test() {
+    fn mm_terms_parse_test() {
         // START TERM
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         println!("mm nodes: {}", mm.len());
@@ -126,37 +128,68 @@ mod test {
     pub fn baseline_goal() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
-        let bg_for_closure = baseline_goal.clone();
 
         let runner = Runner::default()
             .with_expr(&mm)
             .with_iter_limit(3)
             .with_scheduler(SimpleScheduler)
-            .with_hook(move |r| {
-                // printer_hook(r);
-                if r.egraph.lookup_expr(&bg_for_closure).is_some() {
-                    return Err("FOUND IT".to_owned());
-                }
-                Ok(())
-            })
+            .with_hook(find_closure(baseline_goal.clone()))
             .run(&rules(RiseRuleset::MM));
 
         let root_mm = runner.egraph.find(runner.roots[0]);
+
         assert_eq!(root_mm, runner.egraph.lookup_expr(&mm).unwrap());
-
-        let baseline_sketch = sketchify(BASELINE_GOAL);
-        let (_, sketch_extracted_baseline) =
-            eclass_extract(&baseline_sketch, AstSize, &runner.egraph, root_mm).unwrap();
-
-        let diff = find_diff(
-            &sketch_extracted_baseline,
-            sketch_extracted_baseline.root(),
-            &baseline_goal,
-            baseline_goal.root(),
-        );
-
-        assert_eq!(diff, None);
         assert_eq!(root_mm, runner.egraph.lookup_expr(&baseline_goal).unwrap());
+    }
+
+    #[test]
+    pub fn blocking_goal() {
+        let mm: RecExpr<Rise> = MM.parse().unwrap();
+        let split_guide: RecExpr<Rise> = SPLIT_GUIDE.parse().unwrap();
+
+        let runner_1 = Runner::default()
+            .with_expr(&mm)
+            .with_iter_limit(5)
+            .with_time_limit(Duration::from_secs(30))
+            .with_node_limit(1_000_000)
+            .with_scheduler(SimpleScheduler)
+            .with_hook(find_closure(split_guide.clone()))
+            .run(&rules(RiseRuleset::MM));
+
+        println!("{}", runner_1.report());
+
+        let root_mm = runner_1.egraph.find(runner_1.roots[0]);
+        let baseline_sketch = sketchify(SPLIT_GUIDE);
+        let (_, sketch_extracted_split_guide) =
+            eclass_extract(&baseline_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
+
+        assert_eq!(None, find_diff(&sketch_extracted_split_guide, &split_guide));
+        assert_eq!(root_mm, runner_1.egraph.lookup_expr(&split_guide).unwrap());
+
+        let blocking_goal: RecExpr<Rise> = BLOCKING_GOAL.parse().unwrap();
+        let runner_2 = Runner::default()
+            .with_expr(&split_guide)
+            .with_iter_limit(6)
+            .with_scheduler(SimpleScheduler)
+            .with_hook(find_closure(blocking_goal.clone()))
+            .run(&rules(RiseRuleset::MM));
+
+        let root_guide = runner_2.egraph.find(runner_2.roots[0]);
+        assert_eq!(
+            root_guide,
+            runner_2.egraph.lookup_expr(&blocking_goal).unwrap()
+        );
+    }
+
+    fn find_closure(
+        bg_for_closure: RecExpr<Rise>,
+    ) -> impl FnMut(&mut Runner<Rise, RiseAnalysis>) -> Result<(), String> {
+        move |r: &mut Runner<Rise, RiseAnalysis>| {
+            if r.egraph.lookup_expr(&bg_for_closure).is_some() {
+                return Err("FOUND IT".to_owned());
+            }
+            Ok(())
+        }
     }
 
     fn printer_hook(r: &mut Runner<Rise, RiseAnalysis>) {
@@ -188,25 +221,28 @@ mod test {
             .unwrap()
     }
 
-    fn find_diff(
-        lhs: &RecExpr<Rise>,
-        lhs_id: Id,
-        rhs: &RecExpr<Rise>,
-        rhs_id: Id,
-    ) -> Option<(Rise, Rise)> {
-        if let Rise::Var(index) = lhs[lhs_id]
-            && let Rise::Var(index2) = rhs[rhs_id]
-            && index != index2
-        {
-            Some((lhs[lhs_id].clone(), rhs[rhs_id].clone()))
-        } else if lhs[lhs_id].matches(&rhs[rhs_id]) {
-            lhs[lhs_id]
-                .children()
-                .iter()
-                .zip(rhs[rhs_id].children())
-                .find_map(|(lcid, rcid)| find_diff(lhs, *lcid, rhs, *rcid))
-        } else {
-            Some((lhs[lhs_id].clone(), rhs[rhs_id].clone()))
+    fn find_diff(lhs: &RecExpr<Rise>, rhs: &RecExpr<Rise>) -> Option<(Rise, Rise)> {
+        fn rec(
+            lhs: &RecExpr<Rise>,
+            lhs_id: Id,
+            rhs: &RecExpr<Rise>,
+            rhs_id: Id,
+        ) -> Option<(Rise, Rise)> {
+            if let Rise::Var(index) = lhs[lhs_id]
+                && let Rise::Var(index2) = rhs[rhs_id]
+                && index != index2
+            {
+                Some((lhs[lhs_id].clone(), rhs[rhs_id].clone()))
+            } else if lhs[lhs_id].matches(&rhs[rhs_id]) {
+                lhs[lhs_id]
+                    .children()
+                    .iter()
+                    .zip(rhs[rhs_id].children())
+                    .find_map(|(lcid, rcid)| rec(lhs, *lcid, rhs, *rcid))
+            } else {
+                Some((lhs[lhs_id].clone(), rhs[rhs_id].clone()))
+            }
         }
+        rec(lhs, lhs.root(), rhs, rhs.root())
     }
 }

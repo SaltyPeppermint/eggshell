@@ -1,6 +1,5 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::pp::PrettyPrint;
 use super::{Index, Kindable, Rise, RiseAnalysis, Shift};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
@@ -113,7 +112,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
         // dbg!(&expr.len());
         match expr[ei] {
             Rise::Var(index) => {
-                if index >= cutoff {
+                if index >= cutoff && index.kind() == cutoff.kind() {
                     let index2 = index + shift;
                     expr[ei] = Rise::Var(index2);
                 }

@@ -65,12 +65,11 @@ impl std::ops::Add<Shift> for Index {
     type Output = Self;
 
     fn add(self, rhs: Shift) -> Self::Output {
-        let v = |i: u32| i.strict_add_signed(rhs.0);
         match self {
-            Index::Expr(i) => Index::Expr(v(i)),
-            Index::Nat(i) => Index::Nat(v(i)),
-            Index::Data(i) => Index::Data(v(i)),
-            Index::Addr(i) => Index::Addr(v(i)),
+            Index::Expr(i) => Index::Expr(i.strict_add_signed(rhs.0)),
+            Index::Nat(i) => Index::Nat(i.strict_add_signed(rhs.0)),
+            Index::Data(i) => Index::Data(i.strict_add_signed(rhs.0)),
+            Index::Addr(i) => Index::Addr(i.strict_add_signed(rhs.0)),
         }
     }
 }
