@@ -1,7 +1,6 @@
-mod hooks;
-mod scheduler;
-
 pub mod conf;
+pub mod hooks;
+mod scheduler;
 
 use std::fmt::{Debug, Display};
 

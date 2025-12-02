@@ -163,6 +163,26 @@ where
     }
 }
 
+#[expect(clippy::missing_panics_doc)]
+#[must_use]
+pub fn sketchify<L>(term: &str) -> crate::sketch::Sketch<L>
+where
+    <L as egg::FromOp>::Error: std::fmt::Display,
+    L: Language + FromOp,
+{
+    term.split_inclusive(['(', ')', ' '])
+        .flat_map(|s| {
+            s.char_indices().last().map_or(["", s], |(i, _)| {
+                let (a, b) = s.split_at(i);
+                [a, b]
+            })
+        })
+        .map(|s| if s.contains('%') { " ? " } else { s })
+        .collect::<String>()
+        .parse::<Sketch<L>>()
+        .unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use egg::{RecExpr, SymbolLang};

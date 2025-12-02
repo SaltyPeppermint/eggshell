@@ -36,7 +36,7 @@ where
     }
 }
 
-#[expect(clippy::cast_precision_loss)]
+#[expect(clippy::cast_precision_loss, clippy::missing_panics_doc)]
 pub fn memory_log_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where
     L: Language,

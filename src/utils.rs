@@ -126,3 +126,24 @@ where
         r
     }
 }
+
+#[must_use]
+pub fn find_diff<L: Language>(lhs: &RecExpr<L>, rhs: &RecExpr<L>) -> Option<(L, L)> {
+    fn rec<LL: Language>(
+        lhs: &RecExpr<LL>,
+        lhs_id: Id,
+        rhs: &RecExpr<LL>,
+        rhs_id: Id,
+    ) -> Option<(LL, LL)> {
+        if lhs[lhs_id].matches(&rhs[rhs_id]) {
+            lhs[lhs_id]
+                .children()
+                .iter()
+                .zip(rhs[rhs_id].children())
+                .find_map(|(lcid, rcid)| rec(lhs, *lcid, rhs, *rcid))
+        } else {
+            Some((lhs[lhs_id].clone(), rhs[rhs_id].clone()))
+        }
+    }
+    rec(lhs, lhs.root(), rhs, rhs.root())
+}

@@ -10,6 +10,7 @@ use super::{Index, Rise};
 pub struct RiseAnalysis(HashSet<(RecExpr<Math>, RecExpr<Math>)>);
 
 impl RiseAnalysis {
+    #[must_use]
     pub fn new() -> Self {
         Self(HashSet::default())
     }

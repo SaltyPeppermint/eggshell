@@ -84,6 +84,7 @@ egg::define_language! {
 }
 
 impl Rise {
+    #[must_use]
     pub fn kind(&self) -> Option<Kind> {
         Some(match self {
             Rise::Var(index) => index.kind()?,
