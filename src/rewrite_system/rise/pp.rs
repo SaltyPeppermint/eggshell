@@ -1,5 +1,5 @@
 use colored::{ColoredString, Colorize};
-use egg::{Id, Language, RecExpr};
+use egg::{ENodeOrVar, Id, Language, RecExpr};
 
 use super::Rise;
 
@@ -7,12 +7,103 @@ pub trait PrettyPrint {
     fn pp(self, skip_wrapper: bool);
 }
 
-impl PrettyPrint for &RecExpr<Rise> {
-    fn pp(self, skip_wrapper: bool) {
-        let tree: PPNode = self.into();
-        tree.pp(skip_wrapper);
+// ============================================================================
+// Shared Styling Logic
+// ============================================================================
+
+/// Returns the colored string representation and a boolean indicating if
+/// the node is a "wrapper" (like a Lambda) that impacts indentation logic.
+fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
+    match node {
+        Rise::Var(index) => (index.to_string().magenta(), false),
+        Rise::App(_) | Rise::Lambda(_) => (node.to_string().red(), false),
+        Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
+            (node.to_string().cyan(), false)
+        }
+        Rise::NatLambda(_) | Rise::DataLambda(_) | Rise::AddrLambda(_) | Rise::NatNatLambda(_) => {
+            (node.to_string().cyan(), true)
+        } // is_wrapper = true
+
+        // Primitive Types inside Expr position (Panic)
+        Rise::FunType(_)
+        | Rise::NatFun(_)
+        | Rise::DataFun(_)
+        | Rise::AddrFun(_)
+        | Rise::NatNatFun(_)
+        | Rise::TypeOf(_)
+        | Rise::ArrType(_)
+        | Rise::VecType(_)
+        | Rise::PairType(_)
+        | Rise::IndexType(_)
+        | Rise::NatType
+        | Rise::F32 => panic!("Should not see types in expression position: {node}"),
+
+        // NatExprs inside Expr position (Panic)
+        Rise::NatAdd(_) | Rise::NatSub(_) | Rise::NatMul(_) | Rise::NatDiv(_) | Rise::NatPow(_) => {
+            panic!("NatExpr should only appear in types: {node}")
+        }
+
+        // Standard Opcodes
+        Rise::Let
+        | Rise::AsVector
+        | Rise::AsScalar
+        | Rise::VectorFromScalar
+        | Rise::Snd
+        | Rise::Fst
+        | Rise::Add
+        | Rise::Mul
+        | Rise::ToMem
+        | Rise::Split
+        | Rise::Join
+        | Rise::Generate
+        | Rise::Transpose
+        | Rise::Zip
+        | Rise::Unzip
+        | Rise::Map
+        | Rise::MapPar
+        | Rise::Reduce
+        | Rise::ReduceSeq
+        | Rise::ReduceSeqUnroll
+        | Rise::Float(_) => (node.to_string().yellow(), false),
+
+        Rise::Integer(i) => (format!("int{i}").purple(), false),
     }
 }
+
+/// Helper to format a type node given pre-formatted children strings.
+/// This allows us to share the formatting string logic between `Rise` and `egg::ENodeOrVar<Rise>`.
+fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredString {
+    match node {
+        Rise::Var(index) => index.to_string().green(),
+        Rise::FunType(_) => {
+            let s = format!("{} -> {}", children[0], children[1]);
+            if fn_brackets { format!("({s})") } else { s }.blue()
+        }
+        Rise::ArrType(_) => format!("[{}: {}]", children[1], children[0]).blue(),
+        Rise::VecType(_) => format!("Vec[{}: {}]", children[1], children[0]).blue(),
+        Rise::PairType(_) => format!("({}, {})", children[0], children[1]).blue(),
+        Rise::IndexType(_) => format!("Idx[{}]", children[0]).blue(),
+        Rise::NatType => "nat".to_owned().blue(),
+        Rise::F32 => "f32".to_owned().blue(),
+
+        Rise::NatFun(_) => format!("NatFun[{}]", children[0]).blue(),
+        Rise::DataFun(_) => format!("DataFun[{}]", children[0]).blue(),
+        Rise::AddrFun(_) => format!("AddrFun[{}]", children[0]).blue(),
+        Rise::NatNatFun(_) => format!("NatNatFun[{}]", children[0]).blue(),
+
+        Rise::NatAdd(_) => format!("({} + {})", children[0], children[1]).white(),
+        Rise::NatSub(_) => format!("({} - {})", children[0], children[1]).white(),
+        Rise::NatMul(_) => format!("({} * {})", children[0], children[1]).white(),
+        Rise::NatDiv(_) => format!("({} / {})", children[0], children[1]).white(),
+        Rise::NatPow(_) => format!("({} ^ {})", children[0], children[1]).white(),
+
+        _ => panic!("Expected type node but found {node}"),
+    }
+}
+
+// ============================================================================
+// Tree Structure
+// ============================================================================
 
 struct PPNode {
     children: Box<[PPNode]>,
@@ -54,86 +145,37 @@ impl PPNode {
     }
 }
 
+impl PrettyPrint for &RecExpr<Rise> {
+    fn pp(self, skip_wrapper: bool) {
+        let tree: PPNode = self.into();
+        tree.pp(skip_wrapper);
+    }
+}
+
+// ============================================================================
+// Implementation: RecExpr<Rise>
+// ============================================================================
+
 impl From<&RecExpr<Rise>> for PPNode {
     fn from(value: &RecExpr<Rise>) -> PPNode {
         fn rec(expr: &RecExpr<Rise>, id: Id) -> PPNode {
             let Rise::TypeOf([expr_id, ty_id]) = &expr[id] else {
+                // Fallback if top-level node is not TypeOf
                 return PPNode {
-                    children: expr[id]
-                        .children()
-                        .iter()
-                        .map(|c_id| rec(expr, *c_id))
-                        .collect(),
+                    children: expr[id].children().iter().map(|c| rec(expr, *c)).collect(),
                     expr: expr[id].to_string().into(),
-                    ty: ("NO TYPE INFO AVAILABLE").red(),
+                    ty: "NO TYPE INFO".red(),
                     wrapper: false,
                 };
             };
+
             let node = &expr[*expr_id];
-            let mut is_wrapper = false;
-            let colored_string = match node {
-                Rise::Var(index) => index.to_string().magenta(),
-                Rise::App(_) | Rise::Lambda(_) => node.to_string().red(),
-                Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
-                    node.to_string().cyan()
-                }
-                Rise::NatLambda(_)
-                | Rise::DataLambda(_)
-                | Rise::AddrLambda(_)
-                | Rise::NatNatLambda(_) => {
-                    is_wrapper = true;
-                    node.to_string().cyan()
-                }
-                Rise::FunType(_)
-                | Rise::NatFun(_)
-                | Rise::DataFun(_)
-                | Rise::AddrFun(_)
-                | Rise::NatNatFun(_)
-                | Rise::TypeOf(_)
-                | Rise::ArrType(_)
-                | Rise::VecType(_)
-                | Rise::PairType(_)
-                | Rise::IndexType(_)
-                | Rise::NatType
-                | Rise::F32 => panic!("Should not see types here: {node}"),
-                Rise::NatAdd(_)
-                | Rise::NatSub(_)
-                | Rise::NatMul(_)
-                | Rise::NatDiv(_)
-                | Rise::NatPow(_) => {
-                    panic!("NatExpr should only appear in types: {node}")
-                } // node.to_string().white()
-                Rise::Let
-                | Rise::AsVector
-                | Rise::AsScalar
-                | Rise::VectorFromScalar
-                | Rise::Snd
-                | Rise::Fst
-                | Rise::Add
-                | Rise::Mul
-                | Rise::ToMem
-                | Rise::Split
-                | Rise::Join
-                | Rise::Generate
-                | Rise::Transpose
-                | Rise::Zip
-                | Rise::Unzip
-                | Rise::Map
-                | Rise::MapPar
-                | Rise::Reduce
-                | Rise::ReduceSeq
-                | Rise::ReduceSeqUnroll
-                | Rise::Float(_) => node.to_string().yellow(),
-                Rise::Integer(i) => format!("int{i}").purple(),
-            };
+            let (colored_string, is_wrapper) = get_rise_style(node);
+
             PPNode {
-                children: node
-                    .children()
-                    .iter()
-                    .map(|c_id| rec(expr, *c_id))
-                    .collect(),
+                children: node.children().iter().map(|c| rec(expr, *c)).collect(),
                 expr: colored_string,
-                ty: pp_ty(expr, *ty_id, false),
+                ty: pp_ty_rise(expr, *ty_id, false),
                 wrapper: is_wrapper,
             }
         }
@@ -141,92 +183,125 @@ impl From<&RecExpr<Rise>> for PPNode {
     }
 }
 
-fn pp_ty(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {
+fn pp_ty_rise(expr: &RecExpr<Rise>, id: Id, fn_brackets: bool) -> ColoredString {
     let node = &expr[id];
-    match node {
-        Rise::Var(index) => index.to_string().green(),
-        Rise::FunType([i, o]) => if fn_brackets {
-            format!("({} -> {})", pp_ty(expr, *i, true), pp_ty(expr, *o, true))
-        } else {
-            format!("{} -> {}", pp_ty(expr, *i, true), pp_ty(expr, *o, true))
+    let children_strs: Vec<String> = node
+        .children()
+        .iter()
+        .map(|&c| pp_ty_rise(expr, c, true).to_string()) // recursive call with brackets=true
+        .collect();
+
+    fmt_ty_node(node, &children_strs, fn_brackets)
+}
+
+// ============================================================================
+// Implementation: RecExpr<ENodeOrVar<Rise>>
+// ============================================================================
+
+impl PrettyPrint for &RecExpr<ENodeOrVar<Rise>> {
+    fn pp(self, skip_wrapper: bool) {
+        let tree: PPNode = self.into();
+        tree.pp(skip_wrapper);
+    }
+}
+
+impl From<&RecExpr<ENodeOrVar<Rise>>> for PPNode {
+    fn from(value: &RecExpr<ENodeOrVar<Rise>>) -> PPNode {
+        fn rec(expr: &RecExpr<ENodeOrVar<Rise>>, id: Id) -> PPNode {
+            // 1. Resolve Root Node (must be TypeOf inside an ENode)
+            let inner_node = match &expr[id] {
+                ENodeOrVar::ENode(n) => n,
+                ENodeOrVar::Var(v) => {
+                    return PPNode {
+                        children: Box::new([]),
+                        expr: v.to_string().magenta(),
+                        ty: "PATTERN VAR".normal(),
+                        wrapper: false,
+                    };
+                }
+            };
+
+            let Rise::TypeOf([expr_id, ty_id]) = inner_node else {
+                return PPNode {
+                    children: expr[id].children().iter().map(|c| rec(expr, *c)).collect(),
+                    expr: expr[id].to_string().into(),
+                    ty: "NO TYPE INFO".red(),
+                    wrapper: false,
+                };
+            };
+
+            // 2. Resolve Actual Expression Node
+            match &expr[*expr_id] {
+                ENodeOrVar::Var(v) => PPNode {
+                    children: Box::new([]),
+                    expr: v.to_string().magenta(),
+                    ty: pp_ty_enode(expr, *ty_id, false),
+                    wrapper: false,
+                },
+                ENodeOrVar::ENode(node) => {
+                    let (colored_string, is_wrapper) = get_rise_style(node);
+                    PPNode {
+                        children: node.children().iter().map(|c| rec(expr, *c)).collect(),
+                        expr: colored_string,
+                        ty: pp_ty_enode(expr, *ty_id, false),
+                        wrapper: is_wrapper,
+                    }
+                }
+            }
         }
-        .blue(),
-        Rise::ArrType([n, ty]) => format!(
-            "[{}: {}]",
-            pp_ty(expr, *ty, fn_brackets),
-            pp_ty(expr, *n, fn_brackets)
-        )
-        .blue(),
-        Rise::VecType([n, ty]) => format!(
-            "Vec[{}: {}]",
-            pp_ty(expr, *ty, fn_brackets),
-            pp_ty(expr, *n, fn_brackets)
-        )
-        .blue(),
-        Rise::PairType([fst, snd]) => format!(
-            "({}, {})",
-            pp_ty(expr, *fst, fn_brackets),
-            pp_ty(expr, *snd, fn_brackets)
-        )
-        .blue(),
-        Rise::IndexType(c) => format!("Idx[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
-        Rise::NatType => "nat".to_owned().blue(),
-        Rise::F32 => "f32".to_owned().blue(),
-        Rise::NatFun(c) => format!("NatFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
-        Rise::DataFun(c) => format!("DataFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
-        Rise::AddrFun(c) => format!("AddrFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
-        Rise::NatNatFun(c) => format!("NatNatFun[{}]", pp_ty(expr, *c, fn_brackets)).blue(),
-        Rise::NatAdd([a, b]) => format!(
-            "({} + {})",
-            pp_ty(expr, *a, fn_brackets),
-            pp_ty(expr, *b, fn_brackets)
-        )
-        .white(),
-        Rise::NatSub([a, b]) => format!(
-            "({} - {})",
-            pp_ty(expr, *a, fn_brackets),
-            pp_ty(expr, *b, fn_brackets)
-        )
-        .white(),
-        Rise::NatMul([a, b]) => format!(
-            "({} * {})",
-            pp_ty(expr, *a, fn_brackets),
-            pp_ty(expr, *b, fn_brackets)
-        )
-        .white(),
-        Rise::NatDiv([a, b]) => format!(
-            "({} / {})",
-            pp_ty(expr, *a, fn_brackets),
-            pp_ty(expr, *b, fn_brackets)
-        )
-        .white(),
-        Rise::NatPow([a, b]) => format!(
-            "({} ^ {})",
-            pp_ty(expr, *a, fn_brackets),
-            pp_ty(expr, *b, fn_brackets)
-        )
-        .white(),
-        _ => panic!("only for types but found {node}"),
+        rec(value, value.root())
+    }
+}
+
+fn pp_ty_enode(expr: &RecExpr<ENodeOrVar<Rise>>, id: Id, fn_brackets: bool) -> ColoredString {
+    match &expr[id] {
+        ENodeOrVar::Var(v) => v.to_string().green(),
+        ENodeOrVar::ENode(node) => {
+            let children_strs = node
+                .children()
+                .iter()
+                .map(|&c| pp_ty_enode(expr, c, true).to_string())
+                .collect::<Vec<_>>();
+            fmt_ty_node(node, &children_strs, fn_brackets)
+        }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod test {
 
-    use super::super::{BASELINE_GOAL, MM};
+    use egg::RecExpr;
+
+    use super::super::MM;
+    use super::*;
 
     #[test]
     fn pp_mm() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         mm.pp(true);
-        mm.pp(false);
     }
 
     #[test]
-    fn pp_baseline() {
-        let baseline: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
-        baseline.pp(true);
-        baseline.pp(false);
+    fn pp_reduce_seq_lhs() {
+        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf reduce (fun (fun ?dt0 (fun ?dt0 ?dt0)) (fun ?dt0 (fun (arrT ?n0 ?dt0) ?dt0))))".parse().unwrap();
+        r.pp(false);
+    }
+
+    #[test]
+    fn pp_reduce_seq_rhs() {
+        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf reduceSeq (fun (fun ?dt0 (fun ?dt0 ?dt0)) (fun ?dt0 (fun (arrT ?n0 ?dt0) ?dt0))))".parse().unwrap();
+        r.pp(false);
+    }
+
+    #[test]
+    fn pp_reduce_seq_map_fusion_lhs() {
+        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf (app (typeOf (app (typeOf (app (typeOf reduceSeq ?tAny7) (typeOf ?0 (fun ?dt0 (fun ?dt1 ?dt0)))) ?tAny8) (typeOf ?1 ?dt0)) ?tAny9) (typeOf (app (typeOf (app (typeOf map ?tAny10) (typeOf ?2 (fun ?dt2 ?dt1))) ?tAny11) (typeOf ?3 (arrT ?n0 ?dt2))) (arrT ?n0 ?dt1))) ?dt0)".parse().unwrap();
+        r.pp(false);
+    }
+
+    #[test]
+    fn pp_reduce_seq_map_fusion_rhs() {
+        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf (app (typeOf (app (typeOf (app (typeOf reduceSeq (fun (fun ?dt0 (fun ?dt2 ?dt0)) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0)))) (typeOf (lam (typeOf (lam (typeOf (app (typeOf (app (typeOf ?4 (fun ?dt3 (fun ?dt4 ?dt3))) (typeOf %e0 ?dt3)) (fun ?dt4 ?dt3)) (typeOf (app (typeOf ?5 (fun ?dt5 ?dt4)) (typeOf %e0 ?dt5)) ?dt4)) ?dt3)) (fun ?dt6 ?dt7))) (fun ?dt0 (fun ?dt2 ?dt0)))) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0))) (typeOf ?1 ?dt0)) (fun (arrT ?n0 ?dt2) ?dt0)) (typeOf ?3 (arrT ?n0 ?dt2))) ?dt0)".parse().unwrap();
+        r.pp(false);
     }
 }
