@@ -36,6 +36,28 @@ where
     }
 }
 
+#[expect(clippy::missing_errors_doc)]
+pub fn printer_hook<L, N>(r: &mut Runner<L, N>) -> Result<(), String>
+where
+    L: Language,
+    N: Analysis<L>,
+{
+    let Some(this_iter) = r.iterations.last() else {
+        return Ok(());
+    };
+    println!("ITERATION {}:\n", r.iterations.len());
+    println!("Nodes: {}\n", r.egraph.nodes().len());
+    println!("EClasses: {}\n", r.egraph.number_of_classes());
+    println!("Rules:");
+    for rule in &this_iter.applied {
+        let name = &rule.0;
+        let n = &rule.1;
+        println!("{name}: {n}");
+    }
+    println!("---");
+    Ok(())
+}
+
 #[expect(clippy::cast_precision_loss, clippy::missing_panics_doc)]
 pub fn memory_log_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
 where

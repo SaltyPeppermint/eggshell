@@ -18,6 +18,7 @@ fn main() {
         .with_node_limit(1_000_000)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(split_guide.clone()))
+        .with_hook(hooks::printer_hook)
         .run(&rise::rules(RiseRuleset::MM));
 
     println!("{}", runner_1.report());
