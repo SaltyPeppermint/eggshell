@@ -41,7 +41,7 @@ pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
         // rewrite!("map-par"; "(typeOf map (fun (fun ?dt0 ?dt1) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt1))))" => { pat("(typeOf mapPar (fun (fun ?dt0 ?dt1) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt1))))") }),
     ];
     algorithmic.extend([
-            //  OLD: rewrite!("eta-reduction"; "(typeOf (lam (typeOf (app (typeOf ?0 ?tAny0) (typeOf %0 ?t0)) ?tAny1)) (fun ?t1 ?t2))" => { NotFreeIn::new("?0", 0, Shifted::new("?0", "?1", -1, 1, ShiftedCheck::new("?t1", "?t0", 1, 0, pat("(typeOf ?1 (fun ?t1 ?t2))")))) }),
+            //  OLD: rewrite!("eta-reduction"; "(typeOf (lam (typeOf (app (typeOf ?0 ?tAny0) (typeOf %e0 ?t0)) ?tAny1)) (fun ?t1 ?t2))" => { NotFreeIn::new("?0", 0, Shifted::new("?0", "?1", -1, 1, ShiftedCheck::new("?t1", "?t0", 1, 0, pat("(typeOf ?1 (fun ?t1 ?t2))")))) }),
             //  OLD: rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
             // rewrite!("beta"; "(app (typeOf (lam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs", Kind::Expr) }),
             // rewrite!("beta-nat"; "(natApp (typeOf (natLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Nat) }),
@@ -192,22 +192,22 @@ mod tests {
         }
         // (λ. (λ. ((λ. (0 1)) (0 1)))) --> (λ. (λ. ((0 1) 0)))
         // (λ. (0 1)) (0 1) --> (0 1) 0
-        check("(app %0 %1)", "(app %0 %1)", "(app (app %0 %1) %0)");
-        // r1 = (app (lam (app "%6" (app "%5" "%0"))) "%0")
-        // r2 = (app (lam (app "%6" r1)) "%0")
-        // r3 = (app (lam (app "%6" r2)) %0)
-        // (app map (lam (app "%6" r3)))
-        // --> (app map (lam (app "%6" (app "%5" (app "%4" (app "%3" (app "%2" "%0")))))))
-        check("(app %6 (app %5 %0))", "%0", "(app %5 (app %4 %0))");
+        check("(app %e0 %e1)", "(app %e0 %e1)", "(app (app %e0 %e1) %e0)");
+        // r1 = (app (lam (app "%e6" (app "%e5" "%e0"))) "%e0")
+        // r2 = (app (lam (app "%e6" r1)) "%e0")
+        // r3 = (app (lam (app "%e6" r2)) %e0)
+        // (app map (lam (app "%e6" r3)))
+        // --> (app map (lam (app "%e6" (app "%e5" (app "%e4" (app "%e3" (app "%e2" "%e0")))))))
+        check("(app %e6 (app %e5 %e0))", "%e0", "(app %e5 (app %e4 %e0))");
         check(
-            "(app %6 (app %5 (app %4 %0)))",
-            "%0",
-            "(app %5 (app %4 (app %3 %0)))",
+            "(app %e6 (app %e5 (app %e4 %e0)))",
+            "%e0",
+            "(app %e5 (app %e4 (app %e3 %e0)))",
         );
         check(
-            "(app %6 (app %5 (app %4 (app %3 %0))))",
-            "%0",
-            "(app %5 (app %4 (app %3 (app %2 %0))))",
+            "(app %e6 (app %e5 (app %e4 (app %e3 %e0))))",
+            "%e0",
+            "(app %e5 (app %e4 (app %e3 (app %e2 %e0))))",
         );
     }
 

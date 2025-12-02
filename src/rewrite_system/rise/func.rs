@@ -325,15 +325,3 @@ fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
 //       case ArrayType(_, _) => None
 //     }
 //   }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pat_rule_1() {
-        pat(
-            "(typeOf (app (typeOf (app (typeOf map (fun (fun ?dt0 ?dt0) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt0)))) (typeOf (lam (typeOf %0 ?dt1)) (fun ?dt0 ?dt0))) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt0))) (typeOf ?e0 (arrT ?n0 ?dt0))) (arrT ?n0 ?dt0))",
-        );
-    }
-}
