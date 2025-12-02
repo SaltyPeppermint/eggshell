@@ -1,8 +1,7 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use crate::rewrite_system::rise::PrettyPrint;
-
-use super::{Index, Kind, Kindable, Rise, RiseAnalysis, Shift};
+use super::pp::PrettyPrint;
+use super::{Index, Kindable, Rise, RiseAnalysis, Shift};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
@@ -194,6 +193,8 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
 
 #[cfg(test)]
 mod tests {
+    use crate::rewrite_system::rise::kind::Kind;
+
     use super::*;
 
     #[test]

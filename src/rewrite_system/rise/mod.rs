@@ -4,6 +4,7 @@ mod indices;
 mod kind;
 mod lang;
 mod nat;
+mod pp;
 mod rules;
 mod shifted;
 
@@ -13,8 +14,7 @@ use analysis::RiseAnalysis;
 use indices::{Index, Shift};
 use kind::{Kind, Kindable};
 use lang::Rise;
-
-pub use lang::PrettyPrint;
+use pp::PrettyPrint;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
