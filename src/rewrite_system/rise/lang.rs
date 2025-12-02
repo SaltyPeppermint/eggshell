@@ -1,5 +1,4 @@
-use colored::{ColoredString, Colorize};
-use egg::{Id, Language, RecExpr};
+use egg::Id;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 

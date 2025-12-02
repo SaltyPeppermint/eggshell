@@ -134,7 +134,7 @@ mod test {
             .with_iter_limit(3)
             .with_scheduler(SimpleScheduler)
             .with_hook(move |r| {
-                printer_hook(r);
+                // printer_hook(r);
                 if r.egraph.lookup_expr(&bg2).is_some() {
                     return Err("FOUND IT".to_owned());
                 }

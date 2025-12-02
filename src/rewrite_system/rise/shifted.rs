@@ -37,11 +37,11 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
         let extract = &egraph[subst[self.var]].data.beta_extract;
         let shifted = shift_copy(extract, self.shift, self.cutoff);
 
-        println!("Shifting by {} with cutoff {}", self.shift, self.cutoff,);
-        println!("Extracted:");
-        extract.pp(false);
-        println!("Shifted");
-        shifted.pp(false);
+        // println!("Shifting by {} with cutoff {}", self.shift, self.cutoff,);
+        // println!("Extracted:");
+        // extract.pp(false);
+        // println!("Shifted");
+        // shifted.pp(false);
 
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&shifted);

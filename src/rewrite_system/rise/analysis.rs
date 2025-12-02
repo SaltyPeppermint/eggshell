@@ -1,4 +1,4 @@
-use egg::{Analysis, AstSize, CostFunction, DidMerge, EGraph, Language, RecExpr};
+use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
 use hashbrown::HashSet;
 
 use crate::rewrite_system::rise::kind::Kindable;
