@@ -14,7 +14,8 @@ use analysis::RiseAnalysis;
 use indices::{Index, Shift};
 use kind::{Kind, Kindable};
 use lang::Rise;
-use pp::PrettyPrint;
+
+pub use pp::PrettyPrint;
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -125,52 +126,37 @@ mod test {
     pub fn baseline_goal() {
         let mm: RecExpr<Rise> = MM.parse().unwrap();
         let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
-        let bg2 = baseline_goal.clone();
+        let bg_for_closure = baseline_goal.clone();
 
-        let runner = Runner::default();
-        let r = runner
+        let runner = Runner::default()
             .with_expr(&mm)
             .with_iter_limit(3)
             .with_scheduler(SimpleScheduler)
             .with_hook(move |r| {
                 // printer_hook(r);
-                if r.egraph.lookup_expr(&bg2).is_some() {
+                if r.egraph.lookup_expr(&bg_for_closure).is_some() {
                     return Err("FOUND IT".to_owned());
                 }
                 Ok(())
             })
             .run(&rules(RiseRuleset::MM));
 
-        println!("{:?}\n\n\n", r.report());
-        // println!("{}", r.egraph.dot());
-
-        baseline_goal.pp(false);
-        let root_mm = r.egraph.find(r.roots[0]);
-        assert_eq!(root_mm, r.egraph.lookup_expr(&mm).unwrap());
-        // assert_eq!(root_mm, r.egraph.lookup_expr(&baseline_goal).unwrap());
+        let root_mm = runner.egraph.find(runner.roots[0]);
+        assert_eq!(root_mm, runner.egraph.lookup_expr(&mm).unwrap());
 
         let baseline_sketch = sketchify(BASELINE_GOAL);
         let (_, sketch_extracted_baseline) =
-            eclass_extract(&baseline_sketch, AstSize, &r.egraph, root_mm).unwrap();
-        println!("SKETCHIFIED AND EXTRACTED BASELINE:");
-        sketch_extracted_baseline.pp(false);
-        println!("BASELINE:");
-        baseline_goal.pp(false);
+            eclass_extract(&baseline_sketch, AstSize, &runner.egraph, root_mm).unwrap();
 
-        // let diff = find_diff(
-        //     &sketch_extracted_baseline,
-        //     sketch_extracted_baseline.root(),
-        //     &baseline_goal,
-        //     baseline_goal.root(),
-        // );
-        println!("mm:");
-        mm.pp(false);
-        println!("baseline_goal:");
-        baseline_goal.pp(false);
-        println!("sketch_baseline_extr:");
-        // sketch_extracted_baseline.pp(false);
-        // assert_eq!(diff, None);
-        // assert_eq!(root_mm, r.egraph.lookup_expr(&baseline_goal).unwrap());
+        let diff = find_diff(
+            &sketch_extracted_baseline,
+            sketch_extracted_baseline.root(),
+            &baseline_goal,
+            baseline_goal.root(),
+        );
+
+        assert_eq!(diff, None);
+        assert_eq!(root_mm, runner.egraph.lookup_expr(&baseline_goal).unwrap());
     }
 
     fn printer_hook(r: &mut Runner<Rise, RiseAnalysis>) {
