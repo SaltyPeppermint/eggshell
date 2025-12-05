@@ -8,7 +8,7 @@ use crate::rewrite_system::rise::Index;
 
 /// Represents a monomial term's variables and their exponents
 /// We use `BTreeMap` to keep variables sorted for canonical form
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Default)]
 pub struct Monomial {
     // Map from dbindex to exponent (can be negative for rational expressions)
     variables: BTreeMap<Index, i32>,
@@ -16,9 +16,7 @@ pub struct Monomial {
 
 impl Monomial {
     pub fn new() -> Self {
-        Monomial {
-            variables: BTreeMap::new(),
-        }
+        Self::default()
     }
 
     pub fn variables(&self) -> &BTreeMap<Index, i32> {
@@ -73,12 +71,6 @@ impl Monomial {
     }
 }
 
-impl Default for Monomial {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl fmt::Display for Monomial {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.variables.is_empty() {
@@ -103,21 +95,21 @@ impl fmt::Display for Monomial {
     }
 }
 
-impl std::ops::Mul<Monomial> for Monomial {
-    type Output = Monomial;
+impl std::ops::Mul for Monomial {
+    type Output = Self;
 
     /// Multiply two monomials by adding their exponents
-    fn mul(self, rhs: Monomial) -> Self::Output {
+    fn mul(self, rhs: Self) -> Self::Output {
         self * (&rhs)
     }
 }
 
 #[expect(clippy::suspicious_arithmetic_impl)]
-impl std::ops::Mul<&Monomial> for Monomial {
-    type Output = Monomial;
+impl std::ops::Mul<&Self> for Monomial {
+    type Output = Self;
 
     /// Multiply two monomials by adding their exponents
-    fn mul(mut self, rhs: &Monomial) -> Self::Output {
+    fn mul(mut self, rhs: &Self) -> Self::Output {
         for (var, exp) in &rhs.variables {
             *self.variables.entry(*var).or_insert(0) += exp;
         }

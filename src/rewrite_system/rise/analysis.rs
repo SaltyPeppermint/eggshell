@@ -19,14 +19,14 @@ impl RiseAnalysis {
         }
     }
 
-    pub fn check_cache_equiv(&mut self, lhs: &RecExpr<Rise>, rhs: &RecExpr<Rise>) -> Option<bool> {
+    pub fn check_cache_equiv(&mut self, lhs: &RecExpr<Rise>, rhs: &RecExpr<Rise>) -> bool {
         if let Some(lhs_id) = self.nat_eq_cache.lookup_expr(lhs)
             && let Some(rhs_id) = self.nat_eq_cache.lookup_expr(rhs)
+            && lhs_id == rhs_id
         {
-            Some(lhs_id == rhs_id)
-        } else {
-            None
+            return true;
         }
+        false
     }
 
     pub fn add_pair_to_cache(&mut self, lhs: &RecExpr<Rise>, rhs: &RecExpr<Rise>) {
