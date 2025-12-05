@@ -1,14 +1,18 @@
-mod lang;
-mod rules;
+// pub mod cost;
+// pub mod lang;
+mod monomial;
+mod polynomial;
+// pub mod rules;
 
 use egg::{
-    Applier, AstSize, EGraph, ENodeOrVar, Extractor, Id, Language, Pattern, PatternAst, RecExpr,
-    Runner, Searcher, Subst, Symbol, Var,
+    Applier, EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Searcher, Subst,
+    Symbol, Var,
 };
-use hashbrown::HashSet;
+
+use crate::rewrite_system::rise::nat::polynomial::Polynomial;
 
 use super::{Rise, RiseAnalysis};
-pub use lang::Math;
+use monomial::Monomial;
 
 pub struct ComputeNat<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
@@ -40,7 +44,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
             return vec![];
         };
         let expr = &egraph[subst[self.var]].data.beta_extract;
-        let simplified_nat = simplify(&lang::to_nat_expr(expr));
+        let simplified_nat = simplify(expr);
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&simplified_nat);
         new_subst.insert(self.var, added_expr_id);
@@ -52,12 +56,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
     }
 }
 
-fn simplify(nat_expr: &RecExpr<Math>) -> RecExpr<Rise> {
-    let rules = rules::rules();
-    let runner = Runner::default().with_expr(nat_expr).run(&rules);
-    let root = runner.roots.first().unwrap();
-    let (_, expr) = Extractor::new(&runner.egraph, AstSize).find_best(*root);
-    lang::to_rise_expr(&expr)
+pub fn simplify(nat_expr: &RecExpr<Rise>) -> RecExpr<Rise> {
+    let mut polynomial: Polynomial = nat_expr.into();
+    polynomial.simplify();
+    polynomial.into()
 }
 
 pub struct ComputeNatCheck<A: Applier<Rise, RiseAnalysis>> {
@@ -85,9 +87,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let expected = lang::to_nat_expr(&egraph[subst[self.var]].data.beta_extract);
-        let extracted = lang::to_nat_expr(&extract_small(egraph, &self.nat_pattern, subst));
-        if check_equivalence(egraph.analysis.get_mut_term_bank(), (expected, extracted)) {
+        let expected = &egraph[subst[self.var]].data.beta_extract.clone();
+        let extracted = &extract_small(egraph, &self.nat_pattern, subst);
+        let a = &mut egraph.analysis;
+        if check_equivalence(a, expected, extracted) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -97,28 +100,20 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
 }
 
 fn check_equivalence<'a, 'b: 'a>(
-    term_bank: &'b mut HashSet<(RecExpr<Math>, RecExpr<Math>)>,
-    pair: (RecExpr<Math>, RecExpr<Math>),
+    cache: &'b mut RiseAnalysis,
+    lhs: &RecExpr<Rise>,
+    rhs: &RecExpr<Rise>,
 ) -> bool {
     // check cache
-    if term_bank.contains(&pair) {
-        return true;
+    if let Some(equiv) = cache.check_cache_equiv(lhs, rhs) {
+        return equiv;
     }
 
-    let runner = Runner::default()
-        // .with_egraph(term_bank.clone())
-        .with_expr(&pair.0)
-        .with_expr(&pair.1)
-        .with_hook(move |r| {
-            if r.egraph.find(r.roots[0]) == r.egraph.find(r.roots[1]) {
-                Err("HOOK".to_owned())
-            } else {
-                Ok(())
-            }
-        })
-        .run(&rules::rules());
-    if runner.egraph.find(runner.roots[0]) == runner.egraph.find(runner.roots[1]) {
-        term_bank.insert(pair);
+    let poly_lhs: Polynomial = lhs.into();
+    let poly_rhs: Polynomial = rhs.into();
+
+    if poly_lhs == poly_rhs {
+        cache.add_pair_to_cache(lhs, rhs);
         return true;
     }
     false
