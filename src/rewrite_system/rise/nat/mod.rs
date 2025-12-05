@@ -24,28 +24,27 @@ pub use rational::RationalFunction;
 /// Compute GCD of two rational numbers
 fn gcd_ratio(a: Ratio<i32>, b: Ratio<i32>) -> Ratio<i32> {
     if b.is_zero() {
-        a.abs()
-    } else {
-        // For rationals a/b and c/d, gcd = gcd(a*d, c*b) / (b*d)
-        // Simplified: we work with the absolute values
-        let a_abs = a.abs();
-        let b_abs = b.abs();
-
-        // Use Euclidean algorithm on rationals
-        let (mut x, mut y) = if a_abs >= b_abs {
-            (a_abs, b_abs)
-        } else {
-            (b_abs, a_abs)
-        };
-
-        while !y.is_zero() {
-            let remainder = x - (x / y).trunc() * y;
-            x = y;
-            y = remainder;
-        }
-
-        x
+        return a.abs();
     }
+    // For rationals a/b and c/d, gcd = gcd(a*d, c*b) / (b*d)
+    // Simplified: we work with the absolute values
+    let a_abs = a.abs();
+    let b_abs = b.abs();
+
+    // Use Euclidean algorithm on rationals
+    let (mut x, mut y) = if a_abs >= b_abs {
+        (a_abs, b_abs)
+    } else {
+        (b_abs, a_abs)
+    };
+
+    while !y.is_zero() {
+        let remainder = x - (x / y).trunc() * y;
+        x = y;
+        y = remainder;
+    }
+
+    x
 }
 
 pub fn try_simplify(nat_expr: &RecExpr<Rise>) -> Result<RecExpr<Rise>, NatSolverError> {
