@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
 use std::fmt;
+use std::{collections::BTreeMap, num::TryFromIntError};
 
 use egg::{Id, RecExpr};
 use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use super::{Monomial, Rise};
 
@@ -36,17 +37,7 @@ impl Polynomial {
     ///
     /// See `try_inv` for details
     pub fn inv(self) -> Self {
-        // First simplify to remove zero terms
-
-        assert!(!self.is_zero(), "Cannot invert zero polynomial");
-
-        match self.try_inv() {
-            Ok(inverted) => inverted,
-            Err(failed_inverted) => panic!(
-                "Cannot invert multi-term polynomial '{failed_inverted}'. \
-                    Only single-term polynomials (monomials) can be inverted to produce a polynomial.",
-            ),
-        }
+        self.try_inv().unwrap()
     }
 
     /// Try to invert a polynomial, returning Err if it cannot be represented as a polynomial.
@@ -57,11 +48,11 @@ impl Polynomial {
     ///
     /// For multi-term polynomials like (x + 1), inversion cannot produce a polynomial,
     /// so this will panic.
-    pub fn try_inv(mut self) -> Result<Self, Self> {
+    pub fn try_inv(mut self) -> Result<Self, PolyError> {
         self.simplify();
 
         if self.is_zero() {
-            return Err(self);
+            return Err(PolyError::ZeroInversion);
         }
 
         // Check if this is a single-term polynomial (monomial)
@@ -73,7 +64,7 @@ impl Polynomial {
             let inv_monomial = monomial.inv();
             Ok(Polynomial::new().add_term(inv_coeff, inv_monomial))
         } else {
-            Err(self)
+            Err(PolyError::NonMonomialInversion(self))
         }
     }
 
@@ -372,93 +363,112 @@ impl From<Polynomial> for RecExpr<Rise> {
 // From RecExpr<Rise> to Polynomial
 // -------------------------------------
 
-impl From<RecExpr<Rise>> for Polynomial {
-    fn from(expr: RecExpr<Rise>) -> Self {
-        (&expr).into()
+impl TryFrom<RecExpr<Rise>> for Polynomial {
+    type Error = PolyError;
+
+    fn try_from(expr: RecExpr<Rise>) -> Result<Self, Self::Error> {
+        (&expr).try_into()
     }
 }
 
-impl From<&RecExpr<Rise>> for Polynomial {
-    fn from(expr: &RecExpr<Rise>) -> Self {
-        /// Parse a Rise expression into a Polynomial
-        fn rec(expr: &RecExpr<Rise>, id: Id) -> Polynomial {
-            let node = &expr[id];
+impl TryFrom<&RecExpr<Rise>> for Polynomial {
+    type Error = PolyError;
 
-            match node {
+    fn try_from(expr: &RecExpr<Rise>) -> Result<Self, Self::Error> {
+        /// Parse a Rise expression into a Polynomial
+        fn rec(expr: &RecExpr<Rise>, id: Id) -> Result<Polynomial, PolyError> {
+            match &expr[id] {
                 // Integer constant
-                Rise::Integer(n) => Polynomial::new().add_term((*n).into(), Monomial::new()),
+                Rise::Integer(n) => Ok(Polynomial::new().add_term((*n).into(), Monomial::new())),
                 // Single variable with exponent 1
                 Rise::Var(index) => {
-                    Polynomial::new().add_term(Ratio::one(), Monomial::new().with_var(*index, 1))
+                    Ok(Polynomial::new()
+                        .add_term(Ratio::one(), Monomial::new().with_var(*index, 1)))
                 }
 
                 Rise::NatAdd([left, right]) => {
                     // Addition: recursively parse both sides and add
-                    let left_poly = rec(expr, *left);
-                    let right_poly = rec(expr, *right);
-                    left_poly + right_poly
+                    let left_poly = rec(expr, *left)?;
+                    let right_poly = rec(expr, *right)?;
+                    Ok(left_poly + right_poly)
                 }
 
                 Rise::NatSub([left, right]) => {
                     // Subtraction: left - right = left + (-1 * right)
-                    let left_poly = rec(expr, *left);
-                    let right_poly = rec(expr, *right);
-                    left_poly - right_poly
+                    let left_poly = rec(expr, *left)?;
+                    let right_poly = rec(expr, *right)?;
+                    Ok(left_poly - right_poly)
                 }
 
                 Rise::NatMul([left, right]) => {
                     // Multiplication: recursively parse and multiply
-                    let left_poly = rec(expr, *left);
-                    let right_poly = rec(expr, *right);
-                    left_poly * right_poly
+                    let left_poly = rec(expr, *left)?;
+                    let right_poly = rec(expr, *right)?;
+                    Ok(left_poly * right_poly)
                 }
 
                 Rise::NatPow([base, exp]) => {
                     // Power: handle base^exponent
-                    let base_poly = rec(expr, *base);
+                    let base_poly = rec(expr, *base)?;
 
                     // Exponent should be an integer
                     match &expr[*exp] {
                         Rise::Integer(n) => {
                             if *n == 0 {
-                                Polynomial::one()
+                                Ok(Polynomial::one())
                             } else if *n == 1 {
-                                base_poly
+                                Ok(base_poly)
                             } else if *n == -1 {
-                                base_poly.inv()
+                                Ok(base_poly.inv())
                             } else if *n > 0 {
-                                power_polynomial(base_poly, (*n).try_into().unwrap())
+                                Ok(power_polynomial(base_poly, (*n).try_into()?))
                             } else {
                                 // Negative exponent: (base)^(-n) = (base^(-1))^n
                                 let inverted = base_poly.inv();
-                                power_polynomial(inverted, (-*n).try_into().unwrap())
+                                Ok(power_polynomial(inverted, (-*n).try_into().unwrap()))
                             }
                         }
-                        _ => panic!("NatPow exponent must be an integer constant"),
+                        node => Err(PolyError::NatPowExponent(node.clone())),
                     }
                 }
 
                 Rise::NatDiv([left, right]) => {
                     // Division: left / right = left * (right^(-1))
-                    let dividend = rec(expr, *left);
-                    let divisor = rec(expr, *right);
+                    let dividend = rec(expr, *left)?;
+                    let divisor = rec(expr, *right)?;
 
                     // Try to invert the divisor
                     let divisor_inv = divisor.inv();
-                    dividend * divisor_inv
+                    Ok(dividend * divisor_inv)
                 }
 
-                _ => panic!("Unsupported Rise node type for polynomial conversion: {node:?}"),
+                node => Err(PolyError::UnsupportedRiseNode(node.clone())),
             }
         }
         // Parse from the root (last node in the RecExpr)
         if expr.is_empty() {
-            return Polynomial::new();
+            return Ok(Polynomial::new());
         }
 
         let root_id = Id::from(expr.as_ref().len() - 1);
         rec(expr, root_id)
     }
+}
+
+#[derive(Error, Debug)]
+pub enum PolyError {
+    #[error("Unsupported Rise node type for polynomial conversion: {0}")]
+    UnsupportedRiseNode(Rise),
+    #[error("Exponent must be an Integer: {0}")]
+    NatPowExponent(Rise),
+    #[error("Integer conversion failed: {0}")]
+    IntConversionFailure(#[from] TryFromIntError),
+    #[error("Trying to invert the 0 polynom")]
+    ZeroInversion,
+    #[error(
+        "Trying to invert something that is not purely made up of monomial with coefficients: {0}"
+    )]
+    NonMonomialInversion(Polynomial),
 }
 
 #[cfg(test)]
@@ -677,7 +687,7 @@ mod tests {
         let expr: RecExpr<Rise> = poly.clone().into();
         println!("As RecExpr: {expr}");
 
-        let poly_back: Polynomial = expr.into();
+        let poly_back: Polynomial = expr.try_into().unwrap();
         println!("Back to polynomial: {poly_back}");
 
         assert_eq!(poly.to_string(), poly_back.to_string());
@@ -702,7 +712,7 @@ mod tests {
         let expr: RecExpr<Rise> = poly.clone().into();
         println!("As RecExpr: {expr}");
 
-        let poly_back: Polynomial = expr.into();
+        let poly_back: Polynomial = expr.try_into().unwrap();
         println!("Back to polynomial: {poly_back}");
 
         assert_eq!(poly.to_string(), poly_back.to_string());
@@ -719,7 +729,7 @@ mod tests {
         let three = expr.add(Rise::Integer(3));
         expr.add(Rise::NatAdd([two_x, three]));
 
-        let poly: Polynomial = expr.into();
+        let poly: Polynomial = expr.try_into().unwrap();
         println!("Parsed polynomial: {poly}");
 
         assert_eq!(poly.to_string(), "2*x_1 + 3");
@@ -743,7 +753,7 @@ mod tests {
         let one = expr.add(Rise::Integer(1));
         expr.add(Rise::NatAdd([sum1, one]));
 
-        let poly: Polynomial = expr.into();
+        let poly: Polynomial = expr.try_into().unwrap();
         println!("Parsed polynomial: {poly}");
 
         assert_eq!(poly.to_string(), "x_1^2 + 2*x_1 + 1");
@@ -769,7 +779,7 @@ mod tests {
         let one = expr.add(Rise::Integer(1));
         expr.add(Rise::NatAdd([sum1, one]));
 
-        let poly: Polynomial = expr.into();
+        let poly: Polynomial = expr.try_into().unwrap();
         println!("Parsed polynomial: {poly}");
 
         assert_eq!(poly.to_string(), "x_1^2 + 1 + 2*x_1^(-1)");
@@ -934,7 +944,7 @@ mod tests {
 
         expr.add(Rise::NatDiv([numerator, denominator]));
 
-        let poly: Polynomial = expr.into();
+        let poly: Polynomial = expr.try_into().unwrap();
         println!("Parsed polynomial: {poly}");
 
         assert_eq!(poly.to_string(), "2*x_1");
@@ -1031,7 +1041,7 @@ mod tests {
 
         expr.add(Rise::NatAdd([x_div_2, y_div_3]));
 
-        let poly: Polynomial = expr.into();
+        let poly: Polynomial = expr.try_into().unwrap();
         println!("Parsed polynomial: {poly}");
 
         // Should be (1/2)*x + (1/3)*y

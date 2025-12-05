@@ -9,7 +9,7 @@ use egg::{
     Symbol, Var,
 };
 
-use crate::rewrite_system::rise::nat::polynomial::Polynomial;
+use crate::rewrite_system::rise::nat::polynomial::{PolyError, Polynomial};
 
 use super::{Rise, RiseAnalysis};
 use monomial::Monomial;
@@ -44,7 +44,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
             return vec![];
         };
         let expr = &egraph[subst[self.var]].data.beta_extract;
-        let simplified_nat = simplify(expr);
+        let simplified_nat = try_simplify(expr).unwrap();
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&simplified_nat);
         new_subst.insert(self.var, added_expr_id);
@@ -56,10 +56,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
     }
 }
 
-pub fn simplify(nat_expr: &RecExpr<Rise>) -> RecExpr<Rise> {
-    let mut polynomial: Polynomial = nat_expr.into();
+pub fn try_simplify(nat_expr: &RecExpr<Rise>) -> Result<RecExpr<Rise>, PolyError> {
+    let mut polynomial: Polynomial = nat_expr.try_into()?;
     polynomial.simplify();
-    polynomial.into()
+    Ok(polynomial.into())
 }
 
 pub struct ComputeNatCheck<A: Applier<Rise, RiseAnalysis>> {
@@ -109,8 +109,8 @@ fn check_equivalence<'a, 'b: 'a>(
         return equiv;
     }
 
-    let poly_lhs: Polynomial = lhs.into();
-    let poly_rhs: Polynomial = rhs.into();
+    let poly_lhs: Polynomial = lhs.try_into().unwrap();
+    let poly_rhs: Polynomial = rhs.try_into().unwrap();
 
     if poly_lhs == poly_rhs {
         cache.add_pair_to_cache(lhs, rhs);
