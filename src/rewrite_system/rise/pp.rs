@@ -66,7 +66,7 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         | Rise::ReduceSeqUnroll
         | Rise::Float(_) => (node.to_string().yellow(), false),
 
-        Rise::Integer(i) => (format!("int{i}").purple(), false),
+        Rise::Integer(i) => (format!("{i}i").cyan(), false),
     }
 }
 
@@ -96,6 +96,7 @@ fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredSt
         Rise::NatMul(_) => format!("({} * {})", children[0], children[1]).white(),
         Rise::NatDiv(_) => format!("({} / {})", children[0], children[1]).white(),
         Rise::NatPow(_) => format!("({} ^ {})", children[0], children[1]).white(),
+        Rise::Integer(i) => format!("{i}i").cyan(),
 
         _ => panic!("Expected type node but found {node}"),
     }
@@ -268,7 +269,7 @@ fn pp_ty_enode(expr: &RecExpr<ENodeOrVar<Rise>>, id: Id, fn_brackets: bool) -> C
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
 
     use egg::RecExpr;
 
