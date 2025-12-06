@@ -30,6 +30,18 @@ impl Monomial {
         self
     }
 
+    /// Create a new monomial with all variables except the specified one
+    pub fn with_variables_except(&self, source: &Monomial, exclude: Index) -> Self {
+        let mut result = self.clone();
+        for (&var, &exp) in source.variables() {
+            if var != exclude && exp != 0 {
+                *result.variables.entry(var).or_insert(0) += exp;
+            }
+        }
+        result.variables.retain(|_, &mut exp| exp != 0);
+        result
+    }
+
     pub fn is_constant(&self) -> bool {
         self.variables.is_empty()
     }
@@ -116,15 +128,5 @@ impl std::ops::Mul<&Self> for Monomial {
         // Remove any variables with zero exponent
         self.variables.retain(|_, exp| *exp != 0);
         self
-    }
-}
-
-/// Convert monomial to egg `RecExpr`
-/// Returns the Id of the root node representing this monomial
-impl From<&Monomial> for RecExpr<Rise> {
-    fn from(mon: &Monomial) -> RecExpr<Rise> {
-        let mut new = RecExpr::default();
-        mon.append_to_expr(&mut new);
-        new
     }
 }

@@ -1,12 +1,11 @@
-use std::fmt;
+mod from;
+mod ops;
 
-use egg::{Id, Language, RecExpr};
 use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
 use serde::{Deserialize, Serialize};
 
-use super::{NatSolverError, Polynomial, Rise};
-use crate::rewrite_system::rise::Index;
+use super::{NatSolverError, Polynomial, Rise, polynomial};
 
 // ============================================================================
 // RationalFunction
@@ -30,11 +29,11 @@ impl RationalFunction {
         if denominator.is_zero() {
             return Err(NatSolverError::DivisionByZero);
         }
-        Ok(RationalFunction {
+        RationalFunction {
             numerator,
             denominator,
         }
-        .simplified())
+        .simplified()
     }
 
     /// Create a rational function from just a polynomial (denominator = 1)
@@ -87,44 +86,46 @@ impl RationalFunction {
         }
     }
 
-    /// Simplify the rational function
-    ///
-    /// Currently handles:
-    /// 1. If denominator is a monomial, absorb it into numerator using negative exponents
-    /// 2. Normalize signs (if denominator has negative leading coefficient, negate both)
-    /// 3. Cancel common constant factors
-    pub fn simplified(mut self) -> Self {
+    /// Simplify by computing GCD of numerator and denominator
+    pub fn simplified(mut self) -> Result<Self, NatSolverError> {
         self.numerator.simplify();
         self.denominator.simplify();
 
-        // Handle zero numerator
+        // Handle trivial cases
         if self.numerator.is_zero() {
-            return RationalFunction {
+            return Ok(super::RationalFunction {
                 numerator: Polynomial::new(),
                 denominator: Polynomial::one(),
-            };
+            });
         }
 
-        // If denominator is one, we're done
         if self.denominator.is_one() {
-            return self;
+            return Ok(self);
         }
 
-        // If denominator is a monomial, we can absorb it into the numerator
+        // If denominator is a monomial, absorb it
         if self.denominator.is_monomial()
             && let Ok(denom_inv) = self.denominator.clone().try_inv()
         {
             self.numerator = self.numerator * denom_inv;
             self.denominator = Polynomial::one();
-            return self;
+            return Ok(self);
         }
 
-        // Try to cancel common constant factors from coefficients
+        // Compute GCD and cancel
+        let gcd = self.numerator.gcd(&self.denominator)?;
+
+        if !gcd.is_one() && !gcd.is_zero() {
+            let vars = polynomial::collect_variables(&[&self.numerator, &self.denominator]);
+            self.numerator = Polynomial::exact_divide(&self.numerator, &gcd, &vars)?;
+            self.denominator = Polynomial::exact_divide(&self.denominator, &gcd, &vars)?;
+        }
+
+        // Clean up constants and sign
         self.cancel_constant_factors();
-        // Normalize: if denominator's leading coefficient is negative, negate both
         self.normalize_sign();
 
-        self
+        Ok(self)
     }
 
     /// Cancel common constant factors between numerator and denominator
@@ -138,7 +139,7 @@ impl RationalFunction {
         }
 
         // Find GCD of the two GCDs
-        let common_gcd = super::gcd_ratio(numer_gcd, denom_gcd);
+        let common_gcd = polynomial::gcd_ratio(numer_gcd, denom_gcd);
 
         if !common_gcd.is_one() && !common_gcd.is_zero() {
             // Divide all coefficients by the common GCD
@@ -163,11 +164,11 @@ impl RationalFunction {
         if self.numerator.is_zero() {
             return Err(NatSolverError::DivisionByZero);
         }
-        Ok(RationalFunction {
+        RationalFunction {
             numerator: self.denominator,
             denominator: self.numerator,
         }
-        .simplified())
+        .simplified()
     }
 
     /// Raise to an integer power (can be negative)
@@ -178,20 +179,20 @@ impl RationalFunction {
 
         if n > 0 {
             let exp = n.try_into()?;
-            Ok(RationalFunction {
+            RationalFunction {
                 numerator: self.numerator.pow(exp),
                 denominator: self.denominator.pow(exp),
             }
-            .simplified())
+            .simplified()
         } else {
             // Negative exponent: invert first, then raise to positive power
             let exp = (-n).try_into()?;
             let inverted = self.inv()?;
-            Ok(RationalFunction {
+            RationalFunction {
                 numerator: inverted.numerator.pow(exp),
                 denominator: inverted.denominator.pow(exp),
             }
-            .simplified())
+            .simplified()
         }
     }
 }
@@ -202,295 +203,10 @@ impl Default for RationalFunction {
     }
 }
 
-// ============================================================================
-// RationalFunction Arithmetic
-// ============================================================================
-
-impl std::ops::Add<RationalFunction> for RationalFunction {
-    type Output = RationalFunction;
-
-    /// Add two rational functions: a/b + c/d = (ad + bc) / bd
-    fn add(self, rhs: RationalFunction) -> Self::Output {
-        // Optimization: if denominators are equal, just add numerators
-        if self.denominator == rhs.denominator {
-            return RationalFunction {
-                numerator: self.numerator + rhs.numerator,
-                denominator: self.denominator,
-            }
-            .simplified();
-        }
-
-        let numerator =
-            self.numerator.clone() * &rhs.denominator + rhs.numerator.clone() * &self.denominator;
-        let denominator = self.denominator * rhs.denominator;
-        RationalFunction {
-            numerator,
-            denominator,
-        }
-        .simplified()
-    }
-}
-
-impl std::ops::Sub<RationalFunction> for RationalFunction {
-    type Output = RationalFunction;
-
-    fn sub(self, rhs: RationalFunction) -> Self::Output {
-        self + (-rhs)
-    }
-}
-
-impl std::ops::Mul<RationalFunction> for RationalFunction {
-    type Output = RationalFunction;
-
-    /// Multiply two rational functions: (a/b) * (c/d) = ac / bd
-    fn mul(self, rhs: RationalFunction) -> Self::Output {
-        RationalFunction {
-            numerator: self.numerator * rhs.numerator,
-            denominator: self.denominator * rhs.denominator,
-        }
-        .simplified()
-    }
-}
-
-#[expect(clippy::suspicious_arithmetic_impl)]
-impl std::ops::Div<RationalFunction> for RationalFunction {
-    type Output = Result<RationalFunction, NatSolverError>;
-
-    /// Divide two rational functions: (a/b) / (c/d) = (a/b) * (d/c) = ad / bc
-    fn div(self, rhs: RationalFunction) -> Self::Output {
-        if rhs.is_zero() {
-            return Err(NatSolverError::DivisionByZero);
-        }
-        Ok(self * rhs.inv()?)
-    }
-}
-
-impl std::ops::Neg for RationalFunction {
-    type Output = RationalFunction;
-
-    fn neg(self) -> Self::Output {
-        RationalFunction {
-            numerator: -self.numerator,
-            denominator: self.denominator,
-        }
-        .simplified()
-    }
-}
-
-// ============================================================================
-// RationalFunction Equality
-// ============================================================================
-
-impl PartialEq for RationalFunction {
-    fn eq(&self, other: &Self) -> bool {
-        // Two rational functions are equal if their cross products are equal
-        // a/b == c/d iff ad == bc
-        let lhs = self.numerator.clone() * &other.denominator;
-        let rhs = other.numerator.clone() * &self.denominator;
-        lhs == rhs
-    }
-}
-
-// TODO: Check if i can do this via a derive macro
-impl Eq for RationalFunction {}
-
-// ============================================================================
-// RationalFunction Display
-// ============================================================================
-
-impl fmt::Display for RationalFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.denominator.is_one() {
-            write!(f, "{}", self.numerator)
-        } else if self.numerator.term_count() <= 1 && self.denominator.term_count() <= 1 {
-            // Simple case: single terms, no parens needed for numerator
-            write!(f, "{} / {}", self.numerator, self.denominator)
-        } else {
-            // Complex case: use parentheses
-            let numer_str = if self.numerator.term_count() > 1 {
-                format!("({})", self.numerator)
-            } else {
-                format!("{}", self.numerator)
-            };
-            let denom_str = if self.denominator.term_count() > 1 {
-                format!("({})", self.denominator)
-            } else {
-                format!("{}", self.denominator)
-            };
-            write!(f, "{numer_str} / {denom_str}")
-        }
-    }
-}
-
-// ============================================================================
-// Conversions: Polynomial <-> RationalFunction
-// ============================================================================
-
-impl From<Polynomial> for RationalFunction {
-    fn from(p: Polynomial) -> Self {
-        RationalFunction::from_polynomial(p)
-    }
-}
-
-impl TryFrom<RationalFunction> for Polynomial {
-    type Error = NatSolverError;
-
-    fn try_from(rf: RationalFunction) -> Result<Self, Self::Error> {
-        {
-            let simplified = rf.simplified();
-            if simplified.is_polynomial() {
-                Ok(simplified.numerator)
-            } else {
-                Err(NatSolverError::NotAPolynomial(simplified))
-            }
-        }
-    }
-}
-
-// ============================================================================
-// RecExpr <-> RationalFunction
-// ============================================================================
-
-// -------------------------------------
-// RationalFunction -> RecExpr<Rise>
-// -------------------------------------
-
-impl From<&RationalFunction> for RecExpr<Rise> {
-    fn from(rf: &RationalFunction) -> Self {
-        let mut expr = RecExpr::default();
-
-        // If it's just a polynomial, convert directly
-        if rf.denominator.is_one() {
-            return (&rf.numerator).into();
-        }
-
-        // Build numerator expression
-        let numer_expr: RecExpr<Rise> = (&rf.numerator).into();
-        let numer_nodes: Vec<_> = numer_expr.as_ref().to_vec();
-
-        // Add numerator nodes to our expression, tracking the ID mapping
-        let mut numer_id_map: Vec<Id> = Vec::with_capacity(numer_nodes.len());
-        for node in &numer_nodes {
-            let new_node = node
-                .clone()
-                .map_children(|old_id| numer_id_map[usize::from(old_id)]);
-            let new_id = expr.add(new_node);
-            numer_id_map.push(new_id);
-        }
-        let numer_root = *numer_id_map.last().unwrap();
-
-        // Build denominator expression
-        let denom_expr: RecExpr<Rise> = (&rf.denominator).into();
-        let denom_nodes: Vec<_> = denom_expr.as_ref().to_vec();
-
-        // Add denominator nodes to our expression
-        let mut denom_id_map: Vec<Id> = Vec::with_capacity(denom_nodes.len());
-        for node in &denom_nodes {
-            let new_node = node
-                .clone()
-                .map_children(|old_id| denom_id_map[usize::from(old_id)]);
-            let new_id = expr.add(new_node);
-            denom_id_map.push(new_id);
-        }
-        let denom_root = *denom_id_map.last().unwrap();
-
-        // Create division node
-        expr.add(Rise::NatDiv([numer_root, denom_root]));
-
-        expr
-    }
-}
-
-impl From<RationalFunction> for RecExpr<Rise> {
-    fn from(rf: RationalFunction) -> Self {
-        (&rf).into()
-    }
-}
-
-// -------------------------------------
-// RecExpr<Rise> -> RationalFunction
-// -------------------------------------
-
-impl TryFrom<RecExpr<Rise>> for RationalFunction {
-    type Error = NatSolverError;
-
-    fn try_from(expr: RecExpr<Rise>) -> Result<Self, Self::Error> {
-        (&expr).try_into()
-    }
-}
-
-impl TryFrom<&RecExpr<Rise>> for RationalFunction {
-    type Error = NatSolverError;
-
-    fn try_from(expr: &RecExpr<Rise>) -> Result<Self, Self::Error> {
-        /// Parse a Rise expression into a `RationalFunction`
-        fn rec(expr: &RecExpr<Rise>, id: Id) -> Result<RationalFunction, NatSolverError> {
-            match &expr[id] {
-                // Integer constant
-                Rise::Integer(n) => Ok((*n).into()),
-                // Single variable with exponent 1
-                Rise::Var(index) => Ok((*index).into()),
-                Rise::NatAdd([left, right]) => {
-                    let left_rf = rec(expr, *left)?;
-                    let right_rf = rec(expr, *right)?;
-                    Ok(left_rf + right_rf)
-                }
-                Rise::NatSub([left, right]) => {
-                    let left_rf = rec(expr, *left)?;
-                    let right_rf = rec(expr, *right)?;
-                    Ok(left_rf - right_rf)
-                }
-                Rise::NatMul([left, right]) => {
-                    let left_rf = rec(expr, *left)?;
-                    let right_rf = rec(expr, *right)?;
-                    Ok(left_rf * right_rf)
-                }
-                Rise::NatDiv([left, right]) => {
-                    let dividend = rec(expr, *left)?;
-                    let divisor = rec(expr, *right)?;
-                    Ok((dividend / divisor)?)
-                }
-                Rise::NatPow([base, exp]) => {
-                    let base_rf = rec(expr, *base)?;
-                    // Exponent should be an integer
-                    match &expr[*exp] {
-                        Rise::Integer(n) => base_rf.pow(*n),
-                        node => Err(NatSolverError::NonIntegerExponent(node.clone())),
-                    }
-                }
-
-                node => Err(NatSolverError::UnsupportedNode(node.clone())),
-            }
-        }
-
-        // Parse from the root (last node in the RecExpr)
-        if expr.is_empty() {
-            return Ok(Self::zero());
-        }
-
-        let root_id = Id::from(expr.as_ref().len() - 1);
-        rec(expr, root_id)
-    }
-}
-
-// ============================================================================
-// From Simple Types
-// ============================================================================
-
-impl From<Index> for RationalFunction {
-    fn from(index: Index) -> Self {
-        Self::from_polynomial(Polynomial::var(index))
-    }
-}
-
-impl From<i32> for RationalFunction {
-    fn from(n: i32) -> RationalFunction {
-        Self::from_polynomial(n.into())
-    }
-}
-
 #[cfg(test)]
 mod tests {
+    use egg::RecExpr;
+
     use super::super::Monomial;
     use super::*;
 
@@ -549,8 +265,7 @@ mod tests {
 
     #[test]
     fn rf_complex_fraction() {
-        // (x^2 + 2x + 1) / (x + 1) - this would simplify if we had polynomial factoring
-        // For now, it stays as a fraction
+        // (x^2 + 2x + 1) / (x + 1) - this would simplifies to x_1 + 1
         let numer = Polynomial::new()
             .add_term(1.into(), Monomial::new().with_var(idx(1), 2))
             .add_term(2.into(), Monomial::new().with_var(idx(1), 1))
@@ -563,9 +278,8 @@ mod tests {
         let rf = RationalFunction::new(numer, denom).unwrap();
         println!("(x^2 + 2x + 1) / (x + 1) = {rf}");
 
-        // Without polynomial factoring, this won't simplify to (x + 1)
-        assert!(!rf.is_polynomial());
-        assert_eq!(rf.to_string(), "(x_1^2 + 2*x_1 + 1) / (x_1 + 1)");
+        assert!(rf.is_polynomial());
+        assert_eq!(rf.to_string(), "x_1 + 1");
     }
 
     // -------------------------------------
@@ -579,7 +293,7 @@ mod tests {
 
         let rf2 = RationalFunction::new(2.into(), Polynomial::var(idx(1))).unwrap();
 
-        let result = rf1 + rf2;
+        let result = (rf1 + rf2).unwrap();
         println!("(1/x) + (2/x) = {result}");
 
         assert!(result.is_polynomial());
@@ -593,7 +307,7 @@ mod tests {
 
         let rf2 = RationalFunction::new(Polynomial::one(), Polynomial::var(idx(2))).unwrap();
 
-        let result = rf1 + rf2;
+        let result = (rf1 + rf2).unwrap();
         println!("(1/x) + (1/y) = {result}");
 
         // This simplifies to x^(-1) + y^(-1) as a polynomial
@@ -611,7 +325,7 @@ mod tests {
         let rf1 = RationalFunction::new(Polynomial::one(), denom.clone()).unwrap();
         let rf2 = RationalFunction::new(Polynomial::one(), denom).unwrap();
 
-        let result = rf1 + rf2;
+        let result = (rf1 + rf2).unwrap();
         println!("1/(x+1) + 1/(x+1) = {result}");
 
         assert!(!result.is_polynomial());
@@ -625,7 +339,7 @@ mod tests {
 
         let rf2 = RationalFunction::new(Polynomial::var(idx(1)), Polynomial::var(idx(2))).unwrap();
 
-        let result = rf1 * rf2;
+        let result = (rf1 * rf2).unwrap();
         println!("(1/x) * (x/y) = {result}");
 
         assert!(result.is_polynomial());

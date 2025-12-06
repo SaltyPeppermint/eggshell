@@ -6,14 +6,14 @@ mod rational;
 use std::num::TryFromIntError;
 
 use egg::RecExpr;
-use num::rational::Ratio;
-use num_traits::{Signed, Zero};
 use thiserror::Error;
 
 use super::{Rise, RiseAnalysis};
 use monomial::Monomial;
 use polynomial::Polynomial;
 
+// Todo Fixme
+#[expect(unused_imports)]
 pub use applier::{ComputeNat, ComputeNatCheck};
 pub use rational::RationalFunction;
 
@@ -21,35 +21,9 @@ pub use rational::RationalFunction;
 // Helper Functions
 // ============================================================================
 
-/// Compute GCD of two rational numbers
-fn gcd_ratio(a: Ratio<i32>, b: Ratio<i32>) -> Ratio<i32> {
-    if b.is_zero() {
-        return a.abs();
-    }
-    // For rationals a/b and c/d, gcd = gcd(a*d, c*b) / (b*d)
-    // Simplified: we work with the absolute values
-    let a_abs = a.abs();
-    let b_abs = b.abs();
-
-    // Use Euclidean algorithm on rationals
-    let (mut x, mut y) = if a_abs >= b_abs {
-        (a_abs, b_abs)
-    } else {
-        (b_abs, a_abs)
-    };
-
-    while !y.is_zero() {
-        let remainder = x - (x / y).trunc() * y;
-        x = y;
-        y = remainder;
-    }
-
-    x
-}
-
 pub fn try_simplify(nat_expr: &RecExpr<Rise>) -> Result<RecExpr<Rise>, NatSolverError> {
     let polynomial: RationalFunction = nat_expr.try_into()?;
-    Ok(polynomial.simplified().into())
+    Ok(polynomial.simplified()?.into())
 }
 
 fn check_equivalence<'a, 'b: 'a>(
