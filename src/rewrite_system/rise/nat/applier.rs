@@ -1,7 +1,4 @@
-use egg::{
-    Applier, EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Searcher, Subst,
-    Symbol, Var,
-};
+use egg::{Applier, EGraph, Id, Pattern, PatternAst, Searcher, Subst, Symbol, Var};
 
 use super::{Rise, RiseAnalysis};
 
@@ -73,7 +70,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         rule_name: Symbol,
     ) -> Vec<Id> {
         let expected = &egraph[subst[self.var]].data.beta_extract.clone();
-        let extracted = &extract_small(egraph, &self.nat_pattern, subst);
+        let extracted = &super::extract_small(egraph, &self.nat_pattern, subst);
         let a = &mut egraph.analysis;
         if super::check_equivalence(a, expected, extracted) {
             self.applier
@@ -82,40 +79,4 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
             Vec::new()
         }
     }
-}
-
-// Quick check for trivial cases:
-// fn quick_check(lhs: &RecExpr<Math>, lhs_id: Id, rhs: &RecExpr<Math>, rhs_id: Id) -> bool {
-//     lhs[lhs_id].matches(&rhs[rhs_id])
-//         && lhs[lhs_id]
-//             .children()
-//             .iter()
-//             .zip(rhs[rhs_id].children())
-//             .all(|(lcid, rcid)| quick_check(lhs, *lcid, rhs, *rcid))
-// }
-
-// if quick_check(expected, expected.root(), extracted, extracted.root()) {
-//     return true;
-// }
-
-fn extract_small(
-    egraph: &EGraph<Rise, RiseAnalysis>,
-    pattern: &Pattern<Rise>,
-    subst: &Subst,
-) -> RecExpr<Rise> {
-    fn rec(
-        ast: &PatternAst<Rise>,
-        id: Id,
-        subst: &Subst,
-        egraph: &EGraph<Rise, RiseAnalysis>,
-    ) -> RecExpr<Rise> {
-        match &ast[id] {
-            ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
-            ENodeOrVar::ENode(e) => {
-                let new_e = e.clone();
-                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
-            }
-        }
-    }
-    rec(&pattern.ast, pattern.ast.root(), subst, egraph)
 }

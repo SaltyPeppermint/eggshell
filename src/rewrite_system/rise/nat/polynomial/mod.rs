@@ -40,12 +40,12 @@ impl Polynomial {
     }
 
     /// Create a polynomial from a constant integer
-    pub fn constant(n: i32) -> Self {
+    pub fn from_i32(n: i32) -> Self {
         n.into()
     }
 
     /// Create a polynomial from a constant ratio
-    pub fn constant_ratio(r: Ratio<i32>) -> Self {
+    pub fn from_ratio(r: Ratio<i32>) -> Self {
         r.into()
     }
 
@@ -66,7 +66,7 @@ impl Polynomial {
 
         // Check if this is a single-term polynomial (monomial)
         if self.term_count() == 1 {
-            let (monomial, coeff) = self.terms.into_iter().next().unwrap();
+            let (monomial, coeff) = self.terms.pop_first().unwrap();
             // Invert coefficient: c -> 1/c
             let inv_coeff = Ratio::one() / coeff;
             // Invert monomial: negate all exponents
@@ -104,7 +104,7 @@ impl Polynomial {
     /// Check if polynomial equals one
     pub fn is_one(&self) -> bool {
         if self.term_count() == 1
-            && let Some((mon, coeff)) = self.terms.iter().next()
+            && let Some((mon, coeff)) = self.terms.first_key_value()
         {
             return mon.is_constant() && coeff.is_one();
         }
@@ -228,9 +228,11 @@ impl Polynomial {
         if b.is_zero() {
             return Ok(a);
         }
-        if a.is_constant() && b.is_constant() {
+        if let Some(a_const) = a.as_constant()
+            && let Some(b_const) = b.as_constant()
+        {
             // GCD of constants
-            let gcd = gcd_ratio(a.as_constant().unwrap(), b.as_constant().unwrap());
+            let gcd = gcd_ratio(a_const, b_const);
             return Ok((gcd).into());
         }
 
@@ -243,7 +245,7 @@ impl Polynomial {
                 a.as_constant().unwrap_or(Ratio::one()),
                 b.as_constant().unwrap_or(Ratio::one()),
             );
-            return Ok(Polynomial::constant_ratio(gcd));
+            return Ok((gcd).into());
         }
 
         // Factor out content (GCD of coefficients) first
@@ -265,7 +267,7 @@ impl Polynomial {
         if content_gcd.is_one() {
             Ok(primitive_gcd)
         } else {
-            Ok(primitive_gcd * Polynomial::constant_ratio(content_gcd))
+            Ok(primitive_gcd * Polynomial::from_ratio(content_gcd))
         }
     }
 
@@ -874,7 +876,7 @@ mod tests {
     }
 
     fn constant(n: i32) -> Polynomial {
-        Polynomial::constant(n)
+        Polynomial::from_i32(n)
     }
 
     #[test]

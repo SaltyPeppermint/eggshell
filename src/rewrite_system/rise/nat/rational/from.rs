@@ -1,4 +1,5 @@
 use egg::{Id, Language, RecExpr};
+use num::rational::Ratio;
 
 use super::{NatSolverError, Polynomial, RationalFunction, Rise};
 use crate::rewrite_system::rise::Index;
@@ -39,6 +40,7 @@ impl TryFrom<RationalFunction> for Polynomial {
 // RationalFunction -> RecExpr<Rise>
 // -------------------------------------
 
+// TODO: i think this has a bug but not sure
 impl From<&RationalFunction> for RecExpr<Rise> {
     fn from(rf: &RationalFunction) -> Self {
         let mut expr = RecExpr::default();
@@ -153,7 +155,7 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
         }
 
         let root_id = Id::from(expr.as_ref().len() - 1);
-        rec(expr, root_id)
+        rec(expr, root_id)?.simplified()
     }
 }
 
@@ -161,15 +163,23 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
 // From Simple Types
 // ============================================================================
 
-impl From<Index> for RationalFunction {
-    fn from(index: Index) -> Self {
-        (Polynomial::var(index)).into()
+/// Create a `RationalFunction` from an integer constant
+impl From<i32> for RationalFunction {
+    fn from(n: i32) -> RationalFunction {
+        Polynomial::from_i32(n).into()
     }
 }
 
-impl From<i32> for RationalFunction {
-    fn from(n: i32) -> RationalFunction {
-        let p: Polynomial = n.into();
-        p.into()
+/// Create a `RationalFunction` from an integer constant
+impl From<Ratio<i32>> for RationalFunction {
+    fn from(r: Ratio<i32>) -> Self {
+        Polynomial::from_ratio(r).into()
+    }
+}
+
+/// Create a `RationalFunction` from with a single variable
+impl From<Index> for RationalFunction {
+    fn from(index: Index) -> Self {
+        (Polynomial::var(index)).into()
     }
 }

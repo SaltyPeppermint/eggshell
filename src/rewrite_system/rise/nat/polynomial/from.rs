@@ -9,10 +9,6 @@ use crate::rewrite_system::rise::Index;
 // RecExpr Conversions
 // ============================================================================
 
-// -------------------------------------
-// From Polynomial to RecExpr<Rise>
-// -------------------------------------
-
 impl From<&Polynomial> for RecExpr<Rise> {
     fn from(p: &Polynomial) -> Self {
         let mut expr = RecExpr::default();
@@ -69,19 +65,20 @@ impl From<Polynomial> for RecExpr<Rise> {
 // From Simple Types
 // ============================================================================
 
-/// Create a polynomial from an integer constant
+/// Create a `Polynomial` from an integer constant
 impl From<i32> for Polynomial {
     fn from(n: i32) -> Self {
         Self::new().add_term(n.into(), Monomial::new())
     }
 }
-/// Create a polynomial from an integer constant
+/// Create a `Polynomial` from an integer constant
 impl From<Ratio<i32>> for Polynomial {
     fn from(r: Ratio<i32>) -> Self {
         Self::new().add_term(r, Monomial::new())
     }
 }
 
+/// Create a `Polynomial` from with a single variable
 impl From<Index> for Polynomial {
     fn from(index: Index) -> Self {
         Self::new().add_term(Ratio::one(), Monomial::new().with_var(index, 1))
