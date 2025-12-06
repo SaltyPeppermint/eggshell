@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn rf_complex_fraction() {
-        // (x^2 + 2x + 1) / (x + 1) - this would simplifies to x_1 + 1
+        // (x^2 + 2x + 1) / (x + 1) = x_1 + 1
         let numer = Polynomial::new()
             .add_term(1.into(), Monomial::new().with_var(idx(1), 2))
             .add_term(2.into(), Monomial::new().with_var(idx(1), 1))
@@ -570,7 +570,7 @@ mod tests {
         // 1/(-x) should normalize to (-1)/x or -x^(-1)
         let rf = RationalFunction::new(
             Polynomial::one(),
-            Polynomial::constant(-1) * Polynomial::var(idx(1)),
+            Polynomial::from_i32(-1) * Polynomial::var(idx(1)),
         )
         .unwrap();
 

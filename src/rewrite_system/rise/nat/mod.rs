@@ -5,7 +5,7 @@ mod rational;
 
 use std::num::TryFromIntError;
 
-use egg::RecExpr;
+use egg::{EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Subst};
 use thiserror::Error;
 
 use super::{Rise, RiseAnalysis};
@@ -22,8 +22,8 @@ pub use rational::RationalFunction;
 // ============================================================================
 
 pub fn try_simplify(nat_expr: &RecExpr<Rise>) -> Result<RecExpr<Rise>, NatSolverError> {
-    let polynomial: RationalFunction = nat_expr.try_into()?;
-    Ok(polynomial.simplified()?.into())
+    let rf: RationalFunction = nat_expr.try_into()?;
+    Ok(rf.simplified()?.into())
 }
 
 fn check_equivalence<'a, 'b: 'a>(
@@ -36,14 +36,36 @@ fn check_equivalence<'a, 'b: 'a>(
         return true;
     }
 
-    let poly_lhs: RationalFunction = lhs.try_into().unwrap();
-    let poly_rhs: RationalFunction = rhs.try_into().unwrap();
+    let rf_lhs: RationalFunction = lhs.try_into().unwrap();
+    let rf_rhs: RationalFunction = rhs.try_into().unwrap();
 
-    if poly_lhs == poly_rhs {
+    if rf_lhs == rf_rhs {
         cache.add_pair_to_cache(lhs, rhs);
         return true;
     }
     false
+}
+
+fn extract_small(
+    egraph: &EGraph<Rise, RiseAnalysis>,
+    pattern: &Pattern<Rise>,
+    subst: &Subst,
+) -> RecExpr<Rise> {
+    fn rec(
+        ast: &PatternAst<Rise>,
+        id: Id,
+        subst: &Subst,
+        egraph: &EGraph<Rise, RiseAnalysis>,
+    ) -> RecExpr<Rise> {
+        match &ast[id] {
+            ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
+            ENodeOrVar::ENode(e) => {
+                let new_e = e.clone();
+                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
+            }
+        }
+    }
+    rec(&pattern.ast, pattern.ast.root(), subst, egraph)
 }
 
 // ============================================================================
