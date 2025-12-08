@@ -22,14 +22,6 @@ impl std::ops::Add for Polynomial {
     }
 }
 
-impl std::ops::Add<&Self> for Polynomial {
-    type Output = Self;
-
-    fn add(self, rhs: &Self) -> Self {
-        self + rhs.clone()
-    }
-}
-
 impl std::ops::Mul for Polynomial {
     type Output = Self;
 
@@ -74,14 +66,6 @@ impl std::ops::Sub for Polynomial {
 
     fn sub(self, rhs: Self) -> Self::Output {
         self + (-rhs)
-    }
-}
-
-impl std::ops::Sub<&Self> for Polynomial {
-    type Output = Self;
-
-    fn sub(self, rhs: &Self) -> Self::Output {
-        self - rhs.clone()
     }
 }
 

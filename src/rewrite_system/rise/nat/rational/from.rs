@@ -1,4 +1,4 @@
-use egg::{Id, Language, RecExpr};
+use egg::{Id, RecExpr};
 use num::rational::Ratio;
 
 use super::{NatSolverError, Polynomial, RationalFunction, Rise};

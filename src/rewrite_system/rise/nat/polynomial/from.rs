@@ -1,6 +1,6 @@
 use egg::RecExpr;
 use num::rational::Ratio;
-use num_traits::{One, Zero};
+use num_traits::One;
 
 use super::{Monomial, Polynomial, Rise};
 use crate::rewrite_system::rise::Index;
@@ -11,43 +11,45 @@ use crate::rewrite_system::rise::Index;
 
 impl From<&Polynomial> for RecExpr<Rise> {
     fn from(p: &Polynomial) -> Self {
-        let mut expr = RecExpr::default();
-
         if p.is_zero() {
+            let mut expr = RecExpr::default();
             expr.add(Rise::Integer(0));
             return expr;
         }
 
-        let mut result_id = None;
+        p.sorted_monomials()
+            .iter()
+            .fold(RecExpr::default(), |mut expr, (monomial, coeff)| {
+                let prev_id = expr.ids().last();
 
-        for (monomial, coeff) in p.sorted_monomials() {
-            // Get the monomial expression
-            let monomial_id = monomial.append_to_expr(&mut expr);
+                let term_id = if monomial.is_constant() {
+                    // Handle constant
+                    expr.add(Rise::Integer(*coeff.numer()))
+                } else {
+                    // Get the monomial expression
+                    let monomial_id = monomial.append_to_expr(&mut expr);
+                    if coeff.is_one() {
+                        monomial_id
+                    } else if coeff.is_integer() {
+                        // Integer coefficient
+                        let coeff_id = expr.add(Rise::Integer(*coeff.numer()));
+                        expr.add(Rise::NatMul([coeff_id, monomial_id]))
+                    } else {
+                        // Rational coefficient: represent as (numer/denom) * monomial
+                        let numer_id = expr.add(Rise::Integer(*coeff.numer()));
+                        let denom_id = expr.add(Rise::Integer(*coeff.denom()));
+                        let frac_id = expr.add(Rise::NatDiv([numer_id, denom_id]));
+                        expr.add(Rise::NatMul([frac_id, monomial_id]))
+                    }
+                };
 
-            // Handle rational coefficients
-            let term_id = if coeff.is_one() {
-                monomial_id
-            } else if coeff.is_integer() {
-                // Integer coefficient
-                let coeff_id = expr.add(Rise::Integer(*coeff.numer()));
-                expr.add(Rise::NatMul([coeff_id, monomial_id]))
-            } else {
-                // Rational coefficient: represent as (numer/denom) * monomial
-                let numer_id = expr.add(Rise::Integer(*coeff.numer()));
-                let denom_id = expr.add(Rise::Integer(*coeff.denom()));
-                let frac_id = expr.add(Rise::NatDiv([numer_id, denom_id]));
-                expr.add(Rise::NatMul([frac_id, monomial_id]))
-            };
-
-            // Add to running sum
-            result_id = Some(match result_id {
-                None => term_id,
-                Some(prev_id) => expr.add(Rise::NatAdd([prev_id, term_id])),
-            });
-        }
-
-        // result_id.unwrap();
-        expr
+                // Add to running sum
+                match prev_id {
+                    None => term_id,
+                    Some(id) => expr.add(Rise::NatAdd([id, term_id])),
+                };
+                expr
+            })
     }
 }
 

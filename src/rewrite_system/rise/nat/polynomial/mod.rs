@@ -507,7 +507,7 @@ impl UnivariateView {
     /// Subtract from coefficient at given degree
     fn subtract_from_coefficient(&mut self, degree: usize, subtract: &Polynomial) {
         let current = self.coefficients.entry(degree).or_default();
-        *current = std::mem::take(current) - subtract;
+        *current = std::mem::take(current) - subtract.clone();
     }
 
     /// Multiply all coefficients by a polynomial
