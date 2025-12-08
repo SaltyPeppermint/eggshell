@@ -2,7 +2,7 @@ use egg::{Id, Language, RecExpr};
 use num::rational::Ratio;
 
 use super::{NatSolverError, Polynomial, RationalFunction, Rise};
-use crate::rewrite_system::rise::Index;
+use crate::rewrite_system::rise::{Index, add_expr};
 
 // ============================================================================
 // Conversions: Polynomial <-> RationalFunction
@@ -43,46 +43,21 @@ impl TryFrom<RationalFunction> for Polynomial {
 // TODO: i think this has a bug but not sure
 impl From<&RationalFunction> for RecExpr<Rise> {
     fn from(rf: &RationalFunction) -> Self {
-        let mut expr = RecExpr::default();
-
         // If it's just a polynomial, convert directly
         if rf.denominator.is_one() {
             return (&rf.numerator).into();
         }
 
+        let mut expr = RecExpr::default();
         // Build numerator expression
         let numer_expr: RecExpr<Rise> = (&rf.numerator).into();
-        let numer_nodes: Vec<_> = numer_expr.as_ref().to_vec();
-
-        // Add numerator nodes to our expression, tracking the ID mapping
-        let mut numer_id_map: Vec<Id> = Vec::with_capacity(numer_nodes.len());
-        for node in &numer_nodes {
-            let new_node = node
-                .clone()
-                .map_children(|old_id| numer_id_map[usize::from(old_id)]);
-            let new_id = expr.add(new_node);
-            numer_id_map.push(new_id);
-        }
-        let numer_root = *numer_id_map.last().unwrap();
+        let numer_root = add_expr(&mut expr, numer_expr);
 
         // Build denominator expression
         let denom_expr: RecExpr<Rise> = (&rf.denominator).into();
-        let denom_nodes: Vec<_> = denom_expr.as_ref().to_vec();
+        let denom_root = add_expr(&mut expr, denom_expr);
 
-        // Add denominator nodes to our expression
-        let mut denom_id_map: Vec<Id> = Vec::with_capacity(denom_nodes.len());
-        for node in &denom_nodes {
-            let new_node = node
-                .clone()
-                .map_children(|old_id| denom_id_map[usize::from(old_id)]);
-            let new_id = expr.add(new_node);
-            denom_id_map.push(new_id);
-        }
-        let denom_root = *denom_id_map.last().unwrap();
-
-        // Create division node
         expr.add(Rise::NatDiv([numer_root, denom_root]));
-
         expr
     }
 }

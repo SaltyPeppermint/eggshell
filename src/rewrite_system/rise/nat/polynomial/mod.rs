@@ -445,10 +445,6 @@ impl UnivariateView {
         let mut result = Self::new();
 
         for (monomial, coeff) in poly.terms() {
-            if coeff.is_zero() {
-                continue;
-            }
-
             // Extract the degree of the main variable
             let degree = monomial.variables().get(&var).copied().unwrap_or(0);
 
@@ -471,10 +467,6 @@ impl UnivariateView {
 
         for (&degree, coeff_poly) in &self.coefficients {
             for (monomial, coeff) in coeff_poly.terms() {
-                if coeff.is_zero() {
-                    continue;
-                }
-
                 // Add the main variable with its degree
                 let full_monomial = monomial.clone().with_var(var, degree.try_into()?);
                 result = result.add_term(*coeff, full_monomial);

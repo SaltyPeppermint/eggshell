@@ -107,14 +107,14 @@ pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<
 }
 
 pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
-    fn rec(expr: &mut RecExpr<Rise>, ei: Id, shift: Shift, cutoff: Index) {
+    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: Shift, cutoff: Index) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
-        match expr[ei] {
+        match expr[id] {
             Rise::Var(index) => {
                 if index >= cutoff && index.kind() == cutoff.kind() {
-                    let index2 = index + shift;
-                    expr[ei] = Rise::Var(index2);
+                    let shifted_index = index + shift;
+                    expr[id] = Rise::Var(shifted_index);
                 }
             }
             Rise::Lambda(e)
@@ -122,7 +122,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             | Rise::DataLambda(e)
             | Rise::AddrLambda(e)
             | Rise::NatNatLambda(e) => {
-                if expr[ei].kind() == cutoff.kind() {
+                if expr[id].kind() == cutoff.kind() {
                     rec(expr, e, shift, cutoff.inc());
                 } else {
                     rec(expr, e, shift, cutoff);
@@ -137,30 +137,30 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
             //     rec(expr, f, shift, cutoff);
             //     rec(expr, e, shift, cutoff);
             // }
-            Rise::App(ids)
-            | Rise::NatApp(ids)
-            | Rise::DataApp(ids)
-            | Rise::AddrApp(ids)
-            | Rise::NatNatApp(ids)
-            | Rise::TypeOf(ids)
-            | Rise::FunType(ids)
-            | Rise::ArrType(ids)
-            | Rise::VecType(ids)
-            | Rise::PairType(ids)
-            | Rise::NatAdd(ids)
-            | Rise::NatSub(ids)
-            | Rise::NatMul(ids)
-            | Rise::NatDiv(ids)
-            | Rise::NatPow(ids) => {
-                for id in ids {
-                    rec(expr, id, shift, cutoff);
+            Rise::App(c_ids)
+            | Rise::NatApp(c_ids)
+            | Rise::DataApp(c_ids)
+            | Rise::AddrApp(c_ids)
+            | Rise::NatNatApp(c_ids)
+            | Rise::TypeOf(c_ids)
+            | Rise::FunType(c_ids)
+            | Rise::ArrType(c_ids)
+            | Rise::VecType(c_ids)
+            | Rise::PairType(c_ids)
+            | Rise::NatAdd(c_ids)
+            | Rise::NatSub(c_ids)
+            | Rise::NatMul(c_ids)
+            | Rise::NatDiv(c_ids)
+            | Rise::NatPow(c_ids) => {
+                for c_id in c_ids {
+                    rec(expr, c_id, shift, cutoff);
                 }
             }
-            Rise::IndexType(id)
-            | Rise::NatFun(id)
-            | Rise::DataFun(id)
-            | Rise::AddrFun(id)
-            | Rise::NatNatFun(id) => rec(expr, id, shift, cutoff),
+            Rise::IndexType(c_id)
+            | Rise::NatFun(c_id)
+            | Rise::DataFun(c_id)
+            | Rise::AddrFun(c_id)
+            | Rise::NatNatFun(c_id) => rec(expr, c_id, shift, cutoff),
             Rise::Let
             | Rise::NatType
             | Rise::F32

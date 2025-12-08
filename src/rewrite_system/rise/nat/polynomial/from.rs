@@ -21,10 +21,6 @@ impl From<&Polynomial> for RecExpr<Rise> {
         let mut result_id = None;
 
         for (monomial, coeff) in p.sorted_monomials() {
-            if coeff.is_zero() {
-                continue;
-            }
-
             // Get the monomial expression
             let monomial_id = monomial.append_to_expr(&mut expr);
 

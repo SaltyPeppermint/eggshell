@@ -3,7 +3,7 @@ use std::time::Duration;
 use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rewrite_system::rise::{self, Rise, RiseRuleset};
+use eggshell::rewrite_system::rise::{self, PrettyPrint, Rise, RiseRuleset};
 use eggshell::rewrite_system::rise::{BLOCKING_GOAL, MM, SPLIT_GUIDE};
 use eggshell::sketch;
 
@@ -27,6 +27,12 @@ fn main() {
     let baseline_sketch = sketch::sketchify(SPLIT_GUIDE);
     let (_, sketch_extracted_split_guide) =
         sketch::eclass_extract(&baseline_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
+
+    println!("Guide Ground Truth");
+    split_guide.pp(false);
+
+    println!("\nSketch Extracted:");
+    sketch_extracted_split_guide.pp(false);
 
     assert_eq!(
         None,

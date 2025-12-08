@@ -40,7 +40,7 @@ impl RiseAnalysis {
 pub struct AnalysisData {
     pub free: HashSet<Index>,
     pub beta_extract: RecExpr<Rise>,
-    pub simple_nat: Option<RecExpr<Rise>>,
+    // pub simple_nat: Option<RecExpr<Rise>>,
 }
 
 impl Analysis<Rise> for RiseAnalysis {
@@ -60,17 +60,17 @@ impl Analysis<Rise> for RiseAnalysis {
             DidMerge(false, true) // TODO: more precise second bool
         };
 
-        let nat_merge =
-            egg::merge_option(&mut to.simple_nat, from.simple_nat, |to_nat, from_nat| {
-                if to_nat.len() > from_nat.len() {
-                    *to_nat = from_nat;
-                    DidMerge(true, true)
-                } else {
-                    DidMerge(false, true)
-                }
-            });
+        // let nat_merge =
+        //     egg::merge_option(&mut to.simple_nat, from.simple_nat, |to_nat, from_nat| {
+        //         if to_nat.len() > from_nat.len() {
+        //             *to_nat = from_nat;
+        //             DidMerge(true, true)
+        //         } else {
+        //             DidMerge(false, true)
+        //         }
+        //     });
 
-        free_merge | beta_merge | nat_merge
+        free_merge | beta_merge // | nat_merge
     }
 
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
@@ -96,31 +96,37 @@ impl Analysis<Rise> for RiseAnalysis {
         };
 
         let empty = enode.any(|id| egraph[id].data.beta_extract.is_empty());
-        let (beta_extract, simple_nat) = if empty {
-            (RecExpr::default(), None)
+
+        let beta_extract = if empty {
+            RecExpr::default()
         } else {
-            let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
-            let simple_nat = try_simplify(&expr).ok();
-            (expr, simple_nat)
+            enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
         };
+        // let (beta_extract, simple_nat) = if empty {
+        //     (RecExpr::default(), None)
+        // } else {
+        //     let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
+        //     let simple_nat = try_simplify(&expr).ok();
+        //     (expr, simple_nat)
+        // };
 
         AnalysisData {
             free,
             beta_extract,
-            simple_nat,
+            // simple_nat,
         }
     }
 
-    fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
-        if let Some(expr) = egraph[id].data.simple_nat.clone() {
-            let added = egraph.add_expr(&expr);
-            egraph.union(id, added);
+    // fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
+    //     if let Some(expr) = egraph[id].data.simple_nat.clone() {
+    //         let added = egraph.add_expr(&expr);
+    //         egraph.union(id, added);
 
-            // to not prune, comment this out
-            // egraph[id].nodes.retain(egg::Language::is_leaf);
+    //         // to not prune, comment this out
+    //         // egraph[id].nodes.retain(egg::Language::is_leaf);
 
-            // #[cfg(debug_assertions)]
-            egraph[id].assert_unique_leaves();
-        }
-    }
+    //         // #[cfg(debug_assertions)]
+    //         egraph[id].assert_unique_leaves();
+    //     }
+    // }
 }
