@@ -15,7 +15,10 @@ use kind::{Kind, Kindable};
 
 pub use analysis::RiseAnalysis;
 pub use lang::Rise;
+use num::Integer;
 pub use pp::PrettyPrint;
+
+use crate::sketch::{Sketch, SketchLang};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -35,11 +38,6 @@ fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
         .build_recexpr(|child_id| rec_expr[child_id].clone())
 }
 
-// fn add(to: &mut Vec<Rise>, e: Rise) -> Id {
-//     to.push(e);
-//     Id::from(to.len() - 1)
-// }
-
 fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
     let offset = to.len();
     for n in e {
@@ -48,14 +46,42 @@ fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
     to.root()
 }
 
-// fn add_expr_vec(to: &mut Vec<Rise>, e: &[Rise]) -> Id {
-//     let offset = to.len();
-//     to.extend(e.iter().map(|n| {
-//         n.clone()
-//             .map_children(|id| Id::from(usize::from(id) + offset))
-//     }));
-//     Id::from(to.len() - 1)
-// }
+#[expect(clippy::missing_panics_doc)]
+#[must_use]
+pub fn sketchify(term: &str, sketchify_nat_expr: bool) -> Sketch<Rise> {
+    fn rec(
+        expr: &RecExpr<Rise>,
+        id: Id,
+        sketchify_nat_expr: bool,
+        sketch: &mut Sketch<Rise>,
+    ) -> Id {
+        match &expr[id] {
+            Rise::Var(_) => sketch.add(SketchLang::Any),
+            Rise::NatAdd(_)
+            | Rise::NatSub(_)
+            | Rise::NatMul(_)
+            | Rise::NatDiv(_)
+            | Rise::NatPow(_)
+            | Rise::Integer(_)
+                if sketchify_nat_expr =>
+            {
+                sketch.add(SketchLang::Any)
+            }
+            other => {
+                let new_node = SketchLang::Node(
+                    other
+                        .clone()
+                        .map_children(|c_id| rec(expr, c_id, sketchify_nat_expr, sketch)),
+                );
+                sketch.add(new_node)
+            }
+        }
+    }
+    let expr: RecExpr<Rise> = term.parse().unwrap();
+    let mut sketch = RecExpr::default();
+    rec(&expr, expr.root(), sketchify_nat_expr, &mut sketch);
+    sketch
+}
 
 // START TERM
 pub const MM: &str = "(typeOf (natLam (typeOf (natLam (typeOf (natLam (typeOf (lam (typeOf (lam (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT %n0 f32) (arrT %n1 f32)) (fun (arrT %n2 (arrT %n0 f32)) (arrT %n2 (arrT %n1 f32))))) (typeOf (lam (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT %n0 f32) f32) (fun (arrT %n1 (arrT %n0 f32)) (arrT %n1 f32)))) (typeOf (lam (typeOf (app (typeOf (app (typeOf (app (typeOf reduce (fun (fun f32 (fun f32 f32)) (fun f32 (fun (arrT %n0 f32) f32)))) (typeOf add (fun f32 (fun f32 f32)))) (fun f32 (fun (arrT %n0 f32) f32))) (typeOf 0.0 f32)) (fun (arrT %n0 f32) f32)) (typeOf (app (typeOf (app (typeOf map (fun (fun (pairT f32 f32) f32) (fun (arrT %n0 (pairT f32 f32)) (arrT %n0 f32)))) (typeOf (lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %e0 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %e0 (pairT f32 f32))) f32)) f32)) (fun (pairT f32 f32) f32))) (fun (arrT %n0 (pairT f32 f32)) (arrT %n0 f32))) (typeOf (app (typeOf (app (typeOf zip (fun (arrT %n0 f32) (fun (arrT %n0 f32) (arrT %n0 (pairT f32 f32))))) (typeOf %e1 (arrT %n0 f32))) (fun (arrT %n0 f32) (arrT %n0 (pairT f32 f32)))) (typeOf %e0 (arrT %n0 f32))) (arrT %n0 (pairT f32 f32)))) (arrT %n0 f32))) f32)) (fun (arrT %n0 f32) f32))) (fun (arrT %n1 (arrT %n0 f32)) (arrT %n1 f32))) (typeOf (app (typeOf transpose (fun (arrT %n0 (arrT %n1 f32)) (arrT %n1 (arrT %n0 f32)))) (typeOf %e1 (arrT %n0 (arrT %n1 f32)))) (arrT %n1 (arrT %n0 f32)))) (arrT %n1 f32))) (fun (arrT %n0 f32) (arrT %n1 f32)))) (fun (arrT %n2 (arrT %n0 f32)) (arrT %n2 (arrT %n1 f32)))) (typeOf %e1 (arrT %n2 (arrT %n0 f32)))) (arrT %n2 (arrT %n1 f32)))) (fun (arrT %n0 (arrT %n1 f32)) (arrT %n2 (arrT %n1 f32))))) (fun (arrT %n2 (arrT %n0 f32)) (fun (arrT %n0 (arrT %n1 f32)) (arrT %n2 (arrT %n1 f32)))))) (natFun (fun (arrT %n2 (arrT %n0 f32)) (fun (arrT %n0 (arrT %n1 f32)) (arrT %n2 (arrT %n1 f32))))))) (natFun (natFun (fun (arrT %n2 (arrT %n0 f32)) (fun (arrT %n0 (arrT %n1 f32)) (arrT %n2 (arrT %n1 f32)))))))) (natFun (natFun (natFun (fun (arrT %n2 (arrT %n0 f32)) (fun (arrT %n0 (arrT %n1 f32)) (arrT %n2 (arrT %n1 f32))))))))";
