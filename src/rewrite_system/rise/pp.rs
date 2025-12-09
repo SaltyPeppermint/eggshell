@@ -66,7 +66,7 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         | Rise::ReduceSeqUnroll
         | Rise::Float(_) => (node.to_string().yellow(), false),
 
-        Rise::Integer(i) => (format!("{i}i").cyan(), false),
+        Rise::Integer(i) => (format!("{i}int").cyan(), false),
     }
 }
 
@@ -96,7 +96,7 @@ fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredSt
         Rise::NatMul(_) => format!("({} * {})", children[0], children[1]).white(),
         Rise::NatDiv(_) => format!("({} / {})", children[0], children[1]).white(),
         Rise::NatPow(_) => format!("({} ^ {})", children[0], children[1]).white(),
-        Rise::Integer(i) => format!("{i}i").cyan(),
+        Rise::Integer(i) => format!("{i}int").cyan(),
 
         _ => panic!("Expected type node but found {node}"),
     }

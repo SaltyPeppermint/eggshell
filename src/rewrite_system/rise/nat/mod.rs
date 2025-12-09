@@ -35,16 +35,16 @@ fn check_equivalence<'a, 'b: 'a>(
     if cache.check_cache_equiv(lhs, rhs) {
         return true;
     }
-    println!();
-    println!("{lhs}");
-    println!("{rhs}");
+    // println!();
+    // println!("{lhs}");
+    // println!("{rhs}");
 
     let rf_lhs: RationalFunction = lhs.try_into().unwrap();
     let rf_rhs: RationalFunction = rhs.try_into().unwrap();
 
-    println!("{rf_lhs}");
-    println!("{rf_rhs}");
-    println!("{}", rf_lhs == rf_rhs);
+    // println!("{rf_lhs}");
+    // println!("{rf_rhs}");
+    // println!("{}", rf_lhs == rf_rhs);
 
     if rf_lhs == rf_rhs {
         cache.add_pair_to_cache(lhs, rhs);

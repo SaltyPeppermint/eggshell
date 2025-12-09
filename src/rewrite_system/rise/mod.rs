@@ -15,7 +15,6 @@ use kind::{Kind, Kindable};
 
 pub use analysis::RiseAnalysis;
 pub use lang::Rise;
-use num::Integer;
 pub use pp::PrettyPrint;
 
 use crate::sketch::{Sketch, SketchLang};

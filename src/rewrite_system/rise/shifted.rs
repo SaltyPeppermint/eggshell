@@ -85,12 +85,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
+        let expected = &egraph[subst[self.new_var]].data.beta_extract;
         let extract = &egraph[subst[self.var]].data.beta_extract;
-        // dbg!(extract);
         let shifted = shift_copy(extract, self.shift, self.cutoff);
 
-        // dbg!(&shifted);
-        let expected = &egraph[subst[self.new_var]].data.beta_extract;
         if shifted == *expected {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
