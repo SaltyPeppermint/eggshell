@@ -13,7 +13,7 @@ fn main() {
 
     let runner_1 = Runner::default()
         .with_expr(&mm)
-        .with_iter_limit(5)
+        .with_iter_limit(6)
         .with_time_limit(Duration::from_secs(30))
         .with_node_limit(1_000_000)
         .with_scheduler(SimpleScheduler)
@@ -24,9 +24,10 @@ fn main() {
     println!("{}", runner_1.report());
 
     let root_mm = runner_1.egraph.find(runner_1.roots[0]);
-    let baseline_sketch = sketch::sketchify(SPLIT_GUIDE);
+    let split_guide_sketch = rise::sketchify(SPLIT_GUIDE, true);
+    println!("Sketch:\n{}", split_guide_sketch.pretty(50));
     let (_, sketch_extracted_split_guide) =
-        sketch::eclass_extract(&baseline_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
+        sketch::eclass_extract(&split_guide_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
 
     println!("Guide Ground Truth");
     split_guide.pp(false);
