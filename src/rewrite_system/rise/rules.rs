@@ -2,10 +2,12 @@ use egg::{
     Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
 };
 
+use crate::rewrite_system::rise::kind::Kindable;
+
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
 use super::nat::ComputeNatCheck;
 use super::shifted::{Shifted, ShiftedCheck, shift_mut};
-use super::{Index, Kind, Rise, RiseAnalysis, Shift};
+use super::{DBIndex, DBShift, Kind, Rise, RiseAnalysis};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![
@@ -103,80 +105,92 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>, kind: Kind) -> RecExpr<Rise> {
     let arg2 = &mut arg.to_owned();
-    shift_mut(arg2, Shift::up(), Index::zero(kind)); // shift up
-    let mut body2 = replace(body, Index::zero(kind), arg2);
-    shift_mut(&mut body2, Shift::down(), Index::zero(kind)); // shift down
+    shift_mut(arg2, DBShift::up(), DBIndex::zero(kind)); // shift up
+    let mut body2 = replace(body, DBIndex::zero(kind), arg2);
+    shift_mut(&mut body2, DBShift::down(), DBIndex::zero(kind)); // shift down
     body2
 }
 
-fn replace(expr: &RecExpr<Rise>, index: Index, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
-    fn rec(
-        result: &mut RecExpr<Rise>,
-        expr: &RecExpr<Rise>,
-        ei: Id,
-        index: Index,
-        subs: &mut RecExpr<Rise>,
-    ) -> Id {
-        match &expr[ei] {
-            Rise::Var(index2) => {
-                if index == *index2 {
-                    super::add_expr(result, subs.clone())
-                } else {
-                    result.add(Rise::Var(*index2))
-                }
-            }
-            Rise::Lambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.inc(), subs);
-                shift_mut(subs, Shift::down(), Index::zero_like(index));
-                result.add(Rise::Lambda(e2))
-            }
-            Rise::NatLambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.inc(), subs);
-                shift_mut(subs, Shift::down(), Index::zero_like(index));
-                result.add(Rise::NatLambda(e2))
-            }
-            Rise::DataLambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.inc(), subs);
-                shift_mut(subs, Shift::down(), Index::zero_like(index));
-                result.add(Rise::DataLambda(e2))
-            }
-            Rise::AddrLambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.inc(), subs);
-                shift_mut(subs, Shift::down(), Index::zero_like(index));
-                result.add(Rise::AddrLambda(e2))
-            }
-            Rise::NatNatLambda(e) => {
-                shift_mut(subs, Shift::up(), Index::zero_like(index));
-                let e2 = rec(result, expr, *e, index.inc(), subs);
-                shift_mut(subs, Shift::down(), Index::zero_like(index));
-                result.add(Rise::NatNatLambda(e2))
-            }
-            // Should be covered by default case
-            // Rise::App([f, e]) => {
-            //     let f2 = rec(result, expr, usize::from(*f), index, subs);
-            //     let e2 = rec(result, expr, usize::from(*e), index, subs);
-            //     super::add(result, Rise::App([f2, e2]))
-            // }
-            other => {
-                let new_other = other
-                    .clone()
-                    .map_children(|i| rec(result, expr, i, index, subs));
-                result.add(new_other)
-            }
+fn replace(expr: &RecExpr<Rise>, to_replace: DBIndex, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
+    let mut result = RecExpr::default();
+    replace_rec(&mut result, expr, expr.root(), to_replace, subs);
+    result
+}
+
+fn replace_rec(
+    result: &mut RecExpr<Rise>,
+    expr: &RecExpr<Rise>,
+    id: Id,
+    to_replace: DBIndex,
+    subs: &mut RecExpr<Rise>,
+) -> Id {
+    let node = &expr[id];
+    // println!("Node: {node}, Index: {to_replace}");
+    match node {
+        Rise::Var(found) if to_replace == *found => super::add_expr(result, subs.clone()),
+        Rise::Lambda(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::Lambda)
+        }
+        Rise::NatLambda(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::NatLambda)
+        }
+        Rise::DataLambda(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::DataLambda)
+        }
+        Rise::AddrLambda(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::AddrLambda)
+        }
+        Rise::NatFun(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::NatFun)
+        }
+        Rise::DataFun(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::DataFun)
+        }
+        Rise::AddrFun(e) if node.kind() == to_replace.kind() => {
+            shift_replace(result, expr, to_replace, subs, *e, Rise::AddrFun)
+        }
+        // NatNatLam and NatNatFun are not covered
+        // Non-matching vars and lambdas are handled by the default case
+        other => {
+            let new_other = other
+                .clone()
+                .map_children(|i| replace_rec(result, expr, i, to_replace, subs));
+            result.add(new_other)
         }
     }
-    let mut result = RecExpr::default();
-    rec(&mut result, expr, expr.root(), index, subs);
-    result
+}
+
+fn shift_replace<F: FnOnce(Id) -> Rise>(
+    result: &mut RecExpr<Rise>,
+    expr: &RecExpr<Rise>,
+    index: DBIndex,
+    subs: &mut RecExpr<Rise>,
+    e: Id,
+    constructor: F,
+) -> Id {
+    let zero = DBIndex::zero(index.kind());
+    shift_mut(subs, DBShift::up(), zero);
+    let e2 = replace_rec(result, expr, e, index.inc(), subs);
+    shift_mut(subs, DBShift::down(), zero);
+    result.add(constructor(e2))
 }
 
 #[cfg(test)]
 mod tests {
+    use egg::Pattern;
+
     use super::*;
+    use crate::rewrite_system::rise::PrettyPrint;
+
+    #[test]
+    fn print_rule() {
+        let split_join_32: Pattern<Rise> = "(typeOf (app (typeOf join (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)) (arrT ?n0 ?dt1))) (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT 32 ?dt0) (arrT 32 ?dt1)) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))) (typeOf (app (typeOf map (fun (fun ?dt0 ?dt1) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (typeOf ?0 (fun ?dt0 ?dt1))) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (typeOf (app (typeOf (natApp (typeOf split (natFun (fun (arrT (natMul %n0 (natMul (natPow 32 -1) ?n1)) ?dt2) (arrT (natMul (natPow 32 -1) ?n1) (arrT %n0 ?dt2))))) 32) (fun (arrT ?n0 ?dt0) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (typeOf ?1 (arrT ?n0 ?dt0))) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (arrT ?n0 ?dt1))".parse().unwrap();
+        println!("split-join-32");
+        split_join_32.ast.pp(false);
+        let split_join_2m_32: Pattern<Rise> ="(typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1)))))) (typeOf (app (typeOf map (fun (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)) (arrT ?n0 ?dt1)) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))))) (typeOf join (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)) (arrT ?n0 ?dt1)))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1))))) (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))))) (typeOf (app (typeOf map (fun (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (typeOf (app (typeOf map (fun (fun (arrT 32 ?dt0) (arrT 32 ?dt1)) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))) (typeOf (app (typeOf map (fun (fun ?dt0 ?dt1) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (typeOf ?0 (fun ?dt0 ?dt1))) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (fun (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))))))) (typeOf (app (typeOf map (fun (fun (arrT ?n0 ?dt0) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (typeOf (natApp (typeOf split (natFun (fun (arrT (natMul %n0 (natMul (natPow 32 -1) ?n3)) ?dt2) (arrT (natMul (natPow 32 -1) ?n3) (arrT %n0 ?dt2))))) 32) (fun (arrT ?n0 ?dt0) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))))) (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (fun (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (typeOf ?1 (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1))))".parse().unwrap();
+        println!("split-join-2m-32");
+        split_join_2m_32.ast.pp(false);
+    }
 
     #[test]
     fn beta_reduce_applier() {

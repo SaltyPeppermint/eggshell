@@ -1,7 +1,7 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::{Index, Kind, Kindable, Rise, RiseAnalysis};
+use super::{DBIndex, Kind, Kindable, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -9,17 +9,17 @@ pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
-    index: Index,
+    index: DBIndex,
     applier: A,
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
     pub fn new(var_str: &str, index: u32, applier: A) -> Self {
         let var: Var = var_str.parse().unwrap();
-        let kind = var.kind().unwrap();
+        let kind = var.kind();
         NotFreeIn {
             var,
-            index: Index::new(index, kind),
+            index: DBIndex::new(index, kind),
             applier,
         }
     }
@@ -108,7 +108,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i32,
-    v_env: HashSet<Index>,
+    v_env: HashSet<DBIndex>,
     type_of_id: Id,
 ) -> Option<(RecExpr<Rise>, Id, Id)> {
     let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
@@ -144,7 +144,7 @@ fn vec_expr(
             let v_env2 = v_env
                 .into_iter()
                 .map(|i| i.inc())
-                .chain([Index::zero(Kind::Expr)])
+                .chain([DBIndex::zero(Kind::Expr)])
                 .collect::<HashSet<_>>();
 
             // Vectorize e

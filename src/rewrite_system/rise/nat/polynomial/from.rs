@@ -3,7 +3,7 @@ use num::rational::Ratio;
 use num_traits::One;
 
 use super::{Monomial, Polynomial, Rise};
-use crate::rewrite_system::rise::Index;
+use crate::rewrite_system::rise::DBIndex;
 
 // ============================================================================
 // RecExpr Conversions
@@ -77,8 +77,8 @@ impl From<Ratio<i32>> for Polynomial {
 }
 
 /// Create a `Polynomial` from with a single variable
-impl From<Index> for Polynomial {
-    fn from(index: Index) -> Self {
+impl From<DBIndex> for Polynomial {
+    fn from(index: DBIndex) -> Self {
         Self::new().add_term(Ratio::one(), Monomial::new().with_var(index, 1))
     }
 }

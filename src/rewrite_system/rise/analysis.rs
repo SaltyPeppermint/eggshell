@@ -4,7 +4,7 @@ use hashbrown::HashSet;
 use crate::rewrite_system::rise::kind::Kindable;
 use crate::rewrite_system::rise::nat::try_simplify;
 
-use super::{Index, Rise};
+use super::{DBIndex, Rise};
 
 #[derive(Default, Debug)]
 pub struct RiseAnalysis {
@@ -38,7 +38,7 @@ impl RiseAnalysis {
 
 #[derive(Default, Debug)]
 pub struct AnalysisData {
-    pub free: HashSet<Index>,
+    pub free: HashSet<DBIndex>,
     pub beta_extract: RecExpr<Rise>,
     // pub simple_nat: Option<RecExpr<Rise>>,
 }

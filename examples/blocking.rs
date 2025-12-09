@@ -28,9 +28,8 @@ fn main() {
     let (_, sketch_extracted_split_guide) =
         sketch::eclass_extract(&split_guide_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
 
-    println!("Guide Ground Truth");
+    println!("\nGuide Ground Truth");
     split_guide.pp(false);
-
     println!("\nSketch Extracted:");
     sketch_extracted_split_guide.pp(false);
 

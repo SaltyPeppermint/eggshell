@@ -1,24 +1,24 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{Index, Kindable, Rise, RiseAnalysis, Shift};
+use super::{DBIndex, DBShift, Kindable, Rise, RiseAnalysis};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: Shift,
-    cutoff: Index,
+    shift: DBShift,
+    cutoff: DBIndex,
     applier: A,
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
     pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
         let var: Var = var_str.parse().unwrap();
-        let kind = var.kind().unwrap();
+        let kind = var.kind();
         Shifted {
             var,
             new_var: shifted_var_str.parse().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: Index::new(cutoff, kind),
+            cutoff: DBIndex::new(cutoff, kind),
             applier,
         }
     }
@@ -57,20 +57,20 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
 pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: Shift,
-    cutoff: Index,
+    shift: DBShift,
+    cutoff: DBIndex,
     applier: A,
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
     pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
         let var: Var = var_str.parse().unwrap();
-        let kind = var.kind().unwrap();
+        let kind = var.kind();
         ShiftedCheck {
             var,
             new_var: shifted_var_str.parse().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: Index::new(cutoff, kind),
+            cutoff: DBIndex::new(cutoff, kind),
             applier,
         }
     }
@@ -98,19 +98,19 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Index) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
-    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: Shift, cutoff: Index) {
+pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
+    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: DBShift, cutoff: DBIndex) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
         match expr[id] {
             Rise::Var(index) => {
-                if index >= cutoff && index.kind() == cutoff.kind() {
+                if index.value() >= cutoff.value() && index.kind() == cutoff.kind() {
                     let shifted_index = index + shift;
                     expr[id] = Rise::Var(shifted_index);
                 }
@@ -124,6 +124,13 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
                     rec(expr, e, shift, cutoff.inc());
                 } else {
                     rec(expr, e, shift, cutoff);
+                }
+            }
+            Rise::NatFun(f) | Rise::DataFun(f) | Rise::AddrFun(f) | Rise::NatNatFun(f) => {
+                if expr[id].kind() == cutoff.kind() {
+                    rec(expr, f, shift, cutoff.inc());
+                } else {
+                    rec(expr, f, shift, cutoff);
                 }
             }
             // Should be covered by others
@@ -154,11 +161,8 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Index) {
                     rec(expr, c_id, shift, cutoff);
                 }
             }
-            Rise::IndexType(c_id)
-            | Rise::NatFun(c_id)
-            | Rise::DataFun(c_id)
-            | Rise::AddrFun(c_id)
-            | Rise::NatNatFun(c_id) => rec(expr, c_id, shift, cutoff),
+            Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff),
+
             Rise::Let
             | Rise::NatType
             | Rise::F32
@@ -201,8 +205,8 @@ mod tests {
             let b = &ground_truth.parse().unwrap();
             let shifted = shift_copy(
                 a,
-                Shift::try_from(shift).unwrap(),
-                Index::new(cutoff, Kind::Expr),
+                DBShift::try_from(shift).unwrap(),
+                DBIndex::new(cutoff, Kind::Expr),
             );
             assert_eq!(&shifted, b);
         }

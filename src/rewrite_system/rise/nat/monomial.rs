@@ -4,14 +4,14 @@ use egg::{Id, RecExpr};
 use serde::{Deserialize, Serialize};
 
 use super::Rise;
-use crate::rewrite_system::rise::Index;
+use crate::rewrite_system::rise::DBIndex;
 
 /// Represents a monomial term's variables and their exponents
 /// We use `BTreeMap` to keep variables sorted for canonical form
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Default)]
 pub struct Monomial {
     // Map from dbindex to exponent (can be negative for rational expressions)
-    variables: BTreeMap<Index, i32>,
+    variables: BTreeMap<DBIndex, i32>,
 }
 
 impl Monomial {
@@ -19,11 +19,11 @@ impl Monomial {
         Self::default()
     }
 
-    pub fn variables(&self) -> &BTreeMap<Index, i32> {
+    pub fn variables(&self) -> &BTreeMap<DBIndex, i32> {
         &self.variables
     }
 
-    pub fn with_var(mut self, dbindex: Index, exponent: i32) -> Self {
+    pub fn with_var(mut self, dbindex: DBIndex, exponent: i32) -> Self {
         if exponent != 0 {
             self.variables.insert(dbindex, exponent);
         }
@@ -31,7 +31,7 @@ impl Monomial {
     }
 
     /// Create a new monomial with all variables except the specified one
-    pub fn with_variables_except(&self, source: &Monomial, exclude: Index) -> Self {
+    pub fn with_variables_except(&self, source: &Monomial, exclude: DBIndex) -> Self {
         let mut result = self.clone();
         for (&var, &exp) in source.variables() {
             if var != exclude && exp != 0 {

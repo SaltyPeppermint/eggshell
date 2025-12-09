@@ -2,12 +2,12 @@ use egg::Id;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use super::{Index, Kind, Kindable};
+use super::{DBIndex, Kind, Kindable};
 
 egg::define_language! {
   #[derive(Serialize, Deserialize)]
   pub enum Rise {
-    Var(Index),
+    Var(DBIndex),
     "app" = App([Id; 2]),
     "natApp" = NatApp([Id; 2]),
     "dataApp" = DataApp([Id; 2]),
@@ -83,11 +83,15 @@ egg::define_language! {
   }
 }
 
-impl Rise {
-    #[must_use]
-    pub fn kind(&self) -> Option<Kind> {
-        Some(match self {
-            Rise::Var(index) => index.kind()?,
+impl Kindable for Rise {
+    /// Returns the kind of this [`Rise`].
+    ///
+    /// # Panics
+    ///
+    /// Panics if called on an unkindable type
+    fn kind(&self) -> Kind {
+        match self {
+            Rise::Var(index) => index.kind(),
             Rise::App(_)
             | Rise::Lambda(_)
             | Rise::Let
@@ -133,8 +137,8 @@ impl Rise {
             | Rise::F32 => Kind::Data,
             Rise::AddrApp(_) | Rise::AddrLambda(_) => Kind::Addr,
             Rise::TypeOf(_) | Rise::NatNatApp(_) | Rise::NatNatLambda(_) | Rise::Integer(_) => {
-                return None;
+                panic!("NOT KINDABLE");
             }
-        })
+        }
     }
 }

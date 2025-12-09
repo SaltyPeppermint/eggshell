@@ -3,14 +3,12 @@ use std::fmt::Display;
 use egg::Var;
 use serde::{Deserialize, Serialize};
 
-use super::Index;
-
 pub trait Kindable {
-    fn kind(&self) -> Option<Kind>;
+    fn kind(&self) -> Kind;
 }
 
 impl<T: Kindable> Kindable for &T {
-    fn kind(&self) -> Option<Kind> {
+    fn kind(&self) -> Kind {
         (*self).kind()
     }
 }
@@ -35,25 +33,18 @@ impl Display for Kind {
 }
 
 impl Kindable for Var {
-    fn kind(&self) -> Option<Kind> {
+    fn kind(&self) -> Kind {
         let var_str = self.to_string();
-        var_str.chars().nth(1).map(|c| match c {
-            'd' | 't' => Kind::Data,
-            'a' => Kind::Addr,
-            'n' => Kind::Nat,
-            x if x.is_numeric() => Kind::Expr,
-            x => panic!("Wrong format {x}"),
-        })
-    }
-}
-
-impl Kindable for Index {
-    fn kind(&self) -> Option<Kind> {
-        Some(match self {
-            Index::Expr(_) => Kind::Expr,
-            Index::Nat(_) => Kind::Nat,
-            Index::Data(_) => Kind::Data,
-            Index::Addr(_) => Kind::Addr,
-        })
+        var_str
+            .chars()
+            .nth(1)
+            .map(|c| match c {
+                'd' | 't' => Kind::Data,
+                'a' => Kind::Addr,
+                'n' => Kind::Nat,
+                x if x.is_numeric() => Kind::Expr,
+                x => panic!("Wrong format {x}"),
+            })
+            .expect("Wrong format {x}")
     }
 }
