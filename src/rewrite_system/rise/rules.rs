@@ -128,9 +128,7 @@ fn replace_rec(
     // println!("Node: {node}, Index: {to_replace}");
     match node {
         Rise::Var(found) if to_replace == *found => super::add_expr(result, subs.clone()),
-        Rise::Lambda(e) if node.kind() == to_replace.kind() => {
-            shift_replace(result, expr, to_replace, subs, *e, Rise::Lambda)
-        }
+        Rise::Lambda(e) => shift_replace(result, expr, to_replace, subs, *e, Rise::Lambda),
         Rise::NatLambda(e) if node.kind() == to_replace.kind() => {
             shift_replace(result, expr, to_replace, subs, *e, Rise::NatLambda)
         }
@@ -140,16 +138,7 @@ fn replace_rec(
         Rise::AddrLambda(e) if node.kind() == to_replace.kind() => {
             shift_replace(result, expr, to_replace, subs, *e, Rise::AddrLambda)
         }
-        Rise::NatFun(e) if node.kind() == to_replace.kind() => {
-            shift_replace(result, expr, to_replace, subs, *e, Rise::NatFun)
-        }
-        Rise::DataFun(e) if node.kind() == to_replace.kind() => {
-            shift_replace(result, expr, to_replace, subs, *e, Rise::DataFun)
-        }
-        Rise::AddrFun(e) if node.kind() == to_replace.kind() => {
-            shift_replace(result, expr, to_replace, subs, *e, Rise::AddrFun)
-        }
-        // NatNatLam and NatNatFun are not covered
+        // NatNatLam is not covered
         // Non-matching vars and lambdas are handled by the default case
         other => {
             let new_other = other

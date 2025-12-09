@@ -126,13 +126,6 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
                     rec(expr, e, shift, cutoff);
                 }
             }
-            Rise::NatFun(f) | Rise::DataFun(f) | Rise::AddrFun(f) | Rise::NatNatFun(f) => {
-                if expr[id].kind() == cutoff.kind() {
-                    rec(expr, f, shift, cutoff.inc());
-                } else {
-                    rec(expr, f, shift, cutoff);
-                }
-            }
             // Should be covered by others
             // Rise::App([f, e])
             // | Rise::NatApp([f, e])
@@ -141,7 +134,6 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
             // | Rise::NatNatApp([f, e]) => {
             //     rec(expr, f, shift, cutoff);
             //     rec(expr, e, shift, cutoff);
-            // }
             Rise::App(c_ids)
             | Rise::NatApp(c_ids)
             | Rise::DataApp(c_ids)
@@ -161,7 +153,11 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
                     rec(expr, c_id, shift, cutoff);
                 }
             }
-            Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff),
+            Rise::NatFun(c_id)
+            | Rise::DataFun(c_id)
+            | Rise::AddrFun(c_id)
+            | Rise::NatNatFun(c_id)
+            | Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff),
 
             Rise::Let
             | Rise::NatType
