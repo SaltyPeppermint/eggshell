@@ -10,7 +10,7 @@ mod shifted;
 
 use egg::{Id, Language, RecExpr, Rewrite};
 
-use indices::{DBIndex, DBShift};
+use indices::{DBCutoff, DBIndex, DBShift};
 use kind::{Kind, Kindable};
 
 pub use analysis::RiseAnalysis;

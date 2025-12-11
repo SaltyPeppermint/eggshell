@@ -1,24 +1,29 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{DBIndex, DBShift, Kindable, Rise, RiseAnalysis};
+use super::{DBCutoff, DBShift, Kindable, Rise, RiseAnalysis};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: DBShift,
-    cutoff: DBIndex,
+    cutoff: DBCutoff,
     applier: A,
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
-    pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
+    pub fn new(
+        var_str: &str,
+        shifted_var_str: &str,
+        shift: (i32, i32, i32, i32, i32),
+        cutoff: (u32, u32, u32, u32, u32),
+        applier: A,
+    ) -> Self {
         let var: Var = var_str.parse().unwrap();
-        let kind = var.kind();
         Shifted {
             var,
             new_var: shifted_var_str.parse().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: DBIndex::new(cutoff, kind),
+            cutoff: cutoff.into(),
             applier,
         }
     }
@@ -58,19 +63,24 @@ pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: DBShift,
-    cutoff: DBIndex,
+    cutoff: DBCutoff,
     applier: A,
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
-    pub fn new(var_str: &str, shifted_var_str: &str, shift: i32, cutoff: u32, applier: A) -> Self {
+    pub fn new(
+        var_str: &str,
+        shifted_var_str: &str,
+        shift: (i32, i32, i32, i32, i32),
+        cutoff: (u32, u32, u32, u32, u32),
+        applier: A,
+    ) -> Self {
         let var: Var = var_str.parse().unwrap();
-        let kind = var.kind();
         ShiftedCheck {
             var,
             new_var: shifted_var_str.parse().unwrap(),
             shift: shift.try_into().unwrap(),
-            cutoff: DBIndex::new(cutoff, kind),
+            cutoff: cutoff.into(),
             applier,
         }
     }
@@ -98,33 +108,25 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: DBShift, cutoff: DBCutoff) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
-    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: DBShift, cutoff: DBIndex) {
+pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBCutoff) {
+    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: DBShift, cutoff: DBCutoff) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
         match expr[id] {
             Rise::Var(index) => {
-                if index.value() >= cutoff.value() && index.kind() == cutoff.kind() {
+                if index.value() >= cutoff.get(index.kind()) {
                     let shifted_index = index + shift;
                     expr[id] = Rise::Var(shifted_index);
                 }
             }
-            Rise::Lambda(e)
-            | Rise::NatLambda(e)
-            | Rise::DataLambda(e)
-            | Rise::AddrLambda(e)
-            | Rise::NatNatLambda(e) => {
-                if expr[id].kind() == cutoff.kind() {
-                    rec(expr, e, shift, cutoff.inc());
-                } else {
-                    rec(expr, e, shift, cutoff);
-                }
+            Rise::Lambda(l, e) => {
+                rec(expr, e, shift, cutoff.inc(l.kind()));
             }
             // Should be covered by others
             // Rise::App([f, e])
@@ -134,11 +136,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
             // | Rise::NatNatApp([f, e]) => {
             //     rec(expr, f, shift, cutoff);
             //     rec(expr, e, shift, cutoff);
-            Rise::App(c_ids)
-            | Rise::NatApp(c_ids)
-            | Rise::DataApp(c_ids)
-            | Rise::AddrApp(c_ids)
-            | Rise::NatNatApp(c_ids)
+            Rise::App(_, c_ids)
             | Rise::TypeOf(c_ids)
             | Rise::FunType(c_ids)
             | Rise::ArrType(c_ids)
@@ -190,52 +188,57 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBIndex) {
 
 #[cfg(test)]
 mod tests {
-    use crate::rewrite_system::rise::kind::Kind;
 
     use super::*;
 
     #[test]
     fn shift_applier() {
-        fn check(to_shift: &str, ground_truth: &str, cutoff: u32, shift: i32) {
+        fn check(
+            to_shift: &str,
+            ground_truth: &str,
+            cutoff: (u32, u32, u32, u32, u32),
+            shift: (i32, i32, i32, i32, i32),
+        ) {
             let a = &to_shift.parse().unwrap();
             let b = &ground_truth.parse().unwrap();
-            let shifted = shift_copy(
-                a,
-                DBShift::try_from(shift).unwrap(),
-                DBIndex::new(cutoff, Kind::Expr),
-            );
+            let shifted = shift_copy(a, shift.try_into().unwrap(), cutoff.into());
             assert_eq!(&shifted, b);
         }
-        check("(app %e0 %e1)", "(app %e1 %e2)", 0, 1);
+        check(
+            "(app %e0 %e1)",
+            "(app %e1 %e2)",
+            (0, 0, 0, 0, 0),
+            (1, 0, 0, 0, 0),
+        );
         check(
             "(typeOf (app %e0 %e1) f32)",
             "(typeOf (app %e1 %e2) f32)",
-            0,
-            1,
+            (0, 0, 0, 0, 0),
+            (1, 0, 0, 0, 0),
         );
         check(
             "(typeOf (app %e0 %e1) f32)",
             "(typeOf (app %e0 %e2) f32)",
-            1,
-            1,
+            (1, 0, 0, 0, 0),
+            (1, 0, 0, 0, 0),
         );
         check(
             "(typeOf (lam (typeOf (app %e0 %e2) f32)) f32)",
             "(typeOf (lam (typeOf (app %e0 %e3) f32)) f32)",
-            1,
-            1,
+            (1, 0, 0, 0, 0),
+            (1, 0, 0, 0, 0),
         );
         check(
             "(typeOf (lam (typeOf (app %e0 %e2) f32)) f32)",
             "(typeOf (lam (typeOf (app %e0 %e1) f32)) f32)",
-            1,
-            -1,
+            (1, 0, 0, 0, 0),
+            (-1, 0, 0, 0, 0),
         );
         check(
             "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %e3 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %e3 (pairT f32 f32))) f32)) f32))",
             "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %e5 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %e5 (pairT f32 f32))) f32)) f32))",
-            0,
-            2,
+            (0, 0, 0, 0, 0),
+            (2, 0, 0, 0, 0),
         );
     }
 }

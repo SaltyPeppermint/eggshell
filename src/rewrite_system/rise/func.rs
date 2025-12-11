@@ -1,6 +1,9 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
+use crate::rewrite_system::rise::indices::DBShift;
+
+use super::lang::Application;
 use super::{DBIndex, Kind, Kindable, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
@@ -19,7 +22,7 @@ impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
         let kind = var.kind();
         NotFreeIn {
             var,
-            index: DBIndex::new(index, kind),
+            index: DBIndex::new(kind, index),
             applier,
         }
     }
@@ -122,7 +125,7 @@ fn vec_expr(
             new.add(Rise::TypeOf([var_id, vec_ty_id]));
             Some((new, vec_ty_id, var_id))
         }
-        Rise::App([f, e]) => {
+        Rise::App(a, [f, e]) if a.kind() == Kind::Expr => {
             let (fv, fv_ty_id, _) = vec_expr(expr, n, v_env.clone(), *f)?;
             let (ev, _, _) = vec_expr(expr, n, v_env.clone(), *e)?;
 
@@ -134,16 +137,16 @@ fn vec_expr(
             let fv_id = super::add_expr(&mut new, fv);
             let ev_id = super::add_expr(&mut new, ev);
 
-            let app_id = new.add(Rise::App([fv_id, ev_id]));
+            let app_id = new.add(Rise::App(*a, [fv_id, ev_id]));
 
             // The index for fv is preserved since join_expr only appends the second arg
             new.add(Rise::TypeOf([app_id, output_ty_id]));
             Some((new, output_ty_id, app_id))
         }
-        Rise::Lambda(e) => {
+        Rise::Lambda(l, e) if l.kind() == Kind::Expr => {
             let v_env2 = v_env
                 .into_iter()
-                .map(|i| i.inc())
+                .map(|i| i + DBShift::up(l.kind()))
                 .chain([DBIndex::zero(Kind::Expr)])
                 .collect::<HashSet<_>>();
 
@@ -159,7 +162,7 @@ fn vec_expr(
             let vec_input_ty = vec_ty(expr, n, input_ty_id)?;
 
             // Wrap in a lambda and append to the existing recexpr
-            let lam_id = new.add(Rise::Lambda(typed_ev_id));
+            let lam_id = new.add(Rise::Lambda(*l, typed_ev_id));
             let vec_input_ty_id = super::add_expr(&mut new, vec_input_ty);
 
             // Add the fun type of the new lam and wrap it in a typeof
@@ -183,7 +186,8 @@ fn vec_expr(
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
-            let app_id = new.add(Rise::App([typed_prim_id, new_typed_expr_id]));
+            let app = Application::new(Kind::Expr);
+            let app_id = new.add(Rise::App(app, [typed_prim_id, new_typed_expr_id]));
             new.add(Rise::TypeOf([app_id, vec_ty_id]));
 
             Some((new, vec_ty_id, app_id))
@@ -196,14 +200,8 @@ fn vec_expr(
             Some((typed_prim, vec_prim_ty_id, prim_id))
         }
         Rise::Var(_)
-        | Rise::NatApp(_)
-        | Rise::DataApp(_)
-        | Rise::AddrApp(_)
-        | Rise::NatNatApp(_)
-        | Rise::NatLambda(_)
-        | Rise::DataLambda(_)
-        | Rise::AddrLambda(_)
-        | Rise::NatNatLambda(_)
+        | Rise::App(_, _)
+        | Rise::Lambda(_, _)
         | Rise::ToMem
         | Rise::Split
         | Rise::Join

@@ -214,7 +214,7 @@ mod tests {
 
     // Helper to create an Index
     fn idx(n: u32) -> DBIndex {
-        DBIndex::new(n, Kind::Nat)
+        DBIndex::new(Kind::Nat, n)
     }
 
     // -------------------------------------

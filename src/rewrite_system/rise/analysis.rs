@@ -76,16 +76,12 @@ impl Analysis<Rise> for RiseAnalysis {
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
-            Rise::Lambda(e)
-            | Rise::NatLambda(e)
-            | Rise::DataLambda(e)
-            | Rise::AddrLambda(e)
-            | Rise::NatNatLambda(e) => egraph[*e]
+            Rise::Lambda(l, e) => egraph[*e]
                 .data
                 .free
                 .iter()
-                .filter(|idx| !idx.is_zero() && idx.kind() == enode.kind())
-                .map(|idx| idx.dec())
+                .filter(|i| !i.is_zero() && i.kind() == l.kind())
+                .map(|i| i.dec(l.kind()))
                 .collect(),
             _ => enode
                 .children()

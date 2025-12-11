@@ -1,7 +1,7 @@
 use colored::{ColoredString, Colorize};
 use egg::{ENodeOrVar, Id, Language, RecExpr};
 
-use super::Rise;
+use super::{Kind, Kindable, Rise};
 
 pub trait PrettyPrint {
     fn pp(self, skip_wrapper: bool);
@@ -16,13 +16,25 @@ pub trait PrettyPrint {
 fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
     match node {
         Rise::Var(index) => (index.to_string().magenta(), false),
-        Rise::App(_) | Rise::Lambda(_) => (node.to_string().red(), false),
-        Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {
-            (node.to_string().cyan(), false)
+        Rise::App(a, _) => {
+            if a.kind() == Kind::Expr {
+                (node.to_string().red(), false)
+            } else {
+                (node.to_string().cyan(), true)
+            }
         }
-        Rise::NatLambda(_) | Rise::DataLambda(_) | Rise::AddrLambda(_) | Rise::NatNatLambda(_) => {
-            (node.to_string().cyan(), true)
-        } // is_wrapper = true
+        Rise::Lambda(l, _) => {
+            if l.kind() == Kind::Expr {
+                (node.to_string().red(), false)
+            } else {
+                (node.to_string().cyan(), true)
+            }
+        }
+        // Rise::App(x) | Rise::Lambda(_) => (node.to_string().red(), false),
+        // Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {}
+        // Rise::NatLambda(_) | Rise::DataLambda(_) | Rise::AddrLambda(_) | Rise::NatNatLambda(_) => {
+        //     (node.to_string().cyan(), true)
+        // } // is_wrapper = true
 
         // Primitive Types inside Expr position (Panic)
         Rise::FunType(_)

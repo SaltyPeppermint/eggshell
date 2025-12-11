@@ -852,7 +852,7 @@ mod tests {
     use crate::rewrite_system::rise::{DBIndex, Kind};
 
     fn idx(n: u32) -> DBIndex {
-        DBIndex::new(n, Kind::Nat)
+        DBIndex::new(Kind::Nat, n)
     }
 
     fn x() -> Polynomial {

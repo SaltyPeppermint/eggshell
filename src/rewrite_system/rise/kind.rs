@@ -13,12 +13,13 @@ impl<T: Kindable> Kindable for &T {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
 pub enum Kind {
     Expr,
     Nat,
     Data,
     Addr,
+    Nat2Nat,
 }
 
 impl Display for Kind {
@@ -28,6 +29,7 @@ impl Display for Kind {
             Kind::Nat => write!(f, "NAT"),
             Kind::Data => write!(f, "DATA"),
             Kind::Addr => write!(f, "ADDR"),
+            Kind::Nat2Nat => write!(f, "NAT2NAT"),
         }
     }
 }
