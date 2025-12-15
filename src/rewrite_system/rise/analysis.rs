@@ -1,10 +1,8 @@
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::HashSet;
 
-use crate::rewrite_system::rise::kind::Kindable;
-use crate::rewrite_system::rise::nat::try_simplify;
-
-use super::{DBIndex, Rise};
+use super::nat::try_simplify;
+use super::{DBIndex, Kindable, Rise};
 
 #[derive(Default, Debug)]
 pub struct RiseAnalysis {
@@ -40,7 +38,7 @@ impl RiseAnalysis {
 pub struct AnalysisData {
     pub free: HashSet<DBIndex>,
     pub beta_extract: RecExpr<Rise>,
-    // pub simple_nat: Option<RecExpr<Rise>>,
+    pub simple_nat: Option<RecExpr<Rise>>,
 }
 
 impl Analysis<Rise> for RiseAnalysis {
@@ -93,23 +91,23 @@ impl Analysis<Rise> for RiseAnalysis {
 
         let empty = enode.any(|id| egraph[id].data.beta_extract.is_empty());
 
-        let beta_extract = if empty {
-            RecExpr::default()
-        } else {
-            enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
-        };
-        // let (beta_extract, simple_nat) = if empty {
-        //     (RecExpr::default(), None)
+        // let beta_extract = if empty {
+        //     RecExpr::default()
         // } else {
-        //     let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
-        //     let simple_nat = try_simplify(&expr).ok();
-        //     (expr, simple_nat)
+        //     enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
         // };
+        let (beta_extract, simple_nat) = if empty {
+            (RecExpr::default(), None)
+        } else {
+            let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
+            let simple_nat = try_simplify(&expr).ok();
+            (expr, simple_nat)
+        };
 
         AnalysisData {
             free,
             beta_extract,
-            // simple_nat,
+            simple_nat,
         }
     }
 
@@ -118,6 +116,7 @@ impl Analysis<Rise> for RiseAnalysis {
     //         let added = egraph.add_expr(&expr);
     //         egraph.union(id, added);
 
+    //         println!("Adding {expr} to {}", egraph[id].data.beta_extract);
     //         // to not prune, comment this out
     //         // egraph[id].nodes.retain(egg::Language::is_leaf);
 

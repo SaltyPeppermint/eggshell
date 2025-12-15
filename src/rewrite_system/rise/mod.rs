@@ -56,16 +56,7 @@ pub fn sketchify(term: &str, sketchify_nat_expr: bool) -> Sketch<Rise> {
     ) -> Id {
         match &expr[id] {
             Rise::Var(_) => sketch.add(SketchLang::Any),
-            Rise::NatAdd(_)
-            | Rise::NatSub(_)
-            | Rise::NatMul(_)
-            | Rise::NatDiv(_)
-            | Rise::NatPow(_)
-            | Rise::Integer(_)
-                if sketchify_nat_expr =>
-            {
-                sketch.add(SketchLang::Any)
-            }
+            other if other.is_nat() && sketchify_nat_expr => sketch.add(SketchLang::Any),
             other => {
                 let new_node = SketchLang::Node(
                     other

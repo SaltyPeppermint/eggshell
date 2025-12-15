@@ -186,7 +186,7 @@ fn vec_expr(
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
-            let app = Application::new(Kind::Expr);
+            let app = Application::Expr;
             let app_id = new.add(Rise::App(app, [typed_prim_id, new_typed_expr_id]));
             new.add(Rise::TypeOf([app_id, vec_ty_id]));
 

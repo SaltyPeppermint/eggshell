@@ -3,7 +3,6 @@ mod ops;
 
 use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
-use serde::{Deserialize, Serialize};
 
 use super::{NatSolverError, Polynomial, Rise, polynomial};
 
@@ -17,7 +16,7 @@ use super::{NatSolverError, Polynomial, Rise, polynomial};
 /// - Simple polynomials: `x^2 + 2x + 1` (denominator = 1)
 /// - Rational expressions: `1 / (x + 1)`
 /// - Complex ratios: `(x^2 + 1) / (x^2 - 1)`
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone)]
 pub struct RationalFunction {
     numerator: Polynomial,
     denominator: Polynomial,

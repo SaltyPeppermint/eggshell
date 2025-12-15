@@ -1,14 +1,13 @@
 use std::{collections::BTreeMap, fmt};
 
 use egg::{Id, RecExpr};
-use serde::{Deserialize, Serialize};
 
 use super::Rise;
 use crate::rewrite_system::rise::DBIndex;
 
 /// Represents a monomial term's variables and their exponents
 /// We use `BTreeMap` to keep variables sorted for canonical form
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Monomial {
     // Map from dbindex to exponent (can be negative for rational expressions)
     variables: BTreeMap<DBIndex, i32>,

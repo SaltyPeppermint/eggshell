@@ -1,9 +1,8 @@
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::{Kind, Kindable};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
 pub enum DBIndex {
     Expr(u32),
     Nat(u32),
@@ -108,7 +107,7 @@ impl std::fmt::Display for DBIndex {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
 pub enum DBShift {
     /// expr, nat, data, addr, nat2nat
     Expr((i32, i32, i32, i32, i32)),
@@ -215,9 +214,7 @@ impl From<i32> for DBShift {
     }
 }
 
-#[derive(
-    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Default, Serialize, Deserialize,
-)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Default)]
 pub struct DBCutoff {
     expr: u32,
     nat: u32,

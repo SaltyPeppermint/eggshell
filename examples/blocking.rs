@@ -24,7 +24,7 @@ fn main() {
     println!("{}", runner_1.report());
 
     let root_mm = runner_1.egraph.find(runner_1.roots[0]);
-    let split_guide_sketch = rise::sketchify(SPLIT_GUIDE, false);
+    let split_guide_sketch = rise::sketchify(SPLIT_GUIDE, true);
     let (_, sketch_extracted_split_guide) =
         sketch::eclass_extract(&split_guide_sketch, AstSize, &runner_1.egraph, root_mm).unwrap();
 

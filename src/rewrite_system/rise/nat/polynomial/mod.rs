@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
-use serde::{Deserialize, Serialize};
+// use serde::{Deserialize, Serialize};
 
 use super::{Monomial, NatSolverError, Rise};
 use crate::rewrite_system::rise::DBIndex;
@@ -17,7 +17,8 @@ use crate::rewrite_system::rise::DBIndex;
 /// Represents a polynomial as a map from monomials to coefficients
 /// This can represent Laurent polynomials (with negative exponents) and
 /// rational expressions that simplify to a single term in the denominator.
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+// Deserialize, Serialize
+#[derive(Debug, Clone, Default)]
 pub struct Polynomial {
     // Map from monomial to coefficient
     terms: BTreeMap<Monomial, Ratio<i32>>,
