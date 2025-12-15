@@ -4,18 +4,27 @@ use thiserror::Error;
 use super::{Kind, Kindable};
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
-pub struct DBIndex {
-    kind: Kind,
-    value: u32,
+pub enum DBIndex {
+    Expr(u32),
+    Nat(u32),
+    Data(u32),
+    Addr(u32),
+    Nat2Nat(u32),
 }
 
 impl DBIndex {
     pub fn new(kind: Kind, value: u32) -> Self {
-        Self { kind, value }
+        match kind {
+            Kind::Expr => Self::Expr(value),
+            Kind::Nat => Self::Nat(value),
+            Kind::Data => Self::Data(value),
+            Kind::Addr => Self::Addr(value),
+            Kind::Nat2Nat => Self::Nat2Nat(value),
+        }
     }
 
     pub fn zero(kind: Kind) -> Self {
-        Self { kind, value: 0 }
+        Self::new(kind, 0)
     }
 
     pub fn inc(self, kind: Kind) -> Self {
@@ -27,7 +36,13 @@ impl DBIndex {
     }
 
     pub fn value(self) -> u32 {
-        self.value
+        match self {
+            DBIndex::Expr(value)
+            | DBIndex::Nat(value)
+            | DBIndex::Data(value)
+            | DBIndex::Addr(value)
+            | DBIndex::Nat2Nat(value) => value,
+        }
     }
 
     pub fn is_zero(self) -> bool {
@@ -39,10 +54,20 @@ impl std::ops::Add<DBShift> for DBIndex {
     type Output = Self;
 
     fn add(self, rhs: DBShift) -> Self::Output {
-        let shift = rhs.get(self.kind);
-        Self {
-            kind: self.kind,
-            value: self.value.strict_add_signed(shift),
+        let shift = rhs.of_index(self);
+        let new_value = self.value().strict_add_signed(shift);
+        Self::new(self.kind(), new_value)
+    }
+}
+
+impl Kindable for DBIndex {
+    fn kind(&self) -> Kind {
+        match self {
+            DBIndex::Expr(_) => Kind::Expr,
+            DBIndex::Nat(_) => Kind::Nat,
+            DBIndex::Data(_) => Kind::Data,
+            DBIndex::Addr(_) => Kind::Addr,
+            DBIndex::Nat2Nat(_) => Kind::Nat2Nat,
         }
     }
 }
@@ -53,17 +78,14 @@ impl std::str::FromStr for DBIndex {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(stripped_s) = s.strip_prefix("%") {
             if let Some((tag, i)) = stripped_s.split_at_checked(1) {
-                let kind = match tag {
-                    "e" => Kind::Expr,
-                    "n" => Kind::Nat,
-                    "d" => Kind::Data,
-                    "a" => Kind::Addr,
-                    "x" => Kind::Nat2Nat,
+                let value = i.parse()?;
+                Ok(match tag {
+                    "e" => Self::Expr(value),
+                    "n" => Self::Nat(value),
+                    "d" => Self::Data(value),
+                    "a" => Self::Addr(value),
+                    "x" => Self::Nat2Nat(value),
                     _ => return Err(IndexError::ImproperTag(stripped_s.to_owned())),
-                };
-                Ok(Self {
-                    kind,
-                    value: i.parse()?,
                 })
             } else {
                 Err(IndexError::MissingTag(stripped_s.to_owned()))
@@ -76,19 +98,13 @@ impl std::str::FromStr for DBIndex {
 
 impl std::fmt::Display for DBIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.kind {
-            Kind::Expr => write!(f, "%e{}", self.value),
-            Kind::Nat => write!(f, "%n{}", self.value),
-            Kind::Data => write!(f, "%d{}", self.value),
-            Kind::Addr => write!(f, "%a{}", self.value),
-            Kind::Nat2Nat => write!(f, "%x{}", self.value),
+        match self {
+            Self::Expr(value) => write!(f, "%e{value}"),
+            Self::Nat(value) => write!(f, "%n{value}"),
+            Self::Data(value) => write!(f, "%d{value}"),
+            Self::Addr(value) => write!(f, "%a{value}"),
+            Self::Nat2Nat(value) => write!(f, "%x{value}"),
         }
-    }
-}
-
-impl Kindable for DBIndex {
-    fn kind(&self) -> Kind {
-        self.kind
     }
 }
 
@@ -113,13 +129,13 @@ impl DBShift {
         Self::new_with(kind, -1)
     }
 
-    fn get(&self, kind: Kind) -> i32 {
-        match kind {
-            Kind::Expr => self.expr_shift(),
-            Kind::Nat => self.nat_shift(),
-            Kind::Data => self.data_shift(),
-            Kind::Addr => self.addr_shift(),
-            Kind::Nat2Nat => self.nat2nat_shift(),
+    fn of_index(&self, index: DBIndex) -> i32 {
+        match index {
+            DBIndex::Expr(_) => self.expr_shift(),
+            DBIndex::Nat(_) => self.nat_shift(),
+            DBIndex::Data(_) => self.data_shift(),
+            DBIndex::Addr(_) => self.addr_shift(),
+            DBIndex::Nat2Nat(_) => self.nat2nat_shift(),
         }
     }
 
@@ -211,16 +227,6 @@ pub struct DBCutoff {
 }
 
 impl DBCutoff {
-    pub fn get(&self, kind: Kind) -> u32 {
-        match kind {
-            Kind::Expr => self.expr,
-            Kind::Nat => self.nat,
-            Kind::Data => self.data,
-            Kind::Addr => self.addr,
-            Kind::Nat2Nat => self.nat2nat,
-        }
-    }
-
     pub fn inc(self, kind: Kind) -> Self {
         self + DBShift::up(kind)
     }
@@ -228,6 +234,16 @@ impl DBCutoff {
     // pub fn dec(self, kind: Kind) -> Self {
     //     self + DBShift::down(kind)
     // }
+
+    pub fn of_index(self, index: DBIndex) -> u32 {
+        match index {
+            DBIndex::Expr(_) => self.expr,
+            DBIndex::Nat(_) => self.nat,
+            DBIndex::Data(_) => self.data,
+            DBIndex::Addr(_) => self.addr,
+            DBIndex::Nat2Nat(_) => self.nat2nat,
+        }
+    }
 
     pub fn zero() -> Self {
         DBCutoff::default()

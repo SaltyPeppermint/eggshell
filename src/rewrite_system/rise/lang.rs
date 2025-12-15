@@ -86,6 +86,21 @@ egg::define_language! {
   }
 }
 
+impl Rise {
+    #[must_use]
+    pub fn is_nat(&self) -> bool {
+        matches!(
+            self,
+            Rise::NatAdd(_)
+                | Rise::NatSub(_)
+                | Rise::NatMul(_)
+                | Rise::NatDiv(_)
+                | Rise::NatPow(_)
+                | Rise::Integer(_)
+        )
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ParseKindError {
     #[error("Not a lambda: {0}")]

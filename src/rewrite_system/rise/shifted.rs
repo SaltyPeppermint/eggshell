@@ -118,7 +118,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBCutoff) {
         // dbg!(&expr.len());
         match expr[id] {
             Rise::Var(index) => {
-                if index.value() >= cutoff.get(index.kind()) {
+                if index.value() >= cutoff.of_index(index) {
                     let shifted_index = index + shift;
                     expr[id] = Rise::Var(shifted_index);
                 }

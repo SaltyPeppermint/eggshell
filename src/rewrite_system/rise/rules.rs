@@ -78,24 +78,7 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
         let ex_body = &egraph[subst[self.body]].data.beta_extract;
         let ex_subs = &egraph[subst[self.subs]].data.beta_extract;
 
-        // println!("Attempting beta reduction on:");
-        // egraph[eclass].data.beta_extract.pp(false);
-        // println!("\nBody:");
-        // ex_body.pp(false);
-        // println!("Subs:");
-        // ex_subs.pp(false);
-        // println!("Kind is {:?}", self.kind);
         let result = beta_reduce(ex_body, ex_subs, self.kind);
-
-        // println!("Result:");
-        // result.pp(false);
-
-        // // no use reducing smth that is already reduced
-        // if result == egraph[eclass].data.beta_extract {
-        //     println!("Already beta reduced, nothing to do");
-        //     return vec![];
-        // }
-
         let id = egraph.add_expr(&result);
         egraph.union(eclass, id);
 
