@@ -14,16 +14,15 @@ impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
-        shift: (i32, i32, i32, i32, i32),
-        cutoff: (u32, u32, u32, u32, u32),
+        shift: DBShift,
+        cutoff: DBCutoff,
         applier: A,
     ) -> Self {
-        let var: Var = var_str.parse().unwrap();
         Shifted {
-            var,
+            var: var_str.parse().unwrap(),
             new_var: shifted_var_str.parse().unwrap(),
-            shift: shift.try_into().unwrap(),
-            cutoff: cutoff.into(),
+            shift,
+            cutoff,
             applier,
         }
     }
@@ -71,16 +70,15 @@ impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
-        shift: (i32, i32, i32, i32, i32),
-        cutoff: (u32, u32, u32, u32, u32),
+        shift: DBShift,
+        cutoff: DBCutoff,
         applier: A,
     ) -> Self {
-        let var: Var = var_str.parse().unwrap();
         ShiftedCheck {
-            var,
+            var: var_str.parse().unwrap(),
             new_var: shifted_var_str.parse().unwrap(),
-            shift: shift.try_into().unwrap(),
-            cutoff: cutoff.into(),
+            shift,
+            cutoff,
             applier,
         }
     }
@@ -201,7 +199,7 @@ mod tests {
         ) {
             let a = &to_shift.parse().unwrap();
             let b = &ground_truth.parse().unwrap();
-            let shifted = shift_copy(a, shift.try_into().unwrap(), cutoff.into());
+            let shifted = shift_copy(a, shift.into(), cutoff.into());
             assert_eq!(&shifted, b);
         }
         check(

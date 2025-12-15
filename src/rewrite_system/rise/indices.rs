@@ -93,12 +93,15 @@ impl Kindable for DBIndex {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
-pub struct DBShift {
-    expr: i32,
-    nat: i32,
-    data: i32,
-    addr: i32,
-    nat2nat: i32,
+pub enum DBShift {
+    /// expr, nat, data, addr, nat2nat
+    Expr((i32, i32, i32, i32, i32)),
+    /// nat, nat2nat
+    Nat((i32, i32)),
+    /// nat, data, nat2nat
+    Data((i32, i32, i32)),
+    /// addr
+    Addr(i32),
 }
 
 impl DBShift {
@@ -110,85 +113,95 @@ impl DBShift {
         Self::new_with(kind, -1)
     }
 
-    pub fn get(&self, kind: Kind) -> i32 {
+    fn get(&self, kind: Kind) -> i32 {
         match kind {
-            Kind::Expr => self.expr,
-            Kind::Nat => self.nat,
-            Kind::Data => self.data,
-            Kind::Addr => self.addr,
-            Kind::Nat2Nat => self.nat2nat,
+            Kind::Expr => self.expr_shift(),
+            Kind::Nat => self.nat_shift(),
+            Kind::Data => self.data_shift(),
+            Kind::Addr => self.addr_shift(),
+            Kind::Nat2Nat => self.nat2nat_shift(),
         }
     }
 
-    fn new_with(kind: Kind, value: i32) -> Self {
+    pub fn expr_shift(&self) -> i32 {
+        match self {
+            DBShift::Expr((expr_shift, _, _, _, _)) => *expr_shift,
+            DBShift::Nat(_) | DBShift::Data(_) | DBShift::Addr(_) => 0,
+        }
+    }
+
+    pub fn nat_shift(&self) -> i32 {
+        match self {
+            DBShift::Expr((_, nat_shift, _, _, _))
+            | DBShift::Nat((nat_shift, _))
+            | DBShift::Data((nat_shift, _, _)) => *nat_shift,
+            DBShift::Addr(_) => 0,
+        }
+    }
+
+    pub fn data_shift(&self) -> i32 {
+        match self {
+            DBShift::Expr((_, _, data_shift, _, _)) | DBShift::Data((_, data_shift, _)) => {
+                *data_shift
+            }
+            DBShift::Nat(_) | DBShift::Addr(_) => 0,
+        }
+    }
+
+    pub fn addr_shift(&self) -> i32 {
+        match self {
+            DBShift::Expr((_, _, _, addr_shift, _)) | DBShift::Addr(addr_shift) => *addr_shift,
+            DBShift::Nat(_) | DBShift::Data(_) => 0,
+        }
+    }
+
+    pub fn nat2nat_shift(&self) -> i32 {
+        match self {
+            DBShift::Expr((_, _, _, _, nat2nat_shift))
+            | DBShift::Nat((_, nat2nat_shift))
+            | DBShift::Data((_, _, nat2nat_shift)) => *nat2nat_shift,
+            DBShift::Addr(_) => 0,
+        }
+    }
+
+    fn new_with(kind: Kind, arg: i32) -> DBShift {
         match kind {
-            Kind::Expr => Self {
-                expr: value,
-                nat: 0,
-                data: 0,
-                addr: 0,
-                nat2nat: 0,
-            },
-            Kind::Nat => Self {
-                expr: 0,
-                nat: value,
-                data: 0,
-                addr: 0,
-                nat2nat: 0,
-            },
-            Kind::Data => Self {
-                expr: 0,
-                nat: 0,
-                data: value,
-                addr: 0,
-                nat2nat: 0,
-            },
-            Kind::Addr => Self {
-                expr: 0,
-                nat: 0,
-                data: 0,
-                addr: value,
-                nat2nat: 0,
-            },
-            Kind::Nat2Nat => Self {
-                expr: 0,
-                nat: 0,
-                data: 0,
-                addr: 0,
-                nat2nat: value,
-            },
+            Kind::Expr => DBShift::Expr((arg, 0, 0, 0, 0)),
+            Kind::Nat => DBShift::Nat((arg, 0)),
+            Kind::Data => DBShift::Data((arg, 0, 0)),
+            Kind::Addr => DBShift::Addr(arg),
+            Kind::Nat2Nat => panic!("No Nat2Nat shift is possible"),
         }
     }
 }
 
-impl TryFrom<(i32, i32, i32, i32, i32)> for DBShift {
-    type Error = IndexError;
-
-    fn try_from(value: (i32, i32, i32, i32, i32)) -> Result<Self, Self::Error> {
-        if value.0 == 0 && value.1 == 0 && value.2 == 0 && value.3 == 0 && value.4 == 0 {
-            return Err(IndexError::ZeroShift);
-        }
-        Ok(Self {
-            expr: value.0,
-            nat: value.1,
-            data: value.2,
-            addr: value.3,
-            nat2nat: value.4,
-        })
+impl From<(i32, i32, i32, i32, i32)> for DBShift {
+    fn from(value: (i32, i32, i32, i32, i32)) -> Self {
+        Self::Expr(value)
     }
 }
 
-impl std::fmt::Display for DBShift {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "({}, {}, {}, {}, {})",
-            self.expr, self.nat, self.data, self.addr, self.nat2nat
-        )
+impl From<(i32, i32, i32)> for DBShift {
+    fn from(value: (i32, i32, i32)) -> Self {
+        Self::Data(value)
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+impl From<(i32, i32)> for DBShift {
+    fn from(value: (i32, i32)) -> Self {
+        Self::Nat(value)
+    }
+}
+
+impl From<i32> for DBShift {
+    fn from(value: i32) -> Self {
+        Self::Addr(value)
+    }
+}
+
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Default, Serialize, Deserialize,
+)]
 pub struct DBCutoff {
     expr: u32,
     nat: u32,
@@ -217,13 +230,7 @@ impl DBCutoff {
     // }
 
     pub fn zero() -> Self {
-        Self {
-            expr: 0,
-            nat: 0,
-            data: 0,
-            addr: 0,
-            nat2nat: 0,
-        }
+        DBCutoff::default()
     }
 }
 
@@ -232,11 +239,11 @@ impl std::ops::Add<DBShift> for DBCutoff {
 
     fn add(self, rhs: DBShift) -> Self::Output {
         Self {
-            expr: self.expr.strict_add_signed(rhs.expr),
-            nat: self.expr.strict_add_signed(rhs.nat),
-            data: self.expr.strict_add_signed(rhs.data),
-            addr: self.expr.strict_add_signed(rhs.addr),
-            nat2nat: self.expr.strict_add_signed(rhs.nat2nat),
+            expr: self.expr.strict_add_signed(rhs.expr_shift()),
+            nat: self.nat.strict_add_signed(rhs.nat_shift()),
+            data: self.data.strict_add_signed(rhs.data_shift()),
+            addr: self.expr.strict_add_signed(rhs.addr_shift()),
+            nat2nat: self.expr.strict_add_signed(rhs.nat2nat_shift()),
         }
     }
 }
@@ -249,6 +256,36 @@ impl From<(u32, u32, u32, u32, u32)> for DBCutoff {
             data: value.2,
             addr: value.3,
             nat2nat: value.4,
+        }
+    }
+}
+
+impl From<(u32, u32)> for DBCutoff {
+    fn from(value: (u32, u32)) -> Self {
+        Self {
+            nat: value.0,
+            nat2nat: value.1,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<(u32, u32, u32)> for DBCutoff {
+    fn from(value: (u32, u32, u32)) -> Self {
+        Self {
+            nat: value.0,
+            data: value.1,
+            nat2nat: value.2,
+            ..Default::default()
+        }
+    }
+}
+
+impl From<u32> for DBCutoff {
+    fn from(value: u32) -> Self {
+        Self {
+            addr: value,
+            ..Default::default()
         }
     }
 }
@@ -271,8 +308,6 @@ pub enum IndexError {
     ImproperTag(String),
     #[error("Missing Tag {0}")]
     MissingTag(String),
-    #[error("Invalide zero shift")]
-    ZeroShift,
     #[error("Invalide Index: {0}")]
     InvalidIndex(#[from] std::num::ParseIntError),
 }
