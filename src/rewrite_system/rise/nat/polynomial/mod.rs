@@ -4,7 +4,6 @@ mod ops;
 use std::collections::{BTreeMap, BTreeSet};
 
 use num_traits::{One, Signed, Zero};
-// use serde::{Deserialize, Serialize};
 
 use super::{Monomial, NatSolverError, Ratio, Rise};
 use crate::rewrite_system::rise::DBIndex;

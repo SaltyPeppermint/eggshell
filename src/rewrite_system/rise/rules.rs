@@ -2,12 +2,11 @@ use egg::{
     Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
 };
 
-use crate::rewrite_system::rise::kind::Kindable;
-
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
 use super::nat::ComputeNatCheck;
 use super::shifted::{Shifted, shift_mut};
 use super::{DBCutoff, DBIndex, DBShift, Kind, Rise, RiseAnalysis};
+use crate::rewrite_system::rise::kind::Kindable;
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = vec![

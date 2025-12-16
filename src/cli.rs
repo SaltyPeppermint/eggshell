@@ -1,6 +1,5 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use clap::error::ErrorKind;
 use clap::{Error, Parser};
@@ -91,8 +90,8 @@ pub enum SampleStrategy {
     CostWeighted,
 }
 
-impl Display for SampleStrategy {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Display for SampleStrategy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             SampleStrategy::CountUniformly => write!(f, "CountUniformly"),
             SampleStrategy::CountSizeRange => write!(f, "CountSizeRange"),
@@ -102,7 +101,7 @@ impl Display for SampleStrategy {
     }
 }
 
-impl FromStr for SampleStrategy {
+impl std::str::FromStr for SampleStrategy {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -122,8 +121,8 @@ pub enum RewriteSystemName {
     Rise,
 }
 
-impl Display for RewriteSystemName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl fmt::Display for RewriteSystemName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Halide => write!(f, "halide"),
             Self::Rise => write!(f, "rise"),
@@ -131,7 +130,7 @@ impl Display for RewriteSystemName {
     }
 }
 
-impl FromStr for RewriteSystemName {
+impl std::str::FromStr for RewriteSystemName {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

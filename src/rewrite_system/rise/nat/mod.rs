@@ -37,17 +37,9 @@ fn check_equivalence<'a, 'b: 'a>(
     if cache.check_cache_equiv(lhs, rhs) {
         return true;
     }
-    // println!();
-    // println!("{lhs}");
-    // println!("{rhs}");
 
     let rf_lhs: RationalFunction = lhs.try_into().unwrap();
     let rf_rhs: RationalFunction = rhs.try_into().unwrap();
-
-    // println!("{rf_lhs}");
-    // println!("{rf_rhs}");
-    // println!("{}", rf_lhs == rf_rhs);
-
     if rf_lhs == rf_rhs {
         cache.add_pair_to_cache(lhs, rhs);
         return true;
@@ -68,10 +60,7 @@ fn extract_small(
     ) -> RecExpr<Rise> {
         match &ast[id] {
             ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),
-            ENodeOrVar::ENode(e) => {
-                let new_e = e.clone();
-                new_e.join_recexprs(|i| rec(ast, i, subst, egraph))
-            }
+            ENodeOrVar::ENode(e) => e.clone().join_recexprs(|i| rec(ast, i, subst, egraph)),
         }
     }
     rec(&pattern.ast, pattern.ast.root(), subst, egraph)

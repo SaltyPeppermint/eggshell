@@ -1,4 +1,4 @@
-use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
+use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::HashSet;
 
 use super::nat::try_simplify;
@@ -113,17 +113,17 @@ impl Analysis<Rise> for RiseAnalysis {
         }
     }
 
-    // fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
-    //     if let Some(expr) = egraph[id].data.simple_nat.clone() {
-    //         let added = egraph.add_expr(&expr);
-    //         egraph.union(id, added);
+    fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
+        if let Some(expr) = egraph[id].data.simple_nat.clone() {
+            let added = egraph.add_expr(&expr);
+            egraph.union(id, added);
 
-    //         println!("Adding {expr} to {}", egraph[id].data.beta_extract);
-    //         // to not prune, comment this out
-    //         // egraph[id].nodes.retain(egg::Language::is_leaf);
+            println!("Adding {expr} to {}", egraph[id].data.beta_extract);
+            // to not prune, comment this out
+            // egraph[id].nodes.retain(egg::Language::is_leaf);
 
-    //         // #[cfg(debug_assertions)]
-    //         egraph[id].assert_unique_leaves();
-    //     }
-    // }
+            // #[cfg(debug_assertions)]
+            egraph[id].assert_unique_leaves();
+        }
+    }
 }

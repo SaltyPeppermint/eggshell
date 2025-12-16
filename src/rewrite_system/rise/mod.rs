@@ -10,17 +10,13 @@ mod shifted;
 
 use egg::{Id, Language, RecExpr, Rewrite};
 
+use crate::sketch::{Sketch, SketchLang};
 use indices::{DBCutoff, DBIndex, DBShift};
 use kind::{Kind, Kindable};
 
 pub use analysis::RiseAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
-
-use crate::{
-    rewrite_system::rise::nat::try_simplify,
-    sketch::{Sketch, SketchLang},
-};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -78,7 +74,7 @@ pub fn sketchify(expr: &RecExpr<Rise>, sketchify_nat_expr: bool) -> Sketch<Rise>
 pub fn canon_nat(expr: &RecExpr<Rise>) -> RecExpr<Rise> {
     fn rec(expr: &RecExpr<Rise>, id: Id, canon_expr: &mut RecExpr<Rise>) -> Id {
         let node = &expr[id];
-        if let Ok(canon_nat_expr) = try_simplify(&node.build_recexpr(|i| expr[i].clone())) {
+        if let Ok(canon_nat_expr) = nat::try_simplify(&node.build_recexpr(|i| expr[i].clone())) {
             add_expr(canon_expr, canon_nat_expr)
         } else {
             let new_node = node

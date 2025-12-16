@@ -1,3 +1,5 @@
+use std::fmt;
+
 use thiserror::Error;
 
 use super::{Kind, Kindable};
@@ -95,8 +97,8 @@ impl std::str::FromStr for DBIndex {
     }
 }
 
-impl std::fmt::Display for DBIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for DBIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Expr(value) => write!(f, "%e{value}"),
             Self::Nat(value) => write!(f, "%n{value}"),
@@ -303,8 +305,8 @@ impl From<u32> for DBCutoff {
     }
 }
 
-impl std::fmt::Display for DBCutoff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for DBCutoff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "({}, {}, {}, {}, {})",

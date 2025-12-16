@@ -1,3 +1,5 @@
+use std::fmt;
+
 use egg::Id;
 use ordered_float::NotNan;
 use thiserror::Error;
@@ -121,8 +123,8 @@ pub enum Lambda {
     Nat2Nat,
 }
 
-impl std::fmt::Display for Lambda {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Lambda {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Lambda::Expr => write!(f, "lam"),
             Lambda::Nat => write!(f, "natLam"),
@@ -169,8 +171,8 @@ pub enum Application {
     Nat2Nat,
 }
 
-impl std::fmt::Display for Application {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Application {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Application::Expr => write!(f, "app"),
             Application::Nat => write!(f, "natApp"),

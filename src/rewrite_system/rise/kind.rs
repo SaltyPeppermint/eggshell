@@ -1,19 +1,12 @@
-use std::fmt::Display;
+use std::fmt;
 
 use egg::Var;
-use serde::{Deserialize, Serialize};
 
 pub trait Kindable {
     fn kind(&self) -> Kind;
 }
 
-impl<T: Kindable> Kindable for &T {
-    fn kind(&self) -> Kind {
-        (*self).kind()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
 pub enum Kind {
     Expr,
     Nat,
@@ -22,8 +15,8 @@ pub enum Kind {
     Nat2Nat,
 }
 
-impl Display for Kind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Kind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Kind::Expr => write!(f, "EXPR"),
             Kind::Nat => write!(f, "NAT"),

@@ -1,10 +1,8 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use crate::rewrite_system::rise::indices::DBShift;
-
 use super::lang::Application;
-use super::{DBIndex, Kind, Kindable, Rise, RiseAnalysis};
+use super::{DBIndex, DBShift, Kind, Kindable, Rise, RiseAnalysis};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()

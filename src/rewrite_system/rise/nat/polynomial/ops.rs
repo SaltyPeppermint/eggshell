@@ -1,5 +1,5 @@
-use core::fmt;
 use std::collections::BTreeMap;
+use std::fmt;
 
 use num_traits::{One, Signed, Zero};
 

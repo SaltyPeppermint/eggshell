@@ -1,8 +1,7 @@
 use egg::RecExpr;
 use num_traits::One;
 
-use super::{Monomial, Polynomial, Ratio, Rise};
-use crate::rewrite_system::rise::DBIndex;
+use super::{DBIndex, Monomial, Polynomial, Ratio, Rise};
 
 // ============================================================================
 // RecExpr Conversions
