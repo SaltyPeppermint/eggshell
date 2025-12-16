@@ -1,10 +1,9 @@
 mod from;
 mod ops;
 
-use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
 
-use super::{NatSolverError, Polynomial, Rise, polynomial};
+use super::{NatSolverError, Polynomial, Ratio, Rise, polynomial};
 
 // ============================================================================
 // RationalFunction
@@ -77,7 +76,7 @@ impl RationalFunction {
     }
 
     /// Get the constant value if this is a constant rational function
-    pub fn as_constant(&self) -> Option<Ratio<i32>> {
+    pub fn as_constant(&self) -> Option<Ratio> {
         if let (Some(n), Some(d)) = (self.numerator.as_constant(), self.denominator.as_constant()) {
             if d.is_zero() { None } else { Some(n / d) }
         } else {
@@ -569,7 +568,7 @@ mod tests {
         // 1/(-x) should normalize to (-1)/x or -x^(-1)
         let rf = RationalFunction::new(
             Polynomial::one(),
-            Polynomial::from_i32(-1) * Polynomial::var(idx(1)),
+            Polynomial::from_i64(-1) * Polynomial::var(idx(1)),
         )
         .unwrap();
 
@@ -600,5 +599,15 @@ mod tests {
         let rf1 = RationalFunction::new(Polynomial::var(idx(1)), denom.clone()).unwrap();
         let rf2 = RationalFunction::new(Polynomial::var(idx(1)), denom).unwrap();
         assert_eq!(rf1, rf2);
+    }
+
+    // ----------
+    // Other
+    // ----------
+
+    #[test]
+    fn n2_only_variable() {
+        let expr: RecExpr<Rise> = "(natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) \"%n2\")))))))".parse().unwrap();
+        let _: RationalFunction = expr.try_into().unwrap();
     }
 }

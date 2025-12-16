@@ -17,6 +17,8 @@ use polynomial::Polynomial;
 pub use applier::{ComputeNat, ComputeNatCheck};
 pub use rational::RationalFunction;
 
+type Ratio = num::rational::Ratio<i64>;
+
 // ============================================================================
 // Helper Functions
 // ============================================================================

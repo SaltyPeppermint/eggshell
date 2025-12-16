@@ -1,8 +1,7 @@
 use egg::RecExpr;
-use num::rational::Ratio;
 use num_traits::One;
 
-use super::{Monomial, Polynomial, Rise};
+use super::{Monomial, Polynomial, Ratio, Rise};
 use crate::rewrite_system::rise::DBIndex;
 
 // ============================================================================
@@ -64,14 +63,14 @@ impl From<Polynomial> for RecExpr<Rise> {
 // ============================================================================
 
 /// Create a `Polynomial` from an integer constant
-impl From<i32> for Polynomial {
-    fn from(n: i32) -> Self {
+impl From<i64> for Polynomial {
+    fn from(n: i64) -> Self {
         Self::new().add_term(n.into(), Monomial::new())
     }
 }
 /// Create a `Polynomial` from an integer constant
-impl From<Ratio<i32>> for Polynomial {
-    fn from(r: Ratio<i32>) -> Self {
+impl From<Ratio> for Polynomial {
+    fn from(r: Ratio) -> Self {
         Self::new().add_term(r, Monomial::new())
     }
 }

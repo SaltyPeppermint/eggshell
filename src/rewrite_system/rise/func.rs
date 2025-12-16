@@ -99,7 +99,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
     }
 }
 
-fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
+fn extracted_int(expr: &RecExpr<Rise>) -> i64 {
     if let Rise::Integer(i) = expr[0.into()] {
         return i;
     }
@@ -110,7 +110,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i32 {
 #[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
-    n: i32,
+    n: i64,
     v_env: HashSet<DBIndex>,
     type_of_id: Id,
 ) -> Option<(RecExpr<Rise>, Id, Id)> {
@@ -249,7 +249,7 @@ fn vec_expr(
     // }
 }
 
-fn vec_ty(expr: &RecExpr<Rise>, n: i32, id: Id) -> Option<RecExpr<Rise>> {
+fn vec_ty(expr: &RecExpr<Rise>, n: i64, id: Id) -> Option<RecExpr<Rise>> {
     match expr[id] {
         Rise::F32 => {
             let mut vec_ty = RecExpr::default();

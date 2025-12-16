@@ -77,8 +77,8 @@ egg::define_language! {
     // "sig" = Sigma([Id; 3]),
     // "phi" = Phi([Id; 3]),
 
-    Integer(i32),
-    Float(NotNan<f32>),
+    Integer(i64),
+    Float(NotNan<f64>),
     // Double(f64),
     // Symbol(Symbol),
   }

@@ -61,6 +61,7 @@ pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
 }
 
 impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
+    #[expect(unused)]
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,

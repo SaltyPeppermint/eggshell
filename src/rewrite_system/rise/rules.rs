@@ -6,7 +6,7 @@ use crate::rewrite_system::rise::kind::Kindable;
 
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
 use super::nat::ComputeNatCheck;
-use super::shifted::{Shifted, ShiftedCheck, shift_mut};
+use super::shifted::{Shifted, shift_mut};
 use super::{DBCutoff, DBIndex, DBShift, Kind, Rise, RiseAnalysis};
 
 pub fn mm_rules() -> Vec<Rewrite<Rise, RiseAnalysis>> {

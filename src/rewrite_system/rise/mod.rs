@@ -17,7 +17,10 @@ pub use analysis::RiseAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
 
-use crate::sketch::{Sketch, SketchLang};
+use crate::{
+    rewrite_system::rise::nat::try_simplify,
+    sketch::{Sketch, SketchLang},
+};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum RiseRuleset {
@@ -45,9 +48,8 @@ fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
     to.root()
 }
 
-#[expect(clippy::missing_panics_doc)]
 #[must_use]
-pub fn sketchify(term: &str, sketchify_nat_expr: bool) -> Sketch<Rise> {
+pub fn sketchify(expr: &RecExpr<Rise>, sketchify_nat_expr: bool) -> Sketch<Rise> {
     fn rec(
         expr: &RecExpr<Rise>,
         id: Id,
@@ -67,10 +69,27 @@ pub fn sketchify(term: &str, sketchify_nat_expr: bool) -> Sketch<Rise> {
             }
         }
     }
-    let expr: RecExpr<Rise> = term.parse().unwrap();
     let mut sketch = RecExpr::default();
-    rec(&expr, expr.root(), sketchify_nat_expr, &mut sketch);
+    rec(expr, expr.root(), sketchify_nat_expr, &mut sketch);
     sketch
+}
+
+#[must_use]
+pub fn canon_nat(expr: &RecExpr<Rise>) -> RecExpr<Rise> {
+    fn rec(expr: &RecExpr<Rise>, id: Id, canon_expr: &mut RecExpr<Rise>) -> Id {
+        let node = &expr[id];
+        if let Ok(canon_nat_expr) = try_simplify(&node.build_recexpr(|i| expr[i].clone())) {
+            add_expr(canon_expr, canon_nat_expr)
+        } else {
+            let new_node = node
+                .clone()
+                .map_children(|c_id| rec(expr, c_id, canon_expr));
+            canon_expr.add(new_node)
+        }
+    }
+    let mut canon_expr = RecExpr::default();
+    rec(expr, expr.root(), &mut canon_expr);
+    canon_expr
 }
 
 // START TERM

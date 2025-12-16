@@ -3,11 +3,10 @@ mod ops;
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
 // use serde::{Deserialize, Serialize};
 
-use super::{Monomial, NatSolverError, Rise};
+use super::{Monomial, NatSolverError, Ratio, Rise};
 use crate::rewrite_system::rise::DBIndex;
 
 // ============================================================================
@@ -21,7 +20,7 @@ use crate::rewrite_system::rise::DBIndex;
 #[derive(Debug, Clone, Default)]
 pub struct Polynomial {
     // Map from monomial to coefficient
-    terms: BTreeMap<Monomial, Ratio<i32>>,
+    terms: BTreeMap<Monomial, Ratio>,
 }
 
 impl Polynomial {
@@ -41,12 +40,12 @@ impl Polynomial {
     }
 
     /// Create a polynomial from a constant integer
-    pub fn from_i32(n: i32) -> Self {
+    pub fn from_i64(n: i64) -> Self {
         n.into()
     }
 
     /// Create a polynomial from a constant ratio
-    pub fn from_ratio(r: Ratio<i32>) -> Self {
+    pub fn from_ratio(r: Ratio) -> Self {
         r.into()
     }
 
@@ -79,7 +78,7 @@ impl Polynomial {
     }
 
     /// Add a term to the polynomial
-    pub fn add_term(mut self, coefficient: Ratio<i32>, monomial: Monomial) -> Self {
+    pub fn add_term(mut self, coefficient: Ratio, monomial: Monomial) -> Self {
         if !coefficient.is_zero() {
             *self.terms.entry(monomial).or_insert(Ratio::zero()) += coefficient;
         }
@@ -126,7 +125,7 @@ impl Polynomial {
     }
 
     /// Get the constant value if this is a constant polynomial
-    pub fn as_constant(&self) -> Option<Ratio<i32>> {
+    pub fn as_constant(&self) -> Option<Ratio> {
         self.is_constant().then(|| {
             self.terms
                 .iter()
@@ -137,7 +136,7 @@ impl Polynomial {
     }
 
     /// Get terms iterator
-    fn terms(&self) -> impl Iterator<Item = (&Monomial, &Ratio<i32>)> {
+    fn terms(&self) -> impl Iterator<Item = (&Monomial, &Ratio)> {
         self.terms.iter().filter(|(_, c)| !c.is_zero())
     }
 
@@ -146,7 +145,7 @@ impl Polynomial {
         self.terms().count()
     }
 
-    pub fn sorted_monomials(&self) -> Vec<(&Monomial, &Ratio<i32>)> {
+    pub fn sorted_monomials(&self) -> Vec<(&Monomial, &Ratio)> {
         // Sort terms: first by total degree (descending), then lexicographically
         let mut sorted_terms: Vec<_> = self
             .terms
@@ -155,8 +154,8 @@ impl Polynomial {
             .collect();
         sorted_terms.sort_by(|(m1, _), (m2, _)| {
             // Calculate total degree (sum of all exponents, can be negative)
-            let deg1: i32 = m1.variables().values().sum();
-            let deg2: i32 = m2.variables().values().sum();
+            let deg1 = m1.variables().values().sum::<i64>();
+            let deg2: i64 = m2.variables().values().sum::<i64>();
 
             // First compare by total degree (descending)
             match deg2.cmp(&deg1) {
@@ -171,8 +170,8 @@ impl Polynomial {
     }
 
     /// Compute GCD of all coefficients in a polynomial
-    pub fn coefficient_gcd(&self) -> Ratio<i32> {
-        let mut result: Option<Ratio<i32>> = None;
+    pub fn coefficient_gcd(&self) -> Ratio {
+        let mut result: Option<Ratio> = None;
         for (_, coeff) in self.terms() {
             let abs_coeff = coeff.abs();
             result = Some(match result {
@@ -184,7 +183,7 @@ impl Polynomial {
     }
 
     /// Divide all coefficients in a polynomial by a constant
-    pub fn divide_coefficients(&self, divisor: Ratio<i32>) -> Self {
+    pub fn divide_coefficients(&self, divisor: Ratio) -> Self {
         let mut result = Self::new();
         for (mon, coeff) in self.terms() {
             result = result.add_term(*coeff / divisor, mon.clone());
@@ -273,7 +272,7 @@ impl Polynomial {
     }
 
     /// Compute the content of a polynomial (GCD of all coefficients)
-    fn content(&self, _vars: &[DBIndex]) -> Ratio<i32> {
+    fn content(&self, _vars: &[DBIndex]) -> Ratio {
         self.coefficient_gcd()
     }
 
@@ -818,7 +817,7 @@ pub fn collect_variables(polys: &[&Polynomial]) -> Vec<DBIndex> {
 }
 
 /// Compute GCD of two rational numbers
-pub fn gcd_ratio(a: Ratio<i32>, b: Ratio<i32>) -> Ratio<i32> {
+pub fn gcd_ratio(a: Ratio, b: Ratio) -> Ratio {
     if b.is_zero() {
         return a.abs();
     }
@@ -868,8 +867,8 @@ mod tests {
         Polynomial::var(idx(3))
     }
 
-    fn constant(n: i32) -> Polynomial {
-        Polynomial::from_i32(n)
+    fn constant(n: i64) -> Polynomial {
+        Polynomial::from_i64(n)
     }
 
     #[test]

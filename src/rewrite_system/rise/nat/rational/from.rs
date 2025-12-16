@@ -1,9 +1,7 @@
 use egg::{Id, RecExpr};
-use num::rational::Ratio;
 
-use super::{NatSolverError, Polynomial, RationalFunction, Rise};
-use crate::rewrite_system::rise::kind::{Kind, Kindable};
-use crate::rewrite_system::rise::{DBIndex, add_expr};
+use super::{NatSolverError, Polynomial, Ratio, RationalFunction, Rise};
+use crate::rewrite_system::rise::{DBIndex, Kind, Kindable, add_expr};
 
 // ============================================================================
 // Conversions: Polynomial <-> RationalFunction
@@ -116,7 +114,7 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
                     let base_rf = rec(expr, *base)?;
                     // Exponent should be an integer
                     match &expr[*exp] {
-                        Rise::Integer(n) => base_rf.pow(*n),
+                        Rise::Integer(n) => base_rf.pow((*n).try_into().unwrap()),
                         node => Err(NatSolverError::NonIntegerExponent(node.clone())),
                     }
                 }
@@ -140,15 +138,15 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
 // ============================================================================
 
 /// Create a `RationalFunction` from an integer constant
-impl From<i32> for RationalFunction {
-    fn from(n: i32) -> RationalFunction {
-        Polynomial::from_i32(n).into()
+impl From<i64> for RationalFunction {
+    fn from(n: i64) -> RationalFunction {
+        Polynomial::from_i64(n).into()
     }
 }
 
 /// Create a `RationalFunction` from an integer constant
-impl From<Ratio<i32>> for RationalFunction {
-    fn from(r: Ratio<i32>) -> Self {
+impl From<Ratio> for RationalFunction {
+    fn from(r: Ratio) -> Self {
         Polynomial::from_ratio(r).into()
     }
 }

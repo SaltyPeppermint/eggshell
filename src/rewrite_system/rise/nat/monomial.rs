@@ -10,7 +10,7 @@ use crate::rewrite_system::rise::DBIndex;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Monomial {
     // Map from dbindex to exponent (can be negative for rational expressions)
-    variables: BTreeMap<DBIndex, i32>,
+    variables: BTreeMap<DBIndex, i64>,
 }
 
 impl Monomial {
@@ -18,11 +18,11 @@ impl Monomial {
         Self::default()
     }
 
-    pub fn variables(&self) -> &BTreeMap<DBIndex, i32> {
+    pub fn variables(&self) -> &BTreeMap<DBIndex, i64> {
         &self.variables
     }
 
-    pub fn with_var(mut self, dbindex: DBIndex, exponent: i32) -> Self {
+    pub fn with_var(mut self, dbindex: DBIndex, exponent: i64) -> Self {
         if exponent != 0 {
             self.variables.insert(dbindex, exponent);
         }

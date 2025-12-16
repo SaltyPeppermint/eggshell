@@ -1,10 +1,9 @@
 use core::fmt;
 use std::collections::BTreeMap;
 
-use num::rational::Ratio;
 use num_traits::{One, Signed, Zero};
 
-use super::{Monomial, Polynomial};
+use super::{Monomial, Polynomial, Ratio};
 
 // ============================================================================
 // Polynomial Arithmetic

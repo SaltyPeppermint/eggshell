@@ -1,4 +1,4 @@
-use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
+use egg::{Analysis, DidMerge, EGraph, Language, RecExpr};
 use hashbrown::HashSet;
 
 use super::nat::try_simplify;
@@ -47,28 +47,29 @@ impl Analysis<Rise> for RiseAnalysis {
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
         let before_len = to.free.len();
         to.free.extend(from.free);
-        let free_merge = DidMerge(before_len != to.free.len(), true);
+        let free_merge = before_len != to.free.len();
 
         let beta_merge = if !from.beta_extract.is_empty()
             && (to.beta_extract.is_empty() || to.beta_extract.len() > from.beta_extract.len())
         {
             to.beta_extract = from.beta_extract;
-            DidMerge(true, true)
+            true
         } else {
-            DidMerge(false, true) // TODO: more precise second bool
+            false
         };
 
         // let nat_merge =
         //     egg::merge_option(&mut to.simple_nat, from.simple_nat, |to_nat, from_nat| {
         //         if to_nat.len() > from_nat.len() {
         //             *to_nat = from_nat;
-        //             DidMerge(true, true)
+        //             true
         //         } else {
-        //             DidMerge(false, true)
+        //             false
         //         }
         //     });
 
-        free_merge | beta_merge // | nat_merge
+        // TODO: more precise second bool
+        DidMerge(free_merge || beta_merge, true)
     }
 
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
@@ -100,7 +101,8 @@ impl Analysis<Rise> for RiseAnalysis {
             (RecExpr::default(), None)
         } else {
             let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
-            let simple_nat = try_simplify(&expr).ok();
+            let simple_nat = enode.is_nat().then(|| try_simplify(&expr).ok()).flatten();
+
             (expr, simple_nat)
         };
 
