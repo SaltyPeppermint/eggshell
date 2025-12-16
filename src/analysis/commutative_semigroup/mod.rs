@@ -141,7 +141,6 @@ pub trait Counter:
     + Clone
     + Send
     + Sync
-    + Debug
     + NumRef
     + NumAssignRef
     + for<'x> Sum<&'x Self>
@@ -158,7 +157,6 @@ impl<
         + Clone
         + Send
         + Sync
-        + Debug
         + NumRef
         + NumAssignRef
         + for<'x> Sum<&'x Self>
