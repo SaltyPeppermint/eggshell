@@ -58,7 +58,7 @@ impl Analysis<HalideLang> for ConstantFold {
         }
     }
 
-    fn make(egraph: &mut EGraph, enode: &HalideLang) -> Self::Data {
+    fn make(egraph: &mut EGraph, enode: &HalideLang, _: Id) -> Self::Data {
         let xi = |i: &Id| egraph[*i].data.map(|d| i64::try_from(d).unwrap());
         let xb = |i: &Id| egraph[*i].data.map(|d| bool::try_from(d).unwrap());
         // let tv = |i: &Id| egraph[*i].data.map(|d: HalideData| d.as_bool());

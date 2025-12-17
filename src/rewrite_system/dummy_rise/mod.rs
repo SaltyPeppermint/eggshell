@@ -52,7 +52,7 @@ impl Analysis<DummyRiseLang> for DummyRiseAnalysis {
         DidMerge(did_change, true) // TODO: more precise second bool
     }
 
-    fn make(egraph: &mut EGraph, enode: &DummyRiseLang) -> Data {
+    fn make(egraph: &mut EGraph, enode: &DummyRiseLang, _: Id) -> Data {
         let extend = |free: &mut HashSet<Id>, i: &Id| {
             free.extend(&egraph[*i].data.free);
         };
