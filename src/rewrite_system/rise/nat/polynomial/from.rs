@@ -22,14 +22,22 @@ impl From<&Polynomial> for RecExpr<Rise> {
 
                 let term_id = if monomial.is_constant() {
                     // Handle constant
-                    expr.add(Rise::Integer(*coeff.numer()))
+                    let numer_id = expr.add(Rise::Integer(*coeff.numer()));
+                    if coeff.is_integer() {
+                        // Integer constant (denom == 1)
+                        numer_id
+                    } else {
+                        // Fraction constant (numer/denom)
+                        let denom_id = expr.add(Rise::Integer(*coeff.denom()));
+                        expr.add(Rise::NatDiv([numer_id, denom_id]))
+                    }
                 } else {
                     // Get the monomial expression
                     let monomial_id = monomial.append_to_expr(&mut expr);
                     if coeff.is_one() {
                         monomial_id
                     } else if coeff.is_integer() {
-                        // Integer coefficient
+                        // Integer coefficient (denom == 1)
                         let coeff_id = expr.add(Rise::Integer(*coeff.numer()));
                         expr.add(Rise::NatMul([coeff_id, monomial_id]))
                     } else {

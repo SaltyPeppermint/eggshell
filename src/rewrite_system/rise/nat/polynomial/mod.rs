@@ -154,7 +154,7 @@ impl Polynomial {
         sorted_terms.sort_by(|(m1, _), (m2, _)| {
             // Calculate total degree (sum of all exponents, can be negative)
             let deg1 = m1.variables().values().sum::<i64>();
-            let deg2: i64 = m2.variables().values().sum::<i64>();
+            let deg2 = m2.variables().values().sum::<i64>();
 
             // First compare by total degree (descending)
             match deg2.cmp(&deg1) {

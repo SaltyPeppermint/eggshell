@@ -610,4 +610,14 @@ mod tests {
         let expr: RecExpr<Rise> = "(natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) (natMul (natPow 32 -1) \"%n2\")))))))".parse().unwrap();
         let _: RationalFunction = expr.try_into().unwrap();
     }
+
+    #[test]
+    fn natpow4() {
+        let rise_expr: RecExpr<Rise> = "(natPow 4 -1)".parse().unwrap();
+        let rf1 = RationalFunction::new(1.into(), 4.into()).unwrap();
+        let rf2: RationalFunction = rise_expr.try_into().unwrap();
+        assert_eq!(rf1, rf2);
+        let expr1: RecExpr<Rise> = rf1.into();
+        assert_eq!(expr1.to_string(), "(natDiv 1 4)");
+    }
 }
