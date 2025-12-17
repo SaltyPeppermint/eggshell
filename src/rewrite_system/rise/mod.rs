@@ -45,28 +45,28 @@ fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
 }
 
 #[must_use]
-pub fn sketchify(expr: &RecExpr<Rise>, sketchify_nat_expr: bool) -> Sketch<Rise> {
-    fn rec(
+pub fn sketchify<F: Fn(&Rise) -> bool>(expr: &RecExpr<Rise>, also_sketchify: &F) -> Sketch<Rise> {
+    fn rec<F: Fn(&Rise) -> bool>(
         expr: &RecExpr<Rise>,
         id: Id,
-        sketchify_nat_expr: bool,
+        also_sketchify: &F,
         sketch: &mut Sketch<Rise>,
     ) -> Id {
         match &expr[id] {
             Rise::Var(_) => sketch.add(SketchLang::Any),
-            other if other.is_nat() && sketchify_nat_expr => sketch.add(SketchLang::Any),
+            other if also_sketchify(other) => sketch.add(SketchLang::Any),
             other => {
                 let new_node = SketchLang::Node(
                     other
                         .clone()
-                        .map_children(|c_id| rec(expr, c_id, sketchify_nat_expr, sketch)),
+                        .map_children(|c_id| rec(expr, c_id, also_sketchify, sketch)),
                 );
                 sketch.add(new_node)
             }
         }
     }
     let mut sketch = RecExpr::default();
-    rec(expr, expr.root(), sketchify_nat_expr, &mut sketch);
+    rec(expr, expr.root(), also_sketchify, &mut sketch);
     sketch
 }
 

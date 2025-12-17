@@ -27,8 +27,8 @@ where
     N: Analysis<L> + Default,
 {
     move |r: &mut Runner<L, N>| {
-        if let Some(ids) = r.egraph.lookup_expr_ids(&target)
-            && ids.iter().any(|id| r.roots.contains(id))
+        if let Some(id) = r.egraph.lookup_expr(&target)
+            && r.roots.contains(&r.egraph.find(id))
         {
             return Err("Target found".into());
         }

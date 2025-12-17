@@ -124,12 +124,12 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
         }
 
         // Parse from the root (last node in the RecExpr)
+        // TODO this looks sketchy
         if expr.is_empty() {
             return Ok(Self::zero());
         }
 
-        let root_id = Id::from(expr.as_ref().len() - 1);
-        rec(expr, root_id)?.simplified()
+        rec(expr, expr.root())?.simplified()
     }
 }
 

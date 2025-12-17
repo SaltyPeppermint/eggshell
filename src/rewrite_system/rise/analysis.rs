@@ -34,11 +34,11 @@ impl RiseAnalysis {
     }
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct AnalysisData {
     pub free: HashSet<DBIndex>,
     pub beta_extract: RecExpr<Rise>,
-    pub simple_nat: Option<RecExpr<Rise>>,
+    pub canon_nat_expr: RecExpr<Rise>,
 }
 
 impl Analysis<Rise> for RiseAnalysis {
@@ -47,9 +47,9 @@ impl Analysis<Rise> for RiseAnalysis {
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
         let before_len = to.free.len();
         to.free.extend(from.free);
-        let free_merge = before_len != to.free.len();
+        let free_changed = before_len != to.free.len();
 
-        let beta_merge = if !from.beta_extract.is_empty()
+        let beta_changed = if !from.beta_extract.is_empty()
             && (to.beta_extract.is_empty() || to.beta_extract.len() > from.beta_extract.len())
         {
             to.beta_extract = from.beta_extract;
@@ -58,21 +58,20 @@ impl Analysis<Rise> for RiseAnalysis {
             false
         };
 
-        // let nat_merge =
-        //     egg::merge_option(&mut to.simple_nat, from.simple_nat, |to_nat, from_nat| {
-        //         if to_nat.len() > from_nat.len() {
-        //             *to_nat = from_nat;
-        //             true
-        //         } else {
-        //             false
-        //         }
-        //     });
+        let nat_changed = if !from.canon_nat_expr.is_empty()
+            && (to.canon_nat_expr.is_empty() || to.canon_nat_expr.len() > from.canon_nat_expr.len())
+        {
+            to.canon_nat_expr = from.canon_nat_expr;
+            true
+        } else {
+            false
+        };
 
         // TODO: more precise second bool
-        DidMerge(free_merge || beta_merge, true)
+        DidMerge(free_changed || beta_changed || nat_changed, true)
     }
 
-    fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise) -> AnalysisData {
+    fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
             Rise::Lambda(l, e) => egraph[*e]
@@ -97,30 +96,40 @@ impl Analysis<Rise> for RiseAnalysis {
         // } else {
         //     enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
         // };
-        let (beta_extract, simple_nat) = if empty {
-            (RecExpr::default(), None)
+        let beta_extract = if empty {
+            RecExpr::default()
         } else {
-            let expr = enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref());
-            let simple_nat = enode.is_nat().then(|| try_simplify(&expr).ok()).flatten();
+            enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
+        };
 
-            (expr, simple_nat)
+        let canon_nat_expr = if beta_extract.is_empty() {
+            RecExpr::default()
+        } else {
+            try_simplify(&beta_extract).unwrap_or_default()
         };
 
         AnalysisData {
             free,
             beta_extract,
-            simple_nat,
+            canon_nat_expr,
         }
     }
 
     fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
-        if let Some(expr) = egraph[id].data.simple_nat.clone() {
-            let added = egraph.add_expr(&expr);
-            egraph.union(id, added);
+        if !egraph[id].data.canon_nat_expr.is_empty()
+            && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
+        {
+            println!(
+                "Adding {} to {}",
+                egraph[id].data.canon_nat_expr, egraph[id].data.beta_extract
+            );
 
-            println!("Adding {expr} to {}", egraph[id].data.beta_extract);
-            // to not prune, comment this out
-            // egraph[id].nodes.retain(egg::Language::is_leaf);
+            // Remove all other nodes, only the canonical one may remain. This currently breaks some egraph invariant
+            egraph[id].nodes.clear();
+            // Add the canonical expr
+            let canon_nat = &egraph[id].data.canon_nat_expr;
+            let added = egraph.add_expr(&canon_nat.clone());
+            egraph.union(id, added);
 
             // #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
