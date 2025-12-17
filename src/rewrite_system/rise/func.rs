@@ -2,19 +2,19 @@ use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Sy
 use hashbrown::HashSet;
 
 use super::lang::Application;
-use super::{DBIndex, DBShift, Kind, Kindable, Rise, RiseAnalysis};
+use super::{DBIndex, DBShift, FreeBetaNatAnalysis, Kind, Kindable, Rise};
 
-pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
+pub fn pat(pat: &str) -> impl Applier<Rise, FreeBetaNatAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
 }
 
-pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
+pub struct NotFreeIn<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     index: DBIndex,
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> NotFreeIn<A> {
     pub fn new(var_str: &str, index: u32, applier: A) -> Self {
         let var: Var = var_str.parse().unwrap();
         let kind = var.kind();
@@ -26,10 +26,10 @@ impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for NotFreeIn<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
@@ -46,14 +46,14 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A
     }
 }
 
-pub struct VectorizeScalarFun<A: Applier<Rise, RiseAnalysis>> {
+pub struct VectorizeScalarFun<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     size_var: Var,
     vectorized_var: Var,
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalarFun<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> VectorizeScalarFun<A> {
     pub fn new(var: &str, size_var: &str, vectorized_var: &str, applier: A) -> Self {
         VectorizeScalarFun {
             var: var.parse().unwrap(),
@@ -64,10 +64,12 @@ impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalarFun<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeScalarFun<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis>
+    for VectorizeScalarFun<A>
+{
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,

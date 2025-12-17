@@ -1,7 +1,7 @@
 use egg::{RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rewrite_system::rise::{self, Rise, RiseRuleset};
+use eggshell::rewrite_system::rise::{self, Rise, Ruleset};
 use eggshell::rewrite_system::rise::{BASELINE_GOAL, MM};
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
         .with_iter_limit(3)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(baseline_goal.clone()))
-        .run(&rise::rules(RiseRuleset::MM));
+        .run(&rise::rules(Ruleset::All));
 
     let root_mm = runner.egraph.find(runner.roots[0]);
 

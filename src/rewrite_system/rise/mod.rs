@@ -8,27 +8,16 @@ mod pp;
 mod rules;
 mod shifted;
 
-use egg::{Id, Language, RecExpr, Rewrite};
+use egg::{Id, Language, RecExpr};
 
 use crate::sketch::{Sketch, SketchLang};
 use indices::{DBCutoff, DBIndex, DBShift};
 use kind::{Kind, Kindable};
 
-pub use analysis::RiseAnalysis;
+pub use analysis::FreeBetaNatAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
-
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub enum RiseRuleset {
-    MM,
-}
-
-#[must_use]
-pub fn rules(ruleset: RiseRuleset) -> Vec<Rewrite<Rise, RiseAnalysis>> {
-    match ruleset {
-        RiseRuleset::MM => rules::mm_rules(),
-    }
-}
+pub use rules::{Ruleset, rules};
 
 fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
     rec_expr[id]

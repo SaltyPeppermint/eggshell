@@ -1,8 +1,8 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{DBCutoff, DBShift, Kindable, Rise, RiseAnalysis};
+use super::{DBCutoff, DBShift, Kindable, Rise, FreeBetaNatAnalysis};
 
-pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
+pub struct Shifted<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     new_var: Var,
     shift: DBShift,
@@ -10,7 +10,7 @@ pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Shifted<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
@@ -28,10 +28,10 @@ impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for Shifted<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
@@ -52,7 +52,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
     }
 }
 
-pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
+pub struct ShiftedCheck<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     new_var: Var,
     shift: DBShift,
@@ -60,7 +60,7 @@ pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> ShiftedCheck<A> {
     #[expect(unused)]
     pub fn new(
         var_str: &str,
@@ -79,10 +79,10 @@ impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedCheck<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for ShiftedCheck<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,

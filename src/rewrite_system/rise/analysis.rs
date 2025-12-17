@@ -5,11 +5,11 @@ use super::nat::try_simplify;
 use super::{DBIndex, Kindable, Rise};
 
 #[derive(Default, Debug)]
-pub struct RiseAnalysis {
+pub struct FreeBetaNatAnalysis {
     nat_eq_cache: EGraph<Rise, ()>,
 }
 
-impl RiseAnalysis {
+impl FreeBetaNatAnalysis {
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -41,7 +41,7 @@ pub struct AnalysisData {
     pub canon_nat_expr: RecExpr<Rise>,
 }
 
-impl Analysis<Rise> for RiseAnalysis {
+impl Analysis<Rise> for FreeBetaNatAnalysis {
     type Data = AnalysisData;
 
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
@@ -71,7 +71,7 @@ impl Analysis<Rise> for RiseAnalysis {
         DidMerge(free_changed || beta_changed || nat_changed, true)
     }
 
-    fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
+    fn make(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
             Rise::Lambda(l, e) => egraph[*e]
@@ -115,7 +115,7 @@ impl Analysis<Rise> for RiseAnalysis {
         }
     }
 
-    fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
+    fn modify(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, id: Id) {
         if !egraph[id].data.canon_nat_expr.is_empty()
             && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
         {

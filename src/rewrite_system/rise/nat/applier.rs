@@ -1,14 +1,14 @@
 use egg::{Applier, EGraph, Id, Pattern, PatternAst, Searcher, Subst, Symbol, Var};
 
-use super::{Rise, RiseAnalysis};
+use super::{Rise, FreeBetaNatAnalysis};
 
-pub struct ComputeNat<A: Applier<Rise, RiseAnalysis>> {
+pub struct ComputeNat<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> ComputeNat<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> ComputeNat<A> {
     #[expect(dead_code)]
     pub fn new(var: &str, nat_pattern: &str, applier: A) -> Self {
         ComputeNat {
@@ -19,10 +19,10 @@ impl<A: Applier<Rise, RiseAnalysis>> ComputeNat<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for ComputeNat<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
@@ -44,13 +44,13 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNat<
     }
 }
 
-pub struct ComputeNatCheck<A: Applier<Rise, RiseAnalysis>> {
+pub struct ComputeNatCheck<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     nat_pattern: Pattern<Rise>,
     applier: A,
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> ComputeNatCheck<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> ComputeNatCheck<A> {
     pub fn new(var: &str, nat_pattern: &str, applier: A) -> Self {
         ComputeNatCheck {
             var: var.parse().unwrap(),
@@ -60,10 +60,10 @@ impl<A: Applier<Rise, RiseAnalysis>> ComputeNatCheck<A> {
     }
 }
 
-impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatCheck<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for ComputeNatCheck<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,

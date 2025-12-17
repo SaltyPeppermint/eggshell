@@ -8,7 +8,7 @@ use std::num::TryFromIntError;
 use egg::{EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Subst};
 use thiserror::Error;
 
-use super::{Rise, RiseAnalysis};
+use super::{Rise, FreeBetaNatAnalysis};
 use monomial::Monomial;
 use polynomial::Polynomial;
 
@@ -29,7 +29,7 @@ pub fn try_simplify(nat_expr: &RecExpr<Rise>) -> Result<RecExpr<Rise>, NatSolver
 }
 
 fn check_equivalence<'a, 'b: 'a>(
-    cache: &'b mut RiseAnalysis,
+    cache: &'b mut FreeBetaNatAnalysis,
     lhs: &RecExpr<Rise>,
     rhs: &RecExpr<Rise>,
 ) -> bool {
@@ -48,7 +48,7 @@ fn check_equivalence<'a, 'b: 'a>(
 }
 
 fn extract_small(
-    egraph: &EGraph<Rise, RiseAnalysis>,
+    egraph: &EGraph<Rise, FreeBetaNatAnalysis>,
     pattern: &Pattern<Rise>,
     subst: &Subst,
 ) -> RecExpr<Rise> {
@@ -56,7 +56,7 @@ fn extract_small(
         ast: &PatternAst<Rise>,
         id: Id,
         subst: &Subst,
-        egraph: &EGraph<Rise, RiseAnalysis>,
+        egraph: &EGraph<Rise, FreeBetaNatAnalysis>,
     ) -> RecExpr<Rise> {
         match &ast[id] {
             ENodeOrVar::Var(w) => egraph[subst[*w]].data.beta_extract.clone(),

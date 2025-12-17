@@ -3,7 +3,7 @@ use std::time::Duration;
 use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rewrite_system::rise::{self, BLOCKING_GOAL, MM, Rise, RiseRuleset, SPLIT_GUIDE};
+use eggshell::rewrite_system::rise::{self, BLOCKING_GOAL, MM, Rise, Ruleset, SPLIT_GUIDE};
 use eggshell::sketch;
 use eggshell::utils;
 
@@ -14,13 +14,13 @@ fn main() {
 
     let runner_1 = Runner::default()
         .with_expr(&mm)
-        .with_iter_limit(6)
+        // .with_iter_limit(6)
         .with_time_limit(Duration::from_secs(60))
         .with_node_limit(1_000_000)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(split_guide.clone()))
         .with_hook(hooks::printer_hook)
-        .run(&rise::rules(RiseRuleset::MM));
+        .run(&rise::rules(Ruleset::Split));
 
     println!("{}", runner_1.report());
     assert_eq!(
@@ -44,20 +44,18 @@ fn main() {
 
     let runner_2 = Runner::default()
         .with_expr(&split_guide)
-        .with_iter_limit(6)
+        // .with_iter_limit(10)
         .with_time_limit(Duration::from_secs(60))
         .with_node_limit(1_000_000)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(blocking_goal.clone()))
         .with_hook(hooks::printer_hook)
-        .run(&rise::rules(RiseRuleset::MM));
+        .run(&rise::rules(Ruleset::Reorder));
 
     println!("{}", runner_2.report());
 
     let root_guide = runner_2.egraph.find(runner_2.roots[0]);
-    let blocking_goal_sketch = rise::sketchify(&blocking_goal, &|n| {
-        matches!(n, Rise::NatDiv(_) | Rise::NatPow(_))
-    });
+    let blocking_goal_sketch = rise::sketchify(&blocking_goal, &|n| matches!(n, Rise::NatMul(_)));
     let sketch_extracted_blocking_goal = rise::canon_nat(
         &sketch::eclass_extract(&blocking_goal_sketch, AstSize, &runner_2.egraph, root_guide)
             .unwrap()
