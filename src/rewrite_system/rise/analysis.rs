@@ -119,12 +119,7 @@ impl Analysis<Rise> for RiseAnalysis {
         if !egraph[id].data.canon_nat_expr.is_empty()
             && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
         {
-            println!(
-                "Adding {} to {}",
-                egraph[id].data.canon_nat_expr, egraph[id].data.beta_extract
-            );
-
-            // Remove all other nodes, only the canonical one may remain. This currently breaks some egraph invariant
+            // Remove all other nodes, only the canonical one may remain.
             egraph[id].nodes.clear();
             // Add the canonical expr
             let canon_nat = &egraph[id].data.canon_nat_expr;
