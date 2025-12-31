@@ -88,11 +88,9 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis>
             let mut new_subst = subst.clone();
             let added_expr_id = egraph.add_expr(&new_expr);
             new_subst.insert(self.vectorized_var, added_expr_id);
-            let mut ids =
-                self.applier
-                    .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
-            ids.push(added_expr_id);
-            ids
+
+            self.applier
+                .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name)
         } else {
             Vec::new()
         }

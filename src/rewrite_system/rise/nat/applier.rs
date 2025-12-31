@@ -1,6 +1,6 @@
 use egg::{Applier, EGraph, Id, Pattern, PatternAst, Searcher, Subst, Symbol, Var};
 
-use super::{Rise, FreeBetaNatAnalysis};
+use super::{FreeBetaNatAnalysis, Rise};
 
 pub struct ComputeNat<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
@@ -36,11 +36,9 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&simplified_nat);
         new_subst.insert(self.var, added_expr_id);
-        let mut ids = self
-            .applier
-            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
-        ids.push(added_expr_id);
-        ids
+
+        self.applier
+            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name)
     }
 }
 
@@ -60,7 +58,9 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> ComputeNatCheck<A> {
     }
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for ComputeNatCheck<A> {
+impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis>
+    for ComputeNatCheck<A>
+{
     fn apply_one(
         &self,
         egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,

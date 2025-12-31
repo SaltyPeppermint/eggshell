@@ -99,7 +99,7 @@ impl Analysis<Rise> for FreeBetaNatAnalysis {
         let beta_extract = if empty {
             RecExpr::default()
         } else {
-            enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
+            enode.join_recexprs(|id| &egraph[id].data.beta_extract)
         };
 
         let canon_nat_expr = if beta_extract.is_empty() {
@@ -119,14 +119,12 @@ impl Analysis<Rise> for FreeBetaNatAnalysis {
         if !egraph[id].data.canon_nat_expr.is_empty()
             && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
         {
-            // Remove all other nodes, only the canonical one may remain.
-            egraph[id].nodes.clear();
             // Add the canonical expr
             let canon_nat = &egraph[id].data.canon_nat_expr;
             let added = egraph.add_expr(&canon_nat.clone());
             egraph.union(id, added);
 
-            // #[cfg(debug_assertions)]
+            #[cfg(debug_assertions)]
             egraph[id].assert_unique_leaves();
         }
     }

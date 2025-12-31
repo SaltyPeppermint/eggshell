@@ -1,6 +1,6 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{DBCutoff, DBShift, Kindable, Rise, FreeBetaNatAnalysis};
+use super::{DBCutoff, DBShift, FreeBetaNatAnalysis, Kindable, Rise};
 
 pub struct Shifted<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
@@ -44,11 +44,8 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
         let added_expr_id = egraph.add_expr(&shifted);
         new_subst.insert(self.new_var, added_expr_id);
 
-        let mut ids = self
-            .applier
-            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name);
-        ids.push(added_expr_id);
-        ids
+        self.applier
+            .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name)
     }
 }
 

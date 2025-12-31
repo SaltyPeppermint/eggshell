@@ -14,45 +14,30 @@ fn main() {
 
     let runner_1 = Runner::default()
         .with_expr(&mm)
-        // .with_iter_limit(6)
         .with_time_limit(Duration::from_secs(60))
-        .with_node_limit(1_000_000)
+        .with_node_limit(10_000_000)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(split_guide.clone()))
-        .with_hook(hooks::printer_hook)
+        // .with_hook(hooks::printer_hook)
         .run(&rise::rules(Ruleset::Split));
 
-    println!("{}", runner_1.report());
+    // println!("{}\nSPLIT STEP DONE DONE\n-----------\n", runner_1.report());
     assert_eq!(
         runner_1.roots[0],
         runner_1.egraph.lookup_expr(&split_guide).unwrap()
     );
 
-    // let split_guide_sketch = rise::sketchify(&split_guide, &|_| false);
-    // let sketch_extracted_split_guide =
-    //     &sketch::eclass_extract(&split_guide_sketch, AstSize, &runner_1.egraph, root_mm)
-    //         .unwrap()
-    //         .1;
-
-    // // assert!(
-    // //     utils::find_diff(
-    // //         &rise::canon_nat(sketch_extracted_split_guide),
-    // //         &rise::canon_nat(&split_guide)
-    // //     )
-    // //     .is_none()
-    // // );
-
     let runner_2 = Runner::default()
         .with_expr(&split_guide)
-        // .with_iter_limit(10)
         .with_time_limit(Duration::from_secs(60))
-        .with_node_limit(1_000_000)
+        .with_node_limit(10_000_000)
+        .with_iter_limit(11)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(blocking_goal.clone()))
         .with_hook(hooks::printer_hook)
         .run(&rise::rules(Ruleset::Reorder));
 
-    println!("{}", runner_2.report());
+    println!("{}\nREORDER STEP DONE\n-----------\n", runner_2.report());
 
     let root_guide = runner_2.egraph.find(runner_2.roots[0]);
     let blocking_goal_sketch = rise::sketchify(&blocking_goal, &|n| matches!(n, Rise::NatMul(_)));
@@ -62,8 +47,8 @@ fn main() {
             .1,
     );
     assert!(utils::find_diff(&sketch_extracted_blocking_goal, &blocking_goal).is_none());
-    // assert_eq!(
-    //     root_guide,
-    //     runner_2.egraph.lookup_expr(&blocking_goal).unwrap()
-    // );
+    assert_eq!(
+        runner_2.roots[0],
+        runner_2.egraph.lookup_expr(&blocking_goal).unwrap()
+    );
 }
