@@ -8,7 +8,7 @@ use std::num::TryFromIntError;
 use egg::{EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Subst};
 use thiserror::Error;
 
-use super::{Rise, FreeBetaNatAnalysis};
+use super::{FreeBetaNatAnalysis, Rise};
 use monomial::Monomial;
 use polynomial::Polynomial;
 

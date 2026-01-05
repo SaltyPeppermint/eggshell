@@ -1,7 +1,9 @@
 use egg::{Id, RecExpr};
 
 use super::{NatSolverError, Polynomial, Ratio, RationalFunction, Rise};
-use crate::rewrite_system::rise::{DBIndex, Kind, Kindable, add_expr};
+use crate::rise::add_expr;
+use crate::rise::db::Index;
+use crate::rise::kind::{Kind, Kindable};
 
 // ============================================================================
 // Conversions: Polynomial <-> RationalFunction
@@ -152,8 +154,8 @@ impl From<Ratio> for RationalFunction {
 }
 
 /// Create a `RationalFunction` from with a single variable
-impl From<DBIndex> for RationalFunction {
-    fn from(index: DBIndex) -> Self {
+impl From<Index> for RationalFunction {
+    fn from(index: Index) -> Self {
         (Polynomial::var(index)).into()
     }
 }

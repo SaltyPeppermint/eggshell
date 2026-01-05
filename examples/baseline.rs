@@ -1,8 +1,7 @@
 use egg::{RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rewrite_system::rise::{self, Rise, Ruleset};
-use eggshell::rewrite_system::rise::{BASELINE_GOAL, MM};
+use eggshell::rise::{self, BASELINE_GOAL, MM, Rise, Ruleset};
 
 fn main() {
     let mm: RecExpr<Rise> = MM.parse().unwrap();

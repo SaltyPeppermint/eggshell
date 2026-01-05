@@ -208,11 +208,12 @@ mod tests {
     use super::super::Monomial;
     use super::*;
 
-    use crate::rewrite_system::rise::{DBIndex, Kind};
+    use crate::rise::db::Index;
+    use crate::rise::kind::Kind;
 
     // Helper to create an Index
-    fn idx(n: u32) -> DBIndex {
-        DBIndex::new(Kind::Nat, n)
+    fn idx(n: u32) -> Index {
+        Index::new(Kind::Nat, n)
     }
 
     // -------------------------------------

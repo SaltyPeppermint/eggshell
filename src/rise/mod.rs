@@ -1,6 +1,6 @@
 mod analysis;
+mod db;
 mod func;
-mod indices;
 mod kind;
 mod lang;
 mod nat;
@@ -10,22 +10,20 @@ mod shifted;
 
 use egg::{Id, Language, RecExpr};
 
-use crate::sketch::{Sketch, SketchLang};
-use indices::{DBCutoff, DBIndex, DBShift};
-use kind::{Kind, Kindable};
-
 pub use analysis::FreeBetaNatAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
 pub use rules::{Ruleset, rules};
 
-fn build(rec_expr: &RecExpr<Rise>, id: Id) -> RecExpr<Rise> {
+use crate::sketch::{Sketch, SketchLang};
+
+fn build<L: Language>(rec_expr: &RecExpr<L>, id: Id) -> RecExpr<L> {
     rec_expr[id]
         .clone()
         .build_recexpr(|child_id| rec_expr[child_id].clone())
 }
 
-fn add_expr(to: &mut RecExpr<Rise>, e: RecExpr<Rise>) -> Id {
+fn add_expr<L: Language>(to: &mut RecExpr<L>, e: RecExpr<L>) -> Id {
     let offset = to.len();
     for n in e {
         to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));

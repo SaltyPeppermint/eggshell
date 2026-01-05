@@ -1,8 +1,11 @@
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::HashSet;
 
+use crate::rise::kind::Kindable;
+
+use super::Rise;
+use super::db::Index;
 use super::nat::try_simplify;
-use super::{DBIndex, Kindable, Rise};
 
 #[derive(Default, Debug)]
 pub struct FreeBetaNatAnalysis {
@@ -36,7 +39,7 @@ impl FreeBetaNatAnalysis {
 
 #[derive(Default, Debug, Clone)]
 pub struct AnalysisData {
-    pub free: HashSet<DBIndex>,
+    pub free: HashSet<Index>,
     pub beta_extract: RecExpr<Rise>,
     pub canon_nat_expr: RecExpr<Rise>,
 }

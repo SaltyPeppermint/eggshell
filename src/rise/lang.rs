@@ -4,11 +4,12 @@ use egg::Id;
 use ordered_float::NotNan;
 use thiserror::Error;
 
-use super::{DBIndex, Kind, Kindable};
+use super::db::Index;
+use super::kind::{Kind, Kindable};
 
 egg::define_language! {
   pub enum Rise {
-    Var(DBIndex),
+    Var(Index),
     Lambda(Lambda, Id),
     App(Application, [Id; 2]),
     // "app" = App([Id; 2]),
@@ -115,22 +116,22 @@ pub enum ParseKindError {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub enum Lambda {
-    Expr,
-    Nat,
-    Data,
-    Addr,
-    Nat2Nat,
+pub struct Lambda(Kind);
+
+impl Lambda {
+    pub fn new(kind: Kind) -> Self {
+        Self(kind)
+    }
 }
 
 impl fmt::Display for Lambda {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Lambda::Expr => write!(f, "lam"),
-            Lambda::Nat => write!(f, "natLam"),
-            Lambda::Data => write!(f, "dataLam"),
-            Lambda::Addr => write!(f, "addrLam"),
-            Lambda::Nat2Nat => write!(f, "natNatLam"),
+        match self.0 {
+            Kind::Expr => write!(f, "lam"),
+            Kind::Nat => write!(f, "natLam"),
+            Kind::Data => write!(f, "dataLam"),
+            Kind::Addr => write!(f, "addrLam"),
+            Kind::Nat2Nat => write!(f, "natNatLam"),
         }
     }
 }
@@ -140,11 +141,11 @@ impl std::str::FromStr for Lambda {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "lam" => Ok(Lambda::Expr),
-            "natLam" => Ok(Lambda::Nat),
-            "dataLam" => Ok(Lambda::Data),
-            "addrLam" => Ok(Lambda::Addr),
-            "natNatLam" => Ok(Lambda::Nat2Nat),
+            "lam" => Ok(Lambda(Kind::Expr)),
+            "natLam" => Ok(Lambda(Kind::Nat)),
+            "dataLam" => Ok(Lambda(Kind::Data)),
+            "addrLam" => Ok(Lambda(Kind::Addr)),
+            "natNatLam" => Ok(Lambda(Kind::Nat2Nat)),
             _ => Err(ParseKindError::Lambda(s.to_owned())),
         }
     }
@@ -152,33 +153,27 @@ impl std::str::FromStr for Lambda {
 
 impl Kindable for Lambda {
     fn kind(&self) -> Kind {
-        match self {
-            Lambda::Expr => Kind::Expr,
-            Lambda::Nat => Kind::Nat,
-            Lambda::Data => Kind::Data,
-            Lambda::Addr => Kind::Addr,
-            Lambda::Nat2Nat => Kind::Nat2Nat,
-        }
+        self.0
     }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub enum Application {
-    Expr,
-    Nat,
-    Data,
-    Addr,
-    Nat2Nat,
+pub struct Application(Kind);
+
+impl Application {
+    pub fn new(kind: Kind) -> Self {
+        Self(kind)
+    }
 }
 
 impl fmt::Display for Application {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Application::Expr => write!(f, "app"),
-            Application::Nat => write!(f, "natApp"),
-            Application::Data => write!(f, "dataApp"),
-            Application::Addr => write!(f, "addrApp"),
-            Application::Nat2Nat => write!(f, "natNatApp"),
+        match self.0 {
+            Kind::Expr => write!(f, "app"),
+            Kind::Nat => write!(f, "natApp"),
+            Kind::Data => write!(f, "dataApp"),
+            Kind::Addr => write!(f, "addrApp"),
+            Kind::Nat2Nat => write!(f, "natNatApp"),
         }
     }
 }
@@ -188,11 +183,11 @@ impl std::str::FromStr for Application {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "app" => Ok(Application::Expr),
-            "natApp" => Ok(Application::Nat),
-            "dataApp" => Ok(Application::Data),
-            "addrApp" => Ok(Application::Addr),
-            "natNatApp" => Ok(Application::Nat2Nat),
+            "app" => Ok(Application(Kind::Expr)),
+            "natApp" => Ok(Application(Kind::Nat)),
+            "dataApp" => Ok(Application(Kind::Data)),
+            "addrApp" => Ok(Application(Kind::Addr)),
+            "natNatApp" => Ok(Application(Kind::Nat2Nat)),
             _ => Err(ParseKindError::App(s.to_owned())),
         }
     }
@@ -200,12 +195,6 @@ impl std::str::FromStr for Application {
 
 impl Kindable for Application {
     fn kind(&self) -> Kind {
-        match self {
-            Application::Expr => Kind::Expr,
-            Application::Nat => Kind::Nat,
-            Application::Data => Kind::Data,
-            Application::Addr => Kind::Addr,
-            Application::Nat2Nat => Kind::Nat2Nat,
-        }
+        self.0
     }
 }

@@ -5,6 +5,7 @@ pub mod eqsat;
 pub mod io;
 pub mod probabilistic;
 pub mod rewrite_system;
+pub mod rise;
 pub mod sampling;
 pub mod sketch;
 pub mod tree_distance;

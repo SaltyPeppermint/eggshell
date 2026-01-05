@@ -2,11 +2,12 @@ use egg::{
     Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
 };
 
+use super::db::{Cutoff, Index, Shift};
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
+use super::kind::{Kind, Kindable};
 use super::nat::ComputeNatCheck;
 use super::shifted::{Shifted, shift_mut};
-use super::{DBCutoff, DBIndex, DBShift, FreeBetaNatAnalysis, Kind, Rise};
-use crate::rewrite_system::rise::kind::Kindable;
+use super::{FreeBetaNatAnalysis, Rise};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Ruleset {
@@ -137,18 +138,18 @@ impl Applier<Rise, FreeBetaNatAnalysis> for BetaExtractApplier {
 
 pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>, kind: Kind) -> RecExpr<Rise> {
     let arg2 = &mut arg.to_owned();
-    shift_mut(arg2, DBShift::up(kind), DBCutoff::zero()); // shift up
-    let mut body2 = replace(body, DBIndex::zero(kind), arg2);
-    shift_mut(&mut body2, DBShift::down(kind), DBCutoff::zero()); // shift down
+    shift_mut(arg2, Shift::up(kind), Cutoff::zero()); // shift up
+    let mut body2 = replace(body, Index::zero(kind), arg2);
+    shift_mut(&mut body2, Shift::down(kind), Cutoff::zero()); // shift down
     body2
 }
 
-fn replace(expr: &RecExpr<Rise>, to_replace: DBIndex, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
+fn replace(expr: &RecExpr<Rise>, to_replace: Index, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
     fn rec(
         result: &mut RecExpr<Rise>,
         expr: &RecExpr<Rise>,
         id: Id,
-        to_replace: DBIndex,
+        to_replace: Index,
         subs: &mut RecExpr<Rise>,
     ) -> Id {
         let node = &expr[id];
@@ -157,9 +158,9 @@ fn replace(expr: &RecExpr<Rise>, to_replace: DBIndex, subs: &mut RecExpr<Rise>) 
             Rise::Var(found) if to_replace == *found => super::add_expr(result, subs.clone()),
             Rise::Lambda(l, e) => {
                 let kind = l.kind();
-                shift_mut(subs, DBShift::up(kind), DBCutoff::zero());
+                shift_mut(subs, Shift::up(kind), Cutoff::zero());
                 let e2 = rec(result, expr, *e, to_replace.inc(kind), subs);
-                shift_mut(subs, DBShift::down(kind), DBCutoff::zero());
+                shift_mut(subs, Shift::down(kind), Cutoff::zero());
                 result.add(Rise::Lambda(*l, e2))
             }
 
@@ -183,7 +184,7 @@ mod tests {
     use egg::Pattern;
 
     use super::*;
-    use crate::rewrite_system::rise::PrettyPrint;
+    use crate::rise::PrettyPrint;
 
     #[test]
     fn print_rule() {

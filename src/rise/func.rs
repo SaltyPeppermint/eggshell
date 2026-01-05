@@ -1,8 +1,10 @@
 use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
+use super::db::{Index, Shift};
+use super::kind::{Kind, Kindable};
 use super::lang::Application;
-use super::{DBIndex, DBShift, FreeBetaNatAnalysis, Kind, Kindable, Rise};
+use super::{FreeBetaNatAnalysis, Rise};
 
 pub fn pat(pat: &str) -> impl Applier<Rise, FreeBetaNatAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
@@ -10,7 +12,7 @@ pub fn pat(pat: &str) -> impl Applier<Rise, FreeBetaNatAnalysis> {
 
 pub struct NotFreeIn<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
-    index: DBIndex,
+    index: Index,
     applier: A,
 }
 
@@ -20,7 +22,7 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> NotFreeIn<A> {
         let kind = var.kind();
         NotFreeIn {
             var,
-            index: DBIndex::new(kind, index),
+            index: Index::new(kind, index),
             applier,
         }
     }
@@ -109,7 +111,7 @@ fn extracted_int(expr: &RecExpr<Rise>) -> i64 {
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i64,
-    v_env: HashSet<DBIndex>,
+    v_env: HashSet<Index>,
     type_of_id: Id,
 ) -> Option<(RecExpr<Rise>, Id, Id)> {
     let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
@@ -144,8 +146,8 @@ fn vec_expr(
         Rise::Lambda(l, e) if l.kind() == Kind::Expr => {
             let v_env2 = v_env
                 .into_iter()
-                .map(|i| i + DBShift::up(l.kind()))
-                .chain([DBIndex::zero(Kind::Expr)])
+                .map(|i| i + Shift::up(l.kind()))
+                .chain([Index::zero(Kind::Expr)])
                 .collect::<HashSet<_>>();
 
             // Vectorize e
@@ -184,7 +186,7 @@ fn vec_expr(
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
-            let app = Application::Expr;
+            let app = Application::new(Kind::Expr);
             let app_id = new.add(Rise::App(app, [typed_prim_id, new_typed_expr_id]));
             new.add(Rise::TypeOf([app_id, vec_ty_id]));
 

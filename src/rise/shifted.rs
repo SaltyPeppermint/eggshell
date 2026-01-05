@@ -1,12 +1,14 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 
-use super::{DBCutoff, DBShift, FreeBetaNatAnalysis, Kindable, Rise};
+use super::db::{Cutoff, Shift};
+use super::kind::Kindable;
+use super::{FreeBetaNatAnalysis, Rise};
 
 pub struct Shifted<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: DBShift,
-    cutoff: DBCutoff,
+    shift: Shift,
+    cutoff: Cutoff,
     applier: A,
 }
 
@@ -14,8 +16,8 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Shifted<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
-        shift: DBShift,
-        cutoff: DBCutoff,
+        shift: Shift,
+        cutoff: Cutoff,
         applier: A,
     ) -> Self {
         Shifted {
@@ -52,8 +54,8 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
 pub struct ShiftedCheck<A: Applier<Rise, FreeBetaNatAnalysis>> {
     var: Var,
     new_var: Var,
-    shift: DBShift,
-    cutoff: DBCutoff,
+    shift: Shift,
+    cutoff: Cutoff,
     applier: A,
 }
 
@@ -62,8 +64,8 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> ShiftedCheck<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
-        shift: DBShift,
-        cutoff: DBCutoff,
+        shift: Shift,
+        cutoff: Cutoff,
         applier: A,
     ) -> Self {
         ShiftedCheck {
@@ -98,14 +100,14 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: DBShift, cutoff: DBCutoff) -> RecExpr<Rise> {
+pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Cutoff) -> RecExpr<Rise> {
     let mut result = expr.to_owned();
     shift_mut(&mut result, shift, cutoff);
     result
 }
 
-pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: DBShift, cutoff: DBCutoff) {
-    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: DBShift, cutoff: DBCutoff) {
+pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
+    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: Shift, cutoff: Cutoff) {
         // dbg!(&expr[ei]);
         // dbg!(&expr.len());
         match expr[id] {

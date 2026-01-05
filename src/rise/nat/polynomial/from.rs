@@ -1,7 +1,7 @@
 use egg::RecExpr;
 use num_traits::One;
 
-use super::{DBIndex, Monomial, Polynomial, Ratio, Rise};
+use super::{Index, Monomial, Polynomial, Ratio, Rise};
 
 // ============================================================================
 // RecExpr Conversions
@@ -83,8 +83,8 @@ impl From<Ratio> for Polynomial {
 }
 
 /// Create a `Polynomial` from with a single variable
-impl From<DBIndex> for Polynomial {
-    fn from(index: DBIndex) -> Self {
+impl From<Index> for Polynomial {
+    fn from(index: Index) -> Self {
         Self::new().add_term(Ratio::one(), Monomial::new().with_var(index, 1))
     }
 }

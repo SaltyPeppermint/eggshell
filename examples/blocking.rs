@@ -3,7 +3,7 @@ use std::time::Duration;
 use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rewrite_system::rise::{self, BLOCKING_GOAL, MM, Rise, Ruleset, SPLIT_GUIDE};
+use eggshell::rise::{self, BLOCKING_GOAL, MM, Rise, Ruleset, SPLIT_GUIDE};
 use eggshell::sketch;
 use eggshell::utils;
 

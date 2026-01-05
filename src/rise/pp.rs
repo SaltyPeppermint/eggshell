@@ -1,7 +1,8 @@
 use colored::{ColoredString, Colorize};
 use egg::{ENodeOrVar, Id, Language, RecExpr};
 
-use super::{Kind, Kindable, Rise};
+use super::Rise;
+use super::kind::{Kind, Kindable};
 
 pub trait PrettyPrint {
     fn pp(self, skip_wrapper: bool);

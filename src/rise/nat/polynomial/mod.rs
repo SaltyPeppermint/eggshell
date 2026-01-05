@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use num_traits::{One, Signed, Zero};
 
 use super::{Monomial, NatSolverError, Ratio, Rise};
-use crate::rewrite_system::rise::DBIndex;
+use crate::rise::db::Index;
 
 // ============================================================================
 // Polynomial
@@ -34,7 +34,7 @@ impl Polynomial {
     }
 
     /// Create a polynomial from a single variable
-    pub fn var(index: DBIndex) -> Self {
+    pub fn var(index: Index) -> Self {
         index.into()
     }
 
@@ -271,7 +271,7 @@ impl Polynomial {
     }
 
     /// Compute the content of a polynomial (GCD of all coefficients)
-    fn content(&self, _vars: &[DBIndex]) -> Ratio {
+    fn content(&self, _vars: &[Index]) -> Ratio {
         self.coefficient_gcd()
     }
 
@@ -333,7 +333,7 @@ impl Polynomial {
     fn multivariate_gcd_recursive(
         a: &Polynomial,
         b: &Polynomial,
-        vars: &[DBIndex],
+        vars: &[Index],
     ) -> Result<Polynomial, NatSolverError> {
         if vars.is_empty() {
             // Base case: both are constants
@@ -372,7 +372,7 @@ impl Polynomial {
     pub fn exact_divide(
         a: &Polynomial,
         b: &Polynomial,
-        vars: &[DBIndex],
+        vars: &[Index],
     ) -> Result<Polynomial, NatSolverError> {
         if b.is_one() {
             return Ok(a.clone());
@@ -440,7 +440,7 @@ impl UnivariateView {
     }
 
     /// Convert a polynomial to univariate view in the given variable
-    pub fn from_polynomial(poly: &Polynomial, var: DBIndex) -> Result<Self, NatSolverError> {
+    pub fn from_polynomial(poly: &Polynomial, var: Index) -> Result<Self, NatSolverError> {
         let mut result = Self::new();
 
         for (monomial, coeff) in poly.terms() {
@@ -461,7 +461,7 @@ impl UnivariateView {
     }
 
     /// Convert back to a polynomial
-    fn to_polynomial(&self, var: DBIndex) -> Result<Polynomial, NatSolverError> {
+    fn to_polynomial(&self, var: Index) -> Result<Polynomial, NatSolverError> {
         let mut result = Polynomial::new();
 
         for (&degree, coeff_poly) in &self.coefficients {
@@ -525,7 +525,7 @@ impl UnivariateView {
     fn divide_coefficients_by(
         &self,
         divisor: &Polynomial,
-        remaining_vars: &[DBIndex],
+        remaining_vars: &[Index],
     ) -> Result<Self, NatSolverError> {
         let mut result = Self::new();
         for (&deg, coeff) in &self.coefficients {
@@ -540,7 +540,7 @@ impl UnivariateView {
     }
 
     /// Make primitive (divide by content)
-    fn make_primitive(&self, remaining_vars: &[DBIndex]) -> Result<Self, NatSolverError> {
+    fn make_primitive(&self, remaining_vars: &[Index]) -> Result<Self, NatSolverError> {
         let content = self.content(remaining_vars)?;
         if content.is_one() || content.is_zero() {
             return Ok(self.clone());
@@ -549,7 +549,7 @@ impl UnivariateView {
     }
 
     /// Compute content (GCD of all coefficients)
-    fn content(&self, remaining_vars: &[DBIndex]) -> Result<Polynomial, NatSolverError> {
+    fn content(&self, remaining_vars: &[Index]) -> Result<Polynomial, NatSolverError> {
         let coeffs: Vec<&Polynomial> = self.coefficients.values().collect();
 
         if coeffs.is_empty() {
@@ -582,7 +582,7 @@ impl UnivariateView {
     fn content_gcd(
         a: &UnivariateView,
         b: &UnivariateView,
-        remaining_vars: &[DBIndex],
+        remaining_vars: &[Index],
     ) -> Result<Polynomial, NatSolverError> {
         // Todo: Fixme
         // let mut result = Polynomial::new();
@@ -627,8 +627,8 @@ impl UnivariateView {
     fn univariate_gcd_subresultant(
         a: &UnivariateView,
         b: &UnivariateView,
-        main_var: DBIndex,
-        remaining_vars: &[DBIndex],
+        main_var: Index,
+        remaining_vars: &[Index],
     ) -> Result<Polynomial, NatSolverError> {
         if a.is_zero() {
             return b.to_polynomial(main_var);
@@ -702,7 +702,7 @@ impl UnivariateView {
         a: &UnivariateView,
         b: &UnivariateView,
         // main_var: Index,
-        remaining_vars: &[DBIndex],
+        remaining_vars: &[Index],
     ) -> Result<(UnivariateView, UnivariateView), NatSolverError> {
         if b.is_zero() {
             return Err(NatSolverError::DivisionByZero);
@@ -756,7 +756,7 @@ impl UnivariateView {
         a: &UnivariateView,
         b: &UnivariateView,
         // main_var: Index,
-        remaining_vars: &[DBIndex],
+        remaining_vars: &[Index],
     ) -> Result<(UnivariateView, UnivariateView), NatSolverError> {
         if b.is_zero() {
             return Err(NatSolverError::DivisionByZero);
@@ -801,8 +801,8 @@ impl UnivariateView {
 }
 
 /// Collect all variables from a set of polynomials
-pub fn collect_variables(polys: &[&Polynomial]) -> Vec<DBIndex> {
-    let mut vars: BTreeSet<DBIndex> = BTreeSet::new();
+pub fn collect_variables(polys: &[&Polynomial]) -> Vec<Index> {
+    let mut vars: BTreeSet<Index> = BTreeSet::new();
     for poly in polys {
         for (monomial, coeff) in poly.terms() {
             if !coeff.is_zero() {
@@ -848,10 +848,10 @@ pub fn gcd_ratio(a: Ratio, b: Ratio) -> Ratio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rewrite_system::rise::{DBIndex, Kind};
+    use crate::rise::kind::Kind;
 
-    fn idx(n: u32) -> DBIndex {
-        DBIndex::new(Kind::Nat, n)
+    fn idx(n: u32) -> Index {
+        Index::new(Kind::Nat, n)
     }
 
     fn x() -> Polynomial {
