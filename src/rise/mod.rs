@@ -1,4 +1,5 @@
 mod analysis;
+mod beta;
 mod db;
 mod func;
 mod kind;
@@ -10,7 +11,7 @@ mod shifted;
 
 use egg::{Id, Language, RecExpr};
 
-pub use analysis::FreeBetaNatAnalysis;
+pub use analysis::RiseAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
 pub use rules::{Ruleset, rules};

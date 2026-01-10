@@ -1,13 +1,11 @@
-use egg::{
-    Applier, EGraph, Id, Language, PatternAst, RecExpr, Rewrite, Subst, Symbol, Var, rewrite,
-};
+use egg::{Rewrite, rewrite};
 
-use super::db::{Cutoff, Index, Shift};
+use super::beta::BetaExtractApplier;
 use super::func::{NotFreeIn, VectorizeScalarFun, pat};
-use super::kind::{Kind, Kindable};
+use super::kind::Kind;
 use super::nat::ComputeNatCheck;
-use super::shifted::{Shifted, shift_mut};
-use super::{FreeBetaNatAnalysis, Rise};
+use super::shifted::Shifted;
+use super::{Rise, RiseAnalysis};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub enum Ruleset {
@@ -19,7 +17,7 @@ pub enum Ruleset {
 }
 
 #[must_use]
-pub fn rules(ruleset: Ruleset) -> Vec<Rewrite<Rise, FreeBetaNatAnalysis>> {
+pub fn rules(ruleset: Ruleset) -> Vec<Rewrite<Rise, RiseAnalysis>> {
     let mut algorithmic = match ruleset {
         Ruleset::All => vec![
             rewrite!("map-fission"; "(typeOf (app (typeOf map ?tAny2) (typeOf (lam (typeOf (app (typeOf ?0 ?tAny3) (typeOf ?1 ?dt0)) ?tAny4)) (fun ?dt1 ?dt2))) (fun (arrT ?n0 ?dt1) (arrT ?n0 ?dt2)))" => { NotFreeIn::new("?0", 0, Shifted::new("?1", "?2", (1,0,0,0,0).into(), (1,0,0,0,0).into(), pat("(typeOf (lam (typeOf (app (typeOf (app (typeOf map (fun (fun ?dt0 ?dt2) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt2)))) (typeOf ?0 (fun ?dt0 ?dt2))) (fun (arrT ?n0 ?dt0) (arrT ?n0 ?dt2))) (typeOf (app (typeOf (app (typeOf map (fun (fun ?dt1 ?dt0) (fun (arrT ?n0 ?dt1) (arrT ?n0 ?dt0)))) (typeOf (lam (typeOf ?2 ?dt0)) (fun ?dt1 ?dt0))) (fun (arrT ?n0 ?dt1) (arrT ?n0 ?dt0))) (typeOf %e0 (arrT ?n0 ?dt1))) (arrT ?n0 ?dt0))) (arrT ?n0 ?dt2))) (fun (arrT ?n0 ?dt1) (arrT ?n0 ?dt2)))"))) }),
@@ -101,84 +99,6 @@ pub fn rules(ruleset: Ruleset) -> Vec<Rewrite<Rise, FreeBetaNatAnalysis>> {
     algorithmic
 }
 
-struct BetaExtractApplier {
-    body: Var,
-    subs: Var,
-    kind: Kind,
-}
-
-impl BetaExtractApplier {
-    fn new(body: &str, subs: &str, kind: Kind) -> Self {
-        Self {
-            body: body.parse().unwrap(),
-            subs: subs.parse().unwrap(),
-            kind,
-        }
-    }
-}
-
-impl Applier<Rise, FreeBetaNatAnalysis> for BetaExtractApplier {
-    fn apply_one(
-        &self,
-        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
-        eclass: Id,
-        subst: &Subst,
-        _searcher_ast: Option<&PatternAst<Rise>>,
-        _rule_name: Symbol,
-    ) -> Vec<Id> {
-        let ex_body = &egraph[subst[self.body]].data.beta_extract;
-        let ex_subs = &egraph[subst[self.subs]].data.beta_extract;
-
-        let result = beta_reduce(ex_body, ex_subs, self.kind);
-        let id = egraph.add_expr(&result);
-        egraph.union(eclass, id);
-        Vec::new()
-    }
-}
-
-pub fn beta_reduce(body: &RecExpr<Rise>, arg: &RecExpr<Rise>, kind: Kind) -> RecExpr<Rise> {
-    let arg2 = &mut arg.to_owned();
-    shift_mut(arg2, Shift::up(kind), Cutoff::zero()); // shift up
-    let mut body2 = replace(body, Index::zero(kind), arg2);
-    shift_mut(&mut body2, Shift::down(kind), Cutoff::zero()); // shift down
-    body2
-}
-
-fn replace(expr: &RecExpr<Rise>, to_replace: Index, subs: &mut RecExpr<Rise>) -> RecExpr<Rise> {
-    fn rec(
-        result: &mut RecExpr<Rise>,
-        expr: &RecExpr<Rise>,
-        id: Id,
-        to_replace: Index,
-        subs: &mut RecExpr<Rise>,
-    ) -> Id {
-        let node = &expr[id];
-        // println!("Node: {node}, Index: {to_replace}");
-        match node {
-            Rise::Var(found) if to_replace == *found => super::add_expr(result, subs.clone()),
-            Rise::Lambda(l, e) => {
-                let kind = l.kind();
-                shift_mut(subs, Shift::up(kind), Cutoff::zero());
-                let e2 = rec(result, expr, *e, to_replace.inc(kind), subs);
-                shift_mut(subs, Shift::down(kind), Cutoff::zero());
-                result.add(Rise::Lambda(*l, e2))
-            }
-
-            // NatNatLam is not covered
-            // Non-matching vars and lambdas are handled by the default case
-            other => {
-                let new_other = other
-                    .clone()
-                    .map_children(|i| rec(result, expr, i, to_replace, subs));
-                result.add(new_other)
-            }
-        }
-    }
-    let mut result = RecExpr::default();
-    rec(&mut result, expr, expr.root(), to_replace, subs);
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use egg::Pattern;
@@ -194,35 +114,6 @@ mod tests {
         let split_join_2m_32: Pattern<Rise> ="(typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1)))))) (typeOf (app (typeOf map (fun (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)) (arrT ?n0 ?dt1)) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))))) (typeOf join (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)) (arrT ?n0 ?dt1)))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (arrT ?n1 (arrT ?n0 ?dt1))))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1))))) (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))))) (typeOf (app (typeOf map (fun (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (typeOf (app (typeOf map (fun (fun (arrT 32 ?dt0) (arrT 32 ?dt1)) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))) (typeOf (app (typeOf map (fun (fun ?dt0 ?dt1) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (typeOf ?0 (fun ?dt0 ?dt1))) (fun (arrT 32 ?dt0) (arrT 32 ?dt1)))) (fun (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1))))) (fun (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (fun (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (typeOf (app (typeOf (app (typeOf map (fun (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))) (fun (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))))))) (typeOf (app (typeOf map (fun (fun (arrT ?n0 ?dt0) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))) (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (typeOf (natApp (typeOf split (natFun (fun (arrT (natMul %n0 (natMul (natPow 32 -1) ?n3)) ?dt2) (arrT (natMul (natPow 32 -1) ?n3) (arrT %n0 ?dt2))))) 32) (fun (arrT ?n0 ?dt0) (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0))))) (fun (arrT ?n1 (arrT ?n0 ?dt0)) (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (fun (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (typeOf ?1 (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt0))))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt0)))))) (arrT ?n2 (arrT ?n1 (arrT (natMul (natPow 32 -1) ?n0) (arrT 32 ?dt1)))))) (arrT ?n2 (arrT ?n1 (arrT ?n0 ?dt1))))".parse().unwrap();
         println!("split-join-2m-32");
         split_join_2m_32.ast.pp(false);
-    }
-
-    #[test]
-    fn beta_reduce_applier() {
-        fn check(body: &str, arg: &str, res: &str) {
-            let b = &body.parse().unwrap();
-            let a = &arg.parse().unwrap();
-            let r = res.parse().unwrap();
-            assert_eq!(beta_reduce(b, a, Kind::Expr), r);
-        }
-        // (λ. (λ. ((λ. (0 1)) (0 1)))) --> (λ. (λ. ((0 1) 0)))
-        // (λ. (0 1)) (0 1) --> (0 1) 0
-        check("(app %e0 %e1)", "(app %e0 %e1)", "(app (app %e0 %e1) %e0)");
-        // r1 = (app (lam (app "%e6" (app "%e5" "%e0"))) "%e0")
-        // r2 = (app (lam (app "%e6" r1)) "%e0")
-        // r3 = (app (lam (app "%e6" r2)) %e0)
-        // (app map (lam (app "%e6" r3)))
-        // --> (app map (lam (app "%e6" (app "%e5" (app "%e4" (app "%e3" (app "%e2" "%e0")))))))
-        check("(app %e6 (app %e5 %e0))", "%e0", "(app %e5 (app %e4 %e0))");
-        check(
-            "(app %e6 (app %e5 (app %e4 %e0)))",
-            "%e0",
-            "(app %e5 (app %e4 (app %e3 %e0)))",
-        );
-        check(
-            "(app %e6 (app %e5 (app %e4 (app %e3 %e0))))",
-            "%e0",
-            "(app %e5 (app %e4 (app %e3 (app %e2 %e0))))",
-        );
     }
 
     #[test]

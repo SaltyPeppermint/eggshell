@@ -3,7 +3,7 @@ mod analysis;
 pub mod cli;
 pub mod eqsat;
 pub mod io;
-pub mod probabilistic;
+// pub mod probabilistic;
 pub mod rewrite_system;
 pub mod rise;
 pub mod sampling;

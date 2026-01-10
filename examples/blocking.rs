@@ -21,7 +21,7 @@ fn main() {
         // .with_hook(hooks::printer_hook)
         .run(&rise::rules(Ruleset::Split));
 
-    // println!("{}\nSPLIT STEP DONE DONE\n-----------\n", runner_1.report());
+    println!("{}\nSPLIT STEP DONE DONE\n-----------\n", runner_1.report());
     assert_eq!(
         runner_1.roots[0],
         runner_1.egraph.lookup_expr(&split_guide).unwrap()

@@ -4,19 +4,19 @@ use hashbrown::HashSet;
 use super::db::{Index, Shift};
 use super::kind::{Kind, Kindable};
 use super::lang::Application;
-use super::{FreeBetaNatAnalysis, Rise};
+use super::{Rise, RiseAnalysis};
 
-pub fn pat(pat: &str) -> impl Applier<Rise, FreeBetaNatAnalysis> {
+pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
     pat.parse::<Pattern<Rise>>().unwrap()
 }
 
-pub struct NotFreeIn<A: Applier<Rise, FreeBetaNatAnalysis>> {
+pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     index: Index,
     applier: A,
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> NotFreeIn<A> {
+impl<A: Applier<Rise, RiseAnalysis>> NotFreeIn<A> {
     pub fn new(var_str: &str, index: u32, applier: A) -> Self {
         let var: Var = var_str.parse().unwrap();
         let kind = var.kind();
@@ -28,10 +28,10 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> NotFreeIn<A> {
     }
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for NotFreeIn<A> {
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
@@ -48,14 +48,14 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
     }
 }
 
-pub struct VectorizeScalarFun<A: Applier<Rise, FreeBetaNatAnalysis>> {
+pub struct VectorizeScalarFun<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     size_var: Var,
     vectorized_var: Var,
     applier: A,
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> VectorizeScalarFun<A> {
+impl<A: Applier<Rise, RiseAnalysis>> VectorizeScalarFun<A> {
     pub fn new(var: &str, size_var: &str, vectorized_var: &str, applier: A) -> Self {
         VectorizeScalarFun {
             var: var.parse().unwrap(),
@@ -66,22 +66,24 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> VectorizeScalarFun<A> {
     }
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis>
-    for VectorizeScalarFun<A>
-{
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeScalarFun<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let extracted = egraph[egraph[subst[self.var]].parents().next().unwrap()]
+        let Some(extracted) = egraph[egraph[subst[self.var]].parents().next().unwrap()]
             .data
-            .beta_extract
-            .clone();
-        let size_extracted = &egraph[subst[self.size_var]].data.beta_extract.clone();
+            .small_repr(egraph)
+        else {
+            return Vec::new();
+        };
+        let Some(size_extracted) = &egraph[subst[self.size_var]].data.small_repr(egraph) else {
+            return Vec::new();
+        };
         let n = extracted_int(size_extracted);
         if let Some((vectorized_expr, _, expr_id)) =
             vec_expr(&extracted, n, HashSet::new(), extracted.root())

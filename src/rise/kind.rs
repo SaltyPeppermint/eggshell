@@ -1,6 +1,7 @@
 use std::fmt;
 
 use egg::Var;
+use thiserror::Error;
 
 pub trait Kindable {
     fn kind(&self) -> Kind;
@@ -13,6 +14,34 @@ pub enum Kind {
     Data,
     Addr,
     Nat2Nat,
+}
+
+impl Kind {
+    pub fn prefix(self) -> char {
+        match self {
+            Kind::Expr => 'e',
+            Kind::Nat => 'n',
+            Kind::Data => 'd',
+            Kind::Addr => 'a',
+            Kind::Nat2Nat => 'x',
+        }
+    }
+}
+
+impl TryFrom<char> for Kind {
+    type Error = KindError;
+
+    fn try_from(c: char) -> Result<Self, KindError> {
+        Ok(match c {
+            'd' | 't' => Kind::Data,
+            'a' => Kind::Addr,
+            'n' => Kind::Nat,
+            'x' => Kind::Nat2Nat,
+            'e' => Kind::Expr,
+            x if x.is_numeric() => Kind::Expr,
+            _ => return Err(KindError::ImproperTag(c)),
+        })
+    }
 }
 
 impl fmt::Display for Kind {
@@ -37,9 +66,17 @@ impl Kindable for Var {
                 'd' | 't' => Kind::Data,
                 'a' => Kind::Addr,
                 'n' => Kind::Nat,
+                'x' => Kind::Nat2Nat,
+                'e' => Kind::Expr,
                 x if x.is_numeric() => Kind::Expr,
                 x => panic!("Wrong format {x}"),
             })
             .expect("Wrong format {x}")
     }
+}
+
+#[derive(Error, Debug)]
+pub enum KindError {
+    #[error("Improper Prefix Character {0}")]
+    ImproperTag(char),
 }

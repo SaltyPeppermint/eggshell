@@ -1,23 +1,21 @@
+use std::cmp::{Ordering, PartialOrd};
+
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::HashSet;
 
-use crate::rise::kind::Kindable;
-
 use super::Rise;
 use super::db::Index;
-use super::nat::try_simplify;
+use super::kind::Kindable;
 
 #[derive(Default, Debug)]
-pub struct FreeBetaNatAnalysis {
+pub struct RiseAnalysis {
     nat_eq_cache: EGraph<Rise, ()>,
 }
 
-impl FreeBetaNatAnalysis {
+impl RiseAnalysis {
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            nat_eq_cache: EGraph::default(),
-        }
+        RiseAnalysis::default()
     }
 
     pub fn check_cache_equiv(&mut self, lhs: &RecExpr<Rise>, rhs: &RecExpr<Rise>) -> bool {
@@ -37,44 +35,61 @@ impl FreeBetaNatAnalysis {
     }
 }
 
-#[derive(Default, Debug, Clone)]
-pub struct AnalysisData {
-    pub free: HashSet<Index>,
-    pub beta_extract: RecExpr<Rise>,
-    pub canon_nat_expr: RecExpr<Rise>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Optimal {
+    cost: usize,
+    node: Rise,
 }
 
-impl Analysis<Rise> for FreeBetaNatAnalysis {
+impl Ord for Optimal {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.cost.cmp(&other.cost)
+    }
+}
+
+impl PartialOrd for Optimal {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AnalysisData {
+    pub free: HashSet<Index>,
+    pub optimal: Option<Optimal>,
+}
+
+impl AnalysisData {
+    pub fn small_repr(&self, egraph: &EGraph<Rise, RiseAnalysis>) -> Option<RecExpr<Rise>> {
+        self.optimal
+            .as_ref()?
+            .node
+            .try_build_recexpr(|c_id| {
+                egraph[c_id]
+                    .data
+                    .optimal
+                    .as_ref()
+                    .map(|o| o.node.clone())
+                    .ok_or(())
+            })
+            .ok()
+    }
+}
+
+impl Analysis<Rise> for RiseAnalysis {
     type Data = AnalysisData;
 
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
         let before_len = to.free.len();
         to.free.extend(from.free);
-        let free_changed = before_len != to.free.len();
+        let free_changed = DidMerge(before_len != to.free.len(), true);
 
-        let beta_changed = if !from.beta_extract.is_empty()
-            && (to.beta_extract.is_empty() || to.beta_extract.len() > from.beta_extract.len())
-        {
-            to.beta_extract = from.beta_extract;
-            true
-        } else {
-            false
-        };
+        let optimal_changed = egg::merge_option(&mut to.optimal, from.optimal, egg::merge_min);
 
-        let nat_changed = if !from.canon_nat_expr.is_empty()
-            && (to.canon_nat_expr.is_empty() || to.canon_nat_expr.len() > from.canon_nat_expr.len())
-        {
-            to.canon_nat_expr = from.canon_nat_expr;
-            true
-        } else {
-            false
-        };
-
-        // TODO: more precise second bool
-        DidMerge(free_changed || beta_changed || nat_changed, true)
+        free_changed | optimal_changed //|| beta_changed || nat_changed
     }
 
-    fn make(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
+    fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
             Rise::Lambda(l, e) => egraph[*e]
@@ -92,43 +107,30 @@ impl Analysis<Rise> for FreeBetaNatAnalysis {
                 .collect(),
         };
 
-        let empty = enode.any(|id| egraph[id].data.beta_extract.is_empty());
+        let optimal = enode
+            .children()
+            .iter()
+            .map(|id| egraph[*id].data.optimal.as_ref().map(|o| o.cost))
+            .sum::<Option<usize>>()
+            .map(|c_cost| Optimal {
+                cost: c_cost + 1,
+                node: enode.to_owned(),
+            });
 
-        // let beta_extract = if empty {
-        //     RecExpr::default()
-        // } else {
-        //     enode.join_recexprs(|id| egraph[id].data.beta_extract.as_ref())
-        // };
-        let beta_extract = if empty {
-            RecExpr::default()
-        } else {
-            enode.join_recexprs(|id| &egraph[id].data.beta_extract)
-        };
-
-        let canon_nat_expr = if beta_extract.is_empty() {
-            RecExpr::default()
-        } else {
-            try_simplify(&beta_extract).unwrap_or_default()
-        };
-
-        AnalysisData {
-            free,
-            beta_extract,
-            canon_nat_expr,
-        }
+        AnalysisData { free, optimal }
     }
 
-    fn modify(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, id: Id) {
-        if !egraph[id].data.canon_nat_expr.is_empty()
-            && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
-        {
-            // Add the canonical expr
-            let canon_nat = &egraph[id].data.canon_nat_expr;
-            let added = egraph.add_expr(&canon_nat.clone());
-            egraph.union(id, added);
+    // fn modify(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, id: Id) {
+    //     if !egraph[id].data.canon_nat_expr.is_empty()
+    //         && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
+    //     {
+    //         // Add the canonical expr
+    //         let canon_nat = &egraph[id].data.canon_nat_expr;
+    //         let added = egraph.add_expr(&canon_nat.clone());
+    //         egraph.union(id, added);
 
-            #[cfg(debug_assertions)]
-            egraph[id].assert_unique_leaves();
-        }
-    }
+    //         #[cfg(debug_assertions)]
+    //         egraph[id].assert_unique_leaves();
+    //     }
+    // }
 }

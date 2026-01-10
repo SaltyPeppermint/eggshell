@@ -1,10 +1,11 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
+use hashbrown::HashSet;
 
 use super::db::{Cutoff, Shift};
 use super::kind::Kindable;
-use super::{FreeBetaNatAnalysis, Rise};
+use super::{Rise, RiseAnalysis};
 
-pub struct Shifted<A: Applier<Rise, FreeBetaNatAnalysis>> {
+pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: Shift,
@@ -12,7 +13,7 @@ pub struct Shifted<A: Applier<Rise, FreeBetaNatAnalysis>> {
     applier: A,
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Shifted<A> {
+impl<A: Applier<Rise, RiseAnalysis>> Shifted<A> {
     pub fn new(
         var_str: &str,
         shifted_var_str: &str,
@@ -30,20 +31,22 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Shifted<A> {
     }
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for Shifted<A> {
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let extract = &egraph[subst[self.var]].data.beta_extract;
-        let shifted = shift_copy(extract, self.shift, self.cutoff);
+        let Some(mut extract) = egraph[subst[self.var]].data.small_repr(egraph) else {
+            return Vec::new();
+        };
+        shift_mut(&mut extract, self.shift, self.cutoff);
 
         let mut new_subst = subst.clone();
-        let added_expr_id = egraph.add_expr(&shifted);
+        let added_expr_id = egraph.add_expr(&extract);
         new_subst.insert(self.new_var, added_expr_id);
 
         self.applier
@@ -51,7 +54,7 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
     }
 }
 
-pub struct ShiftedCheck<A: Applier<Rise, FreeBetaNatAnalysis>> {
+pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
     shift: Shift,
@@ -59,7 +62,7 @@ pub struct ShiftedCheck<A: Applier<Rise, FreeBetaNatAnalysis>> {
     applier: A,
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> ShiftedCheck<A> {
+impl<A: Applier<Rise, RiseAnalysis>> ShiftedCheck<A> {
     #[expect(unused)]
     pub fn new(
         var_str: &str,
@@ -78,20 +81,24 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> ShiftedCheck<A> {
     }
 }
 
-impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> for ShiftedCheck<A> {
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedCheck<A> {
     fn apply_one(
         &self,
-        egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
         eclass: Id,
         subst: &Subst,
         searcher_ast: Option<&PatternAst<Rise>>,
         rule_name: Symbol,
     ) -> Vec<Id> {
-        let expected = &egraph[subst[self.new_var]].data.beta_extract;
-        let extract = &egraph[subst[self.var]].data.beta_extract;
-        let shifted = shift_copy(extract, self.shift, self.cutoff);
+        let Some(expected) = egraph[subst[self.new_var]].data.small_repr(egraph) else {
+            return Vec::new();
+        };
+        let Some(mut extract) = egraph[subst[self.var]].data.small_repr(egraph) else {
+            return Vec::new();
+        };
+        shift_mut(&mut extract, self.shift, self.cutoff);
 
-        if shifted == *expected {
+        if extract == expected {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
@@ -100,54 +107,58 @@ impl<A: Applier<Rise, FreeBetaNatAnalysis>> Applier<Rise, FreeBetaNatAnalysis> f
     }
 }
 
-pub fn shift_copy(expr: &RecExpr<Rise>, shift: Shift, cutoff: Cutoff) -> RecExpr<Rise> {
-    let mut result = expr.to_owned();
-    shift_mut(&mut result, shift, cutoff);
-    result
-}
-
 pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
-    fn rec(expr: &mut RecExpr<Rise>, id: Id, shift: Shift, cutoff: Cutoff) {
-        // dbg!(&expr[ei]);
+    fn rec(
+        expr: &mut RecExpr<Rise>,
+        id: Id,
+        shift: Shift,
+        cutoff: Cutoff,
+        already_shifted: &mut HashSet<Id>,
+    ) {
+        if !already_shifted.insert(id) {
+            // println!("DO NOT SHIFT TWICE! {}", expr[id]);
+            return;
+        }
+
         // dbg!(&expr.len());
         match expr[id] {
             Rise::Var(index) => {
-                if index.value() >= cutoff.of_index(index) {
+                if index.value() >= cutoff.of_kind(index.kind()) {
                     let shifted_index = index + shift;
                     expr[id] = Rise::Var(shifted_index);
                 }
             }
             Rise::Lambda(l, e) => {
-                rec(expr, e, shift, cutoff.inc(l.kind()));
+                // println!("LAMBDA KIND: {}", l.kind());
+                let new_cutoff = cutoff.inc(l.kind());
+                // println!("NEW_CUTOFF {new_cutoff}");
+                rec(expr, e, shift, new_cutoff, already_shifted);
             }
-            // Should be covered by others
-            // Rise::App([f, e])
-            // | Rise::NatApp([f, e])
-            // | Rise::DataApp([f, e])
-            // | Rise::AddrApp([f, e])
-            // | Rise::NatNatApp([f, e]) => {
-            //     rec(expr, f, shift, cutoff);
-            //     rec(expr, e, shift, cutoff);
-            Rise::App(_, c_ids)
-            | Rise::TypeOf(c_ids)
-            | Rise::FunType(c_ids)
-            | Rise::ArrType(c_ids)
-            | Rise::VecType(c_ids)
-            | Rise::PairType(c_ids)
-            | Rise::NatAdd(c_ids)
-            | Rise::NatSub(c_ids)
-            | Rise::NatMul(c_ids)
-            | Rise::NatDiv(c_ids)
-            | Rise::NatPow(c_ids) => {
-                for c_id in c_ids {
-                    rec(expr, c_id, shift, cutoff);
+            Rise::App(_, [c_id_a, c_id_b])
+            | Rise::TypeOf([c_id_a, c_id_b])
+            | Rise::FunType([c_id_a, c_id_b])
+            | Rise::ArrType([c_id_a, c_id_b])
+            | Rise::VecType([c_id_a, c_id_b])
+            | Rise::PairType([c_id_a, c_id_b])
+            | Rise::NatAdd([c_id_a, c_id_b])
+            | Rise::NatSub([c_id_a, c_id_b])
+            | Rise::NatMul([c_id_a, c_id_b])
+            | Rise::NatDiv([c_id_a, c_id_b])
+            | Rise::NatPow([c_id_a, c_id_b]) => {
+                // Mean bug lurking here, we must not shift down twice if the children point to the same
+                // Eclass
+                // probably just easier to create a new recexpr...
+                //
+                rec(expr, c_id_a, shift, cutoff, already_shifted);
+                if c_id_a != c_id_b {
+                    rec(expr, c_id_b, shift, cutoff, already_shifted);
                 }
             }
             Rise::NatFun(c_id)
             | Rise::DataFun(c_id)
             | Rise::AddrFun(c_id)
             | Rise::NatNatFun(c_id)
-            | Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff),
+            | Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff, already_shifted),
 
             Rise::Let
             | Rise::NatType
@@ -175,7 +186,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
             | Rise::Float(_) => (),
         }
     }
-    rec(expr, expr.root(), shift, cutoff);
+    rec(expr, expr.root(), shift, cutoff, &mut HashSet::new());
 }
 
 #[cfg(test)]
@@ -191,10 +202,10 @@ mod tests {
             cutoff: (u32, u32, u32, u32, u32),
             shift: (i32, i32, i32, i32, i32),
         ) {
-            let a = &to_shift.parse().unwrap();
+            let mut a = to_shift.parse().unwrap();
             let b = &ground_truth.parse().unwrap();
-            let shifted = shift_copy(a, shift.into(), cutoff.into());
-            assert_eq!(&shifted, b);
+            shift_mut(&mut a, shift.into(), cutoff.into());
+            assert_eq!(&a, b);
         }
         check(
             "(app %e0 %e1)",
