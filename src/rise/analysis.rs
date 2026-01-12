@@ -3,6 +3,8 @@ use std::cmp::{Ordering, PartialOrd};
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::HashSet;
 
+use crate::rise::canon_nat;
+
 use super::Rise;
 use super::db::Index;
 use super::kind::Kindable;
@@ -120,17 +122,18 @@ impl Analysis<Rise> for RiseAnalysis {
         AnalysisData { free, optimal }
     }
 
-    // fn modify(egraph: &mut EGraph<Rise, FreeBetaNatAnalysis>, id: Id) {
-    //     if !egraph[id].data.canon_nat_expr.is_empty()
-    //         && egraph[id].data.canon_nat_expr != egraph[id].data.beta_extract
-    //     {
-    //         // Add the canonical expr
-    //         let canon_nat = &egraph[id].data.canon_nat_expr;
-    //         let added = egraph.add_expr(&canon_nat.clone());
-    //         egraph.union(id, added);
+    fn modify(egraph: &mut EGraph<Rise, RiseAnalysis>, id: Id) {
+        if egraph[id].nodes.iter().any(|n| n.is_nat()) {
+            // Add the canonical expr
+            let Some(expr) = egraph[id].data.small_repr(egraph) else {
+                return;
+            };
+            let canon_nat_expr = canon_nat(&expr);
+            let added = egraph.add_expr(&canon_nat_expr);
+            egraph.union(id, added);
 
-    //         #[cfg(debug_assertions)]
-    //         egraph[id].assert_unique_leaves();
-    //     }
-    // }
+            // #[cfg(debug_assertions)]
+            // egraph[id].assert_unique_leaves();
+        }
+    }
 }
