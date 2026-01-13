@@ -116,11 +116,9 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
         already_shifted: &mut HashSet<Id>,
     ) {
         if !already_shifted.insert(id) {
-            // println!("DO NOT SHIFT TWICE! {}", expr[id]);
             return;
         }
 
-        // dbg!(&expr.len());
         match expr[id] {
             Rise::Var(index) => {
                 if index.value() >= cutoff.of_kind(index.kind()) {
@@ -129,9 +127,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
                 }
             }
             Rise::Lambda(l, e) => {
-                // println!("LAMBDA KIND: {}", l.kind());
                 let new_cutoff = cutoff.inc(l.kind());
-                // println!("NEW_CUTOFF {new_cutoff}");
                 rec(expr, e, shift, new_cutoff, already_shifted);
             }
             Rise::App(_, [c_id_a, c_id_b])
@@ -147,12 +143,9 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
             | Rise::NatPow([c_id_a, c_id_b]) => {
                 // Mean bug lurking here, we must not shift down twice if the children point to the same
                 // Eclass
-                // probably just easier to create a new recexpr...
-                //
+                // this is prevented by the already_shifted check
                 rec(expr, c_id_a, shift, cutoff, already_shifted);
-                if c_id_a != c_id_b {
-                    rec(expr, c_id_b, shift, cutoff, already_shifted);
-                }
+                rec(expr, c_id_b, shift, cutoff, already_shifted);
             }
             Rise::NatFun(c_id)
             | Rise::DataFun(c_id)
