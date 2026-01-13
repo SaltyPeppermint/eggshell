@@ -98,13 +98,24 @@ impl Analysis<Rise> for RiseAnalysis {
                 .data
                 .free
                 .iter()
-                .filter(|i| !i.is_zero() && i.kind() == l.kind())
-                .map(|i| i.dec(l.kind()))
+                .filter_map(|i| {
+                    if i.kind() == l.kind() {
+                        if i.is_zero() {
+                            None
+                        } else {
+                            Some(i.dec(l.kind()))
+                        }
+                    } else {
+                        Some(*i)
+                    }
+                })
+                // .filter(|i| !i.is_zero() && i.kind() == l.kind())
+                // .map(|i| i.dec(l.kind()))
                 .collect(),
             _ => enode
                 .children()
                 .iter()
-                .flat_map(|c| egraph[*c].data.free.iter())
+                .flat_map(|c_id| egraph[*c_id].data.free.iter())
                 .copied()
                 .collect(),
         };
