@@ -91,10 +91,11 @@ pub fn rules(ruleset: Ruleset) -> Vec<Rewrite<Rise, RiseAnalysis>> {
             rewrite!("eta-reduction"; "(typeOf (lam (typeOf (app (typeOf ?0 ?tAny0) (typeOf %e0 ?t0)) ?tAny1)) (fun ?t0 ?t1))" => { NotFreeIn::new("?0", 0, Shifted::new("?0", "?1", (-1,0,0,0,0).into(), (1,0,0,0,0).into(), pat("(typeOf ?1 (fun ?t0 ?t1))"))) }),
             // // OLD: rewrite!("beta"; "(app (lam ?body) ?e)" => { BetaExtractApplier::new("?body", "?e") }),
             rewrite!("beta"; "(app (typeOf (lam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs", Kind::Expr) }),
-            // rewrite!("beta-nat"; "(natApp (typeOf (natLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Nat) }),
-            // rewrite!("beta-data"; "(dataApp (typeOf (dataLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Data) }),
-            // rewrite!("beta-addr"; "(addrApp (typeOf (addrLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs",Kind::Addr) }),
-            // // // rewrite!("beta-nat-nat"; "(natNatApp (typeOf (natNatLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
+            // // Nat expr, type expr and addr expr have no type!
+            // rewrite!("beta-nat"; "(natApp (typeOf (natLam (typeOf ?body ?bodyTy)) ?lamTy) ?subs)" => { BetaExtractApplier::new("?body", "?subs",Kind::Nat) }),
+            // rewrite!("beta-data"; "(dataApp (typeOf (dataLam (typeOf ?body ?bodyTy)) ?lamTy) ?subs)" => { BetaExtractApplier::new("?body", "?subs",Kind::Data) }),
+            // rewrite!("beta-addr"; "(addrApp (typeOf (addrLam (typeOf ?body ?bodyTy)) ?lamTy) ?subs)" => { BetaExtractApplier::new("?body", "?subs",Kind::Addr) }),
+            //  // rewrite!("beta-nat-nat"; "(natNatApp (typeOf (natNatLam (typeOf ?body ?bodyTy)) ?lamTy) (typeOf ?subs ?subsTy))" => { BetaExtractApplier::new("?body", "?subs") }),
      ]);
     algorithmic
 }
