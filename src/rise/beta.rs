@@ -37,30 +37,21 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
         let Some(ex_subs) = egraph[subst[self.subs]].data.small_repr(egraph) else {
             return Vec::new();
         };
-        // println!("----");
-        // println!("UNSHIFTED BODY:");
-        // ex_body.pp(false);
-        // println!("UNSHIFTED SUBSTITUTION:");
-        // ex_subs.pp(false);
 
         let shifted = beta_reduce(&ex_body, ex_subs, self.kind);
-        let id = egraph.add_expr(&shifted);
-        egraph.union(eclass, id);
-        Vec::new()
+        let reduced_id = egraph.add_expr(&shifted);
+        if egraph.union(eclass, reduced_id) {
+            vec![eclass]
+        } else {
+            Vec::new()
+        }
     }
 }
 
 pub fn beta_reduce(body: &RecExpr<Rise>, mut arg: RecExpr<Rise>, kind: Kind) -> RecExpr<Rise> {
-    // println!("SHIFTED SUBSTITUTION:");
     shift_mut(&mut arg, Shift::up(kind), Cutoff::zero()); // shift up
-    // arg2.pp(false);
     let mut new_body = replace(body, Index::zero(kind), arg);
-
-    // println!("BODY BEFORE SHIFT DOWN WITH REPLACEMENT, CUTOFF 0, SHIFT: -1 with kind {kind}",);
-    // body2.pp(false);
     shift_mut(&mut new_body, Shift::down(kind), Cutoff::zero()); // shift down
-    // println!("SHIFTED BODY:");
-    // body2.pp(false);
     new_body
 }
 
