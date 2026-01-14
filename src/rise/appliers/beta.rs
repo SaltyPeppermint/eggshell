@@ -1,12 +1,12 @@
 use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
 
+use crate::rise::db::{Cutoff, Index, Shift};
+use crate::rise::kind::Kind;
+use crate::rise::kind::Kindable;
+use crate::rise::{Rise, RiseAnalysis};
 use crate::utils;
 
-use super::db::{Cutoff, Index, Shift};
-use super::kind::Kind;
-use super::kind::Kindable;
 use super::shifted::shift_mut;
-use super::{Rise, RiseAnalysis};
 
 pub struct BetaExtractApplier {
     body: Var,

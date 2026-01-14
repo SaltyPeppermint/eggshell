@@ -3,10 +3,10 @@ use hashbrown::HashSet;
 
 use crate::utils;
 
-use super::db::{Index, Shift};
-use super::kind::{Kind, Kindable};
-use super::lang::Application;
-use super::{Rise, RiseAnalysis};
+use crate::rise::db::{Index, Shift};
+use crate::rise::kind::{Kind, Kindable};
+use crate::rise::lang::Application;
+use crate::rise::{Rise, RiseAnalysis};
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,

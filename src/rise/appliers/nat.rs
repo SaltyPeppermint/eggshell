@@ -1,6 +1,7 @@
 use egg::{Applier, EGraph, Id, Pattern, PatternAst, Subst, Symbol, Var};
 
-use super::{Rise, RiseAnalysis};
+use crate::rise::nat::check_equivalence;
+use crate::rise::{Rise, RiseAnalysis, extract_small};
 
 // pub struct ComputeNat<A: Applier<Rise, RiseAnalysis>> {
 //     var: Var,
@@ -72,12 +73,12 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
         let Some(expected) = egraph[subst[self.var]].data.small_repr(egraph) else {
             return Vec::new();
         };
-        let Some(extracted) = super::extract_small(egraph, &self.nat_pattern, subst) else {
+        let Some(extracted) = extract_small(egraph, &self.nat_pattern, subst) else {
             return Vec::new();
         };
 
         let a = &mut egraph.analysis;
-        if super::check_equivalence(a, &expected, &extracted) {
+        if check_equivalence(a, &expected, &extracted) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {

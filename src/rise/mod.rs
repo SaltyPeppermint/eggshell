@@ -1,15 +1,14 @@
 mod analysis;
-mod beta;
+mod appliers;
 mod db;
-mod func;
 mod kind;
 mod lang;
 mod nat;
 mod pp;
 mod predicates;
 mod rules;
-mod shifted;
 
+use egg::{EGraph, ENodeOrVar, Pattern, PatternAst, Subst};
 use egg::{Id, Language, RecExpr};
 
 pub use analysis::RiseAnalysis;
@@ -64,6 +63,33 @@ pub fn canon_nat(expr: &RecExpr<Rise>) -> RecExpr<Rise> {
     let mut canon_expr = RecExpr::default();
     rec(expr, expr.root(), &mut canon_expr);
     canon_expr
+}
+
+fn extract_small(
+    egraph: &EGraph<Rise, RiseAnalysis>,
+    pattern: &Pattern<Rise>,
+    subst: &Subst,
+) -> Option<RecExpr<Rise>> {
+    fn rec(
+        ast: &PatternAst<Rise>,
+        id: Id,
+        subst: &Subst,
+        egraph: &EGraph<Rise, RiseAnalysis>,
+    ) -> Option<RecExpr<Rise>> {
+        match &ast[id] {
+            ENodeOrVar::Var(w) => egraph[subst[*w]].data.small_repr(egraph),
+            ENodeOrVar::ENode(e) => {
+                let mut expr = RecExpr::default();
+                let mut new_node = e.clone();
+                for c_id in new_node.children_mut() {
+                    *c_id = utils::add_expr(&mut expr, rec(ast, *c_id, subst, egraph)?);
+                }
+                expr.add(new_node);
+                Some(expr)
+            }
+        }
+    }
+    rec(&pattern.ast, pattern.ast.root(), subst, egraph)
 }
 
 // START TERM

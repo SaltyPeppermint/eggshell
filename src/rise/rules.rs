@@ -1,11 +1,10 @@
 use egg::{Pattern, Rewrite, rewrite};
 
-use super::beta::BetaExtractApplier;
-use super::func::{NotFreeIn, VectorizeScalarFun};
+use super::appliers::{
+    BetaExtractApplier, ComputeNatCheck, NotFreeIn, Shifted, VectorizeScalarFun,
+};
 use super::kind::Kind;
-use super::nat::ComputeNatCheck;
 use super::predicates::RisePredicate;
-use super::shifted::Shifted;
 use super::{Rise, RiseAnalysis};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]

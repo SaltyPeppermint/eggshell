@@ -1,9 +1,9 @@
 use egg::{Applier, EGraph, Id, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
-use super::db::{Cutoff, Shift};
-use super::kind::Kindable;
-use super::{Rise, RiseAnalysis};
+use crate::rise::db::{Cutoff, Shift};
+use crate::rise::kind::Kindable;
+use crate::rise::{Rise, RiseAnalysis};
 
 pub struct Shifted<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
