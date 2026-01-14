@@ -7,6 +7,7 @@ mod lang;
 mod nat;
 mod pp;
 mod rules;
+mod scheduler;
 mod shifted;
 
 use egg::{Id, Language, RecExpr};
@@ -17,20 +18,7 @@ pub use pp::PrettyPrint;
 pub use rules::{Ruleset, rules};
 
 use crate::sketch::{Sketch, SketchLang};
-
-fn build<L: Language>(rec_expr: &RecExpr<L>, id: Id) -> RecExpr<L> {
-    rec_expr[id]
-        .clone()
-        .build_recexpr(|child_id| rec_expr[child_id].clone())
-}
-
-fn add_expr<L: Language>(to: &mut RecExpr<L>, e: RecExpr<L>) -> Id {
-    let offset = to.len();
-    for n in e {
-        to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));
-    }
-    to.root()
-}
+use crate::utils;
 
 #[must_use]
 pub fn sketchify<F: Fn(&Rise) -> bool>(expr: &RecExpr<Rise>, also_sketchify: &F) -> Sketch<Rise> {
@@ -63,7 +51,7 @@ pub fn canon_nat(expr: &RecExpr<Rise>) -> RecExpr<Rise> {
     fn rec(expr: &RecExpr<Rise>, id: Id, canon_expr: &mut RecExpr<Rise>) -> Id {
         let node = &expr[id];
         if let Ok(canon_nat_expr) = nat::try_simplify(&node.build_recexpr(|i| expr[i].clone())) {
-            add_expr(canon_expr, canon_nat_expr)
+            utils::add_expr(canon_expr, canon_nat_expr)
         } else {
             let new_node = node
                 .clone()

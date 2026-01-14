@@ -1,9 +1,9 @@
 use egg::{Id, RecExpr};
 
 use super::{NatSolverError, Polynomial, Ratio, RationalFunction, Rise};
-use crate::rise::add_expr;
 use crate::rise::db::Index;
 use crate::rise::kind::{Kind, Kindable};
+use crate::utils;
 
 // ============================================================================
 // Conversions: Polynomial <-> RationalFunction
@@ -52,11 +52,11 @@ impl From<&RationalFunction> for RecExpr<Rise> {
         let mut expr = RecExpr::default();
         // Build numerator expression
         let numer_expr: RecExpr<Rise> = (&rf.numerator).into();
-        let numer_root = add_expr(&mut expr, numer_expr);
+        let numer_root = utils::add_expr(&mut expr, numer_expr);
 
         // Build denominator expression
         let denom_expr: RecExpr<Rise> = (&rf.denominator).into();
-        let denom_root = add_expr(&mut expr, denom_expr);
+        let denom_root = utils::add_expr(&mut expr, denom_expr);
 
         expr.add(Rise::NatDiv([numer_root, denom_root]));
         expr

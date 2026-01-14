@@ -147,3 +147,17 @@ pub fn find_diff<L: Language>(lhs: &RecExpr<L>, rhs: &RecExpr<L>) -> Option<(L, 
     }
     rec(lhs, lhs.root(), rhs, rhs.root())
 }
+
+pub(crate) fn build<L: Language>(rec_expr: &RecExpr<L>, id: Id) -> RecExpr<L> {
+    rec_expr[id]
+        .clone()
+        .build_recexpr(|child_id| rec_expr[child_id].clone())
+}
+
+pub(crate) fn add_expr<L: Language>(to: &mut RecExpr<L>, e: RecExpr<L>) -> Id {
+    let offset = to.len();
+    for n in e {
+        to.add(n.map_children(|id| Id::from(usize::from(id) + offset)));
+    }
+    to.root()
+}

@@ -1,5 +1,7 @@
 use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
 
+use crate::utils;
+
 use super::db::{Cutoff, Index, Shift};
 use super::kind::Kind;
 use super::kind::Kindable;
@@ -64,7 +66,7 @@ fn replace(expr: &RecExpr<Rise>, to_replace: Index, mut subs: RecExpr<Rise>) -> 
         subs: &mut RecExpr<Rise>,
     ) -> Id {
         match &expr[id] {
-            Rise::Var(found) if to_replace == *found => super::add_expr(result, subs.clone()),
+            Rise::Var(found) if to_replace == *found => utils::add_expr(result, subs.clone()),
             Rise::Lambda(l, e) => {
                 let kind = l.kind();
                 shift_mut(subs, Shift::up(kind), Cutoff::zero());

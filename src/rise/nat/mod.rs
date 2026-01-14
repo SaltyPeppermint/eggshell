@@ -8,7 +8,7 @@ use std::num::TryFromIntError;
 use egg::{EGraph, ENodeOrVar, Id, Language, Pattern, PatternAst, RecExpr, Subst};
 use thiserror::Error;
 
-use crate::rise::add_expr;
+use crate::utils;
 
 use super::{Rise, RiseAnalysis};
 use monomial::Monomial;
@@ -65,7 +65,7 @@ fn extract_small(
                 let mut expr = RecExpr::default();
                 let mut new_node = e.clone();
                 for c_id in new_node.children_mut() {
-                    *c_id = add_expr(&mut expr, rec(ast, *c_id, subst, egraph)?);
+                    *c_id = utils::add_expr(&mut expr, rec(ast, *c_id, subst, egraph)?);
                 }
                 expr.add(new_node);
                 Some(expr)
