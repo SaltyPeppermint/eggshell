@@ -1,4 +1,4 @@
-use egg::{Applier, EGraph, Id, Language, Pattern, PatternAst, RecExpr, Subst, Symbol, Var};
+use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
 use crate::utils;
@@ -7,10 +7,6 @@ use super::db::{Index, Shift};
 use super::kind::{Kind, Kindable};
 use super::lang::Application;
 use super::{Rise, RiseAnalysis};
-
-pub fn pat(pat: &str) -> impl Applier<Rise, RiseAnalysis> {
-    pat.parse::<Pattern<Rise>>().unwrap()
-}
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
     var: Var,

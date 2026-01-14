@@ -1,7 +1,7 @@
 use std::cmp::{Ordering, PartialOrd};
 
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 use crate::rise::canon_nat;
 
@@ -12,6 +12,7 @@ use super::kind::Kindable;
 #[derive(Default, Debug)]
 pub struct RiseAnalysis {
     nat_eq_cache: EGraph<Rise, ()>,
+    min_upstream_size: Option<HashMap<Id, usize>>,
 }
 
 impl RiseAnalysis {
@@ -35,17 +36,32 @@ impl RiseAnalysis {
         let rhs_id = self.nat_eq_cache.add_expr(rhs);
         self.nat_eq_cache.union(lhs_id, rhs_id);
     }
+
+    pub fn set_min_upstream_size(&mut self, min_upstream_size: Option<HashMap<Id, usize>>) {
+        self.min_upstream_size = min_upstream_size;
+    }
+
+    #[must_use]
+    pub fn min_upstream_size(&self) -> Option<&HashMap<Id, usize>> {
+        self.min_upstream_size.as_ref()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Optimal {
-    cost: usize,
+    size: usize,
     node: Rise,
+}
+
+impl Optimal {
+    pub fn size(&self) -> usize {
+        self.size
+    }
 }
 
 impl Ord for Optimal {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.cost.cmp(&other.cost)
+        self.size.cmp(&other.size)
     }
 }
 
@@ -123,10 +139,10 @@ impl Analysis<Rise> for RiseAnalysis {
         let optimal = enode
             .children()
             .iter()
-            .map(|id| egraph[*id].data.optimal.as_ref().map(|o| o.cost))
+            .map(|id| egraph[*id].data.optimal.as_ref().map(|o| o.size))
             .sum::<Option<usize>>()
-            .map(|c_cost| Optimal {
-                cost: c_cost + 1,
+            .map(|children_size| Optimal {
+                size: children_size + 1,
                 node: enode.to_owned(),
             });
 

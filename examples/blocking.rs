@@ -3,7 +3,7 @@ use std::time::Duration;
 use egg::{AstSize, RecExpr, Runner, SimpleScheduler};
 
 use eggshell::eqsat::hooks;
-use eggshell::rise::{self, BLOCKING_GOAL, MM, Rise, Ruleset, SPLIT_GUIDE};
+use eggshell::rise::{self, BLOCKING_GOAL, MM, PrettyPrint, Rise, Ruleset, SPLIT_GUIDE};
 use eggshell::sketch;
 use eggshell::utils;
 
@@ -18,14 +18,18 @@ fn main() {
         .with_node_limit(10_000_000)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(split_guide.clone()))
-        // .with_hook(hooks::printer_hook)
+        .with_hook(rise::compute_upstream_sizes_hook)
+        .with_hook(hooks::printer_hook)
         .run(&rise::rules(Ruleset::Split));
 
-    println!("{}\nSPLIT STEP DONE DONE\n-----------\n", runner_1.report());
     assert_eq!(
         runner_1.roots[0],
         runner_1.egraph.lookup_expr(&split_guide).unwrap()
     );
+
+    println!("{}\nSPLIT STEP DONE DONE\n-----------\n", runner_1.report());
+    split_guide.pp(false);
+    println!("Raw: {split_guide}");
 
     let runner_2 = Runner::default()
         .with_expr(&split_guide)
@@ -34,6 +38,7 @@ fn main() {
         .with_iter_limit(11)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(blocking_goal.clone()))
+        .with_hook(rise::compute_upstream_sizes_hook)
         .with_hook(hooks::printer_hook)
         .run(&rise::rules(Ruleset::Reorder));
 

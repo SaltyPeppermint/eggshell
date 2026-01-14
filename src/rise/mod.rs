@@ -6,8 +6,8 @@ mod kind;
 mod lang;
 mod nat;
 mod pp;
+mod predicates;
 mod rules;
-mod scheduler;
 mod shifted;
 
 use egg::{Id, Language, RecExpr};
@@ -15,6 +15,8 @@ use egg::{Id, Language, RecExpr};
 pub use analysis::RiseAnalysis;
 pub use lang::Rise;
 pub use pp::PrettyPrint;
+pub use predicates::RisePredicate;
+pub use predicates::compute_upstream_sizes_hook;
 pub use rules::{Ruleset, rules};
 
 use crate::sketch::{Sketch, SketchLang};
