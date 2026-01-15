@@ -1,13 +1,13 @@
-use std::fs;
+use std::{fmt::Display, fs};
 
 use egg::{Analysis, Language, RecExpr, Runner};
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 use log::{info, warn};
 
-pub const fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub const fn root_check_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String>
 where
     L: Language,
-    N: Analysis<L> + Default,
+    N: Analysis<L>,
 {
     move |r: &mut Runner<L, N>| {
         let mut uniq = HashSet::new();
@@ -21,10 +21,10 @@ where
 
 pub const fn targe_hook<L, N>(
     target: RecExpr<L>,
-) -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+) -> impl Fn(&mut Runner<L, N>) -> Result<(), String>
 where
-    L: Language + 'static,
-    N: Analysis<L> + Default,
+    L: Language,
+    N: Analysis<L>,
 {
     move |r: &mut Runner<L, N>| {
         if let Some(id) = r.egraph.lookup_expr(&target)
@@ -59,10 +59,10 @@ where
 }
 
 #[expect(clippy::cast_precision_loss, clippy::missing_panics_doc)]
-pub fn memory_log_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String> + 'static
+pub fn memory_log_hook<L, N>() -> impl Fn(&mut Runner<L, N>) -> Result<(), String>
 where
     L: Language,
-    N: Analysis<L> + Default,
+    N: Analysis<L>,
 {
     let contents = fs::read_to_string("/proc/meminfo").expect("Could not read /proc/meminfo");
     let mem_info = contents
@@ -95,4 +95,26 @@ where
         }
         Ok(())
     }
+}
+
+#[expect(clippy::missing_errors_doc)]
+pub fn node_detail_hook<L, N>(r: &mut Runner<L, N>) -> Result<(), String>
+where
+    L: Language + Display,
+    N: Analysis<L>,
+{
+    println!("-------\nNode Distribution:");
+    let counts = r.egraph.nodes().iter().fold(HashMap::new(), |mut acc, n| {
+        let node_name = n.to_string();
+        acc.entry(node_name)
+            .and_modify(|x| {
+                *x += 1;
+            })
+            .or_insert(1);
+        acc
+    });
+    for (k, v) in counts {
+        println!("{k}: {v}");
+    }
+    Ok(())
 }

@@ -21,11 +21,12 @@ impl<S: Searcher<Rise, RiseAnalysis>> Searcher<Rise, RiseAnalysis> for RisePredi
         limit: usize,
     ) -> Option<SearchMatches<'_, Rise>> {
         if self.check_limits(egraph, eclass) {
+            // println!("PREDICATED SAID OK\n");
             return self
                 .searcher
                 .search_eclass_with_limit(egraph, eclass, limit);
         }
-        println!("PREDICATED SAID NAH\n");
+        // println!("PREDICATED SAID NAH\n");
         None
     }
 
@@ -42,8 +43,8 @@ impl<S: Searcher<Rise, RiseAnalysis>> RisePredicate<S> {
     #[must_use]
     pub fn new(searcher: S) -> Self {
         Self {
-            max_array_dim: 8,
-            max_ast_size: 1024,
+            max_array_dim: 6,
+            max_ast_size: 2048,
             searcher,
         }
     }
@@ -68,43 +69,59 @@ impl<S: Searcher<Rise, RiseAnalysis>> RisePredicate<S> {
 }
 
 fn check_array_dim(egraph: &EGraph<Rise, RiseAnalysis>, id: Id, limit: usize) -> bool {
-    fn rec(ty_expr: &RecExpr<Rise>, id: Id) -> usize {
-        match ty_expr[id] {
-            Rise::NatFun(c_id)
-            | Rise::DataFun(c_id)
-            | Rise::AddrFun(c_id)
-            | Rise::NatNatFun(c_id) => rec(ty_expr, c_id),
-            Rise::FunType([in_ty, out_ty]) => {
-                max(rec(ty_expr, in_ty), rec(ty_expr, out_ty))
-            }
-            Rise::ArrType([_, c_id]) => 1 + rec(ty_expr, c_id), // Only thing we really count
-            Rise::PairType([fst_id, snd_id]) => {
-                max(rec(ty_expr, fst_id), rec(ty_expr, snd_id))
-            }
-            // Ignore other data types
+    fn rec(expr: &RecExpr<Rise>, id: Id) -> usize {
+        // Ignore natexpr and actual expr nodes, only the types add anything
+        match expr[id] {
+            Rise::FunType([in_ty, out_ty]) => max(rec(expr, in_ty), rec(expr, out_ty)),
+            Rise::ArrType([_, c_id]) => 1 + rec(expr, c_id),
+            Rise::PairType([fst_id, snd_id]) => max(rec(expr, fst_id), rec(expr, snd_id)),
             Rise::IndexType(_)
             | Rise::VecType(_)
             | Rise::NatType
             | Rise::F32
-            // Ignore natexpr
             | Rise::NatAdd(_)
             | Rise::NatSub(_)
             | Rise::NatMul(_)
             | Rise::NatDiv(_)
             | Rise::NatPow(_)
-            | Rise::Integer(_) => 0,
-            _ => panic!("This should not be found in a ty_expr {}", ty_expr[id]),
+            | Rise::Integer(_)
+            | Rise::Var(_)
+            | Rise::Let
+            | Rise::AsVector
+            | Rise::AsScalar
+            | Rise::VectorFromScalar
+            | Rise::Snd
+            | Rise::Fst
+            | Rise::Add
+            | Rise::Mul
+            | Rise::ToMem
+            | Rise::Split
+            | Rise::Join
+            | Rise::Generate
+            | Rise::Transpose
+            | Rise::Zip
+            | Rise::Unzip
+            | Rise::Map
+            | Rise::MapPar
+            | Rise::Reduce
+            | Rise::ReduceSeq
+            | Rise::ReduceSeqUnroll
+            | Rise::Float(_) => 0,
+            Rise::NatFun(ty_id)
+            | Rise::DataFun(ty_id)
+            | Rise::AddrFun(ty_id)
+            | Rise::NatNatFun(ty_id)
+            | Rise::TypeOf([_, ty_id]) => rec(expr, ty_id),
+            Rise::Lambda(_, c_id) => rec(expr, c_id),
+            Rise::App(_, [a_id, b_id]) => max(rec(expr, a_id), rec(expr, b_id)),
         }
     }
     let Some(repr) = egraph[id].data.small_repr(egraph) else {
-        return true;
+        return false;
     };
-    let Rise::TypeOf([_, ty_id]) = repr[repr.root()] else {
-        return true;
-    };
-    let array_dim = rec(&repr, ty_id);
-    println!("Array dim is {array_dim}");
-    array_dim < limit
+    let array_dim = rec(&repr, repr.root());
+    // println!("Array dim is {array_dim}");
+    array_dim <= limit
 }
 
 /// Step 1: Compute the upstream sizes for the whole graph (or reachable parts).
@@ -200,6 +217,6 @@ pub fn check_ast_size(
     };
 
     let min_ast_size = mus + mds.size();
-    println!("Ast size is {min_ast_size}");
-    min_ast_size < limit
+    // println!("Ast size is {min_ast_size}");
+    min_ast_size <= limit
 }
