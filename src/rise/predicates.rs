@@ -62,7 +62,10 @@ impl<S: Searcher<Rise, RiseAnalysis>> RisePredicate<S> {
     }
 
     fn check_limits(&self, egraph: &EGraph<Rise, RiseAnalysis>, id: Id) -> bool {
-        let upstream_sizes = egraph.analysis.min_upstream_size().unwrap();
+        let upstream_sizes = egraph
+            .analysis
+            .min_upstream_size()
+            .expect("Only works if the `compute_upstream_sizes_hook` is used.");
         check_array_dim(egraph, id, self.max_array_dim)
             && check_ast_size(egraph, id, upstream_sizes, self.max_ast_size)
     }
@@ -84,7 +87,8 @@ fn check_array_dim(egraph: &EGraph<Rise, RiseAnalysis>, id: Id, limit: usize) ->
             | Rise::NatMul(_)
             | Rise::NatDiv(_)
             | Rise::NatPow(_)
-            | Rise::Integer(_)
+            | Rise::IntLit(_)
+            | Rise::NatCst(_)
             | Rise::Var(_)
             | Rise::Let
             | Rise::AsVector
@@ -106,7 +110,7 @@ fn check_array_dim(egraph: &EGraph<Rise, RiseAnalysis>, id: Id, limit: usize) ->
             | Rise::Reduce
             | Rise::ReduceSeq
             | Rise::ReduceSeqUnroll
-            | Rise::Float(_) => 0,
+            | Rise::FloatLit(_) => 0,
             Rise::NatFun(ty_id)
             | Rise::DataFun(ty_id)
             | Rise::AddrFun(ty_id)

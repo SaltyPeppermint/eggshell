@@ -89,7 +89,7 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
         fn rec(expr: &RecExpr<Rise>, id: Id) -> Result<RationalFunction, NatSolverError> {
             match &expr[id] {
                 // Integer constant
-                Rise::Integer(n) => Ok((*n).into()),
+                Rise::NatCst(n) => Ok((n.0).into()),
                 // Single variable with exponent 1
                 Rise::Var(index) if index.kind() == Kind::Nat => Ok((*index).into()),
                 Rise::NatAdd([left, right]) => {
@@ -116,7 +116,7 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
                     let base_rf = rec(expr, *base)?;
                     // Exponent should be an integer
                     match &expr[*exp] {
-                        Rise::Integer(n) => base_rf.pow((*n).try_into().unwrap()),
+                        Rise::NatCst(n) => base_rf.pow((n.0).try_into().unwrap()),
                         node => Err(NatSolverError::NonIntegerExponent(node.clone())),
                     }
                 }

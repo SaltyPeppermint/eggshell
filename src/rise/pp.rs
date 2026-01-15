@@ -52,7 +52,12 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         | Rise::F32 => panic!("Should not see types in expression position: {node}"),
 
         // NatExprs inside Expr position (Panic)
-        Rise::NatAdd(_) | Rise::NatSub(_) | Rise::NatMul(_) | Rise::NatDiv(_) | Rise::NatPow(_) => {
+        Rise::NatAdd(_)
+        | Rise::NatSub(_)
+        | Rise::NatMul(_)
+        | Rise::NatDiv(_)
+        | Rise::NatPow(_)
+        | Rise::NatCst(_) => {
             panic!("NatExpr should only appear in types: {node}")
         }
 
@@ -77,9 +82,8 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         | Rise::Reduce
         | Rise::ReduceSeq
         | Rise::ReduceSeqUnroll
-        | Rise::Float(_) => (node.to_string().yellow(), false),
-
-        Rise::Integer(i) => (format!("{i}int").cyan(), false),
+        | Rise::FloatLit(_) => (node.to_string().yellow(), false),
+        Rise::IntLit(i) => (format!("{i}").cyan(), false),
     }
 }
 
@@ -109,7 +113,7 @@ fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredSt
         Rise::NatMul(_) => format!("({} * {})", children[0], children[1]).white(),
         Rise::NatDiv(_) => format!("({} / {})", children[0], children[1]).white(),
         Rise::NatPow(_) => format!("({} ^ {})", children[0], children[1]).white(),
-        Rise::Integer(i) => format!("{i}int").cyan(),
+        Rise::NatCst(i) => format!("{i}").cyan(),
 
         _ => panic!("Expected type node but found {node}"),
     }

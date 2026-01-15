@@ -1,6 +1,8 @@
 use egg::RecExpr;
 use num_traits::One;
 
+use crate::rise::lang::Nat;
+
 use super::{Index, Monomial, Polynomial, Ratio, Rise};
 
 // ============================================================================
@@ -11,7 +13,7 @@ impl From<&Polynomial> for RecExpr<Rise> {
     fn from(p: &Polynomial) -> Self {
         if p.is_zero() {
             let mut expr = RecExpr::default();
-            expr.add(Rise::Integer(0));
+            expr.add(Rise::NatCst(Nat(0)));
             return expr;
         }
 
@@ -22,13 +24,13 @@ impl From<&Polynomial> for RecExpr<Rise> {
 
                 let term_id = if monomial.is_constant() {
                     // Handle constant
-                    let numer_id = expr.add(Rise::Integer(*coeff.numer()));
+                    let numer_id = expr.add(Rise::NatCst(Nat(*coeff.numer())));
                     if coeff.is_integer() {
                         // Integer constant (denom == 1)
                         numer_id
                     } else {
                         // Fraction constant (numer/denom)
-                        let denom_id = expr.add(Rise::Integer(*coeff.denom()));
+                        let denom_id = expr.add(Rise::NatCst(Nat(*coeff.denom())));
                         expr.add(Rise::NatDiv([numer_id, denom_id]))
                     }
                 } else {
@@ -38,12 +40,12 @@ impl From<&Polynomial> for RecExpr<Rise> {
                         monomial_id
                     } else if coeff.is_integer() {
                         // Integer coefficient (denom == 1)
-                        let coeff_id = expr.add(Rise::Integer(*coeff.numer()));
+                        let coeff_id = expr.add(Rise::NatCst(Nat(*coeff.numer())));
                         expr.add(Rise::NatMul([coeff_id, monomial_id]))
                     } else {
                         // Rational coefficient: represent as (numer/denom) * monomial
-                        let numer_id = expr.add(Rise::Integer(*coeff.numer()));
-                        let denom_id = expr.add(Rise::Integer(*coeff.denom()));
+                        let numer_id = expr.add(Rise::NatCst(Nat(*coeff.numer())));
+                        let denom_id = expr.add(Rise::NatCst(Nat(*coeff.denom())));
                         let frac_id = expr.add(Rise::NatDiv([numer_id, denom_id]));
                         expr.add(Rise::NatMul([frac_id, monomial_id]))
                     }

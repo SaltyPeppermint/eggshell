@@ -175,8 +175,9 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
             | Rise::Reduce
             | Rise::ReduceSeq
             | Rise::ReduceSeqUnroll
-            | Rise::Integer(_)
-            | Rise::Float(_) => (),
+            | Rise::IntLit(_)
+            | Rise::NatCst(_)
+            | Rise::FloatLit(_) => (),
         }
     }
     rec(expr, expr.root(), shift, cutoff, &mut HashSet::new());

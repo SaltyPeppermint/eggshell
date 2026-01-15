@@ -41,6 +41,7 @@ fn main() {
         .with_hook(rise::compute_upstream_sizes_hook)
         .with_hook(hooks::printer_hook)
         .with_hook(hooks::node_detail_hook)
+        // .with_hook(rise::illegal_array_hook)
         .run(&rise::rules(Ruleset::Reorder));
 
     println!("{}\nREORDER STEP DONE\n-----------\n", runner_2.report());

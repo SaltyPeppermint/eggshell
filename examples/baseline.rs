@@ -11,6 +11,7 @@ fn main() {
         .with_expr(&mm)
         .with_iter_limit(3)
         .with_scheduler(SimpleScheduler)
+        .with_hook(rise::compute_upstream_sizes_hook)
         .with_hook(hooks::targe_hook(baseline_goal.clone()))
         .run(&rise::rules(Ruleset::All));
 

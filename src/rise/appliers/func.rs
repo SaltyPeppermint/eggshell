@@ -5,7 +5,7 @@ use crate::utils;
 
 use crate::rise::db::{Index, Shift};
 use crate::rise::kind::{Kind, Kindable};
-use crate::rise::lang::Application;
+use crate::rise::lang::{Application, Nat};
 use crate::rise::{Rise, RiseAnalysis};
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
@@ -82,7 +82,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
         let Some(size_extracted) = &egraph[subst[self.size_var]].data.small_repr(egraph) else {
             return Vec::new();
         };
-        let n = extracted_int(size_extracted);
+        let n = extracted_nat(size_extracted);
         if let Some((vectorized_expr, _, expr_id)) =
             vec_expr(&extracted, n, HashSet::new(), extracted.root())
         {
@@ -99,9 +99,9 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
     }
 }
 
-fn extracted_int(expr: &RecExpr<Rise>) -> i64 {
-    if let Rise::Integer(i) = expr[0.into()] {
-        return i;
+fn extracted_nat(expr: &RecExpr<Rise>) -> i64 {
+    if let Rise::NatCst(n) = expr[0.into()] {
+        return n.0;
     }
     panic!("Unexpected thing in expr")
 }
@@ -172,7 +172,7 @@ fn vec_expr(
 
             Some((new, fun_id, lam_id))
         }
-        Rise::Integer(_) => {
+        Rise::IntLit(_) => {
             let vec_ty = vec_ty(expr, n, *ty_id)?;
             let mut new = RecExpr::default();
 
@@ -215,7 +215,7 @@ fn vec_expr(
         | Rise::ReduceSeq
         | Rise::ReduceSeqUnroll
         | Rise::Let
-        | Rise::Float(_)
+        | Rise::FloatLit(_)
         | Rise::AsVector
         | Rise::AsScalar
         | Rise::VectorFromScalar => None,
@@ -236,7 +236,8 @@ fn vec_expr(
         | Rise::NatSub(_)
         | Rise::NatMul(_)
         | Rise::NatDiv(_)
-        | Rise::NatPow(_) => {
+        | Rise::NatPow(_)
+        | Rise::NatCst(_) => {
             panic!("Cannot vectorize this in this fn: {:?}", &expr[*expr_id])
         }
     }
@@ -254,7 +255,7 @@ fn vec_ty(expr: &RecExpr<Rise>, n: i64, id: Id) -> Option<RecExpr<Rise>> {
         Rise::F32 => {
             let mut vec_ty = RecExpr::default();
             let scalar_ty = vec_ty.add(Rise::F32);
-            let width = vec_ty.add(Rise::Integer(n));
+            let width = vec_ty.add(Rise::NatCst(Nat(n)));
             vec_ty.add(Rise::VecType([width, scalar_ty]));
             Some(vec_ty)
         }

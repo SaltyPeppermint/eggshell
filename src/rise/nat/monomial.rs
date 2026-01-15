@@ -5,6 +5,7 @@ use egg::{Id, RecExpr};
 
 use super::Rise;
 use crate::rise::db::Index;
+use crate::rise::lang::{Int, Nat};
 
 /// Represents a monomial term's variables and their exponents
 /// We use `BTreeMap` to keep variables sorted for canonical form
@@ -68,7 +69,7 @@ impl Monomial {
                 var_id
             } else {
                 // Positive or negative exponent: use pow
-                let exp_id = expr.add(Rise::Integer(*exponent));
+                let exp_id = expr.add(Rise::IntLit(Int(*exponent)));
                 expr.add(Rise::NatPow([var_id, exp_id]))
             };
             // Multiply with previous terms
@@ -79,7 +80,7 @@ impl Monomial {
         }
         // If we have never set it to something other than none, the self.var were empty
         // => Constant monomial (1)
-        result_id.unwrap_or_else(|| expr.add(Rise::Integer(1)))
+        result_id.unwrap_or_else(|| expr.add(Rise::NatCst(Nat(1))))
     }
 }
 
