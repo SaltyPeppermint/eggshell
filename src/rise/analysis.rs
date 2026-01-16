@@ -57,6 +57,10 @@ impl Optimal {
     pub fn size(&self) -> usize {
         self.size
     }
+
+    pub fn node(&self) -> &Rise {
+        &self.node
+    }
 }
 
 impl Ord for Optimal {
@@ -116,11 +120,7 @@ impl Analysis<Rise> for RiseAnalysis {
                 .iter()
                 .filter_map(|i| {
                     if i.kind() == l.kind() {
-                        if i.is_zero() {
-                            None
-                        } else {
-                            Some(i.dec(l.kind()))
-                        }
+                        if i.is_zero() { None } else { Some(i.dec()) }
                     } else {
                         Some(*i)
                     }

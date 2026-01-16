@@ -19,12 +19,14 @@ impl Index {
         Self::new(kind, 0)
     }
 
-    pub fn inc(self, kind: Kind) -> Self {
-        self + Shift::up(kind)
+    pub fn inc(mut self) -> Self {
+        self.value = self.value.checked_add_signed(1).unwrap();
+        self
     }
 
-    pub fn dec(self, kind: Kind) -> Self {
-        self + Shift::down(kind)
+    pub fn dec(mut self) -> Self {
+        self.value = self.value.checked_add_signed(-1).unwrap();
+        self
     }
 
     pub fn value(self) -> u32 {

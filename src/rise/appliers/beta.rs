@@ -70,7 +70,7 @@ fn replace(expr: &RecExpr<Rise>, to_replace: Index, mut subs: RecExpr<Rise>) -> 
             Rise::Lambda(l, e) => {
                 let kind = l.kind();
                 shift_mut(subs, Shift::up(kind), Cutoff::zero());
-                let e2 = rec(result, expr, *e, to_replace.inc(kind), subs);
+                let e2 = rec(result, expr, *e, to_replace.inc(), subs);
                 shift_mut(subs, Shift::down(kind), Cutoff::zero());
                 result.add(Rise::Lambda(*l, e2))
             }
