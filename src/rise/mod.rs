@@ -30,7 +30,7 @@ pub fn sketchify<F: Fn(&Rise) -> bool>(expr: &RecExpr<Rise>, also_sketchify: &F)
         sketch: &mut Sketch<Rise>,
     ) -> Id {
         match &expr[id] {
-            Rise::Var(_) => sketch.add(SketchLang::Any),
+            Rise::Var(_) | Rise::TypedVar(_, _) => sketch.add(SketchLang::Any),
             other if also_sketchify(other) => sketch.add(SketchLang::Any),
             other => {
                 let new_node = SketchLang::Node(

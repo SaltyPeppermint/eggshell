@@ -1,4 +1,4 @@
-use std::cmp::{Reverse, max};
+use std::cmp::Reverse;
 use std::collections::BinaryHeap;
 
 use egg::{EGraph, Id, Language, PatternAst, RecExpr, Runner, SearchMatches, Searcher};
@@ -74,50 +74,15 @@ impl<S: Searcher<Rise, RiseAnalysis>> RisePredicate<S> {
 fn check_array_dim(egraph: &EGraph<Rise, RiseAnalysis>, id: Id, limit: usize) -> bool {
     fn rec(expr: &RecExpr<Rise>, id: Id) -> usize {
         // Ignore natexpr and actual expr nodes, only the types add anything
-        match expr[id] {
-            Rise::FunType([in_ty, out_ty]) => max(rec(expr, in_ty), rec(expr, out_ty)),
-            Rise::ArrType([_, c_id]) => 1 + rec(expr, c_id),
-            Rise::PairType([fst_id, snd_id]) => max(rec(expr, fst_id), rec(expr, snd_id)),
-            Rise::IndexType(_)
-            | Rise::VecType(_)
-            | Rise::NatType
-            | Rise::F32
-            | Rise::NatAdd(_)
-            | Rise::NatSub(_)
-            | Rise::NatMul(_)
-            | Rise::NatDiv(_)
-            | Rise::NatPow(_)
-            | Rise::IntLit(_)
-            | Rise::NatCst(_)
-            | Rise::Var(_)
-            | Rise::Let
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::VectorFromScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Add
-            | Rise::Mul
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Zip
-            | Rise::Unzip
-            | Rise::Map
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll
-            | Rise::FloatLit(_) => 0,
-            Rise::NatFun(ty_id)
-            | Rise::DataFun(ty_id)
-            | Rise::AddrFun(ty_id)
-            | Rise::NatNatFun(ty_id)
-            | Rise::TypeOf([_, ty_id]) => rec(expr, ty_id),
-            Rise::Lambda(_, c_id) => rec(expr, c_id),
-            Rise::App(_, [a_id, b_id]) => max(rec(expr, a_id), rec(expr, b_id)),
+        if let Rise::ArrType([_, c_id]) = &expr[id] {
+            1 + rec(expr, *c_id)
+        } else {
+            expr[id]
+                .children()
+                .iter()
+                .map(|c_id| rec(expr, *c_id))
+                .max()
+                .unwrap_or(0)
         }
     }
     let Some(repr) = egraph[id].data.small_repr(egraph) else {

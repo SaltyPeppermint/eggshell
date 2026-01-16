@@ -33,8 +33,8 @@ fn main() {
 
     let runner_2 = Runner::default()
         .with_expr(&split_guide)
-        .with_time_limit(Duration::from_secs(60))
-        .with_node_limit(10_000_000)
+        .with_time_limit(Duration::from_secs(300))
+        .with_node_limit(100_000_000)
         .with_iter_limit(12)
         .with_scheduler(SimpleScheduler)
         .with_hook(hooks::targe_hook(blocking_goal.clone()))

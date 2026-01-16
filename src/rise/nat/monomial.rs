@@ -3,9 +3,9 @@ use std::fmt;
 
 use egg::{Id, RecExpr};
 
-use super::Rise;
+use crate::rise::Rise;
 use crate::rise::db::Index;
-use crate::rise::lang::{Int, Nat};
+use crate::rise::lang::Nat;
 
 /// Represents a monomial term's variables and their exponents
 /// We use `BTreeMap` to keep variables sorted for canonical form
@@ -69,7 +69,7 @@ impl Monomial {
                 var_id
             } else {
                 // Positive or negative exponent: use pow
-                let exp_id = expr.add(Rise::IntLit(Int(*exponent)));
+                let exp_id = expr.add(Rise::NatCst(Nat(*exponent)));
                 expr.add(Rise::NatPow([var_id, exp_id]))
             };
             // Multiply with previous terms

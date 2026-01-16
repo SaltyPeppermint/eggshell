@@ -1,9 +1,10 @@
 use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
 use hashbrown::HashSet;
 
+use crate::rise::lang::Primitive;
 use crate::utils;
 
-use crate::rise::db::{Index, Shift};
+use crate::rise::db::Index;
 use crate::rise::kind::{Kind, Kindable};
 use crate::rise::lang::{Application, Nat};
 use crate::rise::{Rise, RiseAnalysis};
@@ -107,121 +108,117 @@ fn extracted_nat(expr: &RecExpr<Rise>) -> i64 {
 }
 
 // Expr, ty_id, expr_id
-#[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i64,
     v_env: HashSet<Index>,
-    type_of_id: Id,
+    id: Id,
 ) -> Option<(RecExpr<Rise>, Id, Id)> {
-    let Rise::TypeOf([expr_id, ty_id]) = &expr[type_of_id] else {
-        panic!("Not TypeOf! {:?}", expr[type_of_id]);
-    };
-    match &expr[*expr_id] {
-        Rise::Var(index) if v_env.contains(index) => {
+    match &expr[id] {
+        Rise::TypedVar(index, ty) if v_env.contains(index) => {
             let mut new = RecExpr::default();
-            let vec_ty_id = utils::add_expr(&mut new, vec_ty(expr, n, *ty_id)?);
-            let var_id = new.add(Rise::Var(*index));
-            new.add(Rise::TypeOf([var_id, vec_ty_id]));
+            let vec_ty_id = utils::add_expr(&mut new, vec_ty(expr, n, *ty)?);
+            let var_id = new.add(Rise::TypedVar(*index, vec_ty_id));
             Some((new, vec_ty_id, var_id))
         }
-        Rise::App(a, [f, e]) if a.kind() == Kind::Expr => {
+
+        Rise::App(app, [f, e, _]) if app.is_expr() => {
             let (fv, fv_ty_id, _) = vec_expr(expr, n, v_env.clone(), *f)?;
             let (ev, _, _) = vec_expr(expr, n, v_env.clone(), *e)?;
 
             let Rise::FunType([_, output_ty_id]) = fv[fv_ty_id] else {
-                panic!("No Fun type wrapped in here: {:?}", &fv[fv_ty_id])
+                panic!("No Fun type wrapped in here: {:?}", &fv[fv_ty_id]);
             };
 
             let mut new = RecExpr::default();
             let fv_id = utils::add_expr(&mut new, fv);
+            // The index for fv is preserved since add_expr only appends the second arg
             let ev_id = utils::add_expr(&mut new, ev);
 
-            let app_id = new.add(Rise::App(*a, [fv_id, ev_id]));
+            let app_id = new.add(Rise::App(*app, [fv_id, ev_id, output_ty_id]));
 
-            // The index for fv is preserved since join_expr only appends the second arg
-            new.add(Rise::TypeOf([app_id, output_ty_id]));
             Some((new, output_ty_id, app_id))
         }
-        Rise::Lambda(l, e) if l.kind() == Kind::Expr => {
-            let v_env2 = v_env
+        Rise::Lambda(lam, [e, ty]) if lam.is_expr() => {
+            let new_v_env = v_env
                 .into_iter()
-                .map(|i| i + Shift::up(l.kind()))
+                .map(|i| i.inc())
                 .chain([Index::zero(Kind::Expr)])
                 .collect::<HashSet<_>>();
 
             // Vectorize e
-            let (ev, ev_ty_id, _) = vec_expr(expr, n, v_env2, *e)?;
+            let (ev, ev_ty_id, _) = vec_expr(expr, n, new_v_env, *e)?;
             let mut new = RecExpr::default();
             let typed_ev_id = utils::add_expr(&mut new, ev);
 
             // Get input type of the original expr and vectorize it (xtv in scala)
-            let Rise::FunType([input_ty_id, _]) = expr[*ty_id] else {
-                panic!("No Fun type wrapped in here: {:?}", &expr[*ty_id])
+            let Rise::FunType([input_ty_id, _]) = expr[*ty] else {
+                panic!("No Fun type wrapped in here: {:?}", &expr[*ty])
             };
             let vec_input_ty = vec_ty(expr, n, input_ty_id)?;
 
             // Wrap in a lambda and append to the existing recexpr
-            let lam_id = new.add(Rise::Lambda(*l, typed_ev_id));
+
             let vec_input_ty_id = utils::add_expr(&mut new, vec_input_ty);
+            let fun_id = new.add(Rise::FunType([vec_input_ty_id, ev_ty_id]));
+            let lam_id = new.add(Rise::Lambda(*lam, [typed_ev_id, fun_id]));
 
             // Add the fun type of the new lam and wrap it in a typeof
             // evt index is valid since add_expr only appends
-            let fun_id = new.add(Rise::FunType([vec_input_ty_id, ev_ty_id]));
-            new.add(Rise::TypeOf([lam_id, fun_id]));
 
             Some((new, fun_id, lam_id))
         }
-        Rise::IntLit(_) => {
-            let vec_ty = vec_ty(expr, n, *ty_id)?;
+        Rise::IntLit(value, ty) => {
             let mut new = RecExpr::default();
 
-            let new_expr_id = utils::add_expr(&mut new, utils::build(expr, *expr_id));
+            let new_ty_id = utils::add_expr(&mut new, utils::build(expr, *ty));
+            let new_expr_id = new.add(Rise::IntLit(*value, new_ty_id));
 
-            let new_ty_id = utils::add_expr(&mut new, utils::build(expr, *ty_id));
-            let new_typed_expr_id = new.add(Rise::TypeOf([new_expr_id, new_ty_id]));
-
+            let vec_ty = vec_ty(expr, n, *ty)?;
             let vec_ty_id = utils::add_expr(&mut new, vec_ty);
-            let prim_id = new.add(Rise::VectorFromScalar); // asVector ?!
-            let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
-            let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
+            let prim_ty = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
+            let prim_id = new.add(Rise::Prim(Primitive::VectorFromScalar, prim_ty)); // asVector ?!
 
-            let app = Application::new(Kind::Expr);
-            let app_id = new.add(Rise::App(app, [typed_prim_id, new_typed_expr_id]));
-            new.add(Rise::TypeOf([app_id, vec_ty_id]));
+            let app_id = new.add(Rise::App(
+                Application::new(Kind::Expr),
+                [prim_id, new_expr_id, vec_ty_id],
+            ));
 
             Some((new, vec_ty_id, app_id))
         }
-        Rise::Snd | Rise::Fst | Rise::Add | Rise::Mul => {
-            let mut typed_prim = RecExpr::default();
-            let vec_prim_ty_id = utils::add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
-            let prim_id = typed_prim.add(expr[*expr_id].clone());
-            typed_prim.add(Rise::TypeOf([prim_id, vec_prim_ty_id]));
-            Some((typed_prim, vec_prim_ty_id, prim_id))
+        Rise::Prim(prim, ty) => match prim {
+            &Primitive::Fst | Primitive::Snd | Primitive::Add | Primitive::Mul => {
+                let mut typed_prim = RecExpr::default();
+                let vec_prim_ty_id = utils::add_expr(&mut typed_prim, vec_ty(expr, n, *ty)?);
+                let prim_id = typed_prim.add(Rise::Prim(*prim, vec_prim_ty_id));
+                Some((typed_prim, vec_prim_ty_id, prim_id))
+            }
+            _ => None,
+        },
+        Rise::FloatLit(value, ty) => {
+            let mut new = RecExpr::default();
+
+            let new_ty_id = utils::add_expr(&mut new, utils::build(expr, *ty));
+            let new_expr_id = new.add(Rise::FloatLit(*value, new_ty_id));
+
+            let vec_ty = vec_ty(expr, n, *ty)?;
+            let vec_ty_id = utils::add_expr(&mut new, vec_ty);
+            let prim_ty = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
+            let prim_id = new.add(Rise::Prim(Primitive::VectorFromScalar, prim_ty)); // asVector ?!
+
+            let app_id = new.add(Rise::App(
+                Application::new(Kind::Expr),
+                [prim_id, new_expr_id, vec_ty_id],
+            ));
+
+            Some((new, vec_ty_id, app_id))
         }
-        Rise::Var(_)
+        Rise::TypedVar(_, _)
+        | Rise::Var(_)
         | Rise::App(_, _)
         | Rise::Lambda(_, _)
-        | Rise::ToMem
-        | Rise::Split
-        | Rise::Join
-        | Rise::Generate
-        | Rise::Transpose
-        | Rise::Zip
-        | Rise::Unzip
-        | Rise::Map
-        | Rise::MapPar
-        | Rise::Reduce
-        | Rise::ReduceSeq
-        | Rise::ReduceSeqUnroll
-        | Rise::Let
-        | Rise::FloatLit(_)
-        | Rise::AsVector
-        | Rise::AsScalar
-        | Rise::VectorFromScalar => None,
-
-        Rise::TypeOf(_)
-        | Rise::FunType(_)
+        | Rise::Let(_) => None,
+        Rise::FunType(_)
         | Rise::NatFun(_)
         | Rise::DataFun(_)
         | Rise::AddrFun(_)
@@ -230,7 +227,7 @@ fn vec_expr(
         | Rise::VecType(_)
         | Rise::PairType(_)
         | Rise::IndexType(_)
-        | Rise::NatType
+        | Rise::I64
         | Rise::F32
         | Rise::NatAdd(_)
         | Rise::NatSub(_)
@@ -238,7 +235,7 @@ fn vec_expr(
         | Rise::NatDiv(_)
         | Rise::NatPow(_)
         | Rise::NatCst(_) => {
-            panic!("Cannot vectorize this in this fn: {:?}", &expr[*expr_id])
+            panic!("Cannot vectorize this in this fn: {:?}", &expr[id])
         }
     }
     //   case Composition(f, g) =>
@@ -252,16 +249,15 @@ fn vec_expr(
 
 fn vec_ty(expr: &RecExpr<Rise>, n: i64, id: Id) -> Option<RecExpr<Rise>> {
     match expr[id] {
-        Rise::F32 => {
+        Rise::F32 | Rise::I64 => {
             let mut vec_ty = RecExpr::default();
-            let scalar_ty = vec_ty.add(Rise::F32);
+            let scalar_ty = vec_ty.add(expr[id].clone());
             let width = vec_ty.add(Rise::NatCst(Nat(n)));
             vec_ty.add(Rise::VecType([width, scalar_ty]));
             Some(vec_ty)
         }
-        Rise::Var(_) | Rise::NatType | Rise::VecType(_) | Rise::IndexType(_) | Rise::ArrType(_) => {
-            None
-        }
+
+        Rise::VecType(_) | Rise::IndexType(_) | Rise::ArrType(_) => None,
         Rise::PairType([a, b]) => {
             let vec_fst_ty = vec_ty(expr, n, a)?;
             let vec_snd_ty = vec_ty(expr, n, b)?;

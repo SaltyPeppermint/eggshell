@@ -44,16 +44,13 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for Shifted<A> 
             return Vec::new();
         };
         shift_mut(&mut extract, self.shift, self.cutoff);
-
         let mut new_subst = subst.clone();
         let added_expr_id = egraph.add_expr(&extract);
         new_subst.insert(self.new_var, added_expr_id);
-
         self.applier
             .apply_one(egraph, eclass, &new_subst, searcher_ast, rule_name)
     }
 }
-
 pub struct ShiftedCheck<A: Applier<Rise, RiseAnalysis>> {
     var: Var,
     new_var: Var,
@@ -97,7 +94,6 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ShiftedChec
             return Vec::new();
         };
         shift_mut(&mut extract, self.shift, self.cutoff);
-
         if extract == expected {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
@@ -120,64 +116,53 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
         }
 
         match expr[id] {
+            Rise::TypedVar(index, ty) => {
+                if index.value() >= cutoff.of_kind(index.kind()) {
+                    let shifted_index = index + shift;
+                    expr[id] = Rise::TypedVar(shifted_index, ty);
+                }
+                rec(expr, ty, shift, cutoff, already_shifted);
+            }
+
             Rise::Var(index) => {
                 if index.value() >= cutoff.of_kind(index.kind()) {
                     let shifted_index = index + shift;
                     expr[id] = Rise::Var(shifted_index);
                 }
             }
-            Rise::Lambda(l, e) => {
-                let new_cutoff = cutoff.inc(l.kind());
+            Rise::Lambda(_, [e, ty]) => {
+                let new_cutoff = cutoff.inc(expr[id].kind());
                 rec(expr, e, shift, new_cutoff, already_shifted);
+                rec(expr, ty, shift, new_cutoff, already_shifted);
             }
-            Rise::App(_, [c_id_a, c_id_b])
-            | Rise::TypeOf([c_id_a, c_id_b])
-            | Rise::FunType([c_id_a, c_id_b])
-            | Rise::ArrType([c_id_a, c_id_b])
-            | Rise::VecType([c_id_a, c_id_b])
-            | Rise::PairType([c_id_a, c_id_b])
-            | Rise::NatAdd([c_id_a, c_id_b])
-            | Rise::NatSub([c_id_a, c_id_b])
-            | Rise::NatMul([c_id_a, c_id_b])
-            | Rise::NatDiv([c_id_a, c_id_b])
-            | Rise::NatPow([c_id_a, c_id_b]) => {
-                // Mean bug lurking here, we must not shift down twice if the children point to the same
-                // Eclass
-                // this is prevented by the already_shifted check
-                rec(expr, c_id_a, shift, cutoff, already_shifted);
-                rec(expr, c_id_b, shift, cutoff, already_shifted);
-            }
-            Rise::NatFun(c_id)
-            | Rise::DataFun(c_id)
-            | Rise::AddrFun(c_id)
-            | Rise::NatNatFun(c_id)
-            | Rise::IndexType(c_id) => rec(expr, c_id, shift, cutoff, already_shifted),
 
-            Rise::Let
-            | Rise::NatType
-            | Rise::F32
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::VectorFromScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Add
-            | Rise::Mul
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Zip
-            | Rise::Unzip
-            | Rise::Map
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll
-            | Rise::IntLit(_)
-            | Rise::NatCst(_)
-            | Rise::FloatLit(_) => (),
+            Rise::App(_, [t, s, ty]) => {
+                rec(expr, t, shift, cutoff, already_shifted);
+                rec(expr, s, shift, cutoff, already_shifted);
+                rec(expr, ty, shift, cutoff, already_shifted);
+            }
+            Rise::FunType([a, b])
+            | Rise::ArrType([a, b])
+            | Rise::VecType([a, b])
+            | Rise::PairType([a, b])
+            | Rise::NatAdd([a, b])
+            | Rise::NatSub([a, b])
+            | Rise::NatMul([a, b])
+            | Rise::NatDiv([a, b])
+            | Rise::NatPow([a, b]) => {
+                rec(expr, a, shift, cutoff, already_shifted);
+                rec(expr, b, shift, cutoff, already_shifted);
+            }
+            Rise::NatFun(child)
+            | Rise::DataFun(child)
+            | Rise::AddrFun(child)
+            | Rise::NatNatFun(child)
+            | Rise::IndexType(child) => rec(expr, child, shift, cutoff, already_shifted),
+
+            Rise::Let(ty) | Rise::Prim(_, ty) | Rise::IntLit(_, ty) | Rise::FloatLit(_, ty) => {
+                rec(expr, ty, shift, cutoff, already_shifted);
+            }
+            Rise::I64 | Rise::F32 | Rise::NatCst(_) => (),
         }
     }
     rec(expr, expr.root(), shift, cutoff, &mut HashSet::new());

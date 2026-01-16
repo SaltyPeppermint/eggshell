@@ -5,6 +5,22 @@ use thiserror::Error;
 
 pub trait Kindable {
     fn kind(&self) -> Kind;
+
+    fn is_expr(&self) -> bool {
+        self.kind() == Kind::Expr
+    }
+    // fn is_data(&self) -> bool {
+    //     self.kind() == Kind::Data
+    // }
+    fn is_nat(&self) -> bool {
+        self.kind() == Kind::Nat
+    }
+    // fn is_addr(&self) -> bool {
+    //     self.kind() == Kind::Addr
+    // }
+    // fn is_nat2nat(&self) -> bool {
+    //     self.kind() == Kind::Nat2Nat
+    // }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]

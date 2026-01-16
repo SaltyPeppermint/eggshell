@@ -3,11 +3,9 @@ use std::cmp::{Ordering, PartialOrd};
 use egg::{Analysis, DidMerge, EGraph, Id, Language, RecExpr};
 use hashbrown::{HashMap, HashSet};
 
-use crate::rise::canon_nat;
-
-use super::Rise;
-use super::db::Index;
-use super::kind::Kindable;
+use crate::rise::db::Index;
+use crate::rise::kind::Kindable;
+use crate::rise::{Rise, canon_nat};
 
 #[derive(Default, Debug)]
 pub struct RiseAnalysis {
@@ -102,9 +100,9 @@ impl Analysis<Rise> for RiseAnalysis {
     type Data = AnalysisData;
 
     fn merge(&mut self, to: &mut AnalysisData, from: AnalysisData) -> DidMerge {
-        let before_len = to.free.len();
+        let is_superset = to.free.is_superset(&from.free);
         to.free.extend(from.free);
-        let free_changed = DidMerge(before_len != to.free.len(), true);
+        let free_changed = DidMerge(!is_superset, true);
 
         let optimal_changed = egg::merge_option(&mut to.optimal, from.optimal, egg::merge_min);
 
@@ -114,7 +112,7 @@ impl Analysis<Rise> for RiseAnalysis {
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
-            Rise::Lambda(l, e) => egraph[*e]
+            Rise::Lambda(l, [e, ty]) => egraph[*e]
                 .data
                 .free
                 .iter()
@@ -125,8 +123,13 @@ impl Analysis<Rise> for RiseAnalysis {
                         Some(*i)
                     }
                 })
-                // .filter(|i| !i.is_zero() && i.kind() == l.kind())
-                // .map(|i| i.dec(l.kind()))
+                .chain(egraph[*ty].data.free.iter().filter_map(|i| {
+                    if i.kind() == l.kind() {
+                        if i.is_zero() { None } else { Some(i.dec()) }
+                    } else {
+                        Some(*i)
+                    }
+                }))
                 .collect(),
             _ => enode
                 .children()

@@ -1,8 +1,9 @@
 use egg::{Id, RecExpr};
 
 use super::{NatSolverError, Polynomial, Ratio, RationalFunction, Rise};
+
 use crate::rise::db::Index;
-use crate::rise::kind::{Kind, Kindable};
+use crate::rise::kind::Kindable;
 use crate::utils;
 
 // ============================================================================
@@ -91,7 +92,7 @@ impl TryFrom<&RecExpr<Rise>> for RationalFunction {
                 // Integer constant
                 Rise::NatCst(n) => Ok((n.0).into()),
                 // Single variable with exponent 1
-                Rise::Var(index) if index.kind() == Kind::Nat => Ok((*index).into()),
+                Rise::Var(index) if index.is_nat() => Ok((*index).into()),
                 Rise::NatAdd([left, right]) => {
                     let left_rf = rec(expr, *left)?;
                     let right_rf = rec(expr, *right)?;

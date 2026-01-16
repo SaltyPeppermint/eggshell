@@ -67,16 +67,14 @@ fn replace(expr: &RecExpr<Rise>, to_replace: Index, mut subs: RecExpr<Rise>) -> 
     ) -> Id {
         match &expr[id] {
             Rise::Var(found) if to_replace == *found => utils::add_expr(result, subs.clone()),
-            Rise::Lambda(l, e) => {
+            Rise::Lambda(l, [e, ty]) => {
                 let kind = l.kind();
                 shift_mut(subs, Shift::up(kind), Cutoff::zero());
-                let e2 = rec(result, expr, *e, to_replace.inc(), subs);
+                let new_e = rec(result, expr, *e, to_replace.inc(), subs);
                 shift_mut(subs, Shift::down(kind), Cutoff::zero());
-                result.add(Rise::Lambda(*l, e2))
+                let new_ty = rec(result, expr, *ty, to_replace.inc(), subs);
+                result.add(Rise::Lambda(*l, [new_e, new_ty]))
             }
-
-            // NatNatLam is not covered
-            // Non-matching vars and lambdas are handled by the default case
             other => {
                 let new_other = other
                     .clone()

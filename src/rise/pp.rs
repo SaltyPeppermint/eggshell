@@ -1,8 +1,11 @@
+use core::panic;
+
 use colored::{ColoredString, Colorize};
 use egg::{ENodeOrVar, Id, Language, RecExpr};
 
+use crate::rise::kind::Kindable;
+
 use super::Rise;
-use super::kind::{Kind, Kindable};
 
 pub trait PrettyPrint {
     fn pp(self, skip_wrapper: bool);
@@ -16,41 +19,22 @@ pub trait PrettyPrint {
 /// the node is a "wrapper" (like a Lambda) that impacts indentation logic.
 fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
     match node {
-        Rise::Var(index) => (index.to_string().magenta(), false),
-        Rise::App(a, _) => {
-            if a.kind() == Kind::Expr {
-                (node.to_string().red(), false)
-            } else {
-                (node.to_string().cyan(), true)
-            }
-        }
-        Rise::Lambda(l, _) => {
-            if l.kind() == Kind::Expr {
-                (node.to_string().red(), false)
-            } else {
-                (node.to_string().cyan(), true)
-            }
-        }
-        // Rise::App(x) | Rise::Lambda(_) => (node.to_string().red(), false),
-        // Rise::NatApp(_) | Rise::DataApp(_) | Rise::AddrApp(_) | Rise::NatNatApp(_) => {}
-        // Rise::NatLambda(_) | Rise::DataLambda(_) | Rise::AddrLambda(_) | Rise::NatNatLambda(_) => {
-        //     (node.to_string().cyan(), true)
-        // } // is_wrapper = true
-
+        Rise::App(app, _) if app.is_expr() => (node.to_string().red(), false),
+        Rise::Lambda(lam, _) if lam.is_expr() => (node.to_string().red(), false),
+        Rise::App(_, _) | Rise::Lambda(_, _) => (node.to_string().cyan(), true),
+        Rise::Var(index) | Rise::TypedVar(index, _) => (index.to_string().magenta(), false),
         // Primitive Types inside Expr position (Panic)
         Rise::FunType(_)
         | Rise::NatFun(_)
         | Rise::DataFun(_)
         | Rise::AddrFun(_)
         | Rise::NatNatFun(_)
-        | Rise::TypeOf(_)
         | Rise::ArrType(_)
         | Rise::VecType(_)
         | Rise::PairType(_)
         | Rise::IndexType(_)
-        | Rise::NatType
-        | Rise::F32 => panic!("Should not see types in expression position: {node}"),
-
+        | Rise::F32
+        | Rise::I64 => panic!("Should not see types in expression position: {node}"),
         // NatExprs inside Expr position (Panic)
         Rise::NatAdd(_)
         | Rise::NatSub(_)
@@ -62,28 +46,9 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         }
 
         // Standard Opcodes
-        Rise::Let
-        | Rise::AsVector
-        | Rise::AsScalar
-        | Rise::VectorFromScalar
-        | Rise::Snd
-        | Rise::Fst
-        | Rise::Add
-        | Rise::Mul
-        | Rise::ToMem
-        | Rise::Split
-        | Rise::Join
-        | Rise::Generate
-        | Rise::Transpose
-        | Rise::Zip
-        | Rise::Unzip
-        | Rise::Map
-        | Rise::MapPar
-        | Rise::Reduce
-        | Rise::ReduceSeq
-        | Rise::ReduceSeqUnroll
-        | Rise::FloatLit(_) => (node.to_string().yellow(), false),
-        Rise::IntLit(i) => (format!("{i}").cyan(), false),
+        Rise::Let(_) | Rise::FloatLit(_, _) => (node.to_string().yellow(), false),
+        Rise::Prim(prim, _) => (prim.to_string().yellow(), false),
+        Rise::IntLit(_, _) => (node.to_string().cyan(), false),
     }
 }
 
@@ -91,7 +56,7 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
 /// This allows us to share the formatting string logic between `Rise` and `egg::ENodeOrVar<Rise>`.
 fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredString {
     match node {
-        Rise::Var(index) => index.to_string().green(),
+        Rise::Var(_) => node.to_string().green(),
         Rise::FunType(_) => {
             let s = format!("{} -> {}", children[0], children[1]);
             if fn_brackets { format!("({s})") } else { s }.blue()
@@ -100,8 +65,7 @@ fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredSt
         Rise::VecType(_) => format!("Vec[{}: {}]", children[1], children[0]).blue(),
         Rise::PairType(_) => format!("({}, {})", children[0], children[1]).blue(),
         Rise::IndexType(_) => format!("Idx[{}]", children[0]).blue(),
-        Rise::NatType => "nat".to_owned().blue(),
-        Rise::F32 => "f32".to_owned().blue(),
+        Rise::I64 | Rise::F32 => node.to_string().blue(),
 
         Rise::NatFun(_) => format!("NatFun[{}]", children[0]).blue(),
         Rise::DataFun(_) => format!("DataFun[{}]", children[0]).blue(),
@@ -115,7 +79,7 @@ fn fmt_ty_node(node: &Rise, children: &[String], fn_brackets: bool) -> ColoredSt
         Rise::NatPow(_) => format!("({} ^ {})", children[0], children[1]).white(),
         Rise::NatCst(i) => format!("{i}").cyan(),
 
-        _ => panic!("Expected type node but found {node}"),
+        _ => panic!("Expected type constructor node but found {node}"),
     }
 }
 
@@ -177,23 +141,20 @@ impl PrettyPrint for &RecExpr<Rise> {
 impl From<&RecExpr<Rise>> for PPNode {
     fn from(value: &RecExpr<Rise>) -> PPNode {
         fn rec(expr: &RecExpr<Rise>, id: Id) -> PPNode {
-            let Rise::TypeOf([expr_id, ty_id]) = &expr[id] else {
-                // Fallback if top-level node is not TypeOf
-                return PPNode {
-                    children: expr[id].children().iter().map(|c| rec(expr, *c)).collect(),
-                    expr: expr[id].to_string().into(),
-                    ty: "NO TYPE INFO".red(),
-                    wrapper: false,
-                };
-            };
-
-            let node = &expr[*expr_id];
+            let node = &expr[id];
             let (colored_string, is_wrapper) = get_rise_style(node);
 
             PPNode {
-                children: node.children().iter().map(|c| rec(expr, *c)).collect(),
+                children: node
+                    .normal_children()
+                    .iter()
+                    .map(|c| rec(expr, *c))
+                    .collect(),
                 expr: colored_string,
-                ty: pp_ty_rise(expr, *ty_id, false),
+                ty: node.ty_id().map_or_else(
+                    || "NO TYPE INFO".red(),
+                    |ty_id| pp_ty_rise(expr, ty_id, false),
+                ),
                 wrapper: is_wrapper,
             }
         }
@@ -226,42 +187,26 @@ impl PrettyPrint for &RecExpr<ENodeOrVar<Rise>> {
 impl From<&RecExpr<ENodeOrVar<Rise>>> for PPNode {
     fn from(value: &RecExpr<ENodeOrVar<Rise>>) -> PPNode {
         fn rec(expr: &RecExpr<ENodeOrVar<Rise>>, id: Id) -> PPNode {
-            // 1. Resolve Root Node (must be TypeOf inside an ENode)
-            let inner_node = match &expr[id] {
-                ENodeOrVar::ENode(n) => n,
-                ENodeOrVar::Var(v) => {
-                    return PPNode {
-                        children: Box::new([]),
-                        expr: v.to_string().magenta(),
-                        ty: "PATTERN VAR".normal(),
-                        wrapper: false,
-                    };
-                }
-            };
-
-            let Rise::TypeOf([expr_id, ty_id]) = inner_node else {
-                return PPNode {
-                    children: expr[id].children().iter().map(|c| rec(expr, *c)).collect(),
-                    expr: expr[id].to_string().into(),
-                    ty: "NO TYPE INFO".red(),
-                    wrapper: false,
-                };
-            };
-
-            // 2. Resolve Actual Expression Node
-            match &expr[*expr_id] {
+            match &expr[id] {
                 ENodeOrVar::Var(v) => PPNode {
                     children: Box::new([]),
                     expr: v.to_string().magenta(),
-                    ty: pp_ty_enode(expr, *ty_id, false),
+                    ty: "PATTERN VAR".normal(),
                     wrapper: false,
                 },
                 ENodeOrVar::ENode(node) => {
                     let (colored_string, is_wrapper) = get_rise_style(node);
                     PPNode {
-                        children: node.children().iter().map(|c| rec(expr, *c)).collect(),
+                        children: node
+                            .normal_children()
+                            .iter()
+                            .map(|c| rec(expr, *c))
+                            .collect(),
                         expr: colored_string,
-                        ty: pp_ty_enode(expr, *ty_id, false),
+                        ty: node.ty_id().map_or_else(
+                            || "NO TYPE INFO".red(),
+                            |ty_id| pp_ty_enode(expr, ty_id, false),
+                        ),
                         wrapper: is_wrapper,
                     }
                 }
