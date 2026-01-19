@@ -156,6 +156,7 @@ impl Analysis<Rise> for RiseAnalysis {
             let canon_nat_expr = canon_nat(&expr);
             let added = egraph.add_expr(&canon_nat_expr);
             egraph.union(id, added);
+            egraph.rebuild();
 
             // #[cfg(debug_assertions)]
             // egraph[id].assert_unique_leaves();

@@ -42,7 +42,9 @@ impl Applier<Rise, RiseAnalysis> for BetaExtractApplier {
 
         let shifted = beta_reduce(&ex_body, ex_subs, self.kind);
         let reduced_id = egraph.add_expr(&shifted);
-        if egraph.union(eclass, reduced_id) {
+        let changed_smth = egraph.union(eclass, reduced_id);
+        egraph.rebuild();
+        if changed_smth {
             vec![eclass]
         } else {
             Vec::new()

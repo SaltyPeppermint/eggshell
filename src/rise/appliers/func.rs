@@ -56,7 +56,7 @@ impl<A: Applier<Rise, RiseAnalysis>> DTCheck<A> {
         let type_vars = applier
             .vars()
             .into_iter()
-            .filter(|v| v.is_type())
+            .filter(|v| v.kind() == Kind::Type)
             .map(|v| {
                 if v.to_string().contains('d') {
                     (v, true)
@@ -153,6 +153,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for VectorizeSc
             let new_expr = vectorized_expr[expr_id].build_recexpr(|i| vectorized_expr[i].clone());
             let mut new_subst = subst.clone();
             let added_expr_id = egraph.add_expr(&new_expr);
+            egraph.rebuild();
             new_subst.insert(self.vectorized_var, added_expr_id);
 
             self.applier

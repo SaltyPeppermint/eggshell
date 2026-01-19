@@ -77,8 +77,7 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for ComputeNatC
             return Vec::new();
         };
 
-        let a = &mut egraph.analysis;
-        if check_equivalence(a, &expected, &extracted) {
+        if check_equivalence(&mut egraph.analysis, &expected, &extracted) {
             self.applier
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         } else {
