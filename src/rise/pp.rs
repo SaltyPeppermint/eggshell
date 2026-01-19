@@ -62,27 +62,7 @@ fn get_rise_style(node: &Rise) -> (ColoredString, bool) {
         }
 
         // Standard Opcodes
-        Rise::Let
-        | Rise::AsVector
-        | Rise::AsScalar
-        | Rise::VectorFromScalar
-        | Rise::Snd
-        | Rise::Fst
-        | Rise::Add
-        | Rise::Mul
-        | Rise::ToMem
-        | Rise::Split
-        | Rise::Join
-        | Rise::Generate
-        | Rise::Transpose
-        | Rise::Zip
-        | Rise::Unzip
-        | Rise::Map
-        | Rise::MapPar
-        | Rise::Reduce
-        | Rise::ReduceSeq
-        | Rise::ReduceSeqUnroll
-        | Rise::FloatLit(_) => (node.to_string().yellow(), false),
+        Rise::Let | Rise::Prim(_) | Rise::FloatLit(_) => (node.to_string().yellow(), false),
         Rise::IntLit(i) => (format!("{i}").cyan(), false),
     }
 }

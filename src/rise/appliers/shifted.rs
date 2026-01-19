@@ -156,25 +156,7 @@ pub fn shift_mut(expr: &mut RecExpr<Rise>, shift: Shift, cutoff: Cutoff) {
             Rise::Let
             | Rise::NatType
             | Rise::F32
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::VectorFromScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Add
-            | Rise::Mul
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Zip
-            | Rise::Unzip
-            | Rise::Map
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll
+            | Rise::Prim(_)
             | Rise::IntLit(_)
             | Rise::NatCst(_)
             | Rise::FloatLit(_) => (),

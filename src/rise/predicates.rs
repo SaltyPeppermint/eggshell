@@ -91,25 +91,7 @@ fn check_array_dim(egraph: &EGraph<Rise, RiseAnalysis>, id: Id, limit: usize) ->
             | Rise::NatCst(_)
             | Rise::Var(_)
             | Rise::Let
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::VectorFromScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Add
-            | Rise::Mul
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Zip
-            | Rise::Unzip
-            | Rise::Map
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll
+            | Rise::Prim(_)
             | Rise::FloatLit(_) => 0,
             Rise::NatFun(ty_id)
             | Rise::DataFun(ty_id)

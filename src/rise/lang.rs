@@ -53,31 +53,7 @@ egg::define_language! {
 
     NatCst(Nat),
 
-    "asVector" = AsVector,
-    "asScalar" = AsScalar,
-    "vectorFromScalar" = VectorFromScalar,
-
-    "snd" = Snd,
-    "fst" = Fst,
-    "add" = Add,
-    "mul" = Mul,
-
-    "toMem" = ToMem,
-    "split" = Split,
-    "join" = Join,
-
-    "generate" = Generate,
-    "transpose" = Transpose,
-
-    "zip" = Zip,
-    "unzip" = Unzip,
-
-    "map" = Map,
-    "mapPar" = MapPar,
-
-    "reduce" = Reduce,
-    "reduceSeq" = ReduceSeq,
-    "reduceSeqUnroll" = ReduceSeqUnroll,
+    Prim(Primitive),
 
     // to implement explicit substitution:
     // "sig" = Sigma([Id; 3]),
@@ -96,29 +72,9 @@ impl Kindable for Rise {
             Rise::Var(index) => index.kind(),
             Rise::Lambda(lambda, _) => lambda.kind(),
             Rise::App(application, _) => application.kind(),
-            Rise::Let
-            | Rise::TypeOf(_)
-            | Rise::AsVector
-            | Rise::AsScalar
-            | Rise::VectorFromScalar
-            | Rise::Snd
-            | Rise::Fst
-            | Rise::Add
-            | Rise::Mul
-            | Rise::ToMem
-            | Rise::Split
-            | Rise::Join
-            | Rise::Generate
-            | Rise::Transpose
-            | Rise::Zip
-            | Rise::Unzip
-            | Rise::Map
-            | Rise::MapPar
-            | Rise::Reduce
-            | Rise::ReduceSeq
-            | Rise::ReduceSeqUnroll
-            | Rise::FloatLit(_)
-            | Rise::IntLit(_) => Kind::Expr,
+            Rise::Let | Rise::TypeOf(_) | Rise::Prim(_) | Rise::FloatLit(_) | Rise::IntLit(_) => {
+                Kind::Expr
+            }
             Rise::FunType(_)
             | Rise::NatFun(_)
             | Rise::DataFun(_)
@@ -159,149 +115,168 @@ impl Rise {
         )
     }
 }
+macro_rules! define_kinded_type {
+    ($name:ident, $base:literal, $base_cap:literal) => {
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
+        pub struct $name(Kind);
 
-#[derive(Error, Debug)]
-pub enum KindParseError {
-    #[error("Not a lambda: {0}")]
-    Lambda(String),
-    #[error("Not a app: {0}")]
-    App(String),
+        impl $name {
+            pub fn new(kind: Kind) -> Self {
+                Self(kind)
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self.0 {
+                    Kind::Expr => write!(f, $base),
+                    Kind::Nat => write!(f, concat!("nat", $base_cap)),
+                    Kind::Data => write!(f, concat!("data", $base_cap)),
+                    Kind::Addr => write!(f, concat!("addr", $base_cap)),
+                    Kind::Nat2Nat => write!(f, concat!("natNat", $base_cap)),
+                }
+            }
+        }
+
+        impl std::str::FromStr for $name {
+            type Err = RiseParseError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $base => Ok($name(Kind::Expr)),
+                    concat!("nat", $base_cap) => Ok($name(Kind::Nat)),
+                    concat!("data", $base_cap) => Ok($name(Kind::Data)),
+                    concat!("addr", $base_cap) => Ok($name(Kind::Addr)),
+                    concat!("natNat", $base_cap) => Ok($name(Kind::Nat2Nat)),
+                    _ => Err(RiseParseError::$name(s.to_owned())),
+                }
+            }
+        }
+
+        impl Kindable for $name {
+            fn kind(&self) -> Kind {
+                self.0
+            }
+        }
+    };
 }
+
+define_kinded_type!(Lambda, "lam", "Lam");
+define_kinded_type!(Application, "app", "App");
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub struct Lambda(Kind);
-
-impl Lambda {
-    pub fn new(kind: Kind) -> Self {
-        Self(kind)
-    }
+pub enum Primitive {
+    AsVector,
+    AsScalar,
+    VectorFromScalar,
+    Snd,
+    Fst,
+    Add,
+    Mul,
+    ToMem,
+    Split,
+    Join,
+    Generate,
+    Transpose,
+    Zip,
+    Unzip,
+    Map,
+    MapPar,
+    Reduce,
+    ReduceSeq,
+    ReduceSeqUnroll,
 }
-
-impl fmt::Display for Lambda {
+impl fmt::Display for Primitive {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Kind::Expr => write!(f, "lam"),
-            Kind::Nat => write!(f, "natLam"),
-            Kind::Data => write!(f, "dataLam"),
-            Kind::Addr => write!(f, "addrLam"),
-            Kind::Nat2Nat => write!(f, "natNatLam"),
+        match self {
+            Primitive::AsVector => write!(f, "asVector"),
+            Primitive::AsScalar => write!(f, "asScalar"),
+            Primitive::VectorFromScalar => write!(f, "vectorFromScalar"),
+            Primitive::Snd => write!(f, "snd"),
+            Primitive::Fst => write!(f, "fst"),
+            Primitive::Add => write!(f, "add"),
+            Primitive::Mul => write!(f, "mul"),
+            Primitive::ToMem => write!(f, "toMem"),
+            Primitive::Split => write!(f, "split"),
+            Primitive::Join => write!(f, "join"),
+            Primitive::Generate => write!(f, "generate"),
+            Primitive::Transpose => write!(f, "transpose"),
+            Primitive::Zip => write!(f, "zip"),
+            Primitive::Unzip => write!(f, "unzip"),
+            Primitive::Map => write!(f, "map"),
+            Primitive::MapPar => write!(f, "mapPar"),
+            Primitive::Reduce => write!(f, "reduce"),
+            Primitive::ReduceSeq => write!(f, "reduceSeq"),
+            Primitive::ReduceSeqUnroll => write!(f, "reduceSeqUnroll"),
         }
     }
 }
-
-impl std::str::FromStr for Lambda {
-    type Err = KindParseError;
-
+impl std::str::FromStr for Primitive {
+    type Err = RiseParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "lam" => Ok(Lambda(Kind::Expr)),
-            "natLam" => Ok(Lambda(Kind::Nat)),
-            "dataLam" => Ok(Lambda(Kind::Data)),
-            "addrLam" => Ok(Lambda(Kind::Addr)),
-            "natNatLam" => Ok(Lambda(Kind::Nat2Nat)),
-            _ => Err(KindParseError::Lambda(s.to_owned())),
+            "asVector" => Ok(Primitive::AsVector),
+            "asScalar" => Ok(Primitive::AsScalar),
+            "vectorFromScalar" => Ok(Primitive::VectorFromScalar),
+            "snd" => Ok(Primitive::Snd),
+            "fst" => Ok(Primitive::Fst),
+            "add" => Ok(Primitive::Add),
+            "mul" => Ok(Primitive::Mul),
+            "toMem" => Ok(Primitive::ToMem),
+            "split" => Ok(Primitive::Split),
+            "join" => Ok(Primitive::Join),
+            "generate" => Ok(Primitive::Generate),
+            "transpose" => Ok(Primitive::Transpose),
+            "zip" => Ok(Primitive::Zip),
+            "unzip" => Ok(Primitive::Unzip),
+            "map" => Ok(Primitive::Map),
+            "mapPar" => Ok(Primitive::MapPar),
+            "reduce" => Ok(Primitive::Reduce),
+            "reduceSeq" => Ok(Primitive::ReduceSeq),
+            "reduceSeqUnroll" => Ok(Primitive::ReduceSeqUnroll),
+            _ => Err(RiseParseError::Primitive(s.to_owned())),
         }
     }
 }
 
-impl Kindable for Lambda {
-    fn kind(&self) -> Kind {
-        self.0
-    }
-}
+macro_rules! define_number_type {
+    ($name:ident, $suffix:literal, $error_variant:ident) => {
+        #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
+        pub struct $name(pub i64);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub struct Application(Kind);
-
-impl Application {
-    pub fn new(kind: Kind) -> Self {
-        Self(kind)
-    }
-}
-
-impl fmt::Display for Application {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.0 {
-            Kind::Expr => write!(f, "app"),
-            Kind::Nat => write!(f, "natApp"),
-            Kind::Data => write!(f, "dataApp"),
-            Kind::Addr => write!(f, "addrApp"),
-            Kind::Nat2Nat => write!(f, "natNatApp"),
+        impl std::str::FromStr for $name {
+            type Err = RiseParseError;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                let stripped_s = s
+                    .strip_suffix($suffix)
+                    .ok_or(RiseParseError::$error_variant(s.to_owned()))?;
+                let value = stripped_s.parse()?;
+                Ok($name(value))
+            }
         }
-    }
-}
 
-impl std::str::FromStr for Application {
-    type Err = KindParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "app" => Ok(Application(Kind::Expr)),
-            "natApp" => Ok(Application(Kind::Nat)),
-            "dataApp" => Ok(Application(Kind::Data)),
-            "addrApp" => Ok(Application(Kind::Addr)),
-            "natNatApp" => Ok(Application(Kind::Nat2Nat)),
-            _ => Err(KindParseError::App(s.to_owned())),
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, concat!("{}", $suffix), self.0)
+            }
         }
-    }
+    };
 }
 
-impl Kindable for Application {
-    fn kind(&self) -> Kind {
-        self.0
-    }
-}
+define_number_type!(Int, "i", IntegerPrefix);
+define_number_type!(Nat, "n", NatPrefix);
 
 #[derive(Error, Debug)]
-pub enum NumberParseError {
+pub enum RiseParseError {
     #[error("Wrong Integer Prefix: {0}")]
     IntegerPrefix(String),
     #[error("Wrong Nat Prefix: {0}")]
     NatPrefix(String),
     #[error("Can't parse value: {0}")]
     IntegerValue(#[from] ParseIntError),
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub struct Int(pub i64);
-
-impl std::str::FromStr for Int {
-    type Err = NumberParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let stripped_s = s
-            .strip_suffix("i")
-            .ok_or(NumberParseError::IntegerPrefix(s.to_owned()))?;
-
-        let value = stripped_s.parse()?;
-        Ok(Int(value))
-    }
-}
-
-impl fmt::Display for Int {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}i", self.0)
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, std::hash::Hash, Clone, Copy)]
-pub struct Nat(pub i64);
-
-impl std::str::FromStr for Nat {
-    type Err = NumberParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let stripped_s = s
-            .strip_suffix("n")
-            .ok_or(NumberParseError::IntegerPrefix(s.to_owned()))?;
-
-        let value = stripped_s.parse()?;
-        Ok(Nat(value))
-    }
-}
-
-impl fmt::Display for Nat {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}n", self.0)
-    }
+    #[error("Unknown primitive: {0}")]
+    Primitive(String),
+    #[error("Not a lambda: {0}")]
+    Lambda(String),
+    #[error("Not a app: {0}")]
+    Application(String),
 }

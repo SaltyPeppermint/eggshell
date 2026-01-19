@@ -5,7 +5,7 @@ use crate::utils;
 
 use crate::rise::db::{Index, Shift};
 use crate::rise::kind::{Kind, Kindable};
-use crate::rise::lang::{Application, Nat};
+use crate::rise::lang::{Application, Nat, Primitive};
 use crate::rise::{Rise, RiseAnalysis};
 
 pub struct NotFreeIn<A: Applier<Rise, RiseAnalysis>> {
@@ -107,7 +107,6 @@ fn extracted_nat(expr: &RecExpr<Rise>) -> i64 {
 }
 
 // Expr, ty_id, expr_id
-#[expect(clippy::too_many_lines)]
 fn vec_expr(
     expr: &RecExpr<Rise>,
     n: i64,
@@ -182,7 +181,7 @@ fn vec_expr(
             let new_typed_expr_id = new.add(Rise::TypeOf([new_expr_id, new_ty_id]));
 
             let vec_ty_id = utils::add_expr(&mut new, vec_ty);
-            let prim_id = new.add(Rise::VectorFromScalar); // asVector ?!
+            let prim_id = new.add(Rise::Prim(Primitive::VectorFromScalar)); // asVector ?!
             let fun_id = new.add(Rise::FunType([new_ty_id, vec_ty_id]));
             let typed_prim_id = new.add(Rise::TypeOf([prim_id, fun_id]));
 
@@ -192,33 +191,19 @@ fn vec_expr(
 
             Some((new, vec_ty_id, app_id))
         }
-        Rise::Snd | Rise::Fst | Rise::Add | Rise::Mul => {
+        Rise::Prim(Primitive::Snd | Primitive::Fst | Primitive::Add | Primitive::Mul) => {
             let mut typed_prim = RecExpr::default();
             let vec_prim_ty_id = utils::add_expr(&mut typed_prim, vec_ty(expr, n, *ty_id)?);
             let prim_id = typed_prim.add(expr[*expr_id].clone());
             typed_prim.add(Rise::TypeOf([prim_id, vec_prim_ty_id]));
             Some((typed_prim, vec_prim_ty_id, prim_id))
         }
-        Rise::Var(_)
+        Rise::Prim(_)
+        | Rise::Var(_)
         | Rise::App(_, _)
         | Rise::Lambda(_, _)
-        | Rise::ToMem
-        | Rise::Split
-        | Rise::Join
-        | Rise::Generate
-        | Rise::Transpose
-        | Rise::Zip
-        | Rise::Unzip
-        | Rise::Map
-        | Rise::MapPar
-        | Rise::Reduce
-        | Rise::ReduceSeq
-        | Rise::ReduceSeqUnroll
         | Rise::Let
-        | Rise::FloatLit(_)
-        | Rise::AsVector
-        | Rise::AsScalar
-        | Rise::VectorFromScalar => None,
+        | Rise::FloatLit(_) => None,
 
         Rise::TypeOf(_)
         | Rise::FunType(_)
