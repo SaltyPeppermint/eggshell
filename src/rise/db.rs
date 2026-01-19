@@ -81,7 +81,7 @@ impl fmt::Display for Index {
 pub struct Shift {
     expr: i32,
     nat: i32,
-    data: i32,
+    ty: i32,
     addr: i32,
     nat2nat: i32,
 }
@@ -99,7 +99,7 @@ impl Shift {
         match kind {
             Kind::Expr => self.expr(),
             Kind::Nat => self.nat(),
-            Kind::Data => self.data(),
+            Kind::Type => self.ty(),
             Kind::Addr => self.addr(),
             Kind::Nat2Nat => self.nat2nat(),
         }
@@ -113,8 +113,8 @@ impl Shift {
         self.nat
     }
 
-    pub fn data(&self) -> i32 {
-        self.data
+    pub fn ty(&self) -> i32 {
+        self.ty
     }
 
     pub fn addr(&self) -> i32 {
@@ -135,8 +135,8 @@ impl Shift {
                 nat: arg,
                 ..Default::default()
             },
-            Kind::Data => Shift {
-                data: arg,
+            Kind::Type => Shift {
+                ty: arg,
                 ..Default::default()
             },
             Kind::Addr => Shift {
@@ -157,7 +157,7 @@ impl From<(i32, i32, i32, i32, i32)> for Shift {
         Shift {
             expr: value.0,
             nat: value.1,
-            data: value.2,
+            ty: value.2,
             addr: value.3,
             nat2nat: value.4,
         }
@@ -169,7 +169,7 @@ impl From<(i32, i32, i32)> for Shift {
     fn from(value: (i32, i32, i32)) -> Self {
         Shift {
             nat: value.0,
-            data: value.1,
+            ty: value.1,
             nat2nat: value.2,
             ..Default::default()
         }
@@ -219,7 +219,7 @@ impl Cutoff {
         match kind {
             Kind::Expr => self.expr,
             Kind::Nat => self.nat,
-            Kind::Data => self.data,
+            Kind::Type => self.data,
             Kind::Addr => self.addr,
             Kind::Nat2Nat => self.nat2nat,
         }
@@ -237,7 +237,7 @@ impl std::ops::Add<Shift> for Cutoff {
         Self {
             expr: self.expr.strict_add_signed(rhs.expr()),
             nat: self.nat.strict_add_signed(rhs.nat()),
-            data: self.data.strict_add_signed(rhs.data()),
+            data: self.data.strict_add_signed(rhs.ty()),
             addr: self.expr.strict_add_signed(rhs.addr()),
             nat2nat: self.expr.strict_add_signed(rhs.nat2nat()),
         }

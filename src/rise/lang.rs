@@ -85,7 +85,7 @@ impl Kindable for Rise {
             | Rise::PairType(_)
             | Rise::NatType
             | Rise::F32
-            | Rise::IndexType(_) => Kind::Data,
+            | Rise::IndexType(_) => Kind::Type,
             Rise::NatAdd(_)
             | Rise::NatSub(_)
             | Rise::NatMul(_)
@@ -131,7 +131,7 @@ macro_rules! define_kinded_type {
                 match self.0 {
                     Kind::Expr => write!(f, $base),
                     Kind::Nat => write!(f, concat!("nat", $base_cap)),
-                    Kind::Data => write!(f, concat!("data", $base_cap)),
+                    Kind::Type => write!(f, concat!("data", $base_cap)),
                     Kind::Addr => write!(f, concat!("addr", $base_cap)),
                     Kind::Nat2Nat => write!(f, concat!("natNat", $base_cap)),
                 }
@@ -144,7 +144,7 @@ macro_rules! define_kinded_type {
                 match s {
                     $base => Ok($name(Kind::Expr)),
                     concat!("nat", $base_cap) => Ok($name(Kind::Nat)),
-                    concat!("data", $base_cap) => Ok($name(Kind::Data)),
+                    concat!("data", $base_cap) => Ok($name(Kind::Type)),
                     concat!("addr", $base_cap) => Ok($name(Kind::Addr)),
                     concat!("natNat", $base_cap) => Ok($name(Kind::Nat2Nat)),
                     _ => Err(RiseParseError::$name(s.to_owned())),

@@ -5,25 +5,41 @@ use thiserror::Error;
 
 pub trait Kindable {
     fn kind(&self) -> Kind;
+
+    fn is_expr(&self) -> bool {
+        self.kind() == Kind::Expr
+    }
+    fn is_type(&self) -> bool {
+        self.kind() == Kind::Type
+    }
+    fn is_nat(&self) -> bool {
+        self.kind() == Kind::Nat
+    }
+    fn is_addr(&self) -> bool {
+        self.kind() == Kind::Addr
+    }
+    fn is_nat2nat(&self) -> bool {
+        self.kind() == Kind::Nat2Nat
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Hash, Copy)]
 pub enum Kind {
     Expr,
     Nat,
-    Data,
+    Type,
     Addr,
     Nat2Nat,
 }
 
 impl Kind {
-    pub fn prefix(self) -> char {
+    pub fn prefix(self) -> &'static str {
         match self {
-            Kind::Expr => 'e',
-            Kind::Nat => 'n',
-            Kind::Data => 'd',
-            Kind::Addr => 'a',
-            Kind::Nat2Nat => 'x',
+            Kind::Expr => "e",
+            Kind::Nat => "n",
+            Kind::Type => "d|t",
+            Kind::Addr => "a",
+            Kind::Nat2Nat => "x",
         }
     }
 }
@@ -33,7 +49,7 @@ impl TryFrom<char> for Kind {
 
     fn try_from(c: char) -> Result<Self, KindError> {
         Ok(match c {
-            'd' | 't' => Kind::Data,
+            'd' | 't' => Kind::Type,
             'a' => Kind::Addr,
             'n' => Kind::Nat,
             'x' => Kind::Nat2Nat,
@@ -49,7 +65,7 @@ impl fmt::Display for Kind {
         match self {
             Kind::Expr => write!(f, "EXPR"),
             Kind::Nat => write!(f, "NAT"),
-            Kind::Data => write!(f, "DATA"),
+            Kind::Type => write!(f, "TYPE"),
             Kind::Addr => write!(f, "ADDR"),
             Kind::Nat2Nat => write!(f, "NAT2NAT"),
         }
@@ -63,7 +79,7 @@ impl Kindable for Var {
             .chars()
             .nth(1)
             .map(|c| match c {
-                'd' | 't' => Kind::Data,
+                'd' | 't' => Kind::Type,
                 'a' => Kind::Addr,
                 'n' => Kind::Nat,
                 'x' => Kind::Nat2Nat,

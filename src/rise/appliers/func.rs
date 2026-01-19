@@ -1,5 +1,5 @@
 use egg::{Applier, EGraph, Id, Language, PatternAst, RecExpr, Subst, Symbol, Var};
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 use crate::utils;
 
@@ -44,6 +44,70 @@ impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for NotFreeIn<A
                 .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
         }
     }
+}
+
+pub struct DTCheck<A: Applier<Rise, RiseAnalysis>> {
+    type_vars: HashMap<Var, bool>, // bool = "is pure dt"
+    applier: A,
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> DTCheck<A> {
+    pub fn new(applier: A) -> Self {
+        let type_vars = applier
+            .vars()
+            .into_iter()
+            .filter(|v| v.is_type())
+            .map(|v| {
+                if v.to_string().contains('d') {
+                    (v, true)
+                } else if v.to_string().contains('t') {
+                    (v, false)
+                } else {
+                    panic!("how can a type not contain d or t")
+                }
+            })
+            .collect();
+        DTCheck { type_vars, applier }
+    }
+}
+
+impl<A: Applier<Rise, RiseAnalysis>> Applier<Rise, RiseAnalysis> for DTCheck<A> {
+    fn apply_one(
+        &self,
+        egraph: &mut EGraph<Rise, RiseAnalysis>,
+        eclass: Id,
+        subst: &Subst,
+        searcher_ast: Option<&PatternAst<Rise>>,
+        rule_name: Symbol,
+    ) -> Vec<Id> {
+        if self
+            .type_vars
+            .iter()
+            .filter_map(|(v, is_dt)| subst.get(*v).map(|id| (id, is_dt)))
+            .any(|(id, is_dt)| {
+                // If any of them contain a non-datatype, we are messing up smth and need to bail
+                is_dt_var(*id, egraph) != *is_dt
+            })
+        {
+            return vec![];
+        }
+
+        self.applier
+            .apply_one(egraph, eclass, subst, searcher_ast, rule_name)
+    }
+}
+
+fn is_dt_var(id: Id, egraph: &EGraph<Rise, RiseAnalysis>) -> bool {
+    !egraph[id].data.small_repr(egraph).unwrap().iter().any(|n| {
+        matches!(
+            n,
+            Rise::NatFun(_)
+                | Rise::DataFun(_)
+                | Rise::AddrFun(_)
+                | Rise::NatNatFun(_)
+                | Rise::FunType(_)
+        )
+    })
 }
 
 pub struct VectorizeScalarFun<A: Applier<Rise, RiseAnalysis>> {
