@@ -54,7 +54,7 @@ impl TryFrom<char> for Kind {
             'n' => Kind::Nat,
             'x' => Kind::Nat2Nat,
             'e' => Kind::Expr,
-            x if x.is_numeric() => Kind::Expr,
+            // x if x.is_numeric() => Kind::Expr,
             _ => return Err(KindError::ImproperTag(c)),
         })
     }

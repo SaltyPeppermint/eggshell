@@ -55,14 +55,9 @@ egg::define_language! {
 
     Prim(Primitive),
 
-    // to implement explicit substitution:
-    // "sig" = Sigma([Id; 3]),
-    // "phi" = Phi([Id; 3]),
-
     IntLit(Int),
     FloatLit(NotNan<f64>),
     // Double(f64),
-    // Symbol(Symbol),
   }
 }
 

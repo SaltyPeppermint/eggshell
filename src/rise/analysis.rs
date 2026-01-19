@@ -114,19 +114,17 @@ impl Analysis<Rise> for RiseAnalysis {
     fn make(egraph: &mut EGraph<Rise, RiseAnalysis>, enode: &Rise, _: Id) -> AnalysisData {
         let free = match enode {
             Rise::Var(v) => [*v].into(),
-            Rise::Lambda(l, e) => egraph[*e]
+            Rise::Lambda(lam, e) => egraph[*e]
                 .data
                 .free
                 .iter()
-                .filter_map(|i| {
-                    if i.kind() == l.kind() {
-                        if i.is_zero() { None } else { Some(i.dec()) }
+                .filter_map(|idx| {
+                    if idx.kind() == lam.kind() {
+                        if idx.is_zero() { None } else { Some(idx.dec()) }
                     } else {
-                        Some(*i)
+                        Some(*idx)
                     }
                 })
-                // .filter(|i| !i.is_zero() && i.kind() == l.kind())
-                // .map(|i| i.dec(l.kind()))
                 .collect(),
             _ => enode
                 .children()
