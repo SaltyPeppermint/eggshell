@@ -12,10 +12,6 @@ use hashbrown::HashMap;
 
 use super::{EditCosts, TreeNode, tree_distance};
 
-// ============================================================================
-// AND-OR Graph Extension (with strict alternation)
-// ============================================================================
-
 /// AND node: all children must be included in solution tree.
 /// Children must be OR nodes (or leaves).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -80,7 +76,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
 
     /// Find the solution from this AND node without memoization.
     fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
-        let result_tree = if self.is_leaf() {
+        let tree = if self.is_leaf() {
             TreeNode::new(self.label.clone())
         } else {
             // For AND nodes, we must include all children.
@@ -94,11 +90,8 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             TreeNode::with_children(self.label.clone(), child_trees)
         };
 
-        let dist = tree_distance(&result_tree, target, costs);
-        MinEditResult {
-            tree: result_tree,
-            distance: dist,
-        }
+        let distance = tree_distance(&tree, target, costs);
+        MinEditResult { tree, distance }
     }
 
     /// Find the solution from this AND node, with memoization.
@@ -113,7 +106,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             return cached.clone();
         }
 
-        let result_tree = if self.is_leaf() {
+        let tree = if self.is_leaf() {
             TreeNode::new(self.label.clone())
         } else {
             // For AND nodes, we must include all children.
@@ -127,11 +120,8 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             TreeNode::with_children(self.label.clone(), child_trees)
         };
 
-        let dist = tree_distance(&result_tree, target, costs);
-        let result = MinEditResult {
-            tree: result_tree,
-            distance: dist,
-        };
+        let distance = tree_distance(&tree, target, costs);
+        let result = MinEditResult { tree, distance };
         cache.and_cache.insert(self, result.clone());
         result
     }
@@ -196,19 +186,16 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
 
         // Try each AND child and find the one with minimum edit distance
         for and_child in &self.children {
-            let MinEditResult {
-                tree: subtree,
-                distance: _,
-            } = and_child.find_min(target, costs);
+            let subtree = and_child.find_min(target, costs).tree;
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
 
             // Compute actual edit distance for this solution
-            let dist = tree_distance(&candidate_tree, target, costs);
+            let distance = tree_distance(&candidate_tree, target, costs);
 
-            if dist < best_distance {
-                best_distance = dist;
+            if distance < best_distance {
+                best_distance = distance;
                 best_tree = Some(candidate_tree);
             }
             if best_distance == 0 {
@@ -239,10 +226,7 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
 
         // Try each AND child and find the one with minimum edit distance
         for and_child in &self.children {
-            let MinEditResult {
-                tree: subtree,
-                distance: _,
-            } = and_child.find_min_memo(target, costs, cache);
+            let subtree = and_child.find_min_memo(target, costs, cache).tree;
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -274,6 +258,7 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
 ///
 /// Uses pointer addresses as keys - if the same node (by address) appears
 /// multiple times in the graph, it will produce the same solution tree.
+#[derive(Debug, Clone)]
 struct MemoCache<'a, L: Clone + Eq + Hash> {
     /// Cache for OR nodes: maps node pointer -> (`best_solution_tree`, `min_distance`)
     or_cache: HashMap<&'a OrNode<L>, MinEditResult<L>>,
