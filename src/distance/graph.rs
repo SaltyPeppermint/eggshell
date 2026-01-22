@@ -10,7 +10,7 @@ use std::hash::Hash;
 
 use hashbrown::HashMap;
 
-use crate::tree_distance::{EditCosts, TreeNode, tree_distance};
+use super::{EditCosts, TreeNode, tree_distance};
 
 // ============================================================================
 // AND-OR Graph Extension (with strict alternation)
@@ -79,7 +79,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
     }
 
     /// Find the solution from this AND node without memoization.
-    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> (TreeNode<L>, usize) {
+    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
         let result_tree = if self.is_leaf() {
             TreeNode::new(self.label.clone())
         } else {
@@ -88,14 +88,17 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             let child_trees: Vec<TreeNode<L>> = self
                 .children
                 .iter()
-                .map(|or_child| or_child.find_min(target, costs).0)
+                .map(|or_child| or_child.find_min(target, costs).tree)
                 .collect();
 
             TreeNode::with_children(self.label.clone(), child_trees)
         };
 
         let dist = tree_distance(&result_tree, target, costs);
-        (result_tree, dist)
+        MinEditResult {
+            tree: result_tree,
+            distance: dist,
+        }
     }
 
     /// Find the solution from this AND node, with memoization.
@@ -104,7 +107,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<'a, L>,
-    ) -> (TreeNode<L>, usize) {
+    ) -> MinEditResult<L> {
         // Check cache first using pointer address as key
         if let Some(cached) = cache.and_cache.get(&self) {
             return cached.clone();
@@ -118,14 +121,17 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             let child_trees: Vec<TreeNode<L>> = self
                 .children
                 .iter()
-                .map(|or_child| or_child.find_min_memo(target, costs, cache).0)
+                .map(|or_child| or_child.find_min_memo(target, costs, cache).tree)
                 .collect();
 
             TreeNode::with_children(self.label.clone(), child_trees)
         };
 
         let dist = tree_distance(&result_tree, target, costs);
-        let result = (result_tree, dist);
+        let result = MinEditResult {
+            tree: result_tree,
+            distance: dist,
+        };
         cache.and_cache.insert(self, result.clone());
         result
     }
@@ -184,13 +190,16 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
     }
 
     /// Find the best solution from this OR node without memoization.
-    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> (TreeNode<L>, usize) {
+    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
         let mut best_distance = usize::MAX;
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
         for and_child in &self.children {
-            let (subtree, _) = and_child.find_min(target, costs);
+            let MinEditResult {
+                tree: subtree,
+                distance: _,
+            } = and_child.find_min(target, costs);
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -207,10 +216,10 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
             }
         }
 
-        (
-            best_tree.expect("OR node must have at least one child"),
-            best_distance,
-        )
+        MinEditResult {
+            tree: best_tree.expect("OR node must have at least one child"),
+            distance: best_distance,
+        }
     }
 
     /// Find the best solution from this OR node, with memoization.
@@ -219,7 +228,7 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<'a, L>,
-    ) -> (TreeNode<L>, usize) {
+    ) -> MinEditResult<L> {
         // Check cache first using pointer address as key
         if let Some(cached) = cache.or_cache.get(&self) {
             return cached.clone();
@@ -230,7 +239,10 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
 
         // Try each AND child and find the one with minimum edit distance
         for and_child in &self.children {
-            let (subtree, _) = and_child.find_min_memo(target, costs, cache);
+            let MinEditResult {
+                tree: subtree,
+                distance: _,
+            } = and_child.find_min_memo(target, costs, cache);
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -247,20 +259,13 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
             }
         }
 
-        let result = (
-            best_tree.expect("OR node must have at least one child"),
-            best_distance,
-        );
+        let result = MinEditResult {
+            tree: best_tree.expect("OR node must have at least one child"),
+            distance: best_distance,
+        };
         cache.or_cache.insert(self, result.clone());
         result
     }
-}
-
-/// Result of finding the minimum edit distance solution tree
-#[derive(Debug, Clone)]
-pub struct MinEditResult<L: Clone + Eq> {
-    pub solution_tree: TreeNode<L>,
-    pub edit_distance: usize,
 }
 
 /// Memoization cache for AND-OR graph edit distance computation.
@@ -271,9 +276,9 @@ pub struct MinEditResult<L: Clone + Eq> {
 /// multiple times in the graph, it will produce the same solution tree.
 struct MemoCache<'a, L: Clone + Eq + Hash> {
     /// Cache for OR nodes: maps node pointer -> (`best_solution_tree`, `min_distance`)
-    or_cache: HashMap<&'a OrNode<L>, (TreeNode<L>, usize)>,
+    or_cache: HashMap<&'a OrNode<L>, MinEditResult<L>>,
     /// Cache for AND nodes: maps node pointer -> (`solution_tree`, distance)
-    and_cache: HashMap<&'a AndNode<L>, (TreeNode<L>, usize)>,
+    and_cache: HashMap<&'a AndNode<L>, MinEditResult<L>>,
 }
 
 impl<L: Clone + Eq + Hash> MemoCache<'_, L> {
@@ -286,36 +291,29 @@ impl<L: Clone + Eq + Hash> MemoCache<'_, L> {
 }
 
 /// Find the solution tree with minimum edit distance to target.
-pub fn find_min_edit_distance_tree<L: Clone + Eq + Hash, C: EditCosts<L>>(
-    root: &OrNode<L>,
-    target: &TreeNode<L>,
-    costs: &C,
-) -> MinEditResult<L> {
-    let (solution_tree, edit_distance) = root.find_min(target, costs);
-
-    MinEditResult {
-        solution_tree,
-        edit_distance,
-    }
-}
-
-/// Find the solution tree with minimum edit distance to target.
-/// Uses memoization to efficiently handle DAGs with shared substructure.
+/// If memo is true, memoization is used to efficiently handle DAGs with shared substructure.
 ///
 /// When the AND-OR graph has shared nodes (DAG structure), the same subtree
 /// computations are cached and reused, reducing exponential blowup.
-pub fn find_min_edit_distance_tree_memo<L: Clone + Eq + Hash, C: EditCosts<L>>(
-    root: &OrNode<L>,
+pub fn find_min<C: EditCosts<L>, L: Clone + Eq + Hash>(
+    graph: &OrNode<L>,
     target: &TreeNode<L>,
     costs: &C,
+    memo: bool,
 ) -> MinEditResult<L> {
-    let mut cache = MemoCache::new();
-    let (solution_tree, edit_distance) = root.find_min_memo(target, costs, &mut cache);
-
-    MinEditResult {
-        solution_tree,
-        edit_distance,
+    if memo {
+        let mut cache = MemoCache::new();
+        graph.find_min_memo(target, costs, &mut cache)
+    } else {
+        graph.find_min(target, costs)
     }
+}
+
+/// Result of finding the minimum edit distance solution tree
+#[derive(Debug, Clone)]
+pub struct MinEditResult<L: Clone + Eq> {
+    pub tree: TreeNode<L>,
+    pub distance: usize,
 }
 
 /// Compute cartesian product of vectors
@@ -343,7 +341,7 @@ fn cartesian_product<T: Clone>(lists: &[Vec<T>]) -> Vec<Vec<T>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::tree_distance::{UnitCost, tree_distance_unit};
+    use crate::distance::{UnitCost, tree_distance_unit};
 
     use super::*;
 
@@ -449,9 +447,9 @@ mod tests {
 
         let target = node("a", vec![leaf("b")]);
 
-        let result = find_min_edit_distance_tree(&or_node, &target, &UnitCost);
-        assert_eq!(result.edit_distance, 0);
-        assert_eq!(result.solution_tree.children()[0].label(), &"b");
+        let result = find_min(&or_node, &target, &UnitCost, false);
+        assert_eq!(result.distance, 0);
+        assert_eq!(result.tree.children()[0].label(), &"b");
     }
 
     #[test]
@@ -570,10 +568,10 @@ mod tests {
             ],
         );
 
-        let result = find_min_edit_distance_tree(&OrNode::single("top", root), &target, &UnitCost);
+        let result = find_min(&OrNode::single("top", root), &target, &UnitCost, false);
 
         // The result should find a valid solution
-        assert!(result.edit_distance < usize::MAX);
+        assert!(result.distance < usize::MAX);
     }
 
     #[test]
@@ -623,10 +621,10 @@ mod tests {
             )],
         );
 
-        let result = find_min_edit_distance_tree(&root, &target, &UnitCost);
+        let result = find_min(&root, &target, &UnitCost, false);
 
         // Should find and1 as the best match with distance 0
-        assert_eq!(result.edit_distance, 0);
+        assert_eq!(result.distance, 0);
     }
 
     #[test]
@@ -635,13 +633,13 @@ mod tests {
         let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
         let target = node("a", vec![leaf("b")]);
 
-        let (tree_no_memo, dist_no_memo) = or_node.find_min(&target, &UnitCost);
+        let r1 = or_node.find_min(&target, &UnitCost);
 
         let mut cache = MemoCache::new();
-        let (tree_memo, dist_memo) = or_node.find_min_memo(&target, &UnitCost, &mut cache);
+        let r2 = or_node.find_min_memo(&target, &UnitCost, &mut cache);
 
-        assert_eq!(dist_no_memo, dist_memo);
-        assert_eq!(tree_distance_unit(&tree_no_memo, &tree_memo), 0);
+        assert_eq!(r1.distance, r2.distance);
+        assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
     }
 
     #[test]
@@ -666,13 +664,13 @@ mod tests {
             )],
         );
 
-        let (tree_no_memo, dist_no_memo) = root.find_min(&target, &UnitCost);
+        let r1 = root.find_min(&target, &UnitCost);
 
         let mut cache = MemoCache::new();
-        let (tree_memo, dist_memo) = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
 
-        assert_eq!(dist_no_memo, dist_memo);
-        assert_eq!(tree_distance_unit(&tree_no_memo, &tree_memo), 0);
+        assert_eq!(r1.distance, r2.distance);
+        assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
     }
 
     #[test]
@@ -703,13 +701,13 @@ mod tests {
             vec![node("choice1", vec![node("inner", vec![leaf("x")])])],
         );
 
-        let (tree_no_memo, dist_no_memo) = root.find_min(&target, &UnitCost);
+        let r1 = root.find_min(&target, &UnitCost);
 
         let mut cache = MemoCache::new();
-        let (tree_memo, dist_memo) = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
 
-        assert_eq!(dist_no_memo, dist_memo);
-        assert_eq!(tree_distance_unit(&tree_no_memo, &tree_memo), 0);
+        assert_eq!(r1.distance, r2.distance);
+        assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
     }
 
     #[test]
@@ -752,12 +750,12 @@ mod tests {
             )],
         );
 
-        let (tree_no_memo, dist_no_memo) = root.find_min(&target, &UnitCost);
+        let r1 = root.find_min(&target, &UnitCost);
 
         let mut cache = MemoCache::new();
-        let (tree_memo, dist_memo) = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
 
-        assert_eq!(dist_no_memo, dist_memo);
-        assert_eq!(tree_distance_unit(&tree_no_memo, &tree_memo), 0);
+        assert_eq!(r1.distance, r2.distance);
+        assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
     }
 }
