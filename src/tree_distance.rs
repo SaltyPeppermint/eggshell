@@ -1,10 +1,188 @@
-//! Zhang-Shasha Tree Edit Distance Algorithm
+//! AND-OR Graph Extension for Zhang-Shasha Tree Edit Distance
 //!
-//! This implements the Zhang-Shasha algorithm for computing the edit distance
-//! between two ordered labeled trees. The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
+//! Finds the solution tree in a bounded AND-OR graph with minimum edit distance
+//! to a target tree. Assumes bounded OR-branching (N) and bounded depth (d).
+//!
+//! With strict alternation (OR→AND→OR→...), complexity is O(N^(d/2) * |T|^2)
+//! for single-path graphs, where N is OR-branching and d is depth.
+//!
+//! ## Zhang-Shasha Tree Edit Distance Algorithm
+//!
+//! Zhang-Shasha computes the edit distance between two ordered labeled trees.
+//! The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
 //! time and O(n1 * n2) space.
 
 use serde::{Deserialize, Serialize};
+
+// ============================================================================
+// AND-OR Graph Extension (with strict alternation)
+// ============================================================================
+
+/// AND node: all children must be included in solution tree.
+/// Children must be OR nodes (or leaves).
+#[derive(Debug, Clone)]
+pub struct AndNode<L: Clone + Eq> {
+    pub label: L,
+    pub children: Vec<OrNode<L>>,
+}
+
+/// OR node: exactly one child is chosen for solution tree.
+/// Children must be AND nodes.
+#[derive(Debug, Clone)]
+pub struct OrNode<L: Clone + Eq> {
+    pub label: L,
+    pub children: Vec<AndNode<L>>,
+}
+
+impl<L: Clone + Eq> AndNode<L> {
+    /// AND node with OR children
+    pub fn new(label: L, children: Vec<OrNode<L>>) -> Self {
+        AndNode { label, children }
+    }
+
+    /// Leaf node (AND with no children)
+    pub fn leaf(label: L) -> Self {
+        AndNode {
+            label,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn is_leaf(&self) -> bool {
+        self.children.is_empty()
+    }
+
+    /// Generate all valid solution trees from this AND node.
+    /// Includes all OR children, taking cartesian product of their choices.
+    pub fn generate_solutions(&self) -> Vec<TreeNode<L>> {
+        if self.is_leaf() {
+            return vec![TreeNode::new(self.label.clone())];
+        }
+
+        // Each OR child contributes a set of possible subtrees
+        let child_solutions: Vec<Vec<TreeNode<L>>> = self
+            .children
+            .iter()
+            .map(OrNode::generate_solutions)
+            .collect();
+
+        cartesian_product(&child_solutions)
+            .into_iter()
+            .map(|children| TreeNode::with_children(self.label.clone(), children))
+            .collect()
+    }
+
+    /// Count the number of solution trees (for complexity analysis)
+    pub fn count_solutions(&self) -> usize {
+        if self.is_leaf() {
+            return 1;
+        }
+        self.children.iter().map(OrNode::count_solutions).product()
+    }
+}
+
+impl<L: Clone + Eq> OrNode<L> {
+    /// OR node with AND children
+    #[expect(clippy::missing_panics_doc)]
+    pub fn new(label: L, children: Vec<AndNode<L>>) -> Self {
+        assert!(!children.is_empty(), "OR node must have at least one child");
+        OrNode { label, children }
+    }
+
+    /// Single-choice OR node (wraps an AND node)
+    pub fn single(label: L, child: AndNode<L>) -> Self {
+        OrNode {
+            label,
+            children: vec![child],
+        }
+    }
+
+    /// Generate all valid solution trees from this OR node.
+    /// Chooses exactly one AND child.
+    pub fn generate_solutions(&self) -> Vec<TreeNode<L>> {
+        // Each AND child is a possible choice; collect all their solutions
+        self.children
+            .iter()
+            .flat_map(|and_child| {
+                and_child.generate_solutions().into_iter().map(|subtree| {
+                    // OR node label becomes parent of the chosen subtree
+                    TreeNode::with_children(self.label.clone(), vec![subtree])
+                })
+            })
+            .collect()
+    }
+
+    /// Count the number of solution trees
+    pub fn count_solutions(&self) -> usize {
+        self.children.iter().map(AndNode::count_solutions).sum()
+    }
+}
+
+/// Result of finding the minimum edit distance solution tree
+#[derive(Debug, Clone)]
+pub struct MinEditResult<L: Clone + Eq> {
+    pub solution_tree: TreeNode<L>,
+    pub edit_distance: usize,
+}
+
+/// Find the solution tree with minimum edit distance to target.
+#[expect(clippy::missing_panics_doc)]
+pub fn find_min_edit_distance_tree<L: Clone + Eq, C: EditCosts<L>>(
+    root: &OrNode<L>,
+    target: &TreeNode<L>,
+    costs: &C,
+) -> MinEditResult<L> {
+    let mut best_distance = usize::MAX;
+    let mut best_tree = None;
+
+    for solution in root.generate_solutions() {
+        let dist = tree_distance(&solution, target, costs);
+        if dist < best_distance {
+            best_distance = dist;
+            best_tree = Some(solution);
+        }
+        if best_distance == 0 {
+            break;
+        }
+    }
+
+    MinEditResult {
+        solution_tree: best_tree.expect("AND-OR graph must have at least one solution tree"),
+        edit_distance: best_distance,
+    }
+}
+
+/// Compute cartesian product of vectors
+fn cartesian_product<T: Clone>(lists: &[Vec<T>]) -> Vec<Vec<T>> {
+    if lists.is_empty() {
+        return vec![vec![]];
+    }
+
+    let mut result = vec![vec![]];
+
+    for list in lists {
+        let mut new_result = Vec::new();
+        for existing in &result {
+            for item in list {
+                let mut new_vec = existing.clone();
+                new_vec.push(item.clone());
+                new_result.push(new_vec);
+            }
+        }
+        result = new_result;
+    }
+
+    result
+}
+
+#[allow(dead_code)]
+fn count_tree_nodes<L: Clone + Eq>(tree: &TreeNode<L>) -> usize {
+    1 + tree.children.iter().map(count_tree_nodes).sum::<usize>()
+}
+
+// ============================================================================
+// Zhang-Shasha Implementation
+// ============================================================================
 
 /// A node in a labeled tree
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +430,10 @@ pub fn tree_distance_unit<L: Clone + Eq>(tree1: &TreeNode<L>, tree2: &TreeNode<L
     tree_distance(tree1, tree2, &UnitCost)
 }
 
+// ============================================================================
+// Tests
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,5 +541,166 @@ mod tests {
         let dist = tree_distance_unit(&tree1, &tree2);
         assert!(dist > 0);
         assert!(dist <= 4); // Upper bound: delete all and insert all (minus common)
+    }
+
+    #[test]
+    fn test_and_leaf_generates_single_tree() {
+        let and_node = AndNode::leaf("a");
+        let solutions = and_node.generate_solutions();
+        assert_eq!(solutions.len(), 1);
+        assert_eq!(solutions[0].label, "a");
+    }
+
+    #[test]
+    fn test_or_node_generates_multiple_trees() {
+        // OR node with two AND leaf children -> two solution trees
+        let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
+
+        let solutions = or_node.generate_solutions();
+        assert_eq!(solutions.len(), 2);
+    }
+
+    #[test]
+    fn test_and_with_or_children() {
+        // Alternating structure:
+        //       a (AND)
+        //      /       \
+        //   b(OR)     c(OR)
+        //   / \       / \
+        //  d   e     f   g
+        //  (AND leaves)
+        //
+        // Solutions: 2 choices at b × 2 choices at c = 4 trees
+
+        let and_node = AndNode::new(
+            "a",
+            vec![
+                OrNode::new("b", vec![AndNode::leaf("d"), AndNode::leaf("e")]),
+                OrNode::new("c", vec![AndNode::leaf("f"), AndNode::leaf("g")]),
+            ],
+        );
+
+        let solutions = and_node.generate_solutions();
+        assert_eq!(solutions.len(), 4);
+        assert_eq!(and_node.count_solutions(), 4);
+    }
+
+    #[test]
+    fn test_deeper_alternation() {
+        // Three levels: AND -> OR -> AND -> OR -> AND(leaf)
+        //
+        //           root (AND)
+        //             |
+        //           a (OR)
+        //          /     \
+        //       b(AND)  c(AND)
+        //         |       |
+        //       d(OR)   e(OR)
+        //       / \       |
+        //      f   g      h
+        //
+        // Solutions: (f or g) + h = 3 trees
+
+        let root = AndNode::new(
+            "root",
+            vec![OrNode::new(
+                "a",
+                vec![
+                    AndNode::new(
+                        "b",
+                        vec![OrNode::new(
+                            "d",
+                            vec![AndNode::leaf("f"), AndNode::leaf("g")],
+                        )],
+                    ),
+                    AndNode::new("c", vec![OrNode::new("e", vec![AndNode::leaf("h")])]),
+                ],
+            )],
+        );
+
+        let solutions = root.generate_solutions();
+        assert_eq!(solutions.len(), 3);
+        assert_eq!(root.count_solutions(), 3);
+    }
+
+    #[test]
+    fn test_find_min_edit_distance_with_choice() {
+        // OR node where one choice is closer to target
+        //   a(OR)
+        //   / \
+        //  b   c  (AND leaves)
+        //
+        // Target: a -> b
+        // Choosing b gives distance 0
+
+        let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
+
+        let target = node("a", vec![leaf("b")]);
+
+        let result = find_min_edit_distance_tree(&or_node, &target, &UnitCost);
+        assert_eq!(result.edit_distance, 0);
+        assert_eq!(result.solution_tree.children[0].label, "b");
+    }
+
+    #[test]
+    fn test_cartesian_product() {
+        let lists = vec![vec![1, 2], vec![3, 4]];
+        let product = cartesian_product(&lists);
+
+        assert_eq!(product.len(), 4);
+        assert!(product.contains(&vec![1, 3]));
+        assert!(product.contains(&vec![1, 4]));
+        assert!(product.contains(&vec![2, 3]));
+        assert!(product.contains(&vec![2, 4]));
+    }
+
+    #[test]
+    fn test_cartesian_product_empty() {
+        let lists: Vec<Vec<i32>> = vec![];
+        let product = cartesian_product(&lists);
+        assert_eq!(product, vec![Vec::<i32>::new()]);
+    }
+
+    #[test]
+    fn test_original_zhang_shasha_still_works() {
+        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        assert_eq!(tree_distance(&tree1, &tree2, &UnitCost), 0);
+
+        let tree3 = node("a", vec![leaf("b")]);
+        assert_eq!(tree_distance(&tree1, &tree3, &UnitCost), 1);
+    }
+
+    #[test]
+    fn test_solution_count_complexity() {
+        // Verify the counting matches actual enumeration
+
+        let root = AndNode::new(
+            "r",
+            vec![OrNode::new(
+                "o1",
+                vec![
+                    AndNode::new(
+                        "a1",
+                        vec![OrNode::new(
+                            "o2",
+                            vec![AndNode::leaf("x"), AndNode::leaf("y")],
+                        )],
+                    ),
+                    AndNode::new(
+                        "a2",
+                        vec![OrNode::new(
+                            "o3",
+                            vec![AndNode::leaf("z"), AndNode::leaf("w")],
+                        )],
+                    ),
+                ],
+            )],
+        );
+
+        let count = root.count_solutions();
+        let solutions = root.generate_solutions();
+        assert_eq!(count, solutions.len());
+        assert_eq!(count, 4); // (x or y) + (z or w) = 4
     }
 }
