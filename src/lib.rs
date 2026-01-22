@@ -4,6 +4,7 @@ pub mod cli;
 pub mod eqsat;
 pub mod io;
 // pub mod probabilistic;
+pub mod graph_distance;
 pub mod rewrite_system;
 pub mod rise;
 pub mod sampling;
