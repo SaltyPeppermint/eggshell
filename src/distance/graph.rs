@@ -1091,9 +1091,8 @@ mod tests {
 
         let target = node("root", vec![leaf("escape")]);
 
-        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
-        assert!(result.is_some());
-        let result = result.unwrap();
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0).unwrap();
+
         assert_eq!(result.distance, 0);
     }
 
@@ -1162,11 +1161,9 @@ mod tests {
         let target = leaf("anything");
 
         // With 0 revisits, should find the escape
-        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
-        assert!(result.is_some());
-
         // Result should use the leaf escape route
-        let result = result.unwrap();
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0).unwrap();
+
         assert!(result.tree.label() == &"a");
     }
 
@@ -1187,14 +1184,8 @@ mod tests {
 
         let target = node("root", vec![leaf("base")]);
 
-        let r1 = graph.find_min_cyclic(&target, &UnitCost, 0);
-        let r2 = graph.find_min_memo_cyclic(&target, &UnitCost, 0);
-
-        assert!(r1.is_some());
-        assert!(r2.is_some());
-
-        let r1 = r1.unwrap();
-        let r2 = r2.unwrap();
+        let r1 = graph.find_min_cyclic(&target, &UnitCost, 0).unwrap();
+        let r2 = graph.find_min_memo_cyclic(&target, &UnitCost, 0).unwrap();
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -1241,16 +1232,13 @@ mod tests {
         let target = leaf("anything");
 
         // With 0 revisits, should find the base escape immediately
-        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
-        assert!(result.is_some());
+        let r_0 = graph.find_min_cyclic(&target, &UnitCost, 0).unwrap();
         // The result uses the base path (shortest)
-        let tree = result.unwrap().tree;
-        assert_eq!(tree.children().len(), 1);
-        assert_eq!(tree.children()[0].label(), &"base");
+        assert_eq!(r_0.tree.children().len(), 1);
+        assert_eq!(r_0.tree.children()[0].label(), &"base");
 
         // With 1 revisit, we can unroll once and choose either path
-        let result = graph.find_min_cyclic(&target, &UnitCost, 1);
-        assert!(result.is_some());
+        let _ = graph.find_min_cyclic(&target, &UnitCost, 1).unwrap();
     }
 
     #[test]
