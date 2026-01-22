@@ -36,12 +36,18 @@ impl<L: Clone + Eq + Hash> AndOrGraph<L> {
     }
 
     /// Find the solution tree with minimum edit distance to target.
+    /// No cycles are allowed
     #[must_use]
-    pub fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
-        self.or(self.root).find_min(target, costs, self)
+    pub fn find_min<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+    ) -> Option<MinEditResult<L>> {
+        self.find_min_cyclic(target, costs, 0)
     }
 
     /// Find the solution tree with minimum edit distance to target, with memoization.
+    /// No cycles are allowed
     ///
     /// When the AND-OR graph has shared nodes (DAG structure), the same subtree
     /// computations are cached and reused, reducing exponential blowup.
@@ -50,10 +56,52 @@ impl<L: Clone + Eq + Hash> AndOrGraph<L> {
         &self,
         target: &TreeNode<L>,
         costs: &C,
-    ) -> MinEditResult<L> {
+    ) -> Option<MinEditResult<L>> {
+        self.find_min_memo_cyclic(target, costs, 0)
+    }
+
+    /// Find the solution tree with minimum edit distance to target, with cycle handling.
+    ///
+    /// This variant handles graphs with cycles by tracking the current path and
+    /// limiting how many times each node may be revisited.
+    /// Returns `Some(result)` if a valid solution was found, `None` if all paths hit cycle limits
+    #[must_use]
+    pub fn find_min_cyclic<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+        max_revisits: usize,
+    ) -> Option<MinEditResult<L>> {
+        let mut path = PathTracker::new(max_revisits);
+        if !path.can_visit(self.root) {
+            return None;
+        }
+        path.enter(self.root);
+        let result = self.or(self.root).find_min(target, costs, &mut path, self);
+        path.leave(self.root);
+        result
+    }
+
+    /// Find the solution tree with minimum edit distance to target, with memoization
+    /// and multiple cycle visits.
+    #[must_use]
+    pub fn find_min_memo_cyclic<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+        max_revisits: usize,
+    ) -> Option<MinEditResult<L>> {
         let mut cache = MemoCache::new();
-        self.or(self.root)
-            .find_min_memo(target, costs, &mut cache, self)
+        let mut path = PathTracker::new(max_revisits);
+        if !path.can_visit(self.root) {
+            return None;
+        }
+        path.enter(self.root);
+        let result = self
+            .or(self.root)
+            .find_min_memo(target, costs, &mut cache, &mut path, self);
+        path.leave(self.root);
+        result
     }
 }
 
@@ -124,65 +172,158 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             .product()
     }
 
-    /// Find the solution from this AND node without memoization.
+    // /// Find the solution from this AND node without memoization.
+    // fn find_min<C: EditCosts<L>>(
+    //     &self,
+    //     target: &TreeNode<L>,
+    //     costs: &C,
+    //     graph: &AndOrGraph<L>,
+    // ) -> MinEditResult<L> {
+    //     let tree = if self.is_leaf() {
+    //         TreeNode::new(self.label.clone())
+    //     } else {
+    //         // For AND nodes, we must include all children.
+    //         // Recursively find the best solution for each OR child.
+    //         let child_trees: Vec<TreeNode<L>> = self
+    //             .children
+    //             .iter()
+    //             .map(|i| graph.or(*i))
+    //             .map(|or_child| or_child.find_min(target, costs, graph).tree)
+    //             .collect();
+
+    //         TreeNode::with_children(self.label.clone(), child_trees)
+    //     };
+
+    //     let distance = tree_distance(&tree, target, costs);
+    //     MinEditResult { tree, distance }
+    // }
+
+    // /// Find the solution from this AND node, with memoization.
+    // fn find_min_memo<C: EditCosts<L>>(
+    //     &self,
+    //     target: &TreeNode<L>,
+    //     costs: &C,
+    //     cache: &mut MemoCache<L>,
+    //     graph: &AndOrGraph<L>,
+    // ) -> MinEditResult<L> {
+    //     let tree = if self.is_leaf() {
+    //         TreeNode::new(self.label.clone())
+    //     } else {
+    //         // For AND nodes, we must include all children.
+    //         // Recursively find the best solution for each OR child.
+    //         let child_trees: Vec<TreeNode<L>> = self
+    //             .children
+    //             .iter()
+    //             .map(|&or_id| {
+    //                 // Check cache first
+    //                 if let Some(c) = cache.or_cache.get(&or_id) {
+    //                     c.tree.clone()
+    //                 } else {
+    //                     let result = graph.or(or_id).find_min_memo(target, costs, cache, graph);
+    //                     cache.or_cache.insert(or_id, result.clone());
+    //                     result.tree
+    //                 }
+    //             })
+    //             .collect();
+
+    //         TreeNode::with_children(self.label.clone(), child_trees)
+    //     };
+
+    //     let distance = tree_distance(&tree, target, costs);
+    //     MinEditResult { tree, distance }
+    // }
+
+    /// Find the solution from this AND node with cycle detection.
+    /// Caller must have already checked and entered this node in the path tracker.
     fn find_min<C: EditCosts<L>>(
         &self,
         target: &TreeNode<L>,
         costs: &C,
+        path: &mut PathTracker,
         graph: &AndOrGraph<L>,
-    ) -> MinEditResult<L> {
-        let tree = if self.is_leaf() {
-            TreeNode::new(self.label.clone())
-        } else {
-            // For AND nodes, we must include all children.
-            // Recursively find the best solution for each OR child.
-            let child_trees: Vec<TreeNode<L>> = self
-                .children
-                .iter()
-                .map(|i| graph.or(*i))
-                .map(|or_child| or_child.find_min(target, costs, graph).tree)
-                .collect();
+    ) -> Option<MinEditResult<L>> {
+        if self.is_leaf() {
+            let tree = TreeNode::new(self.label.clone());
+            let distance = tree_distance(&tree, target, costs);
+            return Some(MinEditResult { tree, distance });
+        }
 
-            TreeNode::with_children(self.label.clone(), child_trees)
-        };
+        // For AND nodes, we must include all children.
+        // If any child fails due to cycle limits, this AND node fails.
+        let mut child_trees = Vec::with_capacity(self.children.len());
 
+        for &or_id in &self.children {
+            if !path.can_visit(or_id) {
+                return None;
+            }
+            path.enter(or_id);
+            let result = graph.or(or_id).find_min(target, costs, path, graph);
+            path.leave(or_id);
+
+            if let Some(r) = result {
+                child_trees.push(r.tree);
+            } else {
+                return None;
+            }
+        }
+
+        let tree = TreeNode::with_children(self.label.clone(), child_trees);
         let distance = tree_distance(&tree, target, costs);
-        MinEditResult { tree, distance }
+        Some(MinEditResult { tree, distance })
     }
 
-    /// Find the solution from this AND node, with memoization.
+    /// Find the solution from this AND node with memoization and cycle detection.
+    /// Caller must have already checked and entered this node in the path tracker.
     fn find_min_memo<C: EditCosts<L>>(
         &self,
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<L>,
+        path: &mut PathTracker,
         graph: &AndOrGraph<L>,
-    ) -> MinEditResult<L> {
-        let tree = if self.is_leaf() {
-            TreeNode::new(self.label.clone())
-        } else {
-            // For AND nodes, we must include all children.
-            // Recursively find the best solution for each OR child.
-            let child_trees: Vec<TreeNode<L>> = self
-                .children
-                .iter()
-                .map(|&or_id| {
-                    // Check cache first
-                    if let Some(c) = cache.or_cache.get(&or_id) {
-                        c.tree.clone()
-                    } else {
-                        let result = graph.or(or_id).find_min_memo(target, costs, cache, graph);
-                        cache.or_cache.insert(or_id, result.clone());
-                        result.tree
-                    }
-                })
-                .collect();
+    ) -> Option<MinEditResult<L>> {
+        if self.is_leaf() {
+            let tree = TreeNode::new(self.label.clone());
+            let distance = tree_distance(&tree, target, costs);
+            return Some(MinEditResult { tree, distance });
+        }
 
-            TreeNode::with_children(self.label.clone(), child_trees)
-        };
+        // For AND nodes, we must include all children.
+        let mut child_trees = Vec::with_capacity(self.children.len());
 
+        for &or_id in &self.children {
+            // Check cache first, but still need to validate path
+            let child_result = if let Some(cached) = cache.or_cache.get(&or_id) {
+                // Even with cache hit, check if we can visit this node on current path
+                if path.can_visit(or_id) {
+                    Some(cached.clone())
+                } else {
+                    None
+                }
+            } else if path.can_visit(or_id) {
+                path.enter(or_id);
+                let result = graph
+                    .or(or_id)
+                    .find_min_memo(target, costs, cache, path, graph);
+                path.leave(or_id);
+                if let Some(ref r) = result {
+                    cache.or_cache.insert(or_id, r.clone());
+                }
+                result
+            } else {
+                None
+            };
+
+            if let Some(r) = child_result {
+                child_trees.push(r.tree);
+            } else {
+                return None;
+            }
+        }
+
+        let tree = TreeNode::with_children(self.label.clone(), child_trees);
         let distance = tree_distance(&tree, target, costs);
-        MinEditResult { tree, distance }
+        Some(MinEditResult { tree, distance })
     }
 }
 
@@ -261,82 +402,90 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
             .sum()
     }
 
-    /// Find the best solution from this OR node without memoization.
+    /// Find the best solution from this OR node with cycle detection.
+    /// Caller must have already checked and entered this node in the path tracker.
     fn find_min<C: EditCosts<L>>(
         &self,
         target: &TreeNode<L>,
         costs: &C,
+        path: &mut PathTracker,
         graph: &AndOrGraph<L>,
-    ) -> MinEditResult<L> {
+    ) -> Option<MinEditResult<L>> {
         let mut best_distance = usize::MAX;
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
-        for and_child in self.children.iter().map(|i| graph.and(*i)) {
-            let subtree = and_child.find_min(target, costs, graph).tree;
+        for &and_id in &self.children {
+            let result = graph.and(and_id).find_min(target, costs, path, graph);
 
-            // OR node label becomes parent of the chosen subtree
-            let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
+            if let Some(r) = result {
+                // OR node label becomes parent of the chosen subtree
+                let candidate_tree = TreeNode::with_children(self.label.clone(), vec![r.tree]);
+                let dist = tree_distance(&candidate_tree, target, costs);
 
-            // Compute actual edit distance for this solution
-            let distance = tree_distance(&candidate_tree, target, costs);
-
-            if distance < best_distance {
-                best_distance = distance;
-                best_tree = Some(candidate_tree);
-            }
-            if best_distance == 0 {
-                break;
+                if dist < best_distance {
+                    best_distance = dist;
+                    best_tree = Some(candidate_tree);
+                }
+                if best_distance == 0 {
+                    break;
+                }
             }
         }
 
-        MinEditResult {
-            tree: best_tree.expect("OR node must have at least one child"),
+        best_tree.map(|tree| MinEditResult {
+            tree,
             distance: best_distance,
-        }
+        })
     }
 
-    /// Find the best solution from this OR node, with memoization.
+    /// Find the best solution from this OR node with memoization and cycle detection.
+    /// Caller must have already checked and entered this node in the path tracker.
     fn find_min_memo<C: EditCosts<L>>(
         &self,
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<L>,
+        path: &mut PathTracker,
         graph: &AndOrGraph<L>,
-    ) -> MinEditResult<L> {
+    ) -> Option<MinEditResult<L>> {
         let mut best_distance = usize::MAX;
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
         for &and_id in &self.children {
             // Check cache first
-            let subtree = if let Some(cached) = cache.and_cache.get(&and_id) {
-                cached.tree.clone()
+            let child_result = if let Some(cached) = cache.and_cache.get(&and_id) {
+                Some(cached.clone())
             } else {
-                let result = graph.and(and_id).find_min_memo(target, costs, cache, graph);
-                cache.and_cache.insert(and_id, result.clone());
-                result.tree
+                let result = graph
+                    .and(and_id)
+                    .find_min_memo(target, costs, cache, path, graph);
+                if let Some(ref r) = result {
+                    cache.and_cache.insert(and_id, r.clone());
+                }
+                result
             };
 
-            // OR node label becomes parent of the chosen subtree
-            let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
+            if let Some(r) = child_result {
+                // OR node label becomes parent of the chosen subtree
+                let candidate_tree = TreeNode::with_children(self.label.clone(), vec![r.tree]);
+                let dist = tree_distance(&candidate_tree, target, costs);
 
-            // Compute actual edit distance for this solution
-            let dist = tree_distance(&candidate_tree, target, costs);
-
-            if dist < best_distance {
-                best_distance = dist;
-                best_tree = Some(candidate_tree);
-            }
-            if best_distance == 0 {
-                break;
+                if dist < best_distance {
+                    best_distance = dist;
+                    best_tree = Some(candidate_tree);
+                }
+                if best_distance == 0 {
+                    break;
+                }
             }
         }
 
-        MinEditResult {
-            tree: best_tree.expect("OR node must have at least one child"),
+        best_tree.map(|tree| MinEditResult {
+            tree,
             distance: best_distance,
-        }
+        })
     }
 }
 
@@ -374,6 +523,51 @@ impl<L: Clone + Eq + Hash> MemoCache<L> {
         MemoCache {
             or_cache: HashMap::new(),
             and_cache: HashMap::new(),
+        }
+    }
+}
+
+/// Path tracker for cycle detection in AND-OR graphs.
+/// Tracks how many times each OR node has been visited on the current path
+/// and allows configurable revisit limits.
+///
+/// Only OR nodes are tracked because AND and OR nodes strictly alternate.
+/// Cycles are detected at OR nodes since that's where paths can reconverge.
+#[derive(Debug, Clone)]
+struct PathTracker {
+    /// Visit counts for OR nodes on the current path
+    or_visits: HashMap<OrId, usize>,
+    /// Maximum number of times any node may be revisited (0 = no revisits allowed)
+    max_revisits: usize,
+}
+
+impl PathTracker {
+    fn new(max_revisits: usize) -> Self {
+        PathTracker {
+            or_visits: HashMap::new(),
+            max_revisits,
+        }
+    }
+
+    /// Check if visiting this OR node would exceed the revisit limit.
+    /// Returns true if the visit is allowed.
+    fn can_visit(&self, id: OrId) -> bool {
+        let count = self.or_visits.get(&id).copied().unwrap_or(0);
+        count <= self.max_revisits
+    }
+
+    /// Mark an OR node as visited on the current path.
+    fn enter(&mut self, id: OrId) {
+        *self.or_visits.entry(id).or_insert(0) += 1;
+    }
+
+    /// Unmark an OR node when leaving the current path.
+    fn leave(&mut self, id: OrId) {
+        if let Some(count) = self.or_visits.get_mut(&id) {
+            *count = count.saturating_sub(1);
+            if *count == 0 {
+                self.or_visits.remove(&id);
+            }
         }
     }
 }
@@ -532,7 +726,7 @@ mod tests {
 
         let target = node("a", vec![leaf("b")]);
 
-        let result = graph.find_min(&target, &UnitCost);
+        let result = graph.find_min(&target, &UnitCost).unwrap();
         assert_eq!(result.distance, 0);
         assert_eq!(result.tree.children()[0].label(), &"b");
     }
@@ -644,7 +838,7 @@ mod tests {
             )],
         );
 
-        let result = graph.find_min_memo(&target, &UnitCost);
+        let result = graph.find_min_memo(&target, &UnitCost).unwrap();
 
         // The result should find a valid solution
         assert!(result.distance < usize::MAX);
@@ -692,7 +886,7 @@ mod tests {
             )],
         );
 
-        let result = graph.find_min(&target, &UnitCost);
+        let result = graph.find_min(&target, &UnitCost).unwrap();
 
         // Should find and1 as the best match with distance 0
         assert_eq!(result.distance, 0);
@@ -707,8 +901,8 @@ mod tests {
 
         let target = node("a", vec![leaf("b")]);
 
-        let r1 = graph.find_min(&target, &UnitCost);
-        let r2 = graph.find_min_memo(&target, &UnitCost);
+        let r1 = graph.find_min(&target, &UnitCost).unwrap();
+        let r2 = graph.find_min_memo(&target, &UnitCost).unwrap();
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -748,8 +942,8 @@ mod tests {
             )],
         );
 
-        let r1 = graph.find_min(&target, &UnitCost);
-        let r2 = graph.find_min_memo(&target, &UnitCost);
+        let r1 = graph.find_min(&target, &UnitCost).unwrap();
+        let r2 = graph.find_min_memo(&target, &UnitCost).unwrap();
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -787,8 +981,8 @@ mod tests {
             vec![node("choice1", vec![node("inner", vec![leaf("x")])])],
         );
 
-        let r1 = graph.find_min(&target, &UnitCost);
-        let r2 = graph.find_min_memo(&target, &UnitCost);
+        let r1 = graph.find_min(&target, &UnitCost).unwrap();
+        let r2 = graph.find_min_memo(&target, &UnitCost).unwrap();
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -838,10 +1032,263 @@ mod tests {
             )],
         );
 
-        let r1 = graph.find_min(&target, &UnitCost);
-        let r2 = graph.find_min_memo(&target, &UnitCost);
+        let r1 = graph.find_min(&target, &UnitCost).unwrap();
+        let r2 = graph.find_min_memo(&target, &UnitCost).unwrap();
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
+    }
+
+    // ==================== Cycle handling tests ====================
+
+    #[test]
+    fn simple_cycle_blocked_with_no_revisits() {
+        // Graph with a direct cycle: OR -> AND -> OR (same)
+        //
+        //   root (OR, id=0) <----+
+        //        |               |
+        //   loop_and (AND)       |
+        //        |               |
+        //   +----+---------------+
+        //
+        // This cycle has no escape, so with max_revisits=0 we get None
+
+        let and_nodes = vec![
+            AndNode::new("loop_and", vec![OrId(0)]), // AndId(0) - points back to root!
+        ];
+        let or_nodes = vec![
+            OrNode::single("root", AndId(0)), // OrId(0) - the root that creates the cycle
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = leaf("anything");
+
+        // With no revisits allowed, this should return None
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn cycle_with_escape_route() {
+        // Graph with a cycle but also an escape route:
+        //
+        //       root (OR, id=0)
+        //        /         \
+        //   escape(AND)   loop_back(AND)
+        //       |               |
+        //      leaf         root (OR, id=0)  <- cycle!
+        //
+        // With max_revisits=0, should find the escape route
+
+        let and_nodes = vec![
+            AndNode::leaf("escape"),             // AndId(0) - escape route
+            AndNode::new("loop", vec![OrId(0)]), // AndId(1) - creates cycle
+        ];
+        let or_nodes = vec![
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(0)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = node("root", vec![leaf("escape")]);
+
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_some());
+        let result = result.unwrap();
+        assert_eq!(result.distance, 0);
+    }
+
+    #[test]
+    fn cycle_with_revisit_allows_unrolling() {
+        // Graph where revisiting produces a valid tree:
+        //
+        //       root (OR, id=0)
+        //        /         \
+        //   recurse(AND)   base(AND)
+        //       |              |
+        //   inner(OR)        leaf
+        //       |
+        //     root (OR, id=0)  <- back to root
+        //
+        // With max_revisits=1, we can unroll once
+
+        let and_nodes = vec![
+            AndNode::new("recurse", vec![OrId(1)]), // AndId(0)
+            AndNode::leaf("base"),                  // AndId(1)
+        ];
+        let or_nodes = vec![
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(0)
+            OrNode::new("inner", vec![AndId(0), AndId(1)]), // OrId(1) - choices including recursive
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = leaf("base");
+
+        // With 0 revisits, should still find base
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn deep_cycle_respects_revisit_limit() {
+        // A longer cycle: a -> b -> c -> a
+        //
+        //     a (OR)
+        //       |
+        //    and_a (AND)
+        //       |
+        //     b (OR)
+        //       |
+        //    and_b (AND)
+        //       |
+        //     c (OR)
+        //      / \
+        // and_c   leaf
+        //    |
+        //    a (OR)  <- cycle back
+
+        let and_nodes = vec![
+            AndNode::new("and_a", vec![OrId(1)]), // AndId(0)
+            AndNode::new("and_b", vec![OrId(2)]), // AndId(1)
+            AndNode::new("and_c", vec![OrId(0)]), // AndId(2) - cycles back to a!
+            AndNode::leaf("leaf"),                // AndId(3) - escape
+        ];
+        let or_nodes = vec![
+            OrNode::single("a", AndId(0)),              // OrId(0)
+            OrNode::single("b", AndId(1)),              // OrId(1)
+            OrNode::new("c", vec![AndId(2), AndId(3)]), // OrId(2) - has escape
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = leaf("anything");
+
+        // With 0 revisits, should find the escape
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_some());
+
+        // Result should use the leaf escape route
+        let result = result.unwrap();
+        assert!(result.tree.label() == &"a");
+    }
+
+    #[test]
+    fn cyclic_and_memo_cyclic_equivalent() {
+        // Test that find_min_cyclic and find_min_memo_cyclic produce equivalent results
+        // on a graph with cycles
+
+        let and_nodes = vec![
+            AndNode::new("recurse", vec![OrId(1)]), // AndId(0)
+            AndNode::leaf("base"),                  // AndId(1)
+        ];
+        let or_nodes = vec![
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(0)
+            OrNode::new("inner", vec![AndId(0), AndId(1)]), // OrId(1)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = node("root", vec![leaf("base")]);
+
+        let r1 = graph.find_min_cyclic(&target, &UnitCost, 0);
+        let r2 = graph.find_min_memo_cyclic(&target, &UnitCost, 0);
+
+        assert!(r1.is_some());
+        assert!(r2.is_some());
+
+        let r1 = r1.unwrap();
+        let r2 = r2.unwrap();
+
+        assert_eq!(r1.distance, r2.distance);
+        assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
+    }
+
+    #[test]
+    fn no_cycle_graph_works_with_cyclic_methods() {
+        // Test that graphs without cycles work correctly with the cyclic methods
+        let and_nodes = vec![AndNode::leaf("b"), AndNode::leaf("c")];
+        let or_nodes = vec![OrNode::new("a", vec![AndId(0), AndId(1)])];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = node("a", vec![leaf("b")]);
+
+        let r_normal = graph.find_min(&target, &UnitCost).unwrap();
+        let r_memo = graph.find_min_memo(&target, &UnitCost).unwrap();
+
+        assert_eq!(r_normal.distance, r_memo.distance);
+    }
+
+    #[test]
+    fn revisit_limit_allows_controlled_unrolling() {
+        // Graph where higher revisit limits allow deeper unrolling:
+        //
+        //        root (OR)
+        //         /     \
+        //    recurse    base (AND leaf)
+        //    (AND)
+        //       |
+        //     root (OR)  <- cycles back
+        //
+        // With max_revisits=0: can only take base path
+        // With max_revisits=1: can unroll once (recurse -> base)
+
+        let and_nodes = vec![
+            AndNode::new("recurse", vec![OrId(0)]), // AndId(0) - cycles back to root
+            AndNode::leaf("base"),                  // AndId(1) - escape
+        ];
+        let or_nodes = vec![
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(0) - choice of recurse or base
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = leaf("anything");
+
+        // With 0 revisits, should find the base escape immediately
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_some());
+        // The result uses the base path (shortest)
+        let tree = result.unwrap().tree;
+        assert_eq!(tree.children().len(), 1);
+        assert_eq!(tree.children()[0].label(), &"base");
+
+        // With 1 revisit, we can unroll once and choose either path
+        let result = graph.find_min_cyclic(&target, &UnitCost, 1);
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn multiple_cycles_handled_independently() {
+        // Graph with two separate cycles that can be navigated
+        //
+        //         root (OR)
+        //          /     \
+        //       a (AND)  b (AND)
+        //        |         |
+        //     o_a (OR)   o_b (OR)
+        //      /  \       /   \
+        //  leaf   root  leaf  root
+        //
+        // Both branches cycle back but have escapes
+
+        let and_nodes = vec![
+            AndNode::new("a", vec![OrId(1)]),       // AndId(0)
+            AndNode::new("b", vec![OrId(2)]),       // AndId(1)
+            AndNode::leaf("leaf_a"),                // AndId(2)
+            AndNode::leaf("leaf_b"),                // AndId(3)
+            AndNode::new("cycle_a", vec![OrId(0)]), // AndId(4) - cycles to root
+            AndNode::new("cycle_b", vec![OrId(0)]), // AndId(5) - cycles to root
+        ];
+        let or_nodes = vec![
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(0)
+            OrNode::new("o_a", vec![AndId(2), AndId(4)]),  // OrId(1)
+            OrNode::new("o_b", vec![AndId(3), AndId(5)]),  // OrId(2)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let target = node(
+            "root",
+            vec![node("a", vec![node("o_a", vec![leaf("leaf_a")])])],
+        );
+
+        let result = graph.find_min_cyclic(&target, &UnitCost, 0);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().distance, 0);
     }
 }
