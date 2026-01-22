@@ -602,35 +602,35 @@ mod tests {
     }
 
     #[test]
-    fn test_identical_trees() {
+    fn identical_trees() {
         let tree1 = node("a", vec![leaf("b"), leaf("c")]);
         let tree2 = node("a", vec![leaf("b"), leaf("c")]);
         assert_eq!(tree_distance_unit(&tree1, &tree2), 0);
     }
 
     #[test]
-    fn test_single_node_difference() {
+    fn single_node_difference() {
         let tree1 = leaf("a");
         let tree2 = leaf("b");
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // relabel a -> b
     }
 
     #[test]
-    fn test_insert_child() {
+    fn insert_child() {
         let tree1 = node("a", vec![leaf("b")]);
         let tree2 = node("a", vec![leaf("b"), leaf("c")]);
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // insert c
     }
 
     #[test]
-    fn test_delete_child() {
+    fn delete_child() {
         let tree1 = node("a", vec![leaf("b"), leaf("c")]);
         let tree2 = node("a", vec![leaf("b")]);
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // delete c
     }
 
     #[test]
-    fn test_empty_to_tree() {
+    fn empty_to_tree() {
         // Empty tree represented as single node to non-empty
         let tree1 = leaf("a");
         let tree2 = node("a", vec![leaf("b"), leaf("c")]);
@@ -638,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    fn test_different_structure() {
+    fn different_structure() {
         // Tree 1:    a          Tree 2:    a
         //           /|                     |
         //          b c                     b
@@ -651,7 +651,7 @@ mod tests {
     }
 
     #[test]
-    fn test_completely_different() {
+    fn completely_different() {
         let tree1 = node("a", vec![leaf("b")]);
         let tree2 = node("x", vec![leaf("y")]);
         // relabel a->x, relabel b->y = 2 operations
@@ -659,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_larger_trees() {
+    fn larger_trees() {
         // Tree 1:       a
         //             / | \
         //            b  c  d
@@ -682,7 +682,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deep_vs_shallow() {
+    fn deep_vs_shallow() {
         // Tree 1: a - b - c - d (linear chain)
         let tree1 = node("a", vec![node("b", vec![node("c", vec![leaf("d")])])]);
 
@@ -699,7 +699,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and_leaf_generates_single_tree() {
+    fn and_leaf_generates_single_tree() {
         let and_node = AndNode::leaf("a");
         let solutions = and_node.generate_solutions();
         assert_eq!(solutions.len(), 1);
@@ -707,7 +707,7 @@ mod tests {
     }
 
     #[test]
-    fn test_or_node_generates_multiple_trees() {
+    fn or_node_generates_multiple_trees() {
         // OR node with two AND leaf children -> two solution trees
         let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
 
@@ -716,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn test_and_with_or_children() {
+    fn and_with_or_children() {
         // Alternating structure:
         //       a (AND)
         //      /       \
@@ -741,7 +741,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deeper_alternation() {
+    fn deeper_alternation() {
         // Three levels: AND -> OR -> AND -> OR -> AND(leaf)
         //
         //           root (AND)
@@ -779,7 +779,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_min_edit_distance_with_choice() {
+    fn find_min_edit_distance_with_choice() {
         // OR node where one choice is closer to target
         //   a(OR)
         //   / \
@@ -798,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn test_cartesian_product() {
+    fn cartesian_product_basic() {
         let lists = vec![vec![1, 2], vec![3, 4]];
         let product = cartesian_product(&lists);
 
@@ -810,14 +810,14 @@ mod tests {
     }
 
     #[test]
-    fn test_cartesian_product_empty() {
+    fn cartesian_product_empty() {
         let lists: Vec<Vec<i32>> = vec![];
         let product = cartesian_product(&lists);
         assert_eq!(product, vec![Vec::<i32>::new()]);
     }
 
     #[test]
-    fn test_original_zhang_shasha_still_works() {
+    fn original_zhang_shasha_still_works() {
         let tree1 = node("a", vec![leaf("b"), leaf("c")]);
         let tree2 = node("a", vec![leaf("b"), leaf("c")]);
         assert_eq!(tree_distance(&tree1, &tree2, &UnitCost), 0);
@@ -827,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solution_count_complexity() {
+    fn solution_count_complexity() {
         // Verify the counting matches actual enumeration
 
         let root = AndNode::new(
@@ -860,7 +860,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dag_shared_substructure_memoization() {
+    fn dag_shared_substructure_memoization() {
         // Test that memoization works correctly when the AND-OR graph is a DAG
         // with shared substructure (same node referenced multiple times).
         //
@@ -920,7 +920,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dag_with_actual_shared_nodes() {
+    fn dag_with_actual_shared_nodes() {
         // Create a true DAG where the same OR node is referenced by multiple AND nodes.
         // This tests that NodeId-based memoization correctly identifies shared structure.
         //
@@ -973,7 +973,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_min_and_find_min_memo_equivalent_simple() {
+    fn find_min_and_find_min_memo_equivalent_simple() {
         // Simple OR node with two choices
         let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
         let target = node("a", vec![leaf("b")]);
@@ -988,7 +988,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_min_and_find_min_memo_equivalent_nested() {
+    fn find_min_and_find_min_memo_equivalent_nested() {
         // Nested structure: AND -> OR -> AND
         let root = OrNode::new(
             "root",
@@ -1019,7 +1019,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_min_and_find_min_memo_equivalent_multiple_choices() {
+    fn find_min_and_find_min_memo_equivalent_multiple_choices() {
         // Multiple OR choices at different levels
         let root = OrNode::new(
             "root",
@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn test_find_min_and_find_min_memo_equivalent_deep() {
+    fn find_min_and_find_min_memo_equivalent_deep() {
         // Deeper alternation: OR -> AND -> OR -> AND -> OR -> AND(leaf)
         let root = OrNode::new(
             "l1",
