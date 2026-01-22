@@ -151,18 +151,13 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
     }
 
     /// Find the solution from this AND node, with memoization.
-    fn find_min_memo<'a, C: EditCosts<L>>(
-        &'a self,
+    fn find_min_memo<C: EditCosts<L>>(
+        &self,
         target: &TreeNode<L>,
         costs: &C,
-        cache: &mut MemoCache<'a, L>,
-        graph: &'a AndOrGraph<L>,
+        cache: &mut MemoCache<L>,
+        graph: &AndOrGraph<L>,
     ) -> MinEditResult<L> {
-        // Check cache first using pointer address as key
-        if let Some(cached) = cache.and_cache.get(&self) {
-            return cached.clone();
-        }
-
         let tree = if self.is_leaf() {
             TreeNode::new(self.label.clone())
         } else {
@@ -171,17 +166,23 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             let child_trees: Vec<TreeNode<L>> = self
                 .children
                 .iter()
-                .map(|i| graph.or(*i))
-                .map(|or_child| or_child.find_min_memo(target, costs, cache, graph).tree)
+                .map(|&or_id| {
+                    // Check cache first
+                    if let Some(c) = cache.or_cache.get(&or_id) {
+                        c.tree.clone()
+                    } else {
+                        let result = graph.or(or_id).find_min_memo(target, costs, cache, graph);
+                        cache.or_cache.insert(or_id, result.clone());
+                        result.tree
+                    }
+                })
                 .collect();
 
             TreeNode::with_children(self.label.clone(), child_trees)
         };
 
         let distance = tree_distance(&tree, target, costs);
-        let result = MinEditResult { tree, distance };
-        cache.and_cache.insert(self, result.clone());
-        result
+        MinEditResult { tree, distance }
     }
 }
 
@@ -296,24 +297,26 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
     }
 
     /// Find the best solution from this OR node, with memoization.
-    fn find_min_memo<'a, C: EditCosts<L>>(
-        &'a self,
+    fn find_min_memo<C: EditCosts<L>>(
+        &self,
         target: &TreeNode<L>,
         costs: &C,
-        cache: &mut MemoCache<'a, L>,
-        graph: &'a AndOrGraph<L>,
+        cache: &mut MemoCache<L>,
+        graph: &AndOrGraph<L>,
     ) -> MinEditResult<L> {
-        // Check cache first using pointer address as key
-        if let Some(cached) = cache.or_cache.get(&self) {
-            return cached.clone();
-        }
-
         let mut best_distance = usize::MAX;
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
-        for and_child in self.children.iter().map(|i| graph.and(*i)) {
-            let subtree = and_child.find_min_memo(target, costs, cache, graph).tree;
+        for &and_id in &self.children {
+            // Check cache first
+            let subtree = if let Some(cached) = cache.and_cache.get(&and_id) {
+                cached.tree.clone()
+            } else {
+                let result = graph.and(and_id).find_min_memo(target, costs, cache, graph);
+                cache.and_cache.insert(and_id, result.clone());
+                result.tree
+            };
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -330,12 +333,10 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
             }
         }
 
-        let result = MinEditResult {
+        MinEditResult {
             tree: best_tree.expect("OR node must have at least one child"),
             distance: best_distance,
-        };
-        cache.or_cache.insert(self, result.clone());
-        result
+        }
     }
 }
 
@@ -358,17 +359,17 @@ impl From<OrId> for usize {
 /// When the AND-OR graph is a DAG (has shared substructure), this cache
 /// prevents redundant computation of the same subtrees.
 ///
-/// Uses pointer addresses as keys - if the same node (by address) appears
-/// multiple times in the graph, it will produce the same solution tree.
+/// Uses node IDs as keys - if the same node ID appears multiple times in the
+/// graph, it will produce the same solution tree.
 #[derive(Debug, Clone)]
-struct MemoCache<'a, L: Clone + Eq + Hash> {
-    /// Cache for OR nodes: maps node pointer -> (`best_solution_tree`, `min_distance`)
-    or_cache: HashMap<&'a OrNode<L>, MinEditResult<L>>,
-    /// Cache for AND nodes: maps node pointer -> (`solution_tree`, distance)
-    and_cache: HashMap<&'a AndNode<L>, MinEditResult<L>>,
+struct MemoCache<L: Clone + Eq + Hash> {
+    /// Cache for OR nodes: maps node ID -> (`best_solution_tree`, `min_distance`)
+    or_cache: HashMap<OrId, MinEditResult<L>>,
+    /// Cache for AND nodes: maps node ID -> (`solution_tree`, distance)
+    and_cache: HashMap<AndId, MinEditResult<L>>,
 }
 
-impl<L: Clone + Eq + Hash> MemoCache<'_, L> {
+impl<L: Clone + Eq + Hash> MemoCache<L> {
     fn new() -> Self {
         MemoCache {
             or_cache: HashMap::new(),
