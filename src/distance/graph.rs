@@ -12,17 +12,62 @@ use hashbrown::HashMap;
 
 use super::{EditCosts, TreeNode, tree_distance};
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AndOrGraph<L: Clone + Eq + Hash> {
+    or: Vec<OrNode<L>>,
+    and: Vec<AndNode<L>>,
+    root: OrId,
+}
+
+impl<L: Clone + Eq + Hash> AndOrGraph<L> {
+    #[must_use]
+    pub fn new(or: Vec<OrNode<L>>, and: Vec<AndNode<L>>, root: OrId) -> Self {
+        Self { or, and, root }
+    }
+
+    #[must_use]
+    pub fn or(&self, id: OrId) -> &OrNode<L> {
+        &self.or[id.0]
+    }
+
+    #[must_use]
+    pub fn and(&self, id: AndId) -> &AndNode<L> {
+        &self.and[id.0]
+    }
+
+    /// Find the solution tree with minimum edit distance to target.
+    #[must_use]
+    pub fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
+        self.or(self.root).find_min(target, costs, self)
+    }
+
+    /// Find the solution tree with minimum edit distance to target, with memoization.
+    ///
+    /// When the AND-OR graph has shared nodes (DAG structure), the same subtree
+    /// computations are cached and reused, reducing exponential blowup.
+    #[must_use]
+    pub fn find_min_memo<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+    ) -> MinEditResult<L> {
+        let mut cache = MemoCache::new();
+        self.or(self.root)
+            .find_min_memo(target, costs, &mut cache, self)
+    }
+}
+
 /// AND node: all children must be included in solution tree.
 /// Children must be OR nodes (or leaves).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AndNode<L: Clone + Eq + Hash> {
     label: L,
-    children: Vec<OrNode<L>>,
+    children: Vec<OrId>,
 }
 
 impl<L: Clone + Eq + Hash> AndNode<L> {
     /// AND node with OR children
-    pub fn new(label: L, children: Vec<OrNode<L>>) -> Self {
+    pub fn new(label: L, children: Vec<OrId>) -> Self {
         AndNode { label, children }
     }
 
@@ -38,7 +83,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
         self.children.is_empty()
     }
 
-    pub fn children(&self) -> &[OrNode<L>] {
+    pub fn children(&self) -> &[OrId] {
         &self.children
     }
 
@@ -48,7 +93,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
 
     /// Generate all valid solution trees from this AND node.
     /// Includes all OR children, taking cartesian product of their choices.
-    pub fn generate_solutions(&self) -> Vec<TreeNode<L>> {
+    pub fn generate_solutions(&self, graph: &AndOrGraph<L>) -> Vec<TreeNode<L>> {
         if self.is_leaf() {
             return vec![TreeNode::new(self.label.clone())];
         }
@@ -57,7 +102,8 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
         let child_solutions: Vec<Vec<TreeNode<L>>> = self
             .children
             .iter()
-            .map(OrNode::generate_solutions)
+            .map(|i| graph.or(*i))
+            .map(|or_node| or_node.generate_solutions(graph))
             .collect();
 
         cartesian_product(&child_solutions)
@@ -67,15 +113,24 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
     }
 
     /// Count the number of solution trees (for complexity analysis)
-    pub fn count_solutions(&self) -> usize {
+    pub fn count_solutions(&self, graph: &AndOrGraph<L>) -> usize {
         if self.is_leaf() {
             return 1;
         }
-        self.children.iter().map(OrNode::count_solutions).product()
+        self.children
+            .iter()
+            .map(|i| graph.or(*i))
+            .map(|or_node| or_node.count_solutions(graph))
+            .product()
     }
 
     /// Find the solution from this AND node without memoization.
-    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
+    fn find_min<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+        graph: &AndOrGraph<L>,
+    ) -> MinEditResult<L> {
         let tree = if self.is_leaf() {
             TreeNode::new(self.label.clone())
         } else {
@@ -84,7 +139,8 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             let child_trees: Vec<TreeNode<L>> = self
                 .children
                 .iter()
-                .map(|or_child| or_child.find_min(target, costs).tree)
+                .map(|i| graph.or(*i))
+                .map(|or_child| or_child.find_min(target, costs, graph).tree)
                 .collect();
 
             TreeNode::with_children(self.label.clone(), child_trees)
@@ -100,6 +156,7 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<'a, L>,
+        graph: &'a AndOrGraph<L>,
     ) -> MinEditResult<L> {
         // Check cache first using pointer address as key
         if let Some(cached) = cache.and_cache.get(&self) {
@@ -114,7 +171,8 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
             let child_trees: Vec<TreeNode<L>> = self
                 .children
                 .iter()
-                .map(|or_child| or_child.find_min_memo(target, costs, cache).tree)
+                .map(|i| graph.or(*i))
+                .map(|or_child| or_child.find_min_memo(target, costs, cache, graph).tree)
                 .collect();
 
             TreeNode::with_children(self.label.clone(), child_trees)
@@ -127,31 +185,46 @@ impl<L: Clone + Eq + Hash> AndNode<L> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AndId(usize);
+
+impl AndId {
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl From<AndId> for usize {
+    fn from(value: AndId) -> Self {
+        value.0
+    }
+}
+
 /// OR node: exactly one child is chosen for solution tree.
 /// Children must be AND nodes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OrNode<L: Clone + Eq + Hash> {
     label: L,
-    children: Vec<AndNode<L>>,
+    children: Vec<AndId>,
 }
 
 impl<L: Clone + Eq + Hash> OrNode<L> {
     /// OR node with AND children
     #[expect(clippy::missing_panics_doc)]
-    pub fn new(label: L, children: Vec<AndNode<L>>) -> Self {
+    pub fn new(label: L, children: Vec<AndId>) -> Self {
         assert!(!children.is_empty(), "OR node must have at least one child");
         OrNode { label, children }
     }
 
     /// Single-choice OR node (wraps an AND node)
-    pub fn single(label: L, child: AndNode<L>) -> Self {
+    pub fn single(label: L, child: AndId) -> Self {
         OrNode {
             label,
             children: vec![child],
         }
     }
 
-    pub fn children(&self) -> &[AndNode<L>] {
+    pub fn children(&self) -> &[AndId] {
         &self.children
     }
 
@@ -161,32 +234,45 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
 
     /// Generate all valid solution trees from this OR node.
     /// Chooses exactly one AND child.
-    pub fn generate_solutions(&self) -> Vec<TreeNode<L>> {
+    pub fn generate_solutions(&self, graph: &AndOrGraph<L>) -> Vec<TreeNode<L>> {
         // Each AND child is a possible choice; collect all their solutions
         self.children
             .iter()
+            .map(|i| graph.and(*i))
             .flat_map(|and_child| {
-                and_child.generate_solutions().into_iter().map(|subtree| {
-                    // OR node label becomes parent of the chosen subtree
-                    TreeNode::with_children(self.label.clone(), vec![subtree])
-                })
+                and_child
+                    .generate_solutions(graph)
+                    .into_iter()
+                    .map(|subtree| {
+                        // OR node label becomes parent of the chosen subtree
+                        TreeNode::with_children(self.label.clone(), vec![subtree])
+                    })
             })
             .collect()
     }
 
     /// Count the number of solution trees
-    pub fn count_solutions(&self) -> usize {
-        self.children.iter().map(AndNode::count_solutions).sum()
+    pub fn count_solutions(&self, graph: &AndOrGraph<L>) -> usize {
+        self.children
+            .iter()
+            .map(|i| graph.and(*i))
+            .map(|and_child| and_child.count_solutions(graph))
+            .sum()
     }
 
     /// Find the best solution from this OR node without memoization.
-    fn find_min<C: EditCosts<L>>(&self, target: &TreeNode<L>, costs: &C) -> MinEditResult<L> {
+    fn find_min<C: EditCosts<L>>(
+        &self,
+        target: &TreeNode<L>,
+        costs: &C,
+        graph: &AndOrGraph<L>,
+    ) -> MinEditResult<L> {
         let mut best_distance = usize::MAX;
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
-        for and_child in &self.children {
-            let subtree = and_child.find_min(target, costs).tree;
+        for and_child in self.children.iter().map(|i| graph.and(*i)) {
+            let subtree = and_child.find_min(target, costs, graph).tree;
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -215,6 +301,7 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
         target: &TreeNode<L>,
         costs: &C,
         cache: &mut MemoCache<'a, L>,
+        graph: &'a AndOrGraph<L>,
     ) -> MinEditResult<L> {
         // Check cache first using pointer address as key
         if let Some(cached) = cache.or_cache.get(&self) {
@@ -225,8 +312,8 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
         let mut best_tree = None;
 
         // Try each AND child and find the one with minimum edit distance
-        for and_child in &self.children {
-            let subtree = and_child.find_min_memo(target, costs, cache).tree;
+        for and_child in self.children.iter().map(|i| graph.and(*i)) {
+            let subtree = and_child.find_min_memo(target, costs, cache, graph).tree;
 
             // OR node label becomes parent of the chosen subtree
             let candidate_tree = TreeNode::with_children(self.label.clone(), vec![subtree]);
@@ -252,6 +339,21 @@ impl<L: Clone + Eq + Hash> OrNode<L> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OrId(usize);
+
+impl OrId {
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl From<OrId> for usize {
+    fn from(value: OrId) -> Self {
+        value.0
+    }
+}
+
 /// Memoization cache for AND-OR graph edit distance computation.
 /// When the AND-OR graph is a DAG (has shared substructure), this cache
 /// prevents redundant computation of the same subtrees.
@@ -272,25 +374,6 @@ impl<L: Clone + Eq + Hash> MemoCache<'_, L> {
             or_cache: HashMap::new(),
             and_cache: HashMap::new(),
         }
-    }
-}
-
-/// Find the solution tree with minimum edit distance to target.
-/// If memo is true, memoization is used to efficiently handle DAGs with shared substructure.
-///
-/// When the AND-OR graph has shared nodes (DAG structure), the same subtree
-/// computations are cached and reused, reducing exponential blowup.
-pub fn find_min<C: EditCosts<L>, L: Clone + Eq + Hash>(
-    graph: &OrNode<L>,
-    target: &TreeNode<L>,
-    costs: &C,
-    memo: bool,
-) -> MinEditResult<L> {
-    if memo {
-        let mut cache = MemoCache::new();
-        graph.find_min_memo(target, costs, &mut cache)
-    } else {
-        graph.find_min(target, costs)
     }
 }
 
@@ -340,8 +423,12 @@ mod tests {
 
     #[test]
     fn and_leaf_generates_single_tree() {
-        let and_node = AndNode::leaf("a");
-        let solutions = and_node.generate_solutions();
+        // Graph: single AND leaf node "a", wrapped in an OR root
+        let and_nodes = vec![AndNode::leaf("a")];
+        let or_nodes = vec![OrNode::single("root", AndId(0))];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
+        let solutions = graph.and(AndId(0)).generate_solutions(&graph);
         assert_eq!(solutions.len(), 1);
         assert_eq!(solutions[0].label(), &"a");
     }
@@ -349,9 +436,14 @@ mod tests {
     #[test]
     fn or_node_generates_multiple_trees() {
         // OR node with two AND leaf children -> two solution trees
-        let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
+        //   a(OR)
+        //   / \
+        //  b   c  (AND leaves)
+        let and_nodes = vec![AndNode::leaf("b"), AndNode::leaf("c")];
+        let or_nodes = vec![OrNode::new("a", vec![AndId(0), AndId(1)])];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
 
-        let solutions = or_node.generate_solutions();
+        let solutions = graph.or(OrId(0)).generate_solutions(&graph);
         assert_eq!(solutions.len(), 2);
     }
 
@@ -367,17 +459,23 @@ mod tests {
         //
         // Solutions: 2 choices at b × 2 choices at c = 4 trees
 
-        let and_node = AndNode::new(
-            "a",
-            vec![
-                OrNode::new("b", vec![AndNode::leaf("d"), AndNode::leaf("e")]),
-                OrNode::new("c", vec![AndNode::leaf("f"), AndNode::leaf("g")]),
-            ],
-        );
+        let and_nodes = vec![
+            AndNode::new("a", vec![OrId(0), OrId(1)]), // AndId(0)
+            AndNode::leaf("d"),                        // AndId(1)
+            AndNode::leaf("e"),                        // AndId(2)
+            AndNode::leaf("f"),                        // AndId(3)
+            AndNode::leaf("g"),                        // AndId(4)
+        ];
+        let or_nodes = vec![
+            OrNode::new("b", vec![AndId(1), AndId(2)]), // OrId(0)
+            OrNode::new("c", vec![AndId(3), AndId(4)]), // OrId(1)
+            OrNode::single("root", AndId(0)),           // OrId(2) - root wrapper
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(2));
 
-        let solutions = and_node.generate_solutions();
+        let solutions = graph.and(AndId(0)).generate_solutions(&graph);
         assert_eq!(solutions.len(), 4);
-        assert_eq!(and_node.count_solutions(), 4);
+        assert_eq!(graph.and(AndId(0)).count_solutions(&graph), 4);
     }
 
     #[test]
@@ -396,26 +494,25 @@ mod tests {
         //
         // Solutions: (f or g) + h = 3 trees
 
-        let root = AndNode::new(
-            "root",
-            vec![OrNode::new(
-                "a",
-                vec![
-                    AndNode::new(
-                        "b",
-                        vec![OrNode::new(
-                            "d",
-                            vec![AndNode::leaf("f"), AndNode::leaf("g")],
-                        )],
-                    ),
-                    AndNode::new("c", vec![OrNode::new("e", vec![AndNode::leaf("h")])]),
-                ],
-            )],
-        );
+        let and_nodes = vec![
+            AndNode::new("root", vec![OrId(0)]), // AndId(0)
+            AndNode::new("b", vec![OrId(1)]),    // AndId(1)
+            AndNode::new("c", vec![OrId(2)]),    // AndId(2)
+            AndNode::leaf("f"),                  // AndId(3)
+            AndNode::leaf("g"),                  // AndId(4)
+            AndNode::leaf("h"),                  // AndId(5)
+        ];
+        let or_nodes = vec![
+            OrNode::new("a", vec![AndId(1), AndId(2)]), // OrId(0)
+            OrNode::new("d", vec![AndId(3), AndId(4)]), // OrId(1)
+            OrNode::single("e", AndId(5)),              // OrId(2)
+            OrNode::single("graph_root", AndId(0)),     // OrId(3) - graph root wrapper
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(3));
 
-        let solutions = root.generate_solutions();
+        let solutions = graph.and(AndId(0)).generate_solutions(&graph);
         assert_eq!(solutions.len(), 3);
-        assert_eq!(root.count_solutions(), 3);
+        assert_eq!(graph.and(AndId(0)).count_solutions(&graph), 3);
     }
 
     #[test]
@@ -428,11 +525,13 @@ mod tests {
         // Target: a -> b
         // Choosing b gives distance 0
 
-        let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
+        let and_nodes = vec![AndNode::leaf("b"), AndNode::leaf("c")];
+        let or_nodes = vec![OrNode::new("a", vec![AndId(0), AndId(1)])];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
 
         let target = node("a", vec![leaf("b")]);
 
-        let result = find_min(&or_node, &target, &UnitCost, false);
+        let result = graph.find_min(&target, &UnitCost);
         assert_eq!(result.distance, 0);
         assert_eq!(result.tree.children()[0].label(), &"b");
     }
@@ -457,44 +556,38 @@ mod tests {
     }
 
     #[test]
-    fn original_zhang_shasha_still_works() {
-        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
-        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
-        assert_eq!(tree_distance(&tree1, &tree2, &UnitCost), 0);
-
-        let tree3 = node("a", vec![leaf("b")]);
-        assert_eq!(tree_distance(&tree1, &tree3, &UnitCost), 1);
-    }
-
-    #[test]
     fn solution_count_complexity() {
         // Verify the counting matches actual enumeration
+        //
+        //           r (AND)
+        //             |
+        //           o1 (OR)
+        //          /     \
+        //       a1(AND)  a2(AND)
+        //         |        |
+        //       o2(OR)   o3(OR)
+        //       / \       / \
+        //      x   y     z   w
 
-        let root = AndNode::new(
-            "r",
-            vec![OrNode::new(
-                "o1",
-                vec![
-                    AndNode::new(
-                        "a1",
-                        vec![OrNode::new(
-                            "o2",
-                            vec![AndNode::leaf("x"), AndNode::leaf("y")],
-                        )],
-                    ),
-                    AndNode::new(
-                        "a2",
-                        vec![OrNode::new(
-                            "o3",
-                            vec![AndNode::leaf("z"), AndNode::leaf("w")],
-                        )],
-                    ),
-                ],
-            )],
-        );
+        let and_nodes = vec![
+            AndNode::new("r", vec![OrId(0)]),  // AndId(0)
+            AndNode::new("a1", vec![OrId(1)]), // AndId(1)
+            AndNode::new("a2", vec![OrId(2)]), // AndId(2)
+            AndNode::leaf("x"),                // AndId(3)
+            AndNode::leaf("y"),                // AndId(4)
+            AndNode::leaf("z"),                // AndId(5)
+            AndNode::leaf("w"),                // AndId(6)
+        ];
+        let or_nodes = vec![
+            OrNode::new("o1", vec![AndId(1), AndId(2)]), // OrId(0)
+            OrNode::new("o2", vec![AndId(3), AndId(4)]), // OrId(1)
+            OrNode::new("o3", vec![AndId(5), AndId(6)]), // OrId(2)
+            OrNode::single("root", AndId(0)),            // OrId(3)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(3));
 
-        let count = root.count_solutions();
-        let solutions = root.generate_solutions();
+        let count = graph.and(AndId(0)).count_solutions(&graph);
+        let solutions = graph.and(AndId(0)).generate_solutions(&graph);
         assert_eq!(count, solutions.len());
         assert_eq!(count, 4); // (x or y) + (z or w) = 4
     }
@@ -518,42 +611,39 @@ mod tests {
         // Without memoization, shared_and would be processed twice.
         // With memoization, it's processed once and the result is reused.
 
-        // Create the shared substructure
-        let shared_and = AndNode::new(
-            "shared",
-            vec![OrNode::new(
-                "o3",
-                vec![AndNode::leaf("x"), AndNode::leaf("y")],
-            )],
-        );
-
-        // Create a DAG by cloning the shared node (they have the same NodeId)
-        // Note: In a real DAG scenario, you'd use Rc<AndNode> or similar.
-        // Here we simulate by creating nodes with the same structure.
-        let root = AndNode::new(
-            "root",
-            vec![
-                OrNode::new("o1", vec![shared_and.clone()]),
-                OrNode::new("o2", vec![shared_and]),
-            ],
-        );
+        let and_nodes = vec![
+            AndNode::new("root", vec![OrId(0), OrId(1)]), // AndId(0)
+            AndNode::new("shared", vec![OrId(2)]),        // AndId(1) - shared!
+            AndNode::leaf("x"),                           // AndId(2)
+            AndNode::leaf("y"),                           // AndId(3)
+        ];
+        let or_nodes = vec![
+            OrNode::single("o1", AndId(1)), // OrId(0) - points to shared
+            OrNode::single("o2", AndId(1)), // OrId(1) - also points to shared (DAG!)
+            OrNode::new("o3", vec![AndId(2), AndId(3)]), // OrId(2)
+            OrNode::single("top", AndId(0)), // OrId(3) - graph root
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(3));
 
         // Target tree
         let target = node(
-            "root",
-            vec![
-                node(
-                    "o1",
-                    vec![node("shared", vec![node("o3", vec![leaf("x")])])],
-                ),
-                node(
-                    "o2",
-                    vec![node("shared", vec![node("o3", vec![leaf("x")])])],
-                ),
-            ],
+            "top",
+            vec![node(
+                "root",
+                vec![
+                    node(
+                        "o1",
+                        vec![node("shared", vec![node("o3", vec![leaf("x")])])],
+                    ),
+                    node(
+                        "o2",
+                        vec![node("shared", vec![node("o3", vec![leaf("x")])])],
+                    ),
+                ],
+            )],
         );
 
-        let result = find_min(&OrNode::single("top", root), &target, &UnitCost, false);
+        let result = graph.find_min_memo(&target, &UnitCost);
 
         // The result should find a valid solution
         assert!(result.distance < usize::MAX);
@@ -562,7 +652,7 @@ mod tests {
     #[test]
     fn dag_with_actual_shared_nodes() {
         // Create a true DAG where the same OR node is referenced by multiple AND nodes.
-        // This tests that NodeId-based memoization correctly identifies shared structure.
+        // This tests that memoization correctly identifies shared structure.
         //
         //         root (OR)
         //        /        \
@@ -570,29 +660,24 @@ mod tests {
         //       |    \    /    |
         //      o1    shared   o2
         //              |
-        //         leaf_and
+        //         common (AND leaf)
         //
         // shared is the same OrNode referenced by both and1 and and2
 
-        let shared_or = OrNode::new("shared", vec![AndNode::leaf("common")]);
-
-        let and1 = AndNode::new(
-            "and1",
-            vec![
-                OrNode::new("o1", vec![AndNode::leaf("a")]),
-                shared_or.clone(),
-            ],
-        );
-
-        let and2 = AndNode::new(
-            "and2",
-            vec![
-                shared_or, // Same node, same NodeId
-                OrNode::new("o2", vec![AndNode::leaf("b")]),
-            ],
-        );
-
-        let root = OrNode::new("root", vec![and1, and2]);
+        let and_nodes = vec![
+            AndNode::new("and1", vec![OrId(0), OrId(1)]), // AndId(0)
+            AndNode::new("and2", vec![OrId(1), OrId(2)]), // AndId(1) - also uses OrId(1)!
+            AndNode::leaf("a"),                           // AndId(2)
+            AndNode::leaf("common"),                      // AndId(3)
+            AndNode::leaf("b"),                           // AndId(4)
+        ];
+        let or_nodes = vec![
+            OrNode::single("o1", AndId(2)),                // OrId(0)
+            OrNode::single("shared", AndId(3)),            // OrId(1) - shared by and1 and and2
+            OrNode::single("o2", AndId(4)),                // OrId(2)
+            OrNode::new("root", vec![AndId(0), AndId(1)]), // OrId(3)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(3));
 
         // Target that matches and1's structure better
         let target = node(
@@ -606,7 +691,7 @@ mod tests {
             )],
         );
 
-        let result = find_min(&root, &target, &UnitCost, false);
+        let result = graph.find_min(&target, &UnitCost);
 
         // Should find and1 as the best match with distance 0
         assert_eq!(result.distance, 0);
@@ -615,13 +700,14 @@ mod tests {
     #[test]
     fn find_min_and_find_min_memo_equivalent_simple() {
         // Simple OR node with two choices
-        let or_node = OrNode::new("a", vec![AndNode::leaf("b"), AndNode::leaf("c")]);
+        let and_nodes = vec![AndNode::leaf("b"), AndNode::leaf("c")];
+        let or_nodes = vec![OrNode::new("a", vec![AndId(0), AndId(1)])];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(0));
+
         let target = node("a", vec![leaf("b")]);
 
-        let r1 = or_node.find_min(&target, &UnitCost);
-
-        let mut cache = MemoCache::new();
-        let r2 = or_node.find_min_memo(&target, &UnitCost, &mut cache);
+        let r1 = graph.find_min(&target, &UnitCost);
+        let r2 = graph.find_min_memo(&target, &UnitCost);
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -629,17 +715,29 @@ mod tests {
 
     #[test]
     fn find_min_and_find_min_memo_equivalent_nested() {
-        // Nested structure: AND -> OR -> AND
-        let root = OrNode::new(
-            "root",
-            vec![AndNode::new(
-                "a",
-                vec![
-                    OrNode::new("b", vec![AndNode::leaf("d"), AndNode::leaf("e")]),
-                    OrNode::new("c", vec![AndNode::leaf("f"), AndNode::leaf("g")]),
-                ],
-            )],
-        );
+        // Nested structure: OR -> AND -> OR -> AND
+        //
+        //         root (OR)
+        //           |
+        //         a (AND)
+        //        /      \
+        //      b(OR)   c(OR)
+        //      / \      / \
+        //     d   e    f   g
+
+        let and_nodes = vec![
+            AndNode::new("a", vec![OrId(0), OrId(1)]), // AndId(0)
+            AndNode::leaf("d"),                        // AndId(1)
+            AndNode::leaf("e"),                        // AndId(2)
+            AndNode::leaf("f"),                        // AndId(3)
+            AndNode::leaf("g"),                        // AndId(4)
+        ];
+        let or_nodes = vec![
+            OrNode::new("b", vec![AndId(1), AndId(2)]), // OrId(0)
+            OrNode::new("c", vec![AndId(3), AndId(4)]), // OrId(1)
+            OrNode::single("root", AndId(0)),           // OrId(2)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(2));
 
         let target = node(
             "root",
@@ -649,10 +747,8 @@ mod tests {
             )],
         );
 
-        let r1 = root.find_min(&target, &UnitCost);
-
-        let mut cache = MemoCache::new();
-        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r1 = graph.find_min(&target, &UnitCost);
+        let r2 = graph.find_min_memo(&target, &UnitCost);
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -661,35 +757,37 @@ mod tests {
     #[test]
     fn find_min_and_find_min_memo_equivalent_multiple_choices() {
         // Multiple OR choices at different levels
-        let root = OrNode::new(
-            "root",
-            vec![
-                AndNode::new(
-                    "choice1",
-                    vec![OrNode::new(
-                        "inner",
-                        vec![AndNode::leaf("x"), AndNode::leaf("y")],
-                    )],
-                ),
-                AndNode::new(
-                    "choice2",
-                    vec![OrNode::new(
-                        "inner",
-                        vec![AndNode::leaf("z"), AndNode::leaf("w")],
-                    )],
-                ),
-            ],
-        );
+        //
+        //           root (OR)
+        //          /        \
+        //    choice1(AND)  choice2(AND)
+        //        |            |
+        //     inner(OR)    inner(OR)
+        //      / \          / \
+        //     x   y        z   w
+
+        let and_nodes = vec![
+            AndNode::new("choice1", vec![OrId(0)]), // AndId(0)
+            AndNode::new("choice2", vec![OrId(1)]), // AndId(1)
+            AndNode::leaf("x"),                     // AndId(2)
+            AndNode::leaf("y"),                     // AndId(3)
+            AndNode::leaf("z"),                     // AndId(4)
+            AndNode::leaf("w"),                     // AndId(5)
+        ];
+        let or_nodes = vec![
+            OrNode::new("inner", vec![AndId(2), AndId(3)]), // OrId(0)
+            OrNode::new("inner", vec![AndId(4), AndId(5)]), // OrId(1)
+            OrNode::new("root", vec![AndId(0), AndId(1)]),  // OrId(2)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(2));
 
         let target = node(
             "root",
             vec![node("choice1", vec![node("inner", vec![leaf("x")])])],
         );
 
-        let r1 = root.find_min(&target, &UnitCost);
-
-        let mut cache = MemoCache::new();
-        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r1 = graph.find_min(&target, &UnitCost);
+        let r2 = graph.find_min_memo(&target, &UnitCost);
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);
@@ -698,31 +796,35 @@ mod tests {
     #[test]
     fn find_min_and_find_min_memo_equivalent_deep() {
         // Deeper alternation: OR -> AND -> OR -> AND -> OR -> AND(leaf)
-        let root = OrNode::new(
-            "l1",
-            vec![AndNode::new(
-                "l2",
-                vec![OrNode::new(
-                    "l3",
-                    vec![
-                        AndNode::new(
-                            "l4a",
-                            vec![OrNode::new(
-                                "l5",
-                                vec![AndNode::leaf("leaf1"), AndNode::leaf("leaf2")],
-                            )],
-                        ),
-                        AndNode::new(
-                            "l4b",
-                            vec![OrNode::new(
-                                "l5",
-                                vec![AndNode::leaf("leaf3"), AndNode::leaf("leaf4")],
-                            )],
-                        ),
-                    ],
-                )],
-            )],
-        );
+        //
+        //         l1 (OR)
+        //           |
+        //         l2 (AND)
+        //           |
+        //         l3 (OR)
+        //        /      \
+        //     l4a(AND)  l4b(AND)
+        //       |         |
+        //     l5(OR)    l5(OR)
+        //     / \        / \
+        //   leaf1 leaf2 leaf3 leaf4
+
+        let and_nodes = vec![
+            AndNode::new("l2", vec![OrId(0)]),  // AndId(0)
+            AndNode::new("l4a", vec![OrId(1)]), // AndId(1)
+            AndNode::new("l4b", vec![OrId(2)]), // AndId(2)
+            AndNode::leaf("leaf1"),             // AndId(3)
+            AndNode::leaf("leaf2"),             // AndId(4)
+            AndNode::leaf("leaf3"),             // AndId(5)
+            AndNode::leaf("leaf4"),             // AndId(6)
+        ];
+        let or_nodes = vec![
+            OrNode::new("l3", vec![AndId(1), AndId(2)]), // OrId(0)
+            OrNode::new("l5", vec![AndId(3), AndId(4)]), // OrId(1)
+            OrNode::new("l5", vec![AndId(5), AndId(6)]), // OrId(2)
+            OrNode::single("l1", AndId(0)),              // OrId(3)
+        ];
+        let graph = AndOrGraph::new(or_nodes, and_nodes, OrId(3));
 
         let target = node(
             "l1",
@@ -735,10 +837,8 @@ mod tests {
             )],
         );
 
-        let r1 = root.find_min(&target, &UnitCost);
-
-        let mut cache = MemoCache::new();
-        let r2 = root.find_min_memo(&target, &UnitCost, &mut cache);
+        let r1 = graph.find_min(&target, &UnitCost);
+        let r2 = graph.find_min_memo(&target, &UnitCost);
 
         assert_eq!(r1.distance, r2.distance);
         assert_eq!(tree_distance_unit(&r1.tree, &r2.tree), 0);

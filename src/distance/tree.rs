@@ -278,6 +278,16 @@ mod tests {
     }
 
     #[test]
+    fn basic_zhang_shasha() {
+        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        assert_eq!(tree_distance(&tree1, &tree2, &UnitCost), 0);
+
+        let tree3 = node("a", vec![leaf("b")]);
+        assert_eq!(tree_distance(&tree1, &tree3, &UnitCost), 1);
+    }
+
+    #[test]
     fn identical_trees() {
         let tree1 = node("a", vec![leaf("b"), leaf("c")]);
         let tree2 = node("a", vec![leaf("b"), leaf("c")]);
