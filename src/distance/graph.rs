@@ -27,6 +27,27 @@ pub struct ENode<L: Label> {
     children: Vec<Id>, // indices into EClass array
 }
 
+impl<L: Label> ENode<L> {
+    pub fn new_leaf(label: L) -> Self {
+        Self {
+            label,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn new_with_children(label: L, children: Vec<Id>) -> Self {
+        Self { label, children }
+    }
+
+    pub fn label(&self) -> &L {
+        &self.label
+    }
+
+    pub fn children(&self) -> &[Id] {
+        &self.children
+    }
+}
+
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
 /// Must have at least one child
@@ -34,6 +55,20 @@ pub struct ENode<L: Label> {
 pub struct EClass<L: Label> {
     label: L,
     children: Vec<ENode<L>>,
+}
+
+impl<L: Label> EClass<L> {
+    pub fn new(label: L, children: Vec<ENode<L>>) -> Self {
+        Self { label, children }
+    }
+
+    pub fn label(&self) -> &L {
+        &self.label
+    }
+
+    pub fn children(&self) -> &[ENode<L>] {
+        &self.children
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
