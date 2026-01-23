@@ -33,6 +33,10 @@ impl<L: Clone + Eq> TreeNode<L> {
         &self.children
     }
 
+    pub fn children_mut(&mut self) -> &mut Vec<TreeNode<L>> {
+        &mut self.children
+    }
+
     pub fn label(&self) -> &L {
         &self.label
     }

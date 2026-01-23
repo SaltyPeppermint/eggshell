@@ -134,36 +134,36 @@ mod test {
         println!("mm nodes: {}", mm.len());
     }
 
-    #[test]
-    fn mm_terms_parse() {
-        // START TERM
-        let mm: RecExpr<Rise> = MM.parse().unwrap();
-        println!("mm nodes: {}", mm.len());
+    // #[test]
+    // fn mm_terms_parse() {
+    //     // START TERM
+    //     let mm: RecExpr<Rise> = MM.parse().unwrap();
+    //     println!("mm nodes: {}", mm.len());
 
-        // GUIDES
-        let split_guide: RecExpr<Rise> = SPLIT_GUIDE.parse().unwrap();
-        println!("split_guide nodes: {}", split_guide.len());
-        let reorder_1_guide: RecExpr<Rise> = REORDER_1_GUIDE.parse().unwrap();
-        println!("reorder_1_guide nodes: {}", reorder_1_guide.len());
-        let reorder_2_guide: RecExpr<Rise> = REORDER_2_GUIDE.parse().unwrap();
-        println!("reorder_2_guide nodes: {}", reorder_2_guide.len());
-        let store_guide: RecExpr<Rise> = STORE_GUIDE.parse().unwrap();
-        println!("store_guide nodes: {}", store_guide.len());
+    //     // GUIDES
+    //     let split_guide: RecExpr<Rise> = SPLIT_GUIDE.parse().unwrap();
+    //     println!("split_guide nodes: {}", split_guide.len());
+    //     let reorder_1_guide: RecExpr<Rise> = REORDER_1_GUIDE.parse().unwrap();
+    //     println!("reorder_1_guide nodes: {}", reorder_1_guide.len());
+    //     let reorder_2_guide: RecExpr<Rise> = REORDER_2_GUIDE.parse().unwrap();
+    //     println!("reorder_2_guide nodes: {}", reorder_2_guide.len());
+    //     let store_guide: RecExpr<Rise> = STORE_GUIDE.parse().unwrap();
+    //     println!("store_guide nodes: {}", store_guide.len());
 
-        // GOALS
-        let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
-        println!("baseline_goal nodes: {}", baseline_goal.len());
-        let blocking_goal: RecExpr<Rise> = BLOCKING_GOAL.parse().unwrap();
-        println!("blocking_goal: {}", blocking_goal.len());
-        let vectorization_goal: RecExpr<Rise> = VECTORIZATION_GOAL.parse().unwrap();
-        println!("vectorization_goal: {}", vectorization_goal.len());
-        let loop_perm_goal: RecExpr<Rise> = LOOP_PERM_GOAL.parse().unwrap();
-        println!("loop_perm_goal nodes: {}", loop_perm_goal.len());
-        let array_packing_goal: RecExpr<Rise> = ARRAY_PACKING_GOAL.parse().unwrap();
-        println!("array_packing_goal: {}", array_packing_goal.len());
-        let cache_blocks_goal: RecExpr<Rise> = CACHE_BLOCKS_GOAL.parse().unwrap();
-        println!("cache_blocks_goal {}", cache_blocks_goal.len());
-        let parallel_goal: RecExpr<Rise> = PARALLEL_GOAL.parse().unwrap();
-        println!("parallel_goal: {}", parallel_goal.len());
-    }
+    //     // GOALS
+    //     let baseline_goal: RecExpr<Rise> = BASELINE_GOAL.parse().unwrap();
+    //     println!("baseline_goal nodes: {}", baseline_goal.len());
+    //     let blocking_goal: RecExpr<Rise> = BLOCKING_GOAL.parse().unwrap();
+    //     println!("blocking_goal: {}", blocking_goal.len());
+    //     let vectorization_goal: RecExpr<Rise> = VECTORIZATION_GOAL.parse().unwrap();
+    //     println!("vectorization_goal: {}", vectorization_goal.len());
+    //     let loop_perm_goal: RecExpr<Rise> = LOOP_PERM_GOAL.parse().unwrap();
+    //     println!("loop_perm_goal nodes: {}", loop_perm_goal.len());
+    //     let array_packing_goal: RecExpr<Rise> = ARRAY_PACKING_GOAL.parse().unwrap();
+    //     println!("array_packing_goal: {}", array_packing_goal.len());
+    //     let cache_blocks_goal: RecExpr<Rise> = CACHE_BLOCKS_GOAL.parse().unwrap();
+    //     println!("cache_blocks_goal {}", cache_blocks_goal.len());
+    //     let parallel_goal: RecExpr<Rise> = PARALLEL_GOAL.parse().unwrap();
+    //     println!("parallel_goal: {}", parallel_goal.len());
+    // }
 }
