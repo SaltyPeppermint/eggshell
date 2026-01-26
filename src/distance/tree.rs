@@ -4,7 +4,10 @@
 //! The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
 //! time and O(n1 * n2) space.
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
+use symbolic_expressions::{Sexp, SexpError};
 
 use super::EGraph;
 use super::ids::{DataTyId, EClassId, FunTyId, NatId, NatOrDTId, TypeId};
@@ -34,11 +37,11 @@ impl<L: Label> TreeNode<L> {
         self.children.is_empty()
     }
 
-    pub fn children(&self) -> &[TreeNode<L>] {
+    pub fn children(&self) -> &[Self] {
         &self.children
     }
 
-    pub fn children_mut(&mut self) -> &mut Vec<TreeNode<L>> {
+    pub fn children_mut(&mut self) -> &mut Vec<Self> {
         &mut self.children
     }
 
@@ -47,12 +50,12 @@ impl<L: Label> TreeNode<L> {
     }
 
     #[must_use]
-    pub fn from_eclass(egraph: &EGraph<L>, id: EClassId) -> TreeNode<L> {
+    pub fn from_eclass(egraph: &EGraph<L>, id: EClassId) -> Self {
         let ty_id = egraph.class(id).ty();
         Self::from_type(egraph, ty_id)
     }
 
-    fn from_type(egraph: &EGraph<L>, id: TypeId) -> TreeNode<L> {
+    fn from_type(egraph: &EGraph<L>, id: TypeId) -> Self {
         match id {
             TypeId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
             TypeId::Type(fun_ty_id) => Self::from_fun(egraph, fun_ty_id),
@@ -60,7 +63,7 @@ impl<L: Label> TreeNode<L> {
         }
     }
 
-    fn from_fun(egraph: &EGraph<L>, id: FunTyId) -> TreeNode<L> {
+    fn from_fun(egraph: &EGraph<L>, id: FunTyId) -> Self {
         let node = egraph.fun_ty(id).label().to_owned();
         let children = egraph
             .fun_ty(id)
@@ -71,7 +74,7 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
-    fn from_data_ty(egraph: &EGraph<L>, id: DataTyId) -> TreeNode<L> {
+    fn from_data_ty(egraph: &EGraph<L>, id: DataTyId) -> Self {
         let node = egraph.data_ty(id).label().to_owned();
         let children = egraph
             .data_ty(id)
@@ -85,7 +88,7 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
-    fn from_nat(egraph: &EGraph<L>, id: NatId) -> TreeNode<L> {
+    fn from_nat(egraph: &EGraph<L>, id: NatId) -> Self {
         let node = egraph.nat(id).label().to_owned();
         let children = egraph
             .nat(id)
@@ -94,6 +97,30 @@ impl<L: Label> TreeNode<L> {
             .map(|&c_id| Self::from_nat(egraph, c_id))
             .collect();
         TreeNode::new(node, children)
+    }
+}
+
+impl FromStr for TreeNode<String> {
+    type Err = SexpError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        fn rec(expr: Sexp) -> Result<TreeNode<String>, SexpError> {
+            match expr {
+                Sexp::String(s) => Ok(TreeNode::leaf(s)),
+                Sexp::List(sexps) => {
+                    let mut iter = sexps.into_iter();
+                    let Some(Sexp::String(s)) = iter.next() else {
+                        return Err(SexpError::Other(
+                            "Empty list or non string head not valid".to_owned(),
+                        ));
+                    };
+                    let children = iter.map(rec).collect::<Result<Vec<_>, _>>()?;
+                    Ok(TreeNode::new(s, children))
+                }
+                Sexp::Empty => Err(SexpError::Other("Empty string not valid".to_owned())),
+            }
+        }
+        symbolic_expressions::parser::parse_str(s).and_then(rec)
     }
 }
 
