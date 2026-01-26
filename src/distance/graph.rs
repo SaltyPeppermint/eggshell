@@ -308,6 +308,10 @@ mod tests {
         TreeNode::new(label, children)
     }
 
+    fn eid(i: usize) -> EClassId {
+        EClassId::new(i)
+    }
+
     /// Helper to create a dummy `TypeId` for tests
     fn dummy_ty() -> TypeId {
         TypeId::Nat(NatId::new(0))
@@ -324,7 +328,7 @@ mod tests {
     fn single_node_graph(label: &str) -> EGraph<String> {
         EGraph::new(
             vec![EClass::new(vec![ENode::leaf(label.to_owned())], dummy_ty())],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -351,7 +355,7 @@ mod tests {
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -378,16 +382,13 @@ mod tests {
         let graph = EGraph::new(
             vec![
                 EClass::new(
-                    vec![ENode::new(
-                        "a".to_owned(),
-                        vec![EClassId::new(1), EClassId::new(2)],
-                    )],
+                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -410,12 +411,12 @@ mod tests {
         let graph = EGraph::new(
             vec![EClass::new(
                 vec![
-                    ENode::new("a".to_owned(), vec![EClassId::new(0)]), // points back to self
+                    ENode::new("a".to_owned(), vec![eid(0)]), // points back to self
                     ENode::leaf("leaf".to_owned()),
                 ],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -433,12 +434,12 @@ mod tests {
         let graph = EGraph::new(
             vec![EClass::new(
                 vec![
-                    ENode::new("rec".to_owned(), vec![EClassId::new(0)]), // points back to self
+                    ENode::new("rec".to_owned(), vec![eid(0)]), // points back to self
                     ENode::leaf("leaf".to_owned()),
                 ],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -465,16 +466,13 @@ mod tests {
         let graph = EGraph::new(
             vec![
                 EClass::new(
-                    vec![ENode::new(
-                        "a".to_owned(),
-                        vec![EClassId::new(1), EClassId::new(2)],
-                    )],
+                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -514,7 +512,7 @@ mod tests {
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -542,15 +540,15 @@ mod tests {
             vec![
                 EClass::new(
                     vec![
-                        ENode::new("a".to_owned(), vec![EClassId::new(1)]), // a(b)
-                        ENode::new("a".to_owned(), vec![EClassId::new(1), EClassId::new(2)]), // a(b, c)
+                        ENode::new("a".to_owned(), vec![eid(1)]),         // a(b)
+                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]), // a(b, c)
                     ],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -582,7 +580,7 @@ mod tests {
         let graph = single_node_graph("a");
         let choices = vec![0];
 
-        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices);
 
         // typeOf wrapper
         assert_eq!(tree.label(), "typeOf");
@@ -597,14 +595,14 @@ mod tests {
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
         );
 
         let choices = vec![0];
-        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices);
 
         assert_eq!(tree.children()[0].label(), "a");
     }
@@ -617,14 +615,14 @@ mod tests {
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
             )],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
         );
 
         let choices = vec![1];
-        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices);
 
         assert_eq!(tree.children()[0].label(), "b");
     }
@@ -635,23 +633,20 @@ mod tests {
         let graph = EGraph::new(
             vec![
                 EClass::new(
-                    vec![ENode::new(
-                        "a".to_owned(),
-                        vec![EClassId::new(1), EClassId::new(2)],
-                    )],
+                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
         );
 
         let choices = vec![0, 0, 0];
-        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices);
 
         // typeOf(a(...), type)
         let expr = &tree.children()[0];
@@ -673,8 +668,8 @@ mod tests {
             vec![
                 EClass::new(
                     vec![
-                        ENode::new("x".to_owned(), vec![EClassId::new(1)]),
-                        ENode::new("y".to_owned(), vec![EClassId::new(1)]),
+                        ENode::new("x".to_owned(), vec![eid(1)]),
+                        ENode::new("y".to_owned(), vec![eid(1)]),
                     ],
                     dummy_ty(),
                 ),
@@ -683,7 +678,7 @@ mod tests {
                     dummy_ty(),
                 ),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -691,25 +686,25 @@ mod tests {
 
         // Test x(a) - expr part of wrapper
         let choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1);
         assert_eq!(tree1.children()[0].label(), "x");
         assert_eq!(tree1.children()[0].children()[0].children()[0].label(), "a");
 
         // Test x(b)
         let choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2);
         assert_eq!(tree2.children()[0].label(), "x");
         assert_eq!(tree2.children()[0].children()[0].children()[0].label(), "b");
 
         // Test y(a)
         let choices3 = vec![1, 0];
-        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3);
         assert_eq!(tree3.children()[0].label(), "y");
         assert_eq!(tree3.children()[0].children()[0].children()[0].label(), "a");
 
         // Test y(b)
         let choices4 = vec![1, 1];
-        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4);
         assert_eq!(tree4.children()[0].label(), "y");
         assert_eq!(tree4.children()[0].children()[0].children()[0].label(), "b");
     }
@@ -723,10 +718,7 @@ mod tests {
         let graph = EGraph::new(
             vec![
                 EClass::new(
-                    vec![ENode::new(
-                        "p".to_owned(),
-                        vec![EClassId::new(1), EClassId::new(2)],
-                    )],
+                    vec![ENode::new("p".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(
@@ -738,7 +730,7 @@ mod tests {
                     dummy_ty(),
                 ),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -746,7 +738,7 @@ mod tests {
 
         // Test p(a, x) - check expr children (which are typeOf wrapped)
         let choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1);
         let expr1 = &tree1.children()[0];
         assert_eq!(expr1.label(), "p");
         assert_eq!(expr1.children()[0].children()[0].label(), "a");
@@ -754,7 +746,7 @@ mod tests {
 
         // Test p(a, y)
         let choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2);
         let expr2 = &tree2.children()[0];
         assert_eq!(expr2.label(), "p");
         assert_eq!(expr2.children()[0].children()[0].label(), "a");
@@ -762,7 +754,7 @@ mod tests {
 
         // Test p(b, x)
         let choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3);
         let expr3 = &tree3.children()[0];
         assert_eq!(expr3.label(), "p");
         assert_eq!(expr3.children()[0].children()[0].label(), "b");
@@ -770,7 +762,7 @@ mod tests {
 
         // Test p(b, y)
         let choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4);
         let expr4 = &tree4.children()[0];
         assert_eq!(expr4.label(), "p");
         assert_eq!(expr4.children()[0].children()[0].label(), "b");
@@ -785,14 +777,11 @@ mod tests {
         // Class 2: "c1" or "c2"
         let graph = EGraph::new(
             vec![
-                EClass::new(
-                    vec![ENode::new("a".to_owned(), vec![EClassId::new(1)])],
-                    dummy_ty(),
-                ),
+                EClass::new(vec![ENode::new("a".to_owned(), vec![eid(1)])], dummy_ty()),
                 EClass::new(
                     vec![
-                        ENode::new("b1".to_owned(), vec![EClassId::new(2)]),
-                        ENode::new("b2".to_owned(), vec![EClassId::new(2)]),
+                        ENode::new("b1".to_owned(), vec![eid(2)]),
+                        ENode::new("b2".to_owned(), vec![eid(2)]),
                     ],
                     dummy_ty(),
                 ),
@@ -801,7 +790,7 @@ mod tests {
                     dummy_ty(),
                 ),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -809,7 +798,7 @@ mod tests {
 
         // Test a(b1(c1)) - navigate through typeOf wrappers
         let choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1);
         let expr1 = &tree1.children()[0]; // a
         assert_eq!(expr1.label(), "a");
         let b1 = &expr1.children()[0].children()[0]; // typeOf -> b1
@@ -819,7 +808,7 @@ mod tests {
 
         // Test a(b1(c2))
         let choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2);
         let expr2 = &tree2.children()[0];
         let b1_2 = &expr2.children()[0].children()[0];
         let c2 = &b1_2.children()[0].children()[0];
@@ -827,7 +816,7 @@ mod tests {
 
         // Test a(b2(c1))
         let choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3);
         let expr3 = &tree3.children()[0];
         let b2 = &expr3.children()[0].children()[0];
         assert_eq!(b2.label(), "b2");
@@ -836,7 +825,7 @@ mod tests {
 
         // Test a(b2(c2))
         let choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4);
         let expr4 = &tree4.children()[0];
         let b2_4 = &expr4.children()[0].children()[0];
         assert_eq!(b2_4.label(), "b2");
@@ -850,24 +839,21 @@ mod tests {
         let graph = EGraph::new(
             vec![
                 EClass::new(
-                    vec![ENode::new(
-                        "f".to_owned(),
-                        vec![EClassId::new(1), EClassId::new(2), EClassId::new(3)],
-                    )],
+                    vec![ENode::new("f".to_owned(), vec![eid(1), eid(2), eid(3)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("a".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
         );
 
         let choices = vec![0, 0, 0, 0];
-        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices);
 
         let expr = &tree.children()[0];
         assert_eq!(expr.label(), "f");
@@ -896,7 +882,7 @@ mod tests {
             vec![
                 EClass::new(
                     vec![
-                        ENode::new("x".to_owned(), vec![EClassId::new(1)]),
+                        ENode::new("x".to_owned(), vec![eid(1)]),
                         ENode::leaf("y".to_owned()),
                     ],
                     dummy_ty(),
@@ -906,7 +892,7 @@ mod tests {
                     dummy_ty(),
                 ),
             ],
-            EClassId::new(0),
+            eid(0),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -919,15 +905,15 @@ mod tests {
 
         // Reconstruct using tree_from_choices
         let choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1);
         assert!(trees_equal(&tree1, &enumerated[0]));
 
         let choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2);
         assert!(trees_equal(&tree2, &enumerated[1]));
 
         let choices3 = vec![1];
-        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3);
         assert!(trees_equal(&tree3, &enumerated[2]));
     }
 }
