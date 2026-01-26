@@ -1,0 +1,5 @@
+simple: (add x y)
+nested: (add (mul a b) y)
+deep: (add (mul (neg a) b) (div c d))
+same: (add x y)
+different: (sub x y)
