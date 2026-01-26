@@ -12,20 +12,21 @@ use super::nodes::Label;
 
 /// A node in a labeled tree
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "L: Label"))]
 pub struct TreeNode<L: Label> {
     label: L,
     children: Vec<TreeNode<L>>,
 }
 
 impl<L: Label> TreeNode<L> {
-    pub fn new(label: L) -> Self {
+    pub fn leaf(label: L) -> Self {
         TreeNode {
             label,
             children: Vec::new(),
         }
     }
 
-    pub fn with_children(label: L, children: Vec<TreeNode<L>>) -> Self {
+    pub fn new(label: L, children: Vec<TreeNode<L>>) -> Self {
         TreeNode { label, children }
     }
 
@@ -67,7 +68,7 @@ impl<L: Label> TreeNode<L> {
             .iter()
             .map(|&c_id| Self::from_type(egraph, c_id))
             .collect();
-        TreeNode::with_children(node, children)
+        TreeNode::new(node, children)
     }
 
     fn from_data_ty(egraph: &EGraph<L>, id: DataTyId) -> TreeNode<L> {
@@ -81,7 +82,7 @@ impl<L: Label> TreeNode<L> {
                 NatOrDTId::DataType(data_ty_id) => Self::from_data_ty(egraph, data_ty_id),
             })
             .collect();
-        TreeNode::with_children(node, children)
+        TreeNode::new(node, children)
     }
 
     fn from_nat(egraph: &EGraph<L>, id: NatId) -> TreeNode<L> {
@@ -92,7 +93,7 @@ impl<L: Label> TreeNode<L> {
             .iter()
             .map(|&c_id| Self::from_nat(egraph, c_id))
             .collect();
-        TreeNode::with_children(node, children)
+        TreeNode::new(node, children)
     }
 }
 
@@ -328,56 +329,77 @@ mod tests {
     use super::*;
 
     fn leaf<L: Label>(label: L) -> TreeNode<L> {
-        TreeNode::new(label)
+        TreeNode::leaf(label)
     }
 
     fn node<L: Label>(label: L, children: Vec<TreeNode<L>>) -> TreeNode<L> {
-        TreeNode::with_children(label, children)
+        TreeNode::new(label, children)
     }
 
     #[test]
     fn basic_zhang_shasha() {
-        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
-        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree1 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
+        let tree2 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
         assert_eq!(tree_distance(&tree1, &tree2, &UnitCost), 0);
 
-        let tree3 = node("a", vec![leaf("b")]);
+        let tree3 = node("a".to_owned(), vec![leaf("b".to_owned())]);
         assert_eq!(tree_distance(&tree1, &tree3, &UnitCost), 1);
     }
 
     #[test]
     fn identical_trees() {
-        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
-        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree1 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
+        let tree2 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
         assert_eq!(tree_distance_unit(&tree1, &tree2), 0);
     }
 
     #[test]
     fn single_node_difference() {
-        let tree1 = leaf("a");
-        let tree2 = leaf("b");
+        let tree1 = leaf("a".to_owned());
+        let tree2 = leaf("b".to_owned());
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // relabel a -> b
     }
 
     #[test]
     fn insert_child() {
-        let tree1 = node("a", vec![leaf("b")]);
-        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+        let tree2 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // insert c
     }
 
     #[test]
     fn delete_child() {
-        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
-        let tree2 = node("a", vec![leaf("b")]);
+        let tree1 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
+        let tree2 = node("a".to_owned(), vec![leaf("b".to_owned())]);
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1); // delete c
     }
 
     #[test]
     fn empty_to_tree() {
         // Empty tree represented as single node to non-empty
-        let tree1 = leaf("a");
-        let tree2 = node("a", vec![leaf("b"), leaf("c")]);
+        let tree1 = leaf("a".to_owned());
+        let tree2 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
         assert_eq!(tree_distance_unit(&tree1, &tree2), 2); // insert b, insert c
     }
 
@@ -388,16 +410,22 @@ mod tests {
         //          b c                     b
         //                                  |
         //                                  c
-        let tree1 = node("a", vec![leaf("b"), leaf("c")]);
-        let tree2 = node("a", vec![node("b", vec![leaf("c")])]);
+        let tree1 = node(
+            "a".to_owned(),
+            vec![leaf("b".to_owned()), leaf("c".to_owned())],
+        );
+        let tree2 = node(
+            "a".to_owned(),
+            vec![node("b".to_owned(), vec![leaf("c".to_owned())])],
+        );
         // One way: delete c from tree1, insert c under b = 2 operations
         assert_eq!(tree_distance_unit(&tree1, &tree2), 2);
     }
 
     #[test]
     fn completely_different() {
-        let tree1 = node("a", vec![leaf("b")]);
-        let tree2 = node("x", vec![leaf("y")]);
+        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+        let tree2 = node("x".to_owned(), vec![leaf("y".to_owned())]);
         // relabel a->x, relabel b->y = 2 operations
         assert_eq!(tree_distance_unit(&tree1, &tree2), 2);
     }
@@ -410,8 +438,15 @@ mod tests {
         //           /|
         //          e f
         let tree1 = node(
-            "a",
-            vec![node("b", vec![leaf("e"), leaf("f")]), leaf("c"), leaf("d")],
+            "a".to_owned(),
+            vec![
+                node(
+                    "b".to_owned(),
+                    vec![leaf("e".to_owned()), leaf("f".to_owned())],
+                ),
+                leaf("c".to_owned()),
+                leaf("d".to_owned()),
+            ],
         );
 
         // Tree 2:       a
@@ -419,7 +454,14 @@ mod tests {
         //            b  c  d
         //           /
         //          e
-        let tree2 = node("a", vec![node("b", vec![leaf("e")]), leaf("c"), leaf("d")]);
+        let tree2 = node(
+            "a".to_owned(),
+            vec![
+                node("b".to_owned(), vec![leaf("e".to_owned())]),
+                leaf("c".to_owned()),
+                leaf("d".to_owned()),
+            ],
+        );
 
         // Delete f from tree1
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1);
@@ -428,12 +470,25 @@ mod tests {
     #[test]
     fn deep_vs_shallow() {
         // Tree 1: a - b - c - d (linear chain)
-        let tree1 = node("a", vec![node("b", vec![node("c", vec![leaf("d")])])]);
+        let tree1 = node(
+            "a".to_owned(),
+            vec![node(
+                "b".to_owned(),
+                vec![node("c".to_owned(), vec![leaf("d".to_owned())])],
+            )],
+        );
 
         // Tree 2:    a
         //          / | \
         //         b  c  d
-        let tree2 = node("a", vec![leaf("b"), leaf("c"), leaf("d")]);
+        let tree2 = node(
+            "a".to_owned(),
+            vec![
+                leaf("b".to_owned()),
+                leaf("c".to_owned()),
+                leaf("d".to_owned()),
+            ],
+        );
 
         // Need to restructure: this requires delete and insert operations
         // The exact cost depends on the optimal alignment

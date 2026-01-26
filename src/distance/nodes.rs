@@ -1,13 +1,25 @@
+use std::borrow::Cow;
+
+use serde::{Deserialize, Serialize};
+
 use super::ids::{EClassId, NatId, NatOrDTId, TypeId};
 
 /// Trait for node labels
-pub trait Label: Clone + Eq + std::hash::Hash + std::fmt::Debug {
+pub trait Label:
+    Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de>
+{
     fn type_of() -> Self;
 }
 
 impl Label for String {
     fn type_of() -> Self {
         "typeOf".to_owned()
+    }
+}
+
+impl Label for Cow<'_, str> {
+    fn type_of() -> Self {
+        Cow::from("typeOf")
     }
 }
 
@@ -27,21 +39,22 @@ impl Label for String {
 macro_rules! define_node {
     ($(#[$meta:meta])* $name:ident, $id_type:ty) => {
         $(#[$meta])*
-        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        pub struct $name<L: Label> {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        pub struct $name<L> {
+            #[serde(rename = "node")]
             label: L,
             children: Vec<$id_type>,
         }
 
         impl<L: Label> $name<L> {
-            pub fn new_leaf(label: L) -> Self {
+            pub fn leaf(label: L) -> Self {
                 Self {
                     label,
                     children: Vec::new(),
                 }
             }
 
-            pub fn new_with_children(label: L, children: Vec<$id_type>) -> Self {
+            pub fn new(label: L, children: Vec<$id_type>) -> Self {
                 Self { label, children }
             }
 
