@@ -6,47 +6,12 @@
 //! With strict alternation (`EClass` -> `ENode` -> `EClass` ->...),
 //! complexity is O(N^(d/2) * |T|^2) for single-path graphs
 
-use std::hash::Hash;
-
 use hashbrown::HashMap;
 
 use super::TreeNode;
+use super::ids::{DataTyId, EClassId, FunTyId, NatId, TypeId};
+use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
 use super::tree::{EditCosts, UnitCost, tree_distance};
-
-/// Trait for node labels
-pub trait Label: Clone + Eq + Hash + std::fmt::Debug {}
-
-// Blanket implementation for any type that satisfies the bounds
-impl<T: Clone + Eq + Hash + std::fmt::Debug> Label for T {}
-
-/// `ENode` must take all children
-/// Children are indices into the `EGraph` array
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ENode<L: Label> {
-    label: L,
-    children: Vec<Id>, // indices into EClass array
-}
-
-impl<L: Label> ENode<L> {
-    pub fn new_leaf(label: L) -> Self {
-        Self {
-            label,
-            children: Vec::new(),
-        }
-    }
-
-    pub fn new_with_children(label: L, children: Vec<Id>) -> Self {
-        Self { label, children }
-    }
-
-    pub fn label(&self) -> &L {
-        &self.label
-    }
-
-    pub fn children(&self) -> &[Id] {
-        &self.children
-    }
-}
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -55,11 +20,16 @@ impl<L: Label> ENode<L> {
 pub struct EClass<L: Label> {
     label: L,
     children: Vec<ENode<L>>,
+    ty: TypeId,
 }
 
 impl<L: Label> EClass<L> {
-    pub fn new(label: L, children: Vec<ENode<L>>) -> Self {
-        Self { label, children }
+    pub fn new(label: L, children: Vec<ENode<L>>, ty: TypeId) -> Self {
+        Self {
+            label,
+            children,
+            ty,
+        }
     }
 
     pub fn label(&self) -> &L {
@@ -69,23 +39,57 @@ impl<L: Label> EClass<L> {
     pub fn children(&self) -> &[ENode<L>] {
         &self.children
     }
+
+    pub fn ty(&self) -> TypeId {
+        self.ty
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EGraph<L: Label> {
     classes: Vec<EClass<L>>,
-    root: Id,
+    root: EClassId,
+    fun_ty_nodes: HashMap<FunTyId, FunTyNode<L>>,
+    nat_nodes: HashMap<NatId, NatNode<L>>,
+    data_ty_nodes: HashMap<DataTyId, DataTyNode<L>>,
 }
 
 impl<L: Label> EGraph<L> {
     #[must_use]
-    pub fn new(classes: Vec<EClass<L>>, root: Id) -> Self {
-        Self { classes, root }
+    pub fn new(
+        classes: Vec<EClass<L>>,
+        root: EClassId,
+        type_nodes: HashMap<FunTyId, FunTyNode<L>>,
+        nat_nodes: HashMap<NatId, NatNode<L>>,
+        data_type_nodes: HashMap<DataTyId, DataTyNode<L>>,
+    ) -> Self {
+        Self {
+            classes,
+            root,
+            fun_ty_nodes: type_nodes,
+            nat_nodes,
+            data_ty_nodes: data_type_nodes,
+        }
     }
 
     #[must_use]
-    pub fn class(&self, id: Id) -> &EClass<L> {
-        &self.classes[id.0]
+    pub fn class(&self, id: EClassId) -> &EClass<L> {
+        &self.classes[usize::from(id)]
+    }
+
+    #[must_use]
+    pub fn fun_ty(&self, id: FunTyId) -> &FunTyNode<L> {
+        &self.fun_ty_nodes[&id]
+    }
+
+    #[must_use]
+    pub fn data_ty(&self, id: DataTyId) -> &DataTyNode<L> {
+        &self.data_ty_nodes[&id]
+    }
+
+    #[must_use]
+    pub fn nat(&self, id: NatId) -> &NatNode<L> {
+        &self.nat_nodes[&id]
     }
 
     /// Enumerate all possible trees extractable from an `EGraph` starting at a given class,
@@ -95,7 +99,7 @@ impl<L: Label> EGraph<L> {
     /// The `choices` vector is modified to record/follow choices at each `EClass`.
     fn get_next_tree(
         &self,
-        id: Id,
+        id: EClassId,
         choice_idx: usize,
         choices: &mut Vec<usize>,
         path: &mut PathTracker,
@@ -113,14 +117,14 @@ impl<L: Label> EGraph<L> {
 
         path.enter(id);
         // Try choices starting from `choice`, looking for a valid one
-        for (node_idx, node) in class.children.iter().enumerate().skip(choice) {
+        for (node_idx, node) in class.children().iter().enumerate().skip(choice) {
             // Set the choice_idx for future choices
             // Useless write if the choice is correct
             choices[choice_idx] = node_idx;
 
-            let result = node.children.iter().try_fold(
+            let result = node.children().iter().try_fold(
                 (Vec::new(), choice_idx),
-                |(mut children, curr_idx), child_id| {
+                |(mut children, curr_idx): (Vec<_>, _), child_id| {
                     let (child_tree, last_idx) =
                         self.get_next_tree(*child_id, curr_idx + 1, choices, path)?;
                     children.push(child_tree);
@@ -130,8 +134,10 @@ impl<L: Label> EGraph<L> {
 
             if let Some((children, curr_idx)) = result {
                 path.leave(id);
-                let tree = TreeNode::with_children(node.label.clone(), children);
-                return Some((tree, curr_idx));
+                let expr_tree = TreeNode::with_children(node.label().clone(), children);
+                let type_tree = TreeNode::from_eclass(self, id);
+                let eclass_tree = TreeNode::with_children(L::type_of(), vec![expr_tree, type_tree]);
+                return Some((eclass_tree, curr_idx));
             }
 
             // This node's children failed, try next node in this class
@@ -144,35 +150,33 @@ impl<L: Label> EGraph<L> {
         None
     }
 
-    pub fn tree_from_choices(
-        &self,
-        id: Id,
-        choice_idx: usize,
-        choices: &mut Vec<usize>,
-    ) -> TreeNode<L> {
+    #[must_use]
+    pub fn tree_from_choices(&self, id: EClassId, choices: &[usize]) -> TreeNode<L> {
         fn rec<L: Label>(
             graph: &EGraph<L>,
-            id: Id,
+            id: EClassId,
             choice_idx: usize,
-            choices: &mut Vec<usize>,
+            choices: &[usize],
         ) -> (TreeNode<L>, usize) {
             let class = graph.class(id);
             let choice = choices[choice_idx];
             let node = &class.children[choice];
 
-            let (children, curr_idx) = node.children.iter().fold(
+            let (children, curr_idx) = node.children().iter().fold(
                 (Vec::new(), choice_idx),
-                |(mut children, curr_idx), child_id| {
+                |(mut children, curr_idx): (Vec<_>, _), child_id| {
                     let (child_tree, last_idx) = rec(graph, *child_id, curr_idx + 1, choices);
                     children.push(child_tree);
                     (children, last_idx)
                 },
             );
 
-            let tree = TreeNode::with_children(node.label.clone(), children);
-            (tree, curr_idx)
+            let expr_tree = TreeNode::with_children(node.label().clone(), children);
+            let type_tree = TreeNode::from_eclass(graph, id);
+            let eclass_tree = TreeNode::with_children(L::type_of(), vec![expr_tree, type_tree]);
+            (eclass_tree, curr_idx)
         }
-        rec(self, id, choice_idx, choices).0
+        rec(self, id, 0, choices).0
     }
 
     #[must_use]
@@ -183,22 +187,6 @@ impl<L: Label> EGraph<L> {
     #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
         TreeIter::new(self, max_revisits).count()
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Id(usize);
-
-impl Id {
-    #[must_use]
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl From<Id> for usize {
-    fn from(value: Id) -> Self {
-        value.0
     }
 }
 
@@ -238,7 +226,7 @@ impl<L: Label> Iterator for TreeIter<'_, L> {
 #[derive(Debug, Clone)]
 struct PathTracker {
     /// Visit counts for classes on the current path
-    visits: HashMap<Id, usize>,
+    visits: HashMap<EClassId, usize>,
     /// Maximum number of times any node may be revisited (0 = no revisits allowed)
     max_revisits: usize,
 }
@@ -253,18 +241,18 @@ impl PathTracker {
 
     /// Check if visiting this OR node would exceed the revisit limit.
     /// Returns true if the visit is allowed.
-    fn can_visit(&self, id: Id) -> bool {
+    fn can_visit(&self, id: EClassId) -> bool {
         let count = self.visits.get(&id).copied().unwrap_or(0);
         count <= self.max_revisits
     }
 
     /// Mark an OR node as visited on the current path.
-    fn enter(&mut self, id: Id) {
+    fn enter(&mut self, id: EClassId) {
         *self.visits.entry(id).or_insert(0) += 1;
     }
 
     /// Unmark an OR node when leaving the current path.
-    fn leave(&mut self, id: Id) {
+    fn leave(&mut self, id: EClassId) {
         if let Some(count) = self.visits.get_mut(&id) {
             *count = count.saturating_sub(1);
             if *count == 0 {
@@ -276,7 +264,7 @@ impl PathTracker {
 
 /// Result of finding the minimum edit distance solution tree
 #[derive(Debug, Clone)]
-pub struct MinEditResult<L: Clone + Eq> {
+pub struct MinEditResult<L: Label> {
     pub tree: TreeNode<L>,
     pub distance: usize,
 }
@@ -314,6 +302,12 @@ pub fn min_distance_extract_unit<L: Label>(
 mod tests {
     use super::*;
 
+    impl Label for &'static str {
+        fn type_of() -> Self {
+            "typeOf"
+        }
+    }
+
     fn leaf<L: Label>(label: L) -> TreeNode<L> {
         TreeNode::new(label)
     }
@@ -322,17 +316,26 @@ mod tests {
         TreeNode::with_children(label, children)
     }
 
+    /// Helper to create a dummy `TypeId` for tests
+    fn dummy_ty() -> TypeId {
+        TypeId::Nat(NatId::new(0))
+    }
+
+    /// Helper to create dummy nat nodes hashmap with a "0" leaf at NatId(0)
+    fn dummy_nat_nodes() -> HashMap<NatId, NatNode<&'static str>> {
+        let mut nats = HashMap::new();
+        nats.insert(NatId::new(0), NatNode::new_leaf("0"));
+        nats
+    }
+
     /// Helper to build a simple graph with one class containing one node
-    fn single_node_graph(label: &str) -> EGraph<&str> {
+    fn single_node_graph(label: &'static str) -> EGraph<&'static str> {
         EGraph::new(
-            vec![EClass {
-                label,
-                children: vec![ENode {
-                    label,
-                    children: vec![],
-                }],
-            }],
-            Id::new(0),
+            vec![EClass::new(label, vec![ENode::new_leaf(label)], dummy_ty())],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         )
     }
 
@@ -342,34 +345,32 @@ mod tests {
         let trees = graph.enumerate_trees(0);
 
         assert_eq!(trees.len(), 1);
-        assert_eq!(trees[0].label(), &"a");
-        assert!(trees[0].is_leaf());
+        // Trees are now wrapped: typeOf(expr_tree, type_tree)
+        assert_eq!(trees[0].label(), &"typeOf");
+        assert_eq!(trees[0].children().len(), 2);
+        assert_eq!(trees[0].children()[0].label(), &"a");
     }
 
     #[test]
     fn enumerate_with_or_choice() {
         // Graph with one class containing two node choices
         let graph = EGraph::new(
-            vec![EClass {
-                label: "root",
-                children: vec![
-                    ENode {
-                        label: "a",
-                        children: vec![],
-                    },
-                    ENode {
-                        label: "b",
-                        children: vec![],
-                    },
-                ],
-            }],
-            Id::new(0),
+            vec![EClass::new(
+                "root",
+                vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
         let trees = graph.enumerate_trees(0);
         assert_eq!(trees.len(), 2);
 
-        let labels: Vec<_> = trees.iter().map(|t| t.label()).collect();
+        // Extract expr labels from typeOf(expr, type) wrapper
+        let labels: Vec<_> = trees.iter().map(|t| t.children()[0].label()).collect();
         assert!(labels.contains(&&"a"));
         assert!(labels.contains(&&"b"));
     }
@@ -382,83 +383,74 @@ mod tests {
         // Class 2: leaf "c"
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![ENode {
-                        label: "a",
-                        children: vec![Id(1), Id(2)],
-                    }],
-                },
-                EClass {
-                    label: "b",
-                    children: vec![ENode {
-                        label: "b",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c",
-                    children: vec![ENode {
-                        label: "c",
-                        children: vec![],
-                    }],
-                },
+                EClass::new(
+                    "root",
+                    vec![ENode::new_with_children(
+                        "a",
+                        vec![EClassId::new(1), EClassId::new(2)],
+                    )],
+                    dummy_ty(),
+                ),
+                EClass::new("b", vec![ENode::new_leaf("b")], dummy_ty()),
+                EClass::new("c", vec![ENode::new_leaf("c")], dummy_ty()),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
         let trees = graph.enumerate_trees(0);
         assert_eq!(trees.len(), 1);
-        assert_eq!(trees[0].label(), &"a");
-        assert_eq!(trees[0].children().len(), 2);
-        assert_eq!(trees[0].children()[0].label(), &"b");
-        assert_eq!(trees[0].children()[1].label(), &"c");
+        // Root is typeOf(expr, type), expr is "a" with children that are also typeOf wrapped
+        let expr = &trees[0].children()[0];
+        assert_eq!(expr.label(), &"a");
+        assert_eq!(expr.children().len(), 2);
+        // Children are typeOf(b, type) and typeOf(c, type)
+        assert_eq!(expr.children()[0].children()[0].label(), &"b");
+        assert_eq!(expr.children()[1].children()[0].label(), &"c");
     }
 
     #[test]
     fn enumerate_with_cycle_no_revisits() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
-            vec![EClass {
-                label: "a",
-                children: vec![
-                    ENode {
-                        label: "a",
-                        children: vec![Id(0)], // points back to self
-                    },
-                    ENode {
-                        label: "leaf",
-                        children: vec![],
-                    },
+            vec![EClass::new(
+                "a",
+                vec![
+                    ENode::new_with_children("a", vec![EClassId::new(0)]), // points back to self
+                    ENode::new_leaf("leaf"),
                 ],
-            }],
-            Id::new(0),
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
         // With 0 revisits, we can only take the leaf option
         let trees = graph.enumerate_trees(0);
         assert_eq!(trees.len(), 1);
-        assert_eq!(trees[0].label(), &"leaf");
+        assert_eq!(trees[0].children()[0].label(), &"leaf");
     }
 
     #[test]
     fn enumerate_with_cycle_one_revisit() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
-            vec![EClass {
-                label: "a",
-                children: vec![
-                    ENode {
-                        label: "rec",
-                        children: vec![Id(0)], // points back to self
-                    },
-                    ENode {
-                        label: "leaf",
-                        children: vec![],
-                    },
+            vec![EClass::new(
+                "a",
+                vec![
+                    ENode::new_with_children("rec", vec![EClassId::new(0)]), // points back to self
+                    ENode::new_leaf("leaf"),
                 ],
-            }],
-            Id::new(0),
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
         // With 1 revisit, we can go one level deep
@@ -469,10 +461,10 @@ mod tests {
         // Let's verify we get more trees than with 0 revisits
         assert!(trees.len() > 1);
 
-        // Check that we have the recursive structure
+        // Check that we have the recursive structure (expr part of typeOf wrapper)
         let has_recursive = trees
             .iter()
-            .any(|t| t.label() == &"rec" && !t.children().is_empty());
+            .any(|t| t.children()[0].label() == &"rec" && !t.children()[0].children().is_empty());
         assert!(has_recursive);
     }
 
@@ -481,32 +473,37 @@ mod tests {
         // Graph contains the exact reference tree
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "a",
-                    children: vec![ENode {
-                        label: "a",
-                        children: vec![Id(1), Id(2)],
-                    }],
-                },
-                EClass {
-                    label: "b",
-                    children: vec![ENode {
-                        label: "b",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c",
-                    children: vec![ENode {
-                        label: "c",
-                        children: vec![],
-                    }],
-                },
+                EClass::new(
+                    "a",
+                    vec![ENode::new_with_children(
+                        "a",
+                        vec![EClassId::new(1), EClassId::new(2)],
+                    )],
+                    dummy_ty(),
+                ),
+                EClass::new("b", vec![ENode::new_leaf("b")], dummy_ty()),
+                EClass::new("c", vec![ENode::new_leaf("c")], dummy_ty()),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let reference = node("a", vec![leaf("b"), leaf("c")]);
+        // Reference must match the typeOf wrapper structure
+        let reference = node(
+            "typeOf",
+            vec![
+                node(
+                    "a",
+                    vec![
+                        node("typeOf", vec![leaf("b"), leaf("0")]),
+                        node("typeOf", vec![leaf("c"), leaf("0")]),
+                    ],
+                ),
+                leaf("0"), // type tree (dummy nat)
+            ],
+        );
         let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
 
         assert_eq!(result.distance, 0);
@@ -517,27 +514,23 @@ mod tests {
         // Graph with OR choice: "a" or "x"
         // Reference is "a", so should choose "a" with distance 0
         let graph = EGraph::new(
-            vec![EClass {
-                label: "root",
-                children: vec![
-                    ENode {
-                        label: "a",
-                        children: vec![],
-                    },
-                    ENode {
-                        label: "x",
-                        children: vec![],
-                    },
-                ],
-            }],
-            Id::new(0),
+            vec![EClass::new(
+                "root",
+                vec![ENode::new_leaf("a"), ENode::new_leaf("x")],
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let reference = leaf("a");
+        // Reference must match typeOf wrapper
+        let reference = node("typeOf", vec![leaf("a"), leaf("0")]);
         let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
 
         assert_eq!(result.distance, 0);
-        assert_eq!(result.tree.label(), &"a");
+        assert_eq!(result.tree.children()[0].label(), &"a");
     }
 
     #[test]
@@ -549,105 +542,90 @@ mod tests {
         // Should choose option 1 with distance 0
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "a",
-                    children: vec![
-                        ENode {
-                            label: "a",
-                            children: vec![Id(1)], // a(b)
-                        },
-                        ENode {
-                            label: "a",
-                            children: vec![Id(1), Id(2)], // a(b, c)
-                        },
+                EClass::new(
+                    "a",
+                    vec![
+                        ENode::new_with_children("a", vec![EClassId::new(1)]), // a(b)
+                        ENode::new_with_children("a", vec![EClassId::new(1), EClassId::new(2)]), // a(b, c)
                     ],
-                },
-                EClass {
-                    label: "b",
-                    children: vec![ENode {
-                        label: "b",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c",
-                    children: vec![ENode {
-                        label: "c",
-                        children: vec![],
-                    }],
-                },
+                    dummy_ty(),
+                ),
+                EClass::new("b", vec![ENode::new_leaf("b")], dummy_ty()),
+                EClass::new("c", vec![ENode::new_leaf("c")], dummy_ty()),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let reference = node("a", vec![leaf("b")]);
+        // Reference with typeOf wrapper: typeOf(a(typeOf(b, 0)), 0)
+        let reference = node(
+            "typeOf",
+            vec![
+                node("a", vec![node("typeOf", vec![leaf("b"), leaf("0")])]),
+                leaf("0"),
+            ],
+        );
         let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
 
         assert_eq!(result.distance, 0);
-        assert_eq!(result.tree.children().len(), 1);
+        // The expr part of typeOf wrapper should have 1 child
+        assert_eq!(result.tree.children()[0].children().len(), 1);
     }
 
     #[test]
     fn tree_from_choices_single_leaf() {
         let graph = single_node_graph("a");
-        let mut choices = vec![0];
+        let choices = vec![0];
 
-        let tree = graph.tree_from_choices(Id::new(0), 0, &mut choices);
+        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
 
-        assert_eq!(tree.label(), &"a");
-        assert!(tree.is_leaf());
+        // typeOf wrapper
+        assert_eq!(tree.label(), &"typeOf");
+        assert_eq!(tree.children()[0].label(), &"a");
     }
 
     #[test]
     fn tree_from_choices_or_choice_first() {
         // Graph with two OR choices
         let graph = EGraph::new(
-            vec![EClass {
-                label: "root",
-                children: vec![
-                    ENode {
-                        label: "a",
-                        children: vec![],
-                    },
-                    ENode {
-                        label: "b",
-                        children: vec![],
-                    },
-                ],
-            }],
-            Id::new(0),
+            vec![EClass::new(
+                "root",
+                vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let mut choices = vec![0];
-        let tree = graph.tree_from_choices(Id::new(0), 0, &mut choices);
+        let choices = vec![0];
+        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
 
-        assert_eq!(tree.label(), &"a");
+        assert_eq!(tree.children()[0].label(), &"a");
     }
 
     #[test]
     fn tree_from_choices_or_choice_second() {
         // Graph with two OR choices
         let graph = EGraph::new(
-            vec![EClass {
-                label: "root",
-                children: vec![
-                    ENode {
-                        label: "a",
-                        children: vec![],
-                    },
-                    ENode {
-                        label: "b",
-                        children: vec![],
-                    },
-                ],
-            }],
-            Id::new(0),
+            vec![EClass::new(
+                "root",
+                vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                dummy_ty(),
+            )],
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let mut choices = vec![1];
-        let tree = graph.tree_from_choices(Id::new(0), 0, &mut choices);
+        let choices = vec![1];
+        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
 
-        assert_eq!(tree.label(), &"b");
+        assert_eq!(tree.children()[0].label(), &"b");
     }
 
     #[test]
@@ -655,38 +633,33 @@ mod tests {
         // Graph: root -> node with two child classes
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![ENode {
-                        label: "a",
-                        children: vec![Id(1), Id(2)],
-                    }],
-                },
-                EClass {
-                    label: "b",
-                    children: vec![ENode {
-                        label: "b",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c",
-                    children: vec![ENode {
-                        label: "c",
-                        children: vec![],
-                    }],
-                },
+                EClass::new(
+                    "root",
+                    vec![ENode::new_with_children(
+                        "a",
+                        vec![EClassId::new(1), EClassId::new(2)],
+                    )],
+                    dummy_ty(),
+                ),
+                EClass::new("b", vec![ENode::new_leaf("b")], dummy_ty()),
+                EClass::new("c", vec![ENode::new_leaf("c")], dummy_ty()),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let mut choices = vec![0, 0, 0];
-        let tree = graph.tree_from_choices(Id::new(0), 0, &mut choices);
+        let choices = vec![0, 0, 0];
+        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
 
-        assert_eq!(tree.label(), &"a");
-        assert_eq!(tree.children().len(), 2);
-        assert_eq!(tree.children()[0].label(), &"b");
-        assert_eq!(tree.children()[1].label(), &"c");
+        // typeOf(a(...), type)
+        let expr = &tree.children()[0];
+        assert_eq!(expr.label(), &"a");
+        assert_eq!(expr.children().len(), 2);
+        // Children are typeOf wrapped
+        assert_eq!(expr.children()[0].children()[0].label(), &"b");
+        assert_eq!(expr.children()[1].children()[0].label(), &"c");
     }
 
     #[test]
@@ -698,59 +671,61 @@ mod tests {
         // Class 1: two leaf options "a" or "b"
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![
-                        ENode {
-                            label: "x",
-                            children: vec![Id(1)],
-                        },
-                        ENode {
-                            label: "y",
-                            children: vec![Id(1)],
-                        },
+                EClass::new(
+                    "root",
+                    vec![
+                        ENode::new_with_children("x", vec![EClassId::new(1)]),
+                        ENode::new_with_children("y", vec![EClassId::new(1)]),
                     ],
-                },
-                EClass {
-                    label: "leaf",
-                    children: vec![
-                        ENode {
-                            label: "a",
-                            children: vec![],
-                        },
-                        ENode {
-                            label: "b",
-                            children: vec![],
-                        },
-                    ],
-                },
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "leaf",
+                    vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                    dummy_ty(),
+                ),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        // Test x(a)
-        let mut choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(Id::new(0), 0, &mut choices1);
-        assert_eq!(tree1.label(), &"x");
-        assert_eq!(tree1.children()[0].label(), &"a");
+        // Test x(a) - expr part of wrapper
+        let choices1 = vec![0, 0];
+        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        assert_eq!(tree1.children()[0].label(), &"x");
+        assert_eq!(
+            tree1.children()[0].children()[0].children()[0].label(),
+            &"a"
+        );
 
         // Test x(b)
-        let mut choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(Id::new(0), 0, &mut choices2);
-        assert_eq!(tree2.label(), &"x");
-        assert_eq!(tree2.children()[0].label(), &"b");
+        let choices2 = vec![0, 1];
+        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        assert_eq!(tree2.children()[0].label(), &"x");
+        assert_eq!(
+            tree2.children()[0].children()[0].children()[0].label(),
+            &"b"
+        );
 
         // Test y(a)
-        let mut choices3 = vec![1, 0];
-        let tree3 = graph.tree_from_choices(Id::new(0), 0, &mut choices3);
-        assert_eq!(tree3.label(), &"y");
-        assert_eq!(tree3.children()[0].label(), &"a");
+        let choices3 = vec![1, 0];
+        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        assert_eq!(tree3.children()[0].label(), &"y");
+        assert_eq!(
+            tree3.children()[0].children()[0].children()[0].label(),
+            &"a"
+        );
 
         // Test y(b)
-        let mut choices4 = vec![1, 1];
-        let tree4 = graph.tree_from_choices(Id::new(0), 0, &mut choices4);
-        assert_eq!(tree4.label(), &"y");
-        assert_eq!(tree4.children()[0].label(), &"b");
+        let choices4 = vec![1, 1];
+        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        assert_eq!(tree4.children()[0].label(), &"y");
+        assert_eq!(
+            tree4.children()[0].children()[0].children()[0].label(),
+            &"b"
+        );
     }
 
     #[test]
@@ -761,70 +736,62 @@ mod tests {
         // Class 2: "x" or "y"
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![ENode {
-                        label: "p",
-                        children: vec![Id(1), Id(2)],
-                    }],
-                },
-                EClass {
-                    label: "left",
-                    children: vec![
-                        ENode {
-                            label: "a",
-                            children: vec![],
-                        },
-                        ENode {
-                            label: "b",
-                            children: vec![],
-                        },
-                    ],
-                },
-                EClass {
-                    label: "right",
-                    children: vec![
-                        ENode {
-                            label: "x",
-                            children: vec![],
-                        },
-                        ENode {
-                            label: "y",
-                            children: vec![],
-                        },
-                    ],
-                },
+                EClass::new(
+                    "root",
+                    vec![ENode::new_with_children(
+                        "p",
+                        vec![EClassId::new(1), EClassId::new(2)],
+                    )],
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "left",
+                    vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "right",
+                    vec![ENode::new_leaf("x"), ENode::new_leaf("y")],
+                    dummy_ty(),
+                ),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        // Test p(a, x)
-        let mut choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(Id::new(0), 0, &mut choices1);
-        assert_eq!(tree1.label(), &"p");
-        assert_eq!(tree1.children()[0].label(), &"a");
-        assert_eq!(tree1.children()[1].label(), &"x");
+        // Test p(a, x) - check expr children (which are typeOf wrapped)
+        let choices1 = vec![0, 0, 0];
+        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let expr1 = &tree1.children()[0];
+        assert_eq!(expr1.label(), &"p");
+        assert_eq!(expr1.children()[0].children()[0].label(), &"a");
+        assert_eq!(expr1.children()[1].children()[0].label(), &"x");
 
         // Test p(a, y)
-        let mut choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(Id::new(0), 0, &mut choices2);
-        assert_eq!(tree2.label(), &"p");
-        assert_eq!(tree2.children()[0].label(), &"a");
-        assert_eq!(tree2.children()[1].label(), &"y");
+        let choices2 = vec![0, 0, 1];
+        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let expr2 = &tree2.children()[0];
+        assert_eq!(expr2.label(), &"p");
+        assert_eq!(expr2.children()[0].children()[0].label(), &"a");
+        assert_eq!(expr2.children()[1].children()[0].label(), &"y");
 
         // Test p(b, x)
-        let mut choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(Id::new(0), 0, &mut choices3);
-        assert_eq!(tree3.label(), &"p");
-        assert_eq!(tree3.children()[0].label(), &"b");
-        assert_eq!(tree3.children()[1].label(), &"x");
+        let choices3 = vec![0, 1, 0];
+        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let expr3 = &tree3.children()[0];
+        assert_eq!(expr3.label(), &"p");
+        assert_eq!(expr3.children()[0].children()[0].label(), &"b");
+        assert_eq!(expr3.children()[1].children()[0].label(), &"x");
 
         // Test p(b, y)
-        let mut choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(Id::new(0), 0, &mut choices4);
-        assert_eq!(tree4.label(), &"p");
-        assert_eq!(tree4.children()[0].label(), &"b");
-        assert_eq!(tree4.children()[1].label(), &"y");
+        let choices4 = vec![0, 1, 1];
+        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        let expr4 = &tree4.children()[0];
+        assert_eq!(expr4.label(), &"p");
+        assert_eq!(expr4.children()[0].children()[0].label(), &"b");
+        assert_eq!(expr4.children()[1].children()[0].label(), &"y");
     }
 
     #[test]
@@ -835,70 +802,66 @@ mod tests {
         // Class 2: "c1" or "c2"
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![ENode {
-                        label: "a",
-                        children: vec![Id(1)],
-                    }],
-                },
-                EClass {
-                    label: "middle",
-                    children: vec![
-                        ENode {
-                            label: "b1",
-                            children: vec![Id(2)],
-                        },
-                        ENode {
-                            label: "b2",
-                            children: vec![Id(2)],
-                        },
+                EClass::new(
+                    "root",
+                    vec![ENode::new_with_children("a", vec![EClassId::new(1)])],
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "middle",
+                    vec![
+                        ENode::new_with_children("b1", vec![EClassId::new(2)]),
+                        ENode::new_with_children("b2", vec![EClassId::new(2)]),
                     ],
-                },
-                EClass {
-                    label: "bottom",
-                    children: vec![
-                        ENode {
-                            label: "c1",
-                            children: vec![],
-                        },
-                        ENode {
-                            label: "c2",
-                            children: vec![],
-                        },
-                    ],
-                },
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "bottom",
+                    vec![ENode::new_leaf("c1"), ENode::new_leaf("c2")],
+                    dummy_ty(),
+                ),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        // Test a(b1(c1))
-        let mut choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(Id::new(0), 0, &mut choices1);
-        assert_eq!(tree1.label(), &"a");
-        assert_eq!(tree1.children()[0].label(), &"b1");
-        assert_eq!(tree1.children()[0].children()[0].label(), &"c1");
+        // Test a(b1(c1)) - navigate through typeOf wrappers
+        let choices1 = vec![0, 0, 0];
+        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
+        let expr1 = &tree1.children()[0]; // a
+        assert_eq!(expr1.label(), &"a");
+        let b1 = &expr1.children()[0].children()[0]; // typeOf -> b1
+        assert_eq!(b1.label(), &"b1");
+        let c1 = &b1.children()[0].children()[0]; // typeOf -> c1
+        assert_eq!(c1.label(), &"c1");
 
         // Test a(b1(c2))
-        let mut choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(Id::new(0), 0, &mut choices2);
-        assert_eq!(tree2.label(), &"a");
-        assert_eq!(tree2.children()[0].label(), &"b1");
-        assert_eq!(tree2.children()[0].children()[0].label(), &"c2");
+        let choices2 = vec![0, 0, 1];
+        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
+        let expr2 = &tree2.children()[0];
+        let b1_2 = &expr2.children()[0].children()[0];
+        let c2 = &b1_2.children()[0].children()[0];
+        assert_eq!(c2.label(), &"c2");
 
         // Test a(b2(c1))
-        let mut choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(Id::new(0), 0, &mut choices3);
-        assert_eq!(tree3.label(), &"a");
-        assert_eq!(tree3.children()[0].label(), &"b2");
-        assert_eq!(tree3.children()[0].children()[0].label(), &"c1");
+        let choices3 = vec![0, 1, 0];
+        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
+        let expr3 = &tree3.children()[0];
+        let b2 = &expr3.children()[0].children()[0];
+        assert_eq!(b2.label(), &"b2");
+        let c1_3 = &b2.children()[0].children()[0];
+        assert_eq!(c1_3.label(), &"c1");
 
         // Test a(b2(c2))
-        let mut choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(Id::new(0), 0, &mut choices4);
-        assert_eq!(tree4.label(), &"a");
-        assert_eq!(tree4.children()[0].label(), &"b2");
-        assert_eq!(tree4.children()[0].children()[0].label(), &"c2");
+        let choices4 = vec![0, 1, 1];
+        let tree4 = graph.tree_from_choices(EClassId::new(0), &choices4);
+        let expr4 = &tree4.children()[0];
+        let b2_4 = &expr4.children()[0].children()[0];
+        assert_eq!(b2_4.label(), &"b2");
+        let c2_4 = &b2_4.children()[0].children()[0];
+        assert_eq!(c2_4.label(), &"c2");
     }
 
     #[test]
@@ -906,46 +869,34 @@ mod tests {
         // Test with three AND children
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![ENode {
-                        label: "f",
-                        children: vec![Id(1), Id(2), Id(3)],
-                    }],
-                },
-                EClass {
-                    label: "c1",
-                    children: vec![ENode {
-                        label: "a",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c2",
-                    children: vec![ENode {
-                        label: "b",
-                        children: vec![],
-                    }],
-                },
-                EClass {
-                    label: "c3",
-                    children: vec![ENode {
-                        label: "c",
-                        children: vec![],
-                    }],
-                },
+                EClass::new(
+                    "root",
+                    vec![ENode::new_with_children(
+                        "f",
+                        vec![EClassId::new(1), EClassId::new(2), EClassId::new(3)],
+                    )],
+                    dummy_ty(),
+                ),
+                EClass::new("c1", vec![ENode::new_leaf("a")], dummy_ty()),
+                EClass::new("c2", vec![ENode::new_leaf("b")], dummy_ty()),
+                EClass::new("c3", vec![ENode::new_leaf("c")], dummy_ty()),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
-        let mut choices = vec![0, 0, 0, 0];
-        let tree = graph.tree_from_choices(Id::new(0), 0, &mut choices);
+        let choices = vec![0, 0, 0, 0];
+        let tree = graph.tree_from_choices(EClassId::new(0), &choices);
 
-        assert_eq!(tree.label(), &"f");
-        assert_eq!(tree.children().len(), 3);
-        assert_eq!(tree.children()[0].label(), &"a");
-        assert_eq!(tree.children()[1].label(), &"b");
-        assert_eq!(tree.children()[2].label(), &"c");
+        let expr = &tree.children()[0];
+        assert_eq!(expr.label(), &"f");
+        assert_eq!(expr.children().len(), 3);
+        // Children are typeOf wrapped
+        assert_eq!(expr.children()[0].children()[0].label(), &"a");
+        assert_eq!(expr.children()[1].children()[0].label(), &"b");
+        assert_eq!(expr.children()[2].children()[0].label(), &"c");
     }
 
     #[test]
@@ -964,34 +915,24 @@ mod tests {
         // Verify that tree_from_choices produces the same trees as enumeration
         let graph = EGraph::new(
             vec![
-                EClass {
-                    label: "root",
-                    children: vec![
-                        ENode {
-                            label: "x",
-                            children: vec![Id(1)],
-                        },
-                        ENode {
-                            label: "y",
-                            children: vec![],
-                        },
+                EClass::new(
+                    "root",
+                    vec![
+                        ENode::new_with_children("x", vec![EClassId::new(1)]),
+                        ENode::new_leaf("y"),
                     ],
-                },
-                EClass {
-                    label: "leaf",
-                    children: vec![
-                        ENode {
-                            label: "a",
-                            children: vec![],
-                        },
-                        ENode {
-                            label: "b",
-                            children: vec![],
-                        },
-                    ],
-                },
+                    dummy_ty(),
+                ),
+                EClass::new(
+                    "leaf",
+                    vec![ENode::new_leaf("a"), ENode::new_leaf("b")],
+                    dummy_ty(),
+                ),
             ],
-            Id::new(0),
+            EClassId::new(0),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
         );
 
         let enumerated = graph.enumerate_trees(0);
@@ -1000,16 +941,16 @@ mod tests {
         assert_eq!(enumerated.len(), 3);
 
         // Reconstruct using tree_from_choices
-        let mut choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(Id::new(0), 0, &mut choices1);
+        let choices1 = vec![0, 0];
+        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1);
         assert!(trees_equal(&tree1, &enumerated[0]));
 
-        let mut choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(Id::new(0), 0, &mut choices2);
+        let choices2 = vec![0, 1];
+        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2);
         assert!(trees_equal(&tree2, &enumerated[1]));
 
-        let mut choices3 = vec![1];
-        let tree3 = graph.tree_from_choices(Id::new(0), 0, &mut choices3);
+        let choices3 = vec![1];
+        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3);
         assert!(trees_equal(&tree3, &enumerated[2]));
     }
 }

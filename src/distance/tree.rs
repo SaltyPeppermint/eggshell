@@ -6,14 +6,18 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::EGraph;
+use super::ids::{DataTyId, EClassId, FunTyId, NatId, NatOrDTId, TypeId};
+use super::nodes::Label;
+
 /// A node in a labeled tree
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TreeNode<L: Clone + Eq> {
+pub struct TreeNode<L: Label> {
     label: L,
     children: Vec<TreeNode<L>>,
 }
 
-impl<L: Clone + Eq> TreeNode<L> {
+impl<L: Label> TreeNode<L> {
     pub fn new(label: L) -> Self {
         TreeNode {
             label,
@@ -40,22 +44,72 @@ impl<L: Clone + Eq> TreeNode<L> {
     pub fn label(&self) -> &L {
         &self.label
     }
+
+    #[must_use]
+    pub fn from_eclass(egraph: &EGraph<L>, id: EClassId) -> TreeNode<L> {
+        let ty_id = egraph.class(id).ty();
+        Self::from_type(egraph, ty_id)
+    }
+
+    fn from_type(egraph: &EGraph<L>, id: TypeId) -> TreeNode<L> {
+        match id {
+            TypeId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
+            TypeId::Type(fun_ty_id) => Self::from_fun(egraph, fun_ty_id),
+            TypeId::DataType(data_ty_id) => Self::from_data_ty(egraph, data_ty_id),
+        }
+    }
+
+    fn from_fun(egraph: &EGraph<L>, id: FunTyId) -> TreeNode<L> {
+        let node = egraph.fun_ty(id).label().to_owned();
+        let children = egraph
+            .fun_ty(id)
+            .children()
+            .iter()
+            .map(|&c_id| Self::from_type(egraph, c_id))
+            .collect();
+        TreeNode::with_children(node, children)
+    }
+
+    fn from_data_ty(egraph: &EGraph<L>, id: DataTyId) -> TreeNode<L> {
+        let node = egraph.data_ty(id).label().to_owned();
+        let children = egraph
+            .data_ty(id)
+            .children()
+            .iter()
+            .map(|&c_id| match c_id {
+                NatOrDTId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
+                NatOrDTId::DataType(data_ty_id) => Self::from_data_ty(egraph, data_ty_id),
+            })
+            .collect();
+        TreeNode::with_children(node, children)
+    }
+
+    fn from_nat(egraph: &EGraph<L>, id: NatId) -> TreeNode<L> {
+        let node = egraph.nat(id).label().to_owned();
+        let children = egraph
+            .nat(id)
+            .children()
+            .iter()
+            .map(|&c_id| Self::from_nat(egraph, c_id))
+            .collect();
+        TreeNode::with_children(node, children)
+    }
 }
 
 /// Postorder traversal information for a tree node
 #[derive(Debug, Clone)]
-struct PostorderNode<L: Clone + Eq> {
+struct PostorderNode<L: Label> {
     label: L,
     leftmost_leaf: usize, // postorder index of leftmost leaf descendant
 }
 
 /// Preprocessed tree for Zhang-Shasha algorithm
-struct PreprocessedTree<L: Clone + Eq> {
+struct PreprocessedTree<L: Label> {
     nodes: Vec<PostorderNode<L>>,
     keyroots: Vec<usize>, // indices of keyroots in postorder
 }
 
-impl<L: Clone + Eq> PreprocessedTree<L> {
+impl<L: Label> PreprocessedTree<L> {
     fn new(root: &TreeNode<L>) -> Self {
         let mut nodes = Vec::new();
 
@@ -157,7 +211,7 @@ impl<L: Eq> EditCosts<L> for UnitCost {
 }
 
 /// Compute the Zhang-Shasha tree edit distance between two trees
-pub fn tree_distance<L: Clone + Eq, C: EditCosts<L>>(
+pub fn tree_distance<L: Label, C: EditCosts<L>>(
     tree1: &TreeNode<L>,
     tree2: &TreeNode<L>,
     costs: &C,
@@ -196,7 +250,7 @@ pub fn tree_distance<L: Clone + Eq, C: EditCosts<L>>(
     td[n1 - 1][n2 - 1]
 }
 
-fn compute_forest_distance<L: Clone + Eq, C: EditCosts<L>>(
+fn compute_forest_distance<L: Label, C: EditCosts<L>>(
     t1: &PreprocessedTree<L>,
     t2: &PreprocessedTree<L>,
     i: usize,
@@ -260,12 +314,12 @@ fn compute_forest_distance<L: Clone + Eq, C: EditCosts<L>>(
 }
 
 /// Convenience function with unit costs
-pub fn tree_distance_unit<L: Clone + Eq>(tree1: &TreeNode<L>, tree2: &TreeNode<L>) -> usize {
+pub fn tree_distance_unit<L: Label>(tree1: &TreeNode<L>, tree2: &TreeNode<L>) -> usize {
     tree_distance(tree1, tree2, &UnitCost)
 }
 
 #[allow(dead_code)]
-fn count_tree_nodes<L: Clone + Eq>(tree: &TreeNode<L>) -> usize {
+fn count_tree_nodes<L: Label>(tree: &TreeNode<L>) -> usize {
     1 + tree.children.iter().map(count_tree_nodes).sum::<usize>()
 }
 
@@ -273,11 +327,11 @@ fn count_tree_nodes<L: Clone + Eq>(tree: &TreeNode<L>) -> usize {
 mod tests {
     use super::*;
 
-    fn leaf<L: Clone + Eq>(label: L) -> TreeNode<L> {
+    fn leaf<L: Label>(label: L) -> TreeNode<L> {
         TreeNode::new(label)
     }
 
-    fn node<L: Clone + Eq>(label: L, children: Vec<TreeNode<L>>) -> TreeNode<L> {
+    fn node<L: Label>(label: L, children: Vec<TreeNode<L>>) -> TreeNode<L> {
         TreeNode::with_children(label, children)
     }
 
