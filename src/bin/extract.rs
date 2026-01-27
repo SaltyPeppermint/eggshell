@@ -86,7 +86,7 @@ fn main() {
         if let (Some(result), stats) =
             min_distance_extract_filtered(&graph, &ref_tree, args.max_revisits)
         {
-            println!("  Best distance: {}", result.distance);
+            println!("  Best distance: {}", result.1);
             println!("  Time: {:.2?}", start.elapsed());
             println!("\n  Statistics:");
             println!("    Trees enumerated: {}", stats.trees_enumerated);
@@ -102,7 +102,7 @@ fn main() {
             );
 
             // Print the best tree
-            println!("\n  Best tree: {:?}", Sexp::from(&result.tree).to_string());
+            println!("\n  Best tree: {:?}", Sexp::from(&result.0).to_string());
         } else {
             println!("  No result found!");
         }
@@ -114,7 +114,7 @@ fn main() {
         let start = Instant::now();
         if let Some(result) = min_distance_extract_unit(&graph, &ref_tree, args.max_revisits, false)
         {
-            println!("  Best distance: {}", result.distance);
+            println!("  Best distance: {}", result.1);
             println!("  Time: {:.2?}", start.elapsed());
         } else {
             println!("  No result found!");

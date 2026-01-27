@@ -9,6 +9,7 @@
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hashbrown::HashMap;
 use rayon::iter::{ParallelBridge, ParallelIterator};
@@ -323,13 +324,6 @@ impl PathTracker {
     }
 }
 
-/// Result of finding the minimum edit distance solution tree
-#[derive(Debug, Clone)]
-pub struct MinEditResult<L: Label> {
-    pub tree: TreeNode<L>,
-    pub distance: usize,
-}
-
 /// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
 ///
 /// This uses dynamic enumeration: it extracts all possible trees from the graph (bounded by
@@ -344,7 +338,7 @@ pub fn min_distance_extract<L: Label, C: EditCosts<L>>(
     max_revisits: usize,
     costs: &C,
     fast: bool,
-) -> Option<MinEditResult<L>> {
+) -> Option<(TreeNode<L>, usize)> {
     if fast {
         min_distance_extract_fast(graph, reference, max_revisits, costs)
     } else {
@@ -358,7 +352,7 @@ pub fn min_distance_extract_unit<L: Label>(
     reference: &TreeNode<L>,
     max_revisits: usize,
     fast: bool,
-) -> Option<MinEditResult<L>> {
+) -> Option<(TreeNode<L>, usize)> {
     min_distance_extract(graph, reference, max_revisits, &UnitCost, fast)
 }
 
@@ -373,13 +367,13 @@ fn min_distance_extract_slow<L: Label, C: EditCosts<L>>(
     reference: &TreeNode<L>,
     max_revisits: usize,
     costs: &C,
-) -> Option<MinEditResult<L>> {
+) -> Option<(TreeNode<L>, usize)> {
     TreeIter::new(graph, max_revisits)
         .map(|tree| {
             let distance = tree_distance(&tree, reference, costs);
-            MinEditResult { tree, distance }
+            (tree, distance)
         })
-        .min_by_key(|result| result.distance)
+        .min_by_key(|result| result.1)
 }
 
 /// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
@@ -393,7 +387,7 @@ fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
     reference: &TreeNode<L>,
     max_revisits: usize,
     costs: &C,
-) -> Option<MinEditResult<L>> {
+) -> Option<(TreeNode<L>, usize)> {
     let ref_preprocessed = PreprocessedTree::new(reference);
 
     TreeIter::new(graph, max_revisits)
@@ -403,7 +397,55 @@ fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
             (tree, distance)
         })
         .min_by_key(|(_, distance)| *distance)
-        .map(|(tree, distance)| MinEditResult { tree, distance })
+}
+
+/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
+///
+/// This version uses a lower bound filter to skip trees that cannot possibly
+/// be better than the current best. The lower bound is based on label histogram
+/// differences, which is fast to compute.
+///
+/// Only works with unit costs (the lower bound assumes unit cost model).
+///
+/// Returns the result along with statistics about pruning effectiveness.
+#[must_use]
+pub fn min_distance_extract_filtered<L: Label>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    max_revisits: usize,
+) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
+    let ref_preprocessed = PreprocessedTree::new(reference);
+    let ref_histogram = reference.label_histogram();
+
+    let best_distance = AtomicUsize::new(usize::MAX);
+
+    let (result, stats) = TreeIter::new(graph, max_revisits)
+        .par_bridge()
+        .map(|tree| {
+            let lower_bound = label_histogram_distance(&tree.label_histogram(), &ref_histogram);
+
+            // Prune if lower bound already exceeds best distance
+            if lower_bound >= best_distance.load(Ordering::Relaxed) {
+                return (None, ExtractionStats::pruned());
+            }
+
+            let distance = tree_distance_with_ref(&tree, &ref_preprocessed, &UnitCost);
+            best_distance.fetch_min(distance, Ordering::Relaxed);
+
+            (Some((tree, distance)), ExtractionStats::compared())
+        })
+        .reduce(
+            || (None, ExtractionStats::default()),
+            |(best_a, stats_a), (best_b, stats_b)| {
+                let best = [best_a, best_b]
+                    .into_iter()
+                    .flatten()
+                    .min_by_key(|(_, d)| *d);
+                (best, stats_a + stats_b)
+            },
+        );
+
+    (result, stats)
 }
 
 /// Statistics from filtered extraction
@@ -417,57 +459,34 @@ pub struct ExtractionStats {
     pub full_comparisons: usize,
 }
 
-/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
-///
-/// This version uses a lower bound filter to skip trees that cannot possibly
-/// be better than the current best. The lower bound is based on label histogram
-/// differences, which is fast to compute.
-///
-/// Only works with unit costs (the lower bound assumes unit cost model).
-///
-/// Returns the result along with statistics about pruning effectiveness.
-#[must_use]
-pub fn min_distance_extract_filtered(
-    graph: &EGraph<String>,
-    reference: &TreeNode<String>,
-    max_revisits: usize,
-) -> (Option<MinEditResult<String>>, ExtractionStats) {
-    let ref_preprocessed = PreprocessedTree::new(reference);
-    let ref_histogram = reference.label_histogram();
-
-    let mut best_tree: Option<TreeNode<String>> = None;
-    let mut best_distance = usize::MAX;
-    let mut stats = ExtractionStats::default();
-
-    for tree in TreeIter::new(graph, max_revisits) {
-        stats.trees_enumerated += 1;
-
-        // Compute cheap lower bound first
-        let candidate_histogram = tree.label_histogram();
-        let lower_bound = label_histogram_distance(&candidate_histogram, &ref_histogram);
-
-        // Skip if lower bound already exceeds best distance
-        if lower_bound >= best_distance {
-            stats.trees_pruned += 1;
-            continue;
-        }
-
-        // Compute full distance
-        stats.full_comparisons += 1;
-        let distance = tree_distance_with_ref(&tree, &ref_preprocessed, &UnitCost);
-
-        if distance < best_distance {
-            best_distance = distance;
-            best_tree = Some(tree);
+impl ExtractionStats {
+    fn pruned() -> Self {
+        Self {
+            trees_enumerated: 1,
+            trees_pruned: 1,
+            full_comparisons: 0,
         }
     }
 
-    let result = best_tree.map(|tree| MinEditResult {
-        tree,
-        distance: best_distance,
-    });
+    fn compared() -> Self {
+        Self {
+            trees_enumerated: 1,
+            trees_pruned: 0,
+            full_comparisons: 1,
+        }
+    }
+}
 
-    (result, stats)
+impl std::ops::Add for ExtractionStats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self {
+            trees_enumerated: self.trees_enumerated + rhs.trees_enumerated,
+            trees_pruned: self.trees_pruned + rhs.trees_pruned,
+            full_comparisons: self.full_comparisons + rhs.full_comparisons,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -695,7 +714,7 @@ mod tests {
         );
         let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
-        assert_eq!(result.distance, 0);
+        assert_eq!(result.1, 0);
     }
 
     #[test]
@@ -721,8 +740,8 @@ mod tests {
         );
         let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
-        assert_eq!(result.distance, 0);
-        assert_eq!(result.tree.children()[0].label(), "a");
+        assert_eq!(result.1, 0);
+        assert_eq!(result.0.children()[0].label(), "a");
     }
 
     #[test]
@@ -767,9 +786,9 @@ mod tests {
         );
         let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
-        assert_eq!(result.distance, 0);
+        assert_eq!(result.1, 0);
         // The expr part of typeOf wrapper should have 1 child
-        assert_eq!(result.tree.children()[0].children().len(), 1);
+        assert_eq!(result.0.children()[0].children().len(), 1);
     }
 
     #[test]
@@ -1183,7 +1202,7 @@ mod tests {
         );
 
         let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
-        assert_eq!(result.distance, 0);
+        assert_eq!(result.1, 0);
     }
 
     #[test]
@@ -1208,8 +1227,8 @@ mod tests {
         );
 
         let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
-        assert_eq!(result.distance, 0);
-        assert_eq!(result.tree.children()[0].label(), "a");
+        assert_eq!(result.1, 0);
+        assert_eq!(result.0.children()[0].label(), "a");
     }
 
     #[test]
@@ -1251,7 +1270,7 @@ mod tests {
         let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
         let fast = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
-        assert_eq!(original.distance, fast.distance);
+        assert_eq!(original.1, fast.1);
     }
 
     #[test]
@@ -1293,7 +1312,7 @@ mod tests {
         let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
         let (filtered, stats) = min_distance_extract_filtered(&graph, &reference, 0);
 
-        assert_eq!(original.distance, filtered.unwrap().distance);
+        assert_eq!(original.1, filtered.unwrap().1);
         // Should have enumerated both trees
         assert_eq!(stats.trees_enumerated, 2);
     }
@@ -1322,12 +1341,15 @@ mod tests {
 
         let (result, stats) = min_distance_extract_filtered(&graph, &reference, 0);
 
-        assert_eq!(result.unwrap().distance, 0);
+        assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
-        // After finding exact match (distance 0), the second tree should be pruned
-        // because its lower bound (1) >= best distance (0)
-        assert_eq!(stats.trees_pruned, 1);
-        assert_eq!(stats.full_comparisons, 1);
+        // With parallel execution, pruning is non-deterministic since both trees
+        // may be processed before best_distance is updated. We just verify the
+        // invariant that pruned + full_comparisons == trees_enumerated.
+        assert_eq!(
+            stats.trees_pruned + stats.full_comparisons,
+            stats.trees_enumerated
+        );
     }
 
     #[test]
