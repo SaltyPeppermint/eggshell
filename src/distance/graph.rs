@@ -10,7 +10,9 @@ use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::TreeNode;
-use super::ids::{DataTyId, EClassId, FunTyId, NatId, TypeId};
+use super::ids::{
+    DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
+};
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
 use super::tree::{EditCosts, UnitCost, tree_distance};
 
@@ -20,19 +22,19 @@ use super::tree::{EditCosts, UnitCost, tree_distance};
 #[derive(Debug, Clone, Hash, Serialize, Deserialize)]
 #[serde(bound(deserialize = "L: Label"))]
 pub struct EClass<L: Label> {
-    children: Vec<ENode<L>>,
+    nodes: Vec<ENode<L>>,
     ty: TypeId,
 }
 
 impl<L: Label> EClass<L> {
     #[must_use]
-    pub fn new(children: Vec<ENode<L>>, ty: TypeId) -> Self {
-        Self { children, ty }
+    pub fn new(nodes: Vec<ENode<L>>, ty: TypeId) -> Self {
+        Self { nodes, ty }
     }
 
     #[must_use]
-    pub fn children(&self) -> &[ENode<L>] {
-        &self.children
+    pub fn nodes(&self) -> &[ENode<L>] {
+        &self.nodes
     }
 
     #[must_use]
@@ -44,34 +46,85 @@ impl<L: Label> EClass<L> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound(deserialize = "L: Label"))]
 pub struct EGraph<L: Label> {
-    classes: Vec<EClass<L>>,
-    root: EClassId,
+    #[serde(with = "numeric_key_map")]
+    classes: HashMap<EClassId, EClass<L>>,
+    #[serde(skip)]
+    root: Option<EClassId>,
+    #[serde(rename = "unionFind", with = "eclass_id_vec")]
+    union_find: Vec<EClassId>,
+    #[serde(rename = "typeHashCon", with = "numeric_key_map")]
     fun_ty_nodes: HashMap<FunTyId, FunTyNode<L>>,
+    #[serde(rename = "natHashCon", with = "numeric_key_map")]
     nat_nodes: HashMap<NatId, NatNode<L>>,
+    #[serde(rename = "dataTypeHashCon", with = "numeric_key_map")]
     data_ty_nodes: HashMap<DataTyId, DataTyNode<L>>,
 }
 
 impl<L: Label> EGraph<L> {
     #[must_use]
     pub fn new(
-        classes: Vec<EClass<L>>,
+        classes: HashMap<EClassId, EClass<L>>,
         root: EClassId,
-        type_nodes: HashMap<FunTyId, FunTyNode<L>>,
+        union_find: Vec<EClassId>,
+        fun_ty_nodes: HashMap<FunTyId, FunTyNode<L>>,
         nat_nodes: HashMap<NatId, NatNode<L>>,
-        data_type_nodes: HashMap<DataTyId, DataTyNode<L>>,
+        data_ty_nodes: HashMap<DataTyId, DataTyNode<L>>,
     ) -> Self {
         Self {
             classes,
-            root,
-            fun_ty_nodes: type_nodes,
+            root: Some(root),
+            union_find,
+            fun_ty_nodes,
             nat_nodes,
-            data_ty_nodes: data_type_nodes,
+            data_ty_nodes,
         }
+    }
+
+    /// Set the root `EClassId` (useful after deserialization)
+    pub fn set_root(&mut self, root: EClassId) {
+        self.root = Some(root);
+    }
+
+    /// Get the root `EClassId`.
+    ///
+    /// # Panics
+    /// Panics if the root has not been set.
+    #[must_use]
+    pub fn root(&self) -> EClassId {
+        self.root
+            .expect("Root has not been set. This is necessary after deserializing the egraph!")
+    }
+
+    /// Parse root `EClassId` from a filename like `ser_egraph_root_39_arrayPacking_SRCL_0.json`
+    /// Returns `None` if the pattern doesn't match.
+    #[must_use]
+    pub fn parse_root_from_filename(filename: &str) -> Option<EClassId> {
+        let stem = std::path::Path::new(filename).file_stem()?.to_str()?;
+        // Pattern: ser_egraph_root_<id>_...
+        let after_root = stem.strip_prefix("ser_egraph_root_")?;
+        let id_str = after_root.split('_').next()?;
+        let id: usize = id_str.parse().ok()?;
+        Some(EClassId::new(id))
+    }
+
+    /// Canonicalize an `EClassId` through the union-find.
+    /// Returns the canonical representative for the equivalence class.
+    #[must_use]
+    pub fn canonicalize(&self, id: EClassId) -> EClassId {
+        if self.union_find.is_empty() {
+            return id;
+        }
+        let mut current = id;
+        while self.union_find[current.to_index()] != current {
+            current = self.union_find[current.to_index()];
+        }
+        current
     }
 
     #[must_use]
     pub fn class(&self, id: EClassId) -> &EClass<L> {
-        &self.classes[usize::from(id)]
+        let canonical = self.canonicalize(id);
+        &self.classes[&canonical]
     }
 
     #[must_use]
@@ -114,7 +167,7 @@ impl<L: Label> EGraph<L> {
 
         path.enter(id);
         // Try choices starting from `choice`, looking for a valid one
-        for (node_idx, node) in class.children().iter().enumerate().skip(choice) {
+        for (node_idx, node) in class.nodes().iter().enumerate().skip(choice) {
             // Set the choice_idx for future choices
             // Useless write if the choice is correct
             choices[choice_idx] = node_idx;
@@ -157,7 +210,7 @@ impl<L: Label> EGraph<L> {
         ) -> (TreeNode<L>, usize) {
             let class = graph.class(id);
             let choice = choices[choice_idx];
-            let node = &class.children[choice];
+            let node = &class.nodes()[choice];
 
             let (children, curr_idx) = node.children().iter().fold(
                 (Vec::new(), choice_idx),
@@ -210,7 +263,7 @@ impl<L: Label> Iterator for TreeIter<'_, L> {
     fn next(&mut self) -> Option<Self::Item> {
         let (tree, _) =
             self.egraph
-                .get_next_tree(self.egraph.root, 0, &mut self.choices, &mut self.path)?;
+                .get_next_tree(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
         if let Some(last) = self.choices.last_mut() {
             *last += 1;
         }
@@ -298,6 +351,8 @@ pub fn min_distance_extract_unit<L: Label>(
 
 #[cfg(test)]
 mod tests {
+    use crate::distance::ids::NumericId;
+
     use super::*;
 
     fn leaf<L: Label>(label: impl Into<L>) -> TreeNode<L> {
@@ -324,11 +379,24 @@ mod tests {
         nats
     }
 
+    /// Helper to convert a Vec of `EClasses` to a `HashMap` with sequential `EClassIds`
+    fn cfv(classes: Vec<EClass<String>>) -> HashMap<EClassId, EClass<String>> {
+        classes
+            .into_iter()
+            .enumerate()
+            .map(|(i, c)| (EClassId::new(i), c))
+            .collect()
+    }
+
     /// Helper to build a simple graph with one class containing one node
     fn single_node_graph(label: &str) -> EGraph<String> {
         EGraph::new(
-            vec![EClass::new(vec![ENode::leaf(label.to_owned())], dummy_ty())],
+            cfv(vec![EClass::new(
+                vec![ENode::leaf(label.to_owned())],
+                dummy_ty(),
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -351,11 +419,12 @@ mod tests {
     fn enumerate_with_or_choice() {
         // Graph with one class containing two node choices
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -380,15 +449,16 @@ mod tests {
         // Class 1: leaf "b"
         // Class 2: leaf "c"
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -409,14 +479,15 @@ mod tests {
     fn enumerate_with_cycle_no_revisits() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![
                     ENode::new("a".to_owned(), vec![eid(0)]), // points back to self
                     ENode::leaf("leaf".to_owned()),
                 ],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -432,14 +503,15 @@ mod tests {
     fn enumerate_with_cycle_one_revisit() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![
                     ENode::new("rec".to_owned(), vec![eid(0)]), // points back to self
                     ENode::leaf("leaf".to_owned()),
                 ],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -464,15 +536,16 @@ mod tests {
     fn min_distance_exact_match() {
         // Graph contains the exact reference tree
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -508,11 +581,12 @@ mod tests {
         // Graph with OR choice: "a" or "x"
         // Reference is "a", so should choose "a" with distance 0
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -537,7 +611,7 @@ mod tests {
         // Reference: a(b)
         // Should choose option 1 with distance 0
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![
                         ENode::new("a".to_owned(), vec![eid(1)]),         // a(b)
@@ -547,8 +621,9 @@ mod tests {
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -591,11 +666,12 @@ mod tests {
     fn tree_from_choices_or_choice_first() {
         // Graph with two OR choices
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -611,11 +687,12 @@ mod tests {
     fn tree_from_choices_or_choice_second() {
         // Graph with two OR choices
         let graph = EGraph::new(
-            vec![EClass::new(
+            cfv(vec![EClass::new(
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                 dummy_ty(),
-            )],
+            )]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -631,15 +708,16 @@ mod tests {
     fn tree_from_choices_with_and_children() {
         // Graph: root -> node with two child classes
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
                 ),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -665,7 +743,7 @@ mod tests {
         //   Node "y" -> points to Class 1
         // Class 1: two leaf options "a" or "b"
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![
                         ENode::new("x".to_owned(), vec![eid(1)]),
@@ -677,8 +755,9 @@ mod tests {
                     vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                     dummy_ty(),
                 ),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -716,7 +795,7 @@ mod tests {
         // Class 1: "a" or "b"
         // Class 2: "x" or "y"
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![ENode::new("p".to_owned(), vec![eid(1), eid(2)])],
                     dummy_ty(),
@@ -729,8 +808,9 @@ mod tests {
                     vec![ENode::leaf("x".to_owned()), ENode::leaf("y".to_owned())],
                     dummy_ty(),
                 ),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -776,7 +856,7 @@ mod tests {
         // Class 1: "b1" or "b2", both with child [Class 2]
         // Class 2: "c1" or "c2"
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(vec![ENode::new("a".to_owned(), vec![eid(1)])], dummy_ty()),
                 EClass::new(
                     vec![
@@ -789,8 +869,9 @@ mod tests {
                     vec![ENode::leaf("c1".to_owned()), ENode::leaf("c2".to_owned())],
                     dummy_ty(),
                 ),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -837,7 +918,7 @@ mod tests {
     fn tree_from_choices_three_and_children() {
         // Test with three AND children
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![ENode::new("f".to_owned(), vec![eid(1), eid(2), eid(3)])],
                     dummy_ty(),
@@ -845,8 +926,9 @@ mod tests {
                 EClass::new(vec![ENode::leaf("a".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
                 EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -879,7 +961,7 @@ mod tests {
 
         // Verify that tree_from_choices produces the same trees as enumeration
         let graph = EGraph::new(
-            vec![
+            cfv(vec![
                 EClass::new(
                     vec![
                         ENode::new("x".to_owned(), vec![eid(1)]),
@@ -891,8 +973,9 @@ mod tests {
                     vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
                     dummy_ty(),
                 ),
-            ],
+            ]),
             eid(0),
+            Vec::new(),
             HashMap::new(),
             dummy_nat_nodes(),
             HashMap::new(),
@@ -915,5 +998,31 @@ mod tests {
         let choices3 = vec![1];
         let tree3 = graph.tree_from_choices(eid(0), &choices3);
         assert!(trees_equal(&tree3, &enumerated[2]));
+    }
+
+    #[test]
+    fn deserialize_json_file() {
+        let json = include_str!("../../data/ser_egraph_root_39_arrayPacking_SRCL_0.json");
+        let mut graph: EGraph<String> = serde_json::from_str(json).unwrap();
+
+        // Parse root from the filename pattern
+        let root = EGraph::<String>::parse_root_from_filename(
+            "ser_egraph_root_39_arrayPacking_SRCL_0.json",
+        )
+        .unwrap();
+        graph.set_root(root);
+
+        // Verify root is correct
+        assert_eq!(root.to_index(), 39);
+
+        // Verify we can access the root class
+        let root_class = graph.class(root);
+        assert!(!root_class.nodes().is_empty());
+
+        // Verify some classes exist
+        assert!(!graph.classes.is_empty());
+
+        // Verify nat nodes exist
+        assert!(!graph.nat_nodes.is_empty());
     }
 }
