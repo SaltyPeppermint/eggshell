@@ -4,12 +4,14 @@ use serde::{Deserialize, Serialize};
 
 use super::ids::{EClassId, NatId, NatOrDTId, TypeId};
 
-/// Trait for node labels
+/// Trait for node labels in e-graphs and trees.
 pub trait Label:
     Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de> + Send + Sync
 {
+    /// Returns the label used for type annotations (e.g., "typeOf").
     fn type_of() -> Self;
 
+    /// Returns true if this label is the type annotation label.
     fn is_type_of(&self) -> bool {
         &Self::type_of() == self
     }
@@ -74,23 +76,21 @@ macro_rules! define_node {
 }
 
 define_node!(
-    /// `ENode` must take all children
-    /// Children are indices into the `EGraph` array `EClasses`
+    /// Expression node in an e-graph. Children reference `EClass` entries.
     ENode, EClassId
 );
 
 define_node!(
-    /// Node for natural number expressions
-    /// Children are either indices into the nat array or the
+    /// Node for natural number expressions. Children are nats.
     NatNode, NatId
 );
 
 define_node!(
-    /// Node for type expressions
+    /// Node for function type expressions. Children can be function types, datatypes, or nats.
     FunTyNode, TypeId
 );
 
 define_node!(
-    /// Node for datatype expressions
+    /// Node for datatype expressions. Children can be datatypes or nats.
     DataTyNode, NatOrDTId
 );

@@ -4,10 +4,7 @@
 //! The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
 //! time and O(n1 * n2) space.
 
-use std::hash::Hash;
 use std::str::FromStr;
-
-use hashbrown::HashMap;
 
 use serde::{Deserialize, Serialize};
 use symbolic_expressions::{IntoSexp, Sexp, SexpError};
@@ -16,7 +13,7 @@ use super::EGraph;
 use super::ids::{DataTyId, EClassId, FunTyId, NatId, NatOrDTId, TypeId};
 use super::nodes::Label;
 
-/// A node in a labeled tree
+/// A node in a labeled, ordered tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound(deserialize = "L: Label"))]
 pub struct TreeNode<L: Label> {
@@ -25,6 +22,7 @@ pub struct TreeNode<L: Label> {
 }
 
 impl<L: Label> TreeNode<L> {
+    /// Create a leaf node with no children.
     pub fn leaf(label: L) -> Self {
         TreeNode {
             label,
@@ -32,10 +30,12 @@ impl<L: Label> TreeNode<L> {
         }
     }
 
+    /// Create a node with the given children.
     pub fn new(label: L, children: Vec<TreeNode<L>>) -> Self {
         TreeNode { label, children }
     }
 
+    /// Returns true if this node has no children.
     pub fn is_leaf(&self) -> bool {
         self.children.is_empty()
     }
@@ -52,6 +52,7 @@ impl<L: Label> TreeNode<L> {
         &self.label
     }
 
+    /// Build a type tree from an e-class's type annotation.
     #[must_use]
     pub fn from_eclass(egraph: &EGraph<L>, id: EClassId) -> Self {
         let ty_id = egraph.class(id).ty();
@@ -102,33 +103,13 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
+    /// Remove type annotation wrappers from this tree.
     #[must_use]
     pub fn strip_types(&self) -> Self {
         if self.label.is_type_of() {
             self.children()[0].strip_types()
         } else {
             self.clone()
-        }
-    }
-
-    /// Count the occurrences of each label in this tree.
-    pub fn label_histogram(&self) -> HashMap<L, usize>
-    where
-        L: Hash + Eq,
-    {
-        let mut counts = HashMap::new();
-        self.label_histogram_into(&mut counts);
-        counts
-    }
-
-    /// Add label counts from this tree into an existing histogram.
-    pub fn label_histogram_into(&self, counts: &mut HashMap<L, usize>)
-    where
-        L: Hash + Eq,
-    {
-        *counts.entry(self.label.clone()).or_insert(0) += 1;
-        for child in &self.children {
-            child.label_histogram_into(counts);
         }
     }
 
@@ -176,18 +157,19 @@ impl IntoSexp for TreeNode<String> {
     }
 }
 
-/// Postorder traversal information for a tree node
+/// Postorder traversal information for a tree node.
 #[derive(Debug, Clone)]
 pub struct PostorderNode<L: Label> {
     label: L,
-    leftmost_leaf: usize, // postorder index of leftmost leaf descendant
+    leftmost_leaf: usize,
 }
 
 /// Preprocessed tree for Zhang-Shasha algorithm.
-/// This can be reused when computing distances against multiple candidate trees.
+///
+/// Reuse this when computing distances against multiple candidate trees.
 pub struct PreprocessedTree<L: Label> {
     nodes: Vec<PostorderNode<L>>,
-    keyroots: Vec<usize>, // indices of keyroots in postorder
+    keyroots: Vec<usize>,
 }
 
 impl<L: Label> PreprocessedTree<L> {
@@ -273,19 +255,19 @@ impl<L: Label> PreprocessedTree<L> {
     }
 }
 
-/// Cost functions for tree edit operations
+/// Cost functions for tree edit operations.
 pub trait EditCosts<L>: Send + Sync {
-    /// Cost of deleting a node with the given label
+    /// Cost of deleting a node.
     fn delete(&self, label: &L) -> usize;
 
-    /// Cost of inserting a node with the given label
+    /// Cost of inserting a node.
     fn insert(&self, label: &L) -> usize;
 
-    /// Cost of relabeling a node from one label to another
+    /// Cost of relabeling a node.
     fn relabel(&self, from: &L, to: &L) -> usize;
 }
 
-/// Unit cost model: all operations cost 1, relabeling same labels costs 0
+/// Unit cost model: all operations cost 1, relabeling identical labels costs 0.
 pub struct UnitCost;
 
 impl<L: Eq> EditCosts<L> for UnitCost {
@@ -302,7 +284,7 @@ impl<L: Eq> EditCosts<L> for UnitCost {
     }
 }
 
-/// Compute the Zhang-Shasha tree edit distance between two trees
+/// Compute the Zhang-Shasha tree edit distance between two trees.
 pub fn tree_distance<L: Label, C: EditCosts<L>>(
     tree1: &TreeNode<L>,
     tree2: &TreeNode<L>,
@@ -313,8 +295,7 @@ pub fn tree_distance<L: Label, C: EditCosts<L>>(
     tree_distance_preprocessed(&t1, &t2, costs)
 }
 
-/// Compute Zhang-Shasha distance with a pre-preprocessed reference tree.
-/// Use this when comparing many candidate trees against the same reference.
+/// Compute distance with a pre-preprocessed reference tree.
 pub fn tree_distance_with_ref<L: Label, C: EditCosts<L>>(
     candidate: &TreeNode<L>,
     reference: &PreprocessedTree<L>,
@@ -324,7 +305,7 @@ pub fn tree_distance_with_ref<L: Label, C: EditCosts<L>>(
     tree_distance_preprocessed(&t1, reference, costs)
 }
 
-/// Compute Zhang-Shasha distance between two preprocessed trees
+/// Compute distance between two preprocessed trees.
 pub fn tree_distance_preprocessed<L: Label, C: EditCosts<L>>(
     t1: &PreprocessedTree<L>,
     t2: &PreprocessedTree<L>,
@@ -424,7 +405,7 @@ fn compute_forest_distance<L: Label, C: EditCosts<L>>(
     }
 }
 
-/// Convenience function with unit costs
+/// Compute tree edit distance with unit costs.
 pub fn tree_distance_unit<L: Label>(tree1: &TreeNode<L>, tree2: &TreeNode<L>) -> usize {
     tree_distance(tree1, tree2, &UnitCost)
 }

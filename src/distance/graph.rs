@@ -15,12 +15,13 @@ use hashbrown::HashMap;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use super::TreeNode;
 use super::ids::{
     DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::tree::{EditCosts, PreprocessedTree, UnitCost, tree_distance, tree_distance_with_ref};
+use super::tree::{
+    EditCosts, PreprocessedTree, TreeNode, UnitCost, tree_distance, tree_distance_with_ref,
+};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -49,6 +50,7 @@ impl<L: Label> EClass<L> {
     }
 }
 
+/// E-graph with type annotations for tree extraction and edit distance computation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(bound(deserialize = "L: Label"))]
 pub struct EGraph<L: Label> {
@@ -101,10 +103,13 @@ impl<L: Label> EGraph<L> {
             .expect("Root has not been set. This is necessary after deserializing the egraph!")
     }
 
-    /// Parse root `EClassId` from a filename like `ser_egraph_root_129_arrayPacking_SRCL_0.json`
-    /// Returns `None` if the pattern doesn't match.
+    /// Parse an `EGraph` from a JSON file, extracting the root ID from the filename.
+    ///
+    /// Expects filename format: `..._root_<id>.json` (e.g., `ser_egraph_root_129.json`).
+    ///
+    /// # Panics
+    /// Panics if the file cannot be read, parsed, or if the filename doesn't match the expected format.
     #[must_use]
-    #[allow(clippy::missing_panics_doc)]
     pub fn parse_from_file(file: &Path) -> EGraph<String> {
         let mut graph: EGraph<String> =
             serde_json::from_reader(BufReader::new(File::open(file).unwrap())).unwrap();
@@ -116,7 +121,6 @@ impl<L: Label> EGraph<L> {
     }
 
     /// Canonicalize an `EClassId` through the union-find.
-    /// Returns the canonical representative for the equivalence class.
     #[must_use]
     pub fn canonicalize(&self, id: EClassId) -> EClassId {
         if self.union_find.is_empty() {
@@ -130,6 +134,7 @@ impl<L: Label> EGraph<L> {
     }
 
     #[must_use]
+    /// Returns the corresponding `EClass`. Can take a non-canonical Id
     pub fn class(&self, id: EClassId) -> &EClass<L> {
         let canonical = self.canonicalize(id);
         &self.classes[&canonical]
@@ -155,7 +160,7 @@ impl<L: Label> EGraph<L> {
     ///
     /// Returns the tree and the index of the last choice used, or None if no more trees exist.
     /// The `choices` vector is modified to record/follow choices at each `EClass`.
-    fn get_next_tree(
+    fn next_tree(
         &self,
         id: EClassId,
         choice_idx: usize,
@@ -185,7 +190,7 @@ impl<L: Label> EGraph<L> {
                 (Vec::new(), choice_idx),
                 |(mut children, curr_idx): (Vec<_>, _), child_id| {
                     let (child_tree, last_idx) =
-                        self.get_next_tree(*child_id, curr_idx + 1, choices, path, with_type)?;
+                        self.next_tree(*child_id, curr_idx + 1, choices, path, with_type)?;
                     children.push(child_tree);
                     Some((children, last_idx))
                 },
@@ -215,7 +220,7 @@ impl<L: Label> EGraph<L> {
 
     /// Advance to the next valid choice vector without materializing the tree.
     /// Returns the last choice index used, or None if no more valid choices exist.
-    fn get_next_choices(
+    fn next_choices(
         &self,
         id: EClassId,
         choice_idx: usize,
@@ -242,7 +247,7 @@ impl<L: Label> EGraph<L> {
                 .children()
                 .iter()
                 .try_fold(choice_idx, |curr_idx, child_id| {
-                    self.get_next_choices(*child_id, curr_idx + 1, choices, path)
+                    self.next_choices(*child_id, curr_idx + 1, choices, path)
                 });
 
             if let Some(curr_idx) = result {
@@ -265,37 +270,38 @@ impl<L: Label> EGraph<L> {
         choices: &[usize],
         with_type: bool,
     ) -> TreeNode<L> {
-        fn rec<L: Label>(
-            graph: &EGraph<L>,
-            id: EClassId,
-            choice_idx: usize,
-            choices: &[usize],
-            with_type: bool,
-        ) -> (TreeNode<L>, usize) {
-            let class = graph.class(id);
-            let choice = choices[choice_idx];
-            let node = &class.nodes()[choice];
+        self.tree_from_choices_rec(id, 0, choices, with_type).0
+    }
 
-            let (children, curr_idx) = node.children().iter().fold(
-                (Vec::new(), choice_idx),
-                |(mut children, curr_idx): (Vec<_>, _), child_id| {
-                    let (child_tree, last_idx) =
-                        rec(graph, *child_id, curr_idx + 1, choices, with_type);
-                    children.push(child_tree);
-                    (children, last_idx)
-                },
-            );
+    fn tree_from_choices_rec(
+        &self,
+        id: EClassId,
+        choice_idx: usize,
+        choices: &[usize],
+        with_type: bool,
+    ) -> (TreeNode<L>, usize) {
+        let class = self.class(id);
+        let choice = choices[choice_idx];
+        let node = &class.nodes()[choice];
 
-            let eclass_tree = if with_type {
-                let expr_tree = TreeNode::new(node.label().clone(), children);
-                let type_tree = TreeNode::from_eclass(graph, id);
-                TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
-            } else {
-                TreeNode::new(node.label().clone(), children)
-            };
-            (eclass_tree, curr_idx)
-        }
-        rec(self, id, 0, choices, with_type).0
+        let (children, curr_idx) = node.children().iter().fold(
+            (Vec::new(), choice_idx),
+            |(mut children, curr_idx): (Vec<_>, _), child_id| {
+                let (child_tree, last_idx) =
+                    self.tree_from_choices_rec(*child_id, curr_idx + 1, choices, with_type);
+                children.push(child_tree);
+                (children, last_idx)
+            },
+        );
+
+        let eclass_tree = if with_type {
+            let expr_tree = TreeNode::new(node.label().clone(), children);
+            let type_tree = TreeNode::from_eclass(self, id);
+            TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
+        } else {
+            TreeNode::new(node.label().clone(), children)
+        };
+        (eclass_tree, curr_idx)
     }
 
     #[must_use]
@@ -311,6 +317,126 @@ impl<L: Label> EGraph<L> {
     #[must_use]
     pub fn choice_iter(&self, max_revisits: usize) -> ChoiceIter<'_, L> {
         ChoiceIter::new(self, max_revisits)
+    }
+
+    /// Find the tree with minimum edit distance to the reference tree.
+    ///
+    /// If `fast` is true, uses parallel iteration with pruning optimizations.
+    pub fn find_min<C: EditCosts<L>>(
+        &self,
+        reference: &TreeNode<L>,
+        max_revisits: usize,
+        costs: &C,
+        fast: bool,
+    ) -> Option<(TreeNode<L>, usize)> {
+        if fast {
+            self.find_min_fast(reference, max_revisits, costs)
+        } else {
+            self.find_min_slow(reference, max_revisits, costs)
+        }
+    }
+
+    /// Sequential enumeration of all trees, computing full distance for each.
+    fn find_min_slow<C: EditCosts<L>>(
+        &self,
+        reference: &TreeNode<L>,
+        max_revisits: usize,
+        costs: &C,
+    ) -> Option<(TreeNode<L>, usize)> {
+        TreeIter::new(self, max_revisits, true)
+            .map(|tree| {
+                let distance = tree_distance(&tree, reference, costs);
+                (tree, distance)
+            })
+            .min_by_key(|result| result.1)
+    }
+
+    /// Try to extract a tree, using untyped distance as a lower bound for pruning.
+    fn try_filtered<C: EditCosts<L>>(
+        &self,
+        choices: &[usize],
+        ref_pp: &PreprocessedTree<L>,
+        ref_untyped_pp: &PreprocessedTree<L>,
+        best_untyped_distance: &AtomicUsize,
+        costs: &C,
+    ) -> Option<(TreeNode<L>, usize)> {
+        let untyped_tree = self.tree_from_choices(self.root(), choices, false);
+        let untyped_distance = tree_distance_with_ref(&untyped_tree, ref_untyped_pp, &UnitCost);
+
+        (untyped_distance < best_untyped_distance.load(Ordering::Relaxed)).then(|| {
+            let tree = self.tree_from_choices(self.root(), choices, true);
+            let distance = tree_distance_with_ref(&tree, ref_pp, costs);
+            (tree, distance)
+        })
+    }
+
+    /// Parallel iteration with preprocessing and pruning optimizations.
+    fn find_min_fast<C: EditCosts<L>>(
+        &self,
+        reference: &TreeNode<L>,
+        max_revisits: usize,
+        costs: &C,
+    ) -> Option<(TreeNode<L>, usize)> {
+        let ref_pp = PreprocessedTree::new(reference);
+        let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
+        let best_untyped_distance = AtomicUsize::new(usize::MAX);
+
+        ChoiceIter::new(self, max_revisits)
+            .par_bridge()
+            .filter_map(|choices| {
+                self.try_filtered(
+                    &choices,
+                    &ref_pp,
+                    &ref_untyped_pp,
+                    &best_untyped_distance,
+                    costs,
+                )
+            })
+            .min_by_key(|(_, distance)| *distance)
+    }
+
+    /// Like `find_min` with `fast=true`, but also returns extraction statistics.
+    #[must_use]
+    pub fn find_min_filtered<C: EditCosts<L>>(
+        &self,
+        reference: &TreeNode<L>,
+        max_revisits: usize,
+        costs: &C,
+    ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
+        let ref_pp = PreprocessedTree::new(reference);
+        let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
+
+        let best_untyped_distance = AtomicUsize::new(usize::MAX);
+
+        let (result, stats) = ChoiceIter::new(self, max_revisits)
+            .par_bridge()
+            .map(|choices| {
+                let result = self.try_filtered(
+                    &choices,
+                    &ref_pp,
+                    &ref_untyped_pp,
+                    &best_untyped_distance,
+                    costs,
+                );
+                let stats = if result.is_some() {
+                    ExtractionStats::compared()
+                } else {
+                    ExtractionStats::pruned()
+                };
+                (result, stats)
+            })
+            .reduce(
+                || (None, ExtractionStats::default()),
+                |(best_a, stats_a), (best_b, stats_b)| {
+                    let best = [best_a, best_b]
+                        .into_iter()
+                        .flatten()
+                        .min_by_key(|(_, d)| *d);
+                    (best, stats_a + stats_b)
+                },
+            );
+
+        (result, stats)
     }
 }
 
@@ -337,7 +463,7 @@ impl<L: Label> Iterator for TreeIter<'_, L> {
     type Item = TreeNode<L>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (tree, _) = self.egraph.get_next_tree(
+        let (tree, _) = self.egraph.next_tree(
             self.egraph.root(),
             0,
             &mut self.choices,
@@ -375,7 +501,7 @@ impl<L: Label> Iterator for ChoiceIter<'_, L> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.egraph
-            .get_next_choices(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
+            .next_choices(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
         let result = self.choices.clone();
         if let Some(last) = self.choices.last_mut() {
             *last += 1;
@@ -424,162 +550,6 @@ impl PathTracker {
             }
         }
     }
-}
-
-/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
-///
-/// This uses dynamic enumeration: it extracts all possible trees from the graph (bounded by
-/// `max_revisits` for cycles) and computes the full Zhang-Shasha distance for each.
-///
-/// fast uses some optimization
-///
-/// Returns None if no valid trees can be extracted from the graph.
-pub fn min_distance_extract<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    max_revisits: usize,
-    costs: &C,
-    fast: bool,
-) -> Option<(TreeNode<L>, usize)> {
-    if fast {
-        min_distance_extract_fast(graph, reference, max_revisits, costs)
-    } else {
-        min_distance_extract_slow(graph, reference, max_revisits, costs)
-    }
-}
-
-/// See `min_distance_extract` but with unit costs
-pub fn min_distance_extract_unit<L: Label>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    max_revisits: usize,
-    fast: bool,
-) -> Option<(TreeNode<L>, usize)> {
-    min_distance_extract(graph, reference, max_revisits, &UnitCost, fast)
-}
-
-/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
-///
-/// This uses dynamic enumeration: it extracts all possible trees from the graph (bounded by
-/// `max_revisits` for cycles) and computes the full Zhang-Shasha distance for each.
-///
-/// Returns None if no valid trees can be extracted from the graph.
-fn min_distance_extract_slow<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    max_revisits: usize,
-    costs: &C,
-) -> Option<(TreeNode<L>, usize)> {
-    TreeIter::new(graph, max_revisits, true)
-        .map(|tree| {
-            let distance = tree_distance(&tree, reference, costs);
-            (tree, distance)
-        })
-        .min_by_key(|result| result.1)
-}
-
-/// Try to extract a tree from choices, using untyped distance as a lower bound for pruning.
-/// Returns `Some((tree, distance))` if the tree passes the pruning threshold, `None` otherwise.
-fn try_extract_with_pruning<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    choices: &[usize],
-    ref_pp: &PreprocessedTree<L>,
-    ref_untyped_pp: &PreprocessedTree<L>,
-    best_untyped_distance: &AtomicUsize,
-    costs: &C,
-) -> Option<(TreeNode<L>, usize)> {
-    let untyped_tree = graph.tree_from_choices(graph.root(), choices, false);
-    let untyped_distance = tree_distance_with_ref(&untyped_tree, ref_untyped_pp, &UnitCost);
-
-    (untyped_distance < best_untyped_distance.load(Ordering::Relaxed)).then(|| {
-        let tree = graph.tree_from_choices(graph.root(), choices, true);
-        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
-        (tree, distance)
-    })
-}
-
-/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
-///
-/// This is an optimized version that preprocesses the reference tree once,
-/// avoiding redundant work when comparing against many candidates.
-///
-/// Returns None if no valid trees can be extracted from the graph.
-fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    max_revisits: usize,
-    costs: &C,
-) -> Option<(TreeNode<L>, usize)> {
-    let ref_pp = PreprocessedTree::new(reference);
-    let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
-    let best_untyped_distance = AtomicUsize::new(usize::MAX);
-
-    ChoiceIter::new(graph, max_revisits)
-        .par_bridge()
-        .filter_map(|choices| {
-            try_extract_with_pruning(
-                graph,
-                &choices,
-                &ref_pp,
-                &ref_untyped_pp,
-                &best_untyped_distance,
-                costs,
-            )
-        })
-        .min_by_key(|(_, distance)| *distance)
-}
-
-/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
-///
-/// This version uses a lower bound filter to skip trees that cannot possibly
-/// be better than the current best. The lower bound is based on label histogram
-/// differences, which is fast to compute.
-///
-/// Only works with unit costs (the lower bound assumes unit cost model).
-///
-/// Returns the result along with statistics about pruning effectiveness.
-#[must_use]
-pub fn min_distance_extract_filtered<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    max_revisits: usize,
-    costs: &C,
-) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-    let ref_pp = PreprocessedTree::new(reference);
-    let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
-
-    let best_untyped_distance = AtomicUsize::new(usize::MAX);
-
-    let (result, stats) = ChoiceIter::new(graph, max_revisits)
-        .par_bridge()
-        .map(|choices| {
-            let result = try_extract_with_pruning(
-                graph,
-                &choices,
-                &ref_pp,
-                &ref_untyped_pp,
-                &best_untyped_distance,
-                costs,
-            );
-            let stats = if result.is_some() {
-                ExtractionStats::compared()
-            } else {
-                ExtractionStats::pruned()
-            };
-            (result, stats)
-        })
-        .reduce(
-            || (None, ExtractionStats::default()),
-            |(best_a, stats_a), (best_b, stats_b)| {
-                let best = [best_a, best_b]
-                    .into_iter()
-                    .flatten()
-                    .min_by_key(|(_, d)| *d);
-                (best, stats_a + stats_b)
-            },
-        );
-
-    (result, stats)
 }
 
 /// Statistics from filtered extraction
@@ -846,7 +816,7 @@ mod tests {
                 leaf("0".to_owned()), // type tree (dummy nat)
             ],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(result.1, 0);
     }
@@ -872,7 +842,7 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(result.1, 0);
         assert_eq!(result.0.children()[0].label(), "a");
@@ -918,7 +888,7 @@ mod tests {
                 leaf("0".to_owned()),
             ],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(result.1, 0);
         // The expr part of typeOf wrapper should have 1 child
@@ -1335,7 +1305,7 @@ mod tests {
             ],
         );
 
-        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
         assert_eq!(result.1, 0);
     }
 
@@ -1360,7 +1330,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
         assert_eq!(result.1, 0);
         assert_eq!(result.0.children()[0].label(), "a");
     }
@@ -1401,8 +1371,8 @@ mod tests {
             ],
         );
 
-        let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
-        let fast = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        let original = graph.find_min(&reference, 0, &UnitCost, false).unwrap();
+        let fast = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(original.1, fast.1);
     }
@@ -1443,8 +1413,8 @@ mod tests {
             ],
         );
 
-        let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
-        let (filtered, stats) = min_distance_extract_filtered(&graph, &reference, 0, &UnitCost);
+        let original = graph.find_min(&reference, 0, &UnitCost, false).unwrap();
+        let (filtered, stats) = graph.find_min_filtered(&reference, 0, &UnitCost);
 
         assert_eq!(original.1, filtered.unwrap().1);
         // Should have enumerated both trees
@@ -1473,7 +1443,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = min_distance_extract_filtered(&graph, &reference, 0, &UnitCost);
+        let (result, stats) = graph.find_min_filtered(&reference, 0, &UnitCost);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
@@ -1485,75 +1455,4 @@ mod tests {
             stats.trees_enumerated
         );
     }
-
-    #[test]
-    fn label_histogram_basic() {
-        let tree = node(
-            "a".to_owned(),
-            vec![
-                leaf("b".to_owned()),
-                leaf("b".to_owned()),
-                leaf("c".to_owned()),
-            ],
-        );
-
-        let hist = tree.label_histogram();
-        assert_eq!(hist.get("a"), Some(&1));
-        assert_eq!(hist.get("b"), Some(&2));
-        assert_eq!(hist.get("c"), Some(&1));
-        assert_eq!(hist.get("x"), None);
-    }
-
-    // #[test]
-    // fn label_histogram_distance_identical() {
-    //     use crate::distance::tree::label_histogram_distance;
-
-    //     let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
-    //     let tree2 = node("a".to_owned(), vec![leaf("b".to_owned())]);
-
-    //     let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
-    //     assert_eq!(dist, 0);
-    // }
-
-    // #[test]
-    // fn label_histogram_distance_one_diff() {
-    //     use crate::distance::tree::label_histogram_distance;
-
-    //     let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
-    //     let tree2 = node("a".to_owned(), vec![leaf("c".to_owned())]);
-
-    //     // tree1 has: a=1, b=1
-    //     // tree2 has: a=1, c=1
-    //     // diff: b differs by 1, c differs by 1 = total 2, lower bound = 1
-    //     let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
-    //     assert_eq!(dist, 1);
-    // }
-
-    // #[test]
-    // fn label_histogram_is_lower_bound() {
-    //     use crate::distance::tree::{label_histogram_distance, tree_distance_unit};
-
-    //     // Verify that histogram distance is always <= actual distance
-    //     let trees = vec![
-    //         node("a".to_owned(), vec![leaf("b".to_owned())]),
-    //         node("a".to_owned(), vec![leaf("c".to_owned())]),
-    //         node("x".to_owned(), vec![leaf("y".to_owned())]),
-    //         node(
-    //             "a".to_owned(),
-    //             vec![leaf("b".to_owned()), leaf("c".to_owned())],
-    //         ),
-    //         leaf("single".to_owned()),
-    //     ];
-
-    //     for t1 in &trees {
-    //         for t2 in &trees {
-    //             let lower = label_histogram_distance(&t1.label_histogram(), &t2.label_histogram());
-    //             let actual = tree_distance_unit(t1, t2);
-    //             assert!(
-    //                 lower <= actual,
-    //                 "Lower bound {lower} > actual {actual} for trees"
-    //             );
-    //         }
-    //     }
-    // }
 }

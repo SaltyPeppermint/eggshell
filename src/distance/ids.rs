@@ -2,9 +2,11 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Trait for ID types that can be created from a numeric index
+/// Trait for ID types that wrap a numeric index.
 pub trait NumericId: Sized + Copy + Eq + std::hash::Hash {
+    /// Create an ID from a numeric index.
     fn from_index(index: usize) -> Self;
+    /// Convert the ID back to its numeric index.
     fn to_index(self) -> usize;
 }
 
@@ -79,6 +81,7 @@ define_id!(NatId, "NatId");
 define_id!(FunTyId, "NotDataTypeId");
 define_id!(DataTyId, "DataTypeId");
 
+/// Type identifier: can be a nat, function type, or datatype.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TypeId {
@@ -87,6 +90,7 @@ pub enum TypeId {
     DataType(DataTyId),
 }
 
+/// Identifier for nat or datatype nodes.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum NatOrDTId {
