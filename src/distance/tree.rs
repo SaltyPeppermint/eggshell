@@ -102,6 +102,15 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
+    #[must_use]
+    pub fn strip_types(&self) -> Self {
+        if self.label.is_type_of() {
+            self.children()[0].strip_types()
+        } else {
+            self.clone()
+        }
+    }
+
     /// Count the occurrences of each label in this tree.
     pub fn label_histogram(&self) -> HashMap<L, usize>
     where
@@ -420,32 +429,32 @@ pub fn tree_distance_unit<L: Label>(tree1: &TreeNode<L>, tree2: &TreeNode<L>) ->
     tree_distance(tree1, tree2, &UnitCost)
 }
 
-/// Compute the symmetric difference between two label histograms.
-/// Returns sum of |count1 - count2| for all labels, divided by 2.
-pub fn label_histogram_distance<L: Hash + Eq>(
-    hist1: &HashMap<L, usize>,
-    hist2: &HashMap<L, usize>,
-) -> usize {
-    let mut total_diff = 0usize;
+// /// Compute the symmetric difference between two label histograms.
+// /// Returns sum of |count1 - count2| for all labels, divided by 2.
+// pub fn label_histogram_distance<L: Hash + Eq>(
+//     hist1: &HashMap<L, usize>,
+//     hist2: &HashMap<L, usize>,
+// ) -> usize {
+//     let mut total_diff = 0usize;
 
-    // Count differences for labels in hist1
-    for (label, &count1) in hist1 {
-        let count2 = hist2.get(label).copied().unwrap_or(0);
-        total_diff += count1.abs_diff(count2);
-    }
+//     // Count differences for labels in hist1
+//     for (label, &count1) in hist1 {
+//         let count2 = hist2.get(label).copied().unwrap_or(0);
+//         total_diff += count1.abs_diff(count2);
+//     }
 
-    // Count labels only in hist2
-    for (label, &count2) in hist2 {
-        if !hist1.contains_key(label) {
-            total_diff += count2;
-        }
-    }
+//     // Count labels only in hist2
+//     for (label, &count2) in hist2 {
+//         if !hist1.contains_key(label) {
+//             total_diff += count2;
+//         }
+//     }
 
-    // Each edit fixes at most 2 in the symmetric difference
-    // delete/insert change diff by 1, relabel changes by at most 2
-    // So lower bound is ceil(total_diff / 2)
-    total_diff.div_ceil(2)
-}
+//     // Each edit fixes at most 2 in the symmetric difference
+//     // delete/insert change diff by 1, relabel changes by at most 2
+//     // So lower bound is ceil(total_diff / 2)
+//     total_diff.div_ceil(2)
+// }
 
 #[allow(dead_code)]
 fn count_tree_nodes<L: Label>(tree: &TreeNode<L>) -> usize {

@@ -20,10 +20,7 @@ use super::ids::{
     DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::tree::{
-    EditCosts, PreprocessedTree, UnitCost, label_histogram_distance, tree_distance,
-    tree_distance_with_ref,
-};
+use super::tree::{EditCosts, PreprocessedTree, UnitCost, tree_distance, tree_distance_with_ref};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -164,6 +161,7 @@ impl<L: Label> EGraph<L> {
         choice_idx: usize,
         choices: &mut Vec<usize>,
         path: &mut PathTracker,
+        with_type: bool,
     ) -> Option<(TreeNode<L>, usize)> {
         // Cycle detection
         if !path.can_visit(id) {
@@ -187,7 +185,7 @@ impl<L: Label> EGraph<L> {
                 (Vec::new(), choice_idx),
                 |(mut children, curr_idx): (Vec<_>, _), child_id| {
                     let (child_tree, last_idx) =
-                        self.get_next_tree(*child_id, curr_idx + 1, choices, path)?;
+                        self.get_next_tree(*child_id, curr_idx + 1, choices, path, with_type)?;
                     children.push(child_tree);
                     Some((children, last_idx))
                 },
@@ -195,9 +193,13 @@ impl<L: Label> EGraph<L> {
 
             if let Some((children, curr_idx)) = result {
                 path.leave(id);
-                let expr_tree = TreeNode::new(node.label().clone(), children);
-                let type_tree = TreeNode::from_eclass(self, id);
-                let eclass_tree = TreeNode::new(L::type_of(), vec![expr_tree, type_tree]);
+                let eclass_tree = if with_type {
+                    let expr_tree = TreeNode::new(node.label().clone(), children);
+                    let type_tree = TreeNode::from_eclass(self, id);
+                    TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
+                } else {
+                    TreeNode::new(node.label().clone(), children)
+                };
                 return Some((eclass_tree, curr_idx));
             }
 
@@ -211,13 +213,64 @@ impl<L: Label> EGraph<L> {
         None
     }
 
+    /// Advance to the next valid choice vector without materializing the tree.
+    /// Returns the last choice index used, or None if no more valid choices exist.
+    fn get_next_choices(
+        &self,
+        id: EClassId,
+        choice_idx: usize,
+        choices: &mut Vec<usize>,
+        path: &mut PathTracker,
+    ) -> Option<usize> {
+        // Cycle detection
+        if !path.can_visit(id) {
+            return None;
+        }
+
+        let class = self.class(id);
+        let choice = choices.get(choice_idx).copied().unwrap_or_else(|| {
+            choices.push(0);
+            0
+        });
+
+        path.enter(id);
+        // Try choices starting from `choice`, looking for a valid one
+        for (node_idx, node) in class.nodes().iter().enumerate().skip(choice) {
+            choices[choice_idx] = node_idx;
+
+            let result = node
+                .children()
+                .iter()
+                .try_fold(choice_idx, |curr_idx, child_id| {
+                    self.get_next_choices(*child_id, curr_idx + 1, choices, path)
+                });
+
+            if let Some(curr_idx) = result {
+                path.leave(id);
+                return Some(curr_idx);
+            }
+
+            // This node's children failed, try next node in this class
+            choices.truncate(choice_idx + 1);
+        }
+
+        path.leave(id);
+        None
+    }
+
     #[must_use]
-    pub fn tree_from_choices(&self, id: EClassId, choices: &[usize]) -> TreeNode<L> {
+    pub fn tree_from_choices(
+        &self,
+        id: EClassId,
+        choices: &[usize],
+        with_type: bool,
+    ) -> TreeNode<L> {
         fn rec<L: Label>(
             graph: &EGraph<L>,
             id: EClassId,
             choice_idx: usize,
             choices: &[usize],
+            with_type: bool,
         ) -> (TreeNode<L>, usize) {
             let class = graph.class(id);
             let choice = choices[choice_idx];
@@ -226,28 +279,38 @@ impl<L: Label> EGraph<L> {
             let (children, curr_idx) = node.children().iter().fold(
                 (Vec::new(), choice_idx),
                 |(mut children, curr_idx): (Vec<_>, _), child_id| {
-                    let (child_tree, last_idx) = rec(graph, *child_id, curr_idx + 1, choices);
+                    let (child_tree, last_idx) =
+                        rec(graph, *child_id, curr_idx + 1, choices, with_type);
                     children.push(child_tree);
                     (children, last_idx)
                 },
             );
 
-            let expr_tree = TreeNode::new(node.label().clone(), children);
-            let type_tree = TreeNode::from_eclass(graph, id);
-            let eclass_tree = TreeNode::new(L::type_of(), vec![expr_tree, type_tree]);
+            let eclass_tree = if with_type {
+                let expr_tree = TreeNode::new(node.label().clone(), children);
+                let type_tree = TreeNode::from_eclass(graph, id);
+                TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
+            } else {
+                TreeNode::new(node.label().clone(), children)
+            };
             (eclass_tree, curr_idx)
         }
-        rec(self, id, 0, choices).0
+        rec(self, id, 0, choices, with_type).0
     }
 
     #[must_use]
-    pub fn enumerate_trees(&self, max_revisits: usize) -> Vec<TreeNode<L>> {
-        TreeIter::new(self, max_revisits).collect()
+    pub fn enumerate_trees(&self, max_revisits: usize, with_type: bool) -> Vec<TreeNode<L>> {
+        TreeIter::new(self, max_revisits, with_type).collect()
     }
 
     #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
-        TreeIter::new(self, max_revisits).count()
+        TreeIter::new(self, max_revisits, false).count()
+    }
+
+    #[must_use]
+    pub fn choice_iter(&self, max_revisits: usize) -> ChoiceIter<'_, L> {
+        ChoiceIter::new(self, max_revisits)
     }
 }
 
@@ -256,9 +319,48 @@ pub struct TreeIter<'a, L: Label> {
     choices: Vec<usize>,
     path: PathTracker,
     egraph: &'a EGraph<L>,
+    with_type: bool,
 }
 
 impl<'a, L: Label> TreeIter<'a, L> {
+    pub fn new(egraph: &'a EGraph<L>, max_revisits: usize, with_type: bool) -> Self {
+        Self {
+            choices: Vec::new(),
+            path: PathTracker::new(max_revisits),
+            egraph,
+            with_type,
+        }
+    }
+}
+
+impl<L: Label> Iterator for TreeIter<'_, L> {
+    type Item = TreeNode<L>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let (tree, _) = self.egraph.get_next_tree(
+            self.egraph.root(),
+            0,
+            &mut self.choices,
+            &mut self.path,
+            self.with_type,
+        )?;
+        if let Some(last) = self.choices.last_mut() {
+            *last += 1;
+        }
+        Some(tree)
+    }
+}
+
+/// Iterator that yields choice vectors without materializing trees.
+/// Each choice vector can later be used with `tree_from_choices` to get the actual tree.
+#[derive(Debug)]
+pub struct ChoiceIter<'a, L: Label> {
+    choices: Vec<usize>,
+    path: PathTracker,
+    egraph: &'a EGraph<L>,
+}
+
+impl<'a, L: Label> ChoiceIter<'a, L> {
     pub fn new(egraph: &'a EGraph<L>, max_revisits: usize) -> Self {
         Self {
             choices: Vec::new(),
@@ -268,17 +370,17 @@ impl<'a, L: Label> TreeIter<'a, L> {
     }
 }
 
-impl<L: Label> Iterator for TreeIter<'_, L> {
-    type Item = TreeNode<L>;
+impl<L: Label> Iterator for ChoiceIter<'_, L> {
+    type Item = Vec<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (tree, _) =
-            self.egraph
-                .get_next_tree(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
+        self.egraph
+            .get_next_choices(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
+        let result = self.choices.clone();
         if let Some(last) = self.choices.last_mut() {
             *last += 1;
         }
-        Some(tree)
+        Some(result)
     }
 }
 
@@ -368,12 +470,32 @@ fn min_distance_extract_slow<L: Label, C: EditCosts<L>>(
     max_revisits: usize,
     costs: &C,
 ) -> Option<(TreeNode<L>, usize)> {
-    TreeIter::new(graph, max_revisits)
+    TreeIter::new(graph, max_revisits, true)
         .map(|tree| {
             let distance = tree_distance(&tree, reference, costs);
             (tree, distance)
         })
         .min_by_key(|result| result.1)
+}
+
+/// Try to extract a tree from choices, using untyped distance as a lower bound for pruning.
+/// Returns `Some((tree, distance))` if the tree passes the pruning threshold, `None` otherwise.
+fn try_extract_with_pruning<L: Label, C: EditCosts<L>>(
+    graph: &EGraph<L>,
+    choices: &[usize],
+    ref_pp: &PreprocessedTree<L>,
+    ref_untyped_pp: &PreprocessedTree<L>,
+    best_untyped_distance: &AtomicUsize,
+    costs: &C,
+) -> Option<(TreeNode<L>, usize)> {
+    let untyped_tree = graph.tree_from_choices(graph.root(), choices, false);
+    let untyped_distance = tree_distance_with_ref(&untyped_tree, ref_untyped_pp, &UnitCost);
+
+    (untyped_distance < best_untyped_distance.load(Ordering::Relaxed)).then(|| {
+        let tree = graph.tree_from_choices(graph.root(), choices, true);
+        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
+        (tree, distance)
+    })
 }
 
 /// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
@@ -388,13 +510,21 @@ fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
     max_revisits: usize,
     costs: &C,
 ) -> Option<(TreeNode<L>, usize)> {
-    let ref_preprocessed = PreprocessedTree::new(reference);
+    let ref_pp = PreprocessedTree::new(reference);
+    let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
+    let best_untyped_distance = AtomicUsize::new(usize::MAX);
 
-    TreeIter::new(graph, max_revisits)
+    ChoiceIter::new(graph, max_revisits)
         .par_bridge()
-        .map(|tree| {
-            let distance = tree_distance_with_ref(&tree, &ref_preprocessed, costs);
-            (tree, distance)
+        .filter_map(|choices| {
+            try_extract_with_pruning(
+                graph,
+                &choices,
+                &ref_pp,
+                &ref_untyped_pp,
+                &best_untyped_distance,
+                costs,
+            )
         })
         .min_by_key(|(_, distance)| *distance)
 }
@@ -409,30 +539,34 @@ fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
 ///
 /// Returns the result along with statistics about pruning effectiveness.
 #[must_use]
-pub fn min_distance_extract_filtered<L: Label>(
+pub fn min_distance_extract_filtered<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     max_revisits: usize,
+    costs: &C,
 ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-    let ref_preprocessed = PreprocessedTree::new(reference);
-    let ref_histogram = reference.label_histogram();
+    let ref_pp = PreprocessedTree::new(reference);
+    let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
 
-    let best_distance = AtomicUsize::new(usize::MAX);
+    let best_untyped_distance = AtomicUsize::new(usize::MAX);
 
-    let (result, stats) = TreeIter::new(graph, max_revisits)
+    let (result, stats) = ChoiceIter::new(graph, max_revisits)
         .par_bridge()
-        .map(|tree| {
-            let lower_bound = label_histogram_distance(&tree.label_histogram(), &ref_histogram);
-
-            // Prune if lower bound already exceeds best distance
-            if lower_bound >= best_distance.load(Ordering::Relaxed) {
-                return (None, ExtractionStats::pruned());
-            }
-
-            let distance = tree_distance_with_ref(&tree, &ref_preprocessed, &UnitCost);
-            best_distance.fetch_min(distance, Ordering::Relaxed);
-
-            (Some((tree, distance)), ExtractionStats::compared())
+        .map(|choices| {
+            let result = try_extract_with_pruning(
+                graph,
+                &choices,
+                &ref_pp,
+                &ref_untyped_pp,
+                &best_untyped_distance,
+                costs,
+            );
+            let stats = if result.is_some() {
+                ExtractionStats::compared()
+            } else {
+                ExtractionStats::pruned()
+            };
+            (result, stats)
         })
         .reduce(
             || (None, ExtractionStats::default()),
@@ -547,7 +681,7 @@ mod tests {
     #[test]
     fn enumerate_single_leaf() {
         let graph = single_node_graph("a");
-        let trees = graph.enumerate_trees(0);
+        let trees = graph.enumerate_trees(0, true);
 
         assert_eq!(trees.len(), 1);
         // Trees are now wrapped: typeOf(expr_tree, type_tree)
@@ -571,7 +705,7 @@ mod tests {
             HashMap::new(),
         );
 
-        let trees = graph.enumerate_trees(0);
+        let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 2);
 
         // Extract expr labels from typeOf(expr, type) wrapper
@@ -605,7 +739,7 @@ mod tests {
             HashMap::new(),
         );
 
-        let trees = graph.enumerate_trees(0);
+        let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 1);
         // Root is typeOf(expr, type), expr is "a" with children that are also typeOf wrapped
         let expr = &trees[0].children()[0];
@@ -635,7 +769,7 @@ mod tests {
         );
 
         // With 0 revisits, we can only take the leaf option
-        let trees = graph.enumerate_trees(0);
+        let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 1);
         assert_eq!(trees[0].children()[0].label(), "leaf");
     }
@@ -659,7 +793,7 @@ mod tests {
         );
 
         // With 1 revisit, we can go one level deep
-        let trees = graph.enumerate_trees(1);
+        let trees = graph.enumerate_trees(1, true);
 
         // Should have: "leaf", "rec(leaf)", "rec(rec(leaf))"
         // Actually: at depth 0 we have 2 choices, at depth 1 we have 2 choices...
@@ -796,7 +930,7 @@ mod tests {
         let graph = single_node_graph("a");
         let choices = vec![0];
 
-        let tree = graph.tree_from_choices(eid(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices, true);
 
         // typeOf wrapper
         assert_eq!(tree.label(), "typeOf");
@@ -819,7 +953,7 @@ mod tests {
         );
 
         let choices = vec![0];
-        let tree = graph.tree_from_choices(eid(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices, true);
 
         assert_eq!(tree.children()[0].label(), "a");
     }
@@ -840,7 +974,7 @@ mod tests {
         );
 
         let choices = vec![1];
-        let tree = graph.tree_from_choices(eid(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices, true);
 
         assert_eq!(tree.children()[0].label(), "b");
     }
@@ -865,7 +999,7 @@ mod tests {
         );
 
         let choices = vec![0, 0, 0];
-        let tree = graph.tree_from_choices(eid(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices, true);
 
         // typeOf(a(...), type)
         let expr = &tree.children()[0];
@@ -906,25 +1040,25 @@ mod tests {
 
         // Test x(a) - expr part of wrapper
         let choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(eid(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
         assert_eq!(tree1.children()[0].label(), "x");
         assert_eq!(tree1.children()[0].children()[0].children()[0].label(), "a");
 
         // Test x(b)
         let choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(eid(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
         assert_eq!(tree2.children()[0].label(), "x");
         assert_eq!(tree2.children()[0].children()[0].children()[0].label(), "b");
 
         // Test y(a)
         let choices3 = vec![1, 0];
-        let tree3 = graph.tree_from_choices(eid(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
         assert_eq!(tree3.children()[0].label(), "y");
         assert_eq!(tree3.children()[0].children()[0].children()[0].label(), "a");
 
         // Test y(b)
         let choices4 = vec![1, 1];
-        let tree4 = graph.tree_from_choices(eid(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
         assert_eq!(tree4.children()[0].label(), "y");
         assert_eq!(tree4.children()[0].children()[0].children()[0].label(), "b");
     }
@@ -959,7 +1093,7 @@ mod tests {
 
         // Test p(a, x) - check expr children (which are typeOf wrapped)
         let choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(eid(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
         let expr1 = &tree1.children()[0];
         assert_eq!(expr1.label(), "p");
         assert_eq!(expr1.children()[0].children()[0].label(), "a");
@@ -967,7 +1101,7 @@ mod tests {
 
         // Test p(a, y)
         let choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(eid(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
         let expr2 = &tree2.children()[0];
         assert_eq!(expr2.label(), "p");
         assert_eq!(expr2.children()[0].children()[0].label(), "a");
@@ -975,7 +1109,7 @@ mod tests {
 
         // Test p(b, x)
         let choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(eid(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
         let expr3 = &tree3.children()[0];
         assert_eq!(expr3.label(), "p");
         assert_eq!(expr3.children()[0].children()[0].label(), "b");
@@ -983,7 +1117,7 @@ mod tests {
 
         // Test p(b, y)
         let choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(eid(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
         let expr4 = &tree4.children()[0];
         assert_eq!(expr4.label(), "p");
         assert_eq!(expr4.children()[0].children()[0].label(), "b");
@@ -1020,7 +1154,7 @@ mod tests {
 
         // Test a(b1(c1)) - navigate through typeOf wrappers
         let choices1 = vec![0, 0, 0];
-        let tree1 = graph.tree_from_choices(eid(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
         let expr1 = &tree1.children()[0]; // a
         assert_eq!(expr1.label(), "a");
         let b1 = &expr1.children()[0].children()[0]; // typeOf -> b1
@@ -1030,7 +1164,7 @@ mod tests {
 
         // Test a(b1(c2))
         let choices2 = vec![0, 0, 1];
-        let tree2 = graph.tree_from_choices(eid(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
         let expr2 = &tree2.children()[0];
         let b1_2 = &expr2.children()[0].children()[0];
         let c2 = &b1_2.children()[0].children()[0];
@@ -1038,7 +1172,7 @@ mod tests {
 
         // Test a(b2(c1))
         let choices3 = vec![0, 1, 0];
-        let tree3 = graph.tree_from_choices(eid(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
         let expr3 = &tree3.children()[0];
         let b2 = &expr3.children()[0].children()[0];
         assert_eq!(b2.label(), "b2");
@@ -1047,7 +1181,7 @@ mod tests {
 
         // Test a(b2(c2))
         let choices4 = vec![0, 1, 1];
-        let tree4 = graph.tree_from_choices(eid(0), &choices4);
+        let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
         let expr4 = &tree4.children()[0];
         let b2_4 = &expr4.children()[0].children()[0];
         assert_eq!(b2_4.label(), "b2");
@@ -1076,7 +1210,7 @@ mod tests {
         );
 
         let choices = vec![0, 0, 0, 0];
-        let tree = graph.tree_from_choices(eid(0), &choices);
+        let tree = graph.tree_from_choices(eid(0), &choices, true);
 
         let expr = &tree.children()[0];
         assert_eq!(expr.label(), "f");
@@ -1122,22 +1256,22 @@ mod tests {
             HashMap::new(),
         );
 
-        let enumerated = graph.enumerate_trees(0);
+        let enumerated = graph.enumerate_trees(0, true);
 
         // Should produce: x(a), x(b), y
         assert_eq!(enumerated.len(), 3);
 
         // Reconstruct using tree_from_choices
         let choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(eid(0), &choices1);
+        let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
         assert!(trees_equal(&tree1, &enumerated[0]));
 
         let choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(eid(0), &choices2);
+        let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
         assert!(trees_equal(&tree2, &enumerated[1]));
 
         let choices3 = vec![1];
-        let tree3 = graph.tree_from_choices(eid(0), &choices3);
+        let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
         assert!(trees_equal(&tree3, &enumerated[2]));
     }
 
@@ -1310,7 +1444,7 @@ mod tests {
         );
 
         let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
-        let (filtered, stats) = min_distance_extract_filtered(&graph, &reference, 0);
+        let (filtered, stats) = min_distance_extract_filtered(&graph, &reference, 0, &UnitCost);
 
         assert_eq!(original.1, filtered.unwrap().1);
         // Should have enumerated both trees
@@ -1339,7 +1473,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = min_distance_extract_filtered(&graph, &reference, 0);
+        let (result, stats) = min_distance_extract_filtered(&graph, &reference, 0, &UnitCost);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
@@ -1370,56 +1504,56 @@ mod tests {
         assert_eq!(hist.get("x"), None);
     }
 
-    #[test]
-    fn label_histogram_distance_identical() {
-        use crate::distance::tree::label_histogram_distance;
+    // #[test]
+    // fn label_histogram_distance_identical() {
+    //     use crate::distance::tree::label_histogram_distance;
 
-        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
-        let tree2 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+    //     let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+    //     let tree2 = node("a".to_owned(), vec![leaf("b".to_owned())]);
 
-        let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
-        assert_eq!(dist, 0);
-    }
+    //     let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
+    //     assert_eq!(dist, 0);
+    // }
 
-    #[test]
-    fn label_histogram_distance_one_diff() {
-        use crate::distance::tree::label_histogram_distance;
+    // #[test]
+    // fn label_histogram_distance_one_diff() {
+    //     use crate::distance::tree::label_histogram_distance;
 
-        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
-        let tree2 = node("a".to_owned(), vec![leaf("c".to_owned())]);
+    //     let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+    //     let tree2 = node("a".to_owned(), vec![leaf("c".to_owned())]);
 
-        // tree1 has: a=1, b=1
-        // tree2 has: a=1, c=1
-        // diff: b differs by 1, c differs by 1 = total 2, lower bound = 1
-        let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
-        assert_eq!(dist, 1);
-    }
+    //     // tree1 has: a=1, b=1
+    //     // tree2 has: a=1, c=1
+    //     // diff: b differs by 1, c differs by 1 = total 2, lower bound = 1
+    //     let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
+    //     assert_eq!(dist, 1);
+    // }
 
-    #[test]
-    fn label_histogram_is_lower_bound() {
-        use crate::distance::tree::{label_histogram_distance, tree_distance_unit};
+    // #[test]
+    // fn label_histogram_is_lower_bound() {
+    //     use crate::distance::tree::{label_histogram_distance, tree_distance_unit};
 
-        // Verify that histogram distance is always <= actual distance
-        let trees = vec![
-            node("a".to_owned(), vec![leaf("b".to_owned())]),
-            node("a".to_owned(), vec![leaf("c".to_owned())]),
-            node("x".to_owned(), vec![leaf("y".to_owned())]),
-            node(
-                "a".to_owned(),
-                vec![leaf("b".to_owned()), leaf("c".to_owned())],
-            ),
-            leaf("single".to_owned()),
-        ];
+    //     // Verify that histogram distance is always <= actual distance
+    //     let trees = vec![
+    //         node("a".to_owned(), vec![leaf("b".to_owned())]),
+    //         node("a".to_owned(), vec![leaf("c".to_owned())]),
+    //         node("x".to_owned(), vec![leaf("y".to_owned())]),
+    //         node(
+    //             "a".to_owned(),
+    //             vec![leaf("b".to_owned()), leaf("c".to_owned())],
+    //         ),
+    //         leaf("single".to_owned()),
+    //     ];
 
-        for t1 in &trees {
-            for t2 in &trees {
-                let lower = label_histogram_distance(&t1.label_histogram(), &t2.label_histogram());
-                let actual = tree_distance_unit(t1, t2);
-                assert!(
-                    lower <= actual,
-                    "Lower bound {lower} > actual {actual} for trees"
-                );
-            }
-        }
-    }
+    //     for t1 in &trees {
+    //         for t2 in &trees {
+    //             let lower = label_histogram_distance(&t1.label_histogram(), &t2.label_histogram());
+    //             let actual = tree_distance_unit(t1, t2);
+    //             assert!(
+    //                 lower <= actual,
+    //                 "Lower bound {lower} > actual {actual} for trees"
+    //             );
+    //         }
+    //     }
+    // }
 }

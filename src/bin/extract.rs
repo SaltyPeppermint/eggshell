@@ -6,7 +6,7 @@ use std::time::Instant;
 use clap::Parser;
 
 use eggshell::distance::{
-    EGraph, TreeNode, min_distance_extract_filtered, min_distance_extract_unit,
+    EGraph, TreeNode, UnitCost, min_distance_extract_filtered, min_distance_extract_unit,
 };
 use symbolic_expressions::Sexp;
 
@@ -84,7 +84,7 @@ fn main() {
         let start = Instant::now();
 
         if let (Some(result), stats) =
-            min_distance_extract_filtered(&graph, &ref_tree, args.max_revisits)
+            min_distance_extract_filtered(&graph, &ref_tree, args.max_revisits, &UnitCost)
         {
             println!("  Best distance: {}", result.1);
             println!("  Time: {:.2?}", start.elapsed());
