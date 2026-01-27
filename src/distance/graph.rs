@@ -363,11 +363,13 @@ impl<L: Label> EGraph<L> {
         let untyped_tree = self.tree_from_choices(self.root(), choices, false);
         let untyped_distance = tree_distance_with_ref(&untyped_tree, ref_untyped_pp, &UnitCost);
 
-        (untyped_distance < best_untyped_distance.load(Ordering::Relaxed)).then(|| {
+        if untyped_distance <= best_untyped_distance.fetch_min(untyped_distance, Ordering::Relaxed)
+        {
             let tree = self.tree_from_choices(self.root(), choices, true);
             let distance = tree_distance_with_ref(&tree, ref_pp, costs);
-            (tree, distance)
-        })
+            return Some((tree, distance));
+        }
+        None
     }
 
     /// Parallel iteration with preprocessing and pruning optimizations.
