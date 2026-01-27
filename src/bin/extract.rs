@@ -8,6 +8,7 @@ use clap::Parser;
 use eggshell::distance::{
     EGraph, TreeNode, min_distance_extract_filtered, min_distance_extract_unit,
 };
+use symbolic_expressions::Sexp;
 
 #[derive(Parser)]
 #[command(about = "Find the closest tree in an e-graph to a reference tree")]
@@ -101,7 +102,7 @@ fn main() {
             );
 
             // Print the best tree
-            println!("\n  Best tree: {:?}", result.tree);
+            println!("\n  Best tree: {:?}", Sexp::from(&result.tree).to_string());
         } else {
             println!("  No result found!");
         }

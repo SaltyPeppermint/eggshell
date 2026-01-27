@@ -10,7 +10,7 @@ use std::str::FromStr;
 use hashbrown::HashMap;
 
 use serde::{Deserialize, Serialize};
-use symbolic_expressions::{Sexp, SexpError};
+use symbolic_expressions::{IntoSexp, Sexp, SexpError};
 
 use super::EGraph;
 use super::ids::{DataTyId, EClassId, FunTyId, NatId, NatOrDTId, TypeId};
@@ -150,6 +150,20 @@ impl FromStr for TreeNode<String> {
             }
         }
         symbolic_expressions::parser::parse_str(s).and_then(rec)
+    }
+}
+
+impl IntoSexp for TreeNode<String> {
+    fn into_sexp(&self) -> Sexp {
+        if self.is_leaf() {
+            Sexp::String(self.label.clone())
+        } else {
+            let l = vec![Sexp::String(self.label.clone())]
+                .into_iter()
+                .chain(self.children.iter().map(Sexp::from))
+                .collect::<Vec<_>>();
+            Sexp::List(l)
+        }
     }
 }
 
