@@ -4,7 +4,10 @@
 //! The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
 //! time and O(n1 * n2) space.
 
+use std::hash::Hash;
 use std::str::FromStr;
+
+use hashbrown::HashMap;
 
 use serde::{Deserialize, Serialize};
 use symbolic_expressions::{Sexp, SexpError};
@@ -98,6 +101,32 @@ impl<L: Label> TreeNode<L> {
             .collect();
         TreeNode::new(node, children)
     }
+
+    /// Count the occurrences of each label in this tree.
+    pub fn label_histogram(&self) -> HashMap<L, usize>
+    where
+        L: Hash + Eq,
+    {
+        let mut counts = HashMap::new();
+        self.label_histogram_into(&mut counts);
+        counts
+    }
+
+    /// Add label counts from this tree into an existing histogram.
+    pub fn label_histogram_into(&self, counts: &mut HashMap<L, usize>)
+    where
+        L: Hash + Eq,
+    {
+        *counts.entry(self.label.clone()).or_insert(0) += 1;
+        for child in &self.children {
+            child.label_histogram_into(counts);
+        }
+    }
+
+    /// Count total number of nodes in this tree.
+    pub fn node_count(&self) -> usize {
+        1 + self.children.iter().map(Self::node_count).sum::<usize>()
+    }
 }
 
 impl FromStr for TreeNode<String> {
@@ -126,19 +155,23 @@ impl FromStr for TreeNode<String> {
 
 /// Postorder traversal information for a tree node
 #[derive(Debug, Clone)]
-struct PostorderNode<L: Label> {
+pub struct PostorderNode<L: Label> {
     label: L,
     leftmost_leaf: usize, // postorder index of leftmost leaf descendant
 }
 
-/// Preprocessed tree for Zhang-Shasha algorithm
-struct PreprocessedTree<L: Label> {
+/// Preprocessed tree for Zhang-Shasha algorithm.
+/// This can be reused when computing distances against multiple candidate trees.
+pub struct PreprocessedTree<L: Label> {
     nodes: Vec<PostorderNode<L>>,
     keyroots: Vec<usize>, // indices of keyroots in postorder
 }
 
 impl<L: Label> PreprocessedTree<L> {
-    fn new(root: &TreeNode<L>) -> Self {
+    /// Create a preprocessed tree from a tree node.
+    /// This performs a single postorder traversal to compute leftmost leaf descendants
+    /// and keyroots.
+    pub fn new(root: &TreeNode<L>) -> Self {
         let mut nodes = Vec::new();
 
         // Perform postorder traversal and compute leftmost leaf descendants
@@ -196,16 +229,24 @@ impl<L: Label> PreprocessedTree<L> {
         current_idx
     }
 
-    fn size(&self) -> usize {
+    /// Returns the number of nodes in the tree
+    pub fn size(&self) -> usize {
         self.nodes.len()
     }
 
-    fn leftmost_leaf(&self, i: usize) -> usize {
+    /// Returns the postorder index of the leftmost leaf descendant of node i
+    pub fn leftmost_leaf(&self, i: usize) -> usize {
         self.nodes[i].leftmost_leaf
     }
 
-    fn label(&self, i: usize) -> &L {
+    /// Returns the label of node i
+    pub fn label(&self, i: usize) -> &L {
         &self.nodes[i].label
+    }
+
+    /// Returns the keyroots of the tree (nodes that start new subproblems)
+    pub fn keyroots(&self) -> &[usize] {
+        &self.keyroots
     }
 }
 
@@ -246,7 +287,26 @@ pub fn tree_distance<L: Label, C: EditCosts<L>>(
 ) -> usize {
     let t1 = PreprocessedTree::new(tree1);
     let t2 = PreprocessedTree::new(tree2);
+    tree_distance_preprocessed(&t1, &t2, costs)
+}
 
+/// Compute Zhang-Shasha distance with a pre-preprocessed reference tree.
+/// Use this when comparing many candidate trees against the same reference.
+pub fn tree_distance_with_ref<L: Label, C: EditCosts<L>>(
+    candidate: &TreeNode<L>,
+    reference: &PreprocessedTree<L>,
+    costs: &C,
+) -> usize {
+    let t1 = PreprocessedTree::new(candidate);
+    tree_distance_preprocessed(&t1, reference, costs)
+}
+
+/// Compute Zhang-Shasha distance between two preprocessed trees
+pub fn tree_distance_preprocessed<L: Label, C: EditCosts<L>>(
+    t1: &PreprocessedTree<L>,
+    t2: &PreprocessedTree<L>,
+    costs: &C,
+) -> usize {
     let n1 = t1.size();
     let n2 = t2.size();
 
@@ -268,9 +328,9 @@ pub fn tree_distance<L: Label, C: EditCosts<L>>(
     let mut fd = vec![vec![0; n2 + 1]; n1 + 1];
 
     // Compute tree distance for each pair of keyroots
-    for &i in &t1.keyroots {
-        for &j in &t2.keyroots {
-            compute_forest_distance(&t1, &t2, i, j, &mut td, &mut fd, costs);
+    for &i in t1.keyroots() {
+        for &j in t2.keyroots() {
+            compute_forest_distance(t1, t2, i, j, &mut td, &mut fd, costs);
         }
     }
 
@@ -344,6 +404,33 @@ fn compute_forest_distance<L: Label, C: EditCosts<L>>(
 /// Convenience function with unit costs
 pub fn tree_distance_unit<L: Label>(tree1: &TreeNode<L>, tree2: &TreeNode<L>) -> usize {
     tree_distance(tree1, tree2, &UnitCost)
+}
+
+/// Compute the symmetric difference between two label histograms.
+/// Returns sum of |count1 - count2| for all labels, divided by 2.
+pub fn label_histogram_distance<L: Hash + Eq>(
+    hist1: &HashMap<L, usize>,
+    hist2: &HashMap<L, usize>,
+) -> usize {
+    let mut total_diff = 0usize;
+
+    // Count differences for labels in hist1
+    for (label, &count1) in hist1 {
+        let count2 = hist2.get(label).copied().unwrap_or(0);
+        total_diff += count1.abs_diff(count2);
+    }
+
+    // Count labels only in hist2
+    for (label, &count2) in hist2 {
+        if !hist1.contains_key(label) {
+            total_diff += count2;
+        }
+    }
+
+    // Each edit fixes at most 2 in the symmetric difference
+    // delete/insert change diff by 1, relabel changes by at most 2
+    // So lower bound is ceil(total_diff / 2)
+    total_diff.div_ceil(2)
 }
 
 #[allow(dead_code)]

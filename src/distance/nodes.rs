@@ -9,6 +9,10 @@ pub trait Label:
     Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de>
 {
     fn type_of() -> Self;
+
+    fn is_type_of(&self) -> bool {
+        &Self::type_of() == self
+    }
 }
 
 impl Label for String {

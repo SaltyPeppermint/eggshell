@@ -6,6 +6,10 @@
 //! With strict alternation (`EClass` -> `ENode` -> `EClass` ->...),
 //! complexity is O(N^(d/2) * |T|^2) for single-path graphs
 
+use std::fs::File;
+use std::io::BufReader;
+use std::path::Path;
+
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +18,10 @@ use super::ids::{
     DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::tree::{EditCosts, UnitCost, tree_distance};
+use super::tree::{
+    EditCosts, PreprocessedTree, UnitCost, label_histogram_distance, tree_distance,
+    tree_distance_with_ref,
+};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -81,7 +88,7 @@ impl<L: Label> EGraph<L> {
     }
 
     /// Set the root `EClassId` (useful after deserialization)
-    pub fn set_root(&mut self, root: EClassId) {
+    fn set_root(&mut self, root: EClassId) {
         self.root = Some(root);
     }
 
@@ -95,16 +102,19 @@ impl<L: Label> EGraph<L> {
             .expect("Root has not been set. This is necessary after deserializing the egraph!")
     }
 
-    /// Parse root `EClassId` from a filename like `ser_egraph_root_39_arrayPacking_SRCL_0.json`
+    /// Parse root `EClassId` from a filename like `ser_egraph_root_129_arrayPacking_SRCL_0.json`
     /// Returns `None` if the pattern doesn't match.
     #[must_use]
-    pub fn parse_root_from_filename(filename: &str) -> Option<EClassId> {
-        let stem = std::path::Path::new(filename).file_stem()?.to_str()?;
+    #[allow(clippy::missing_panics_doc)]
+    pub fn parse_from_file(file: &Path) -> EGraph<String> {
+        let mut graph: EGraph<String> =
+            serde_json::from_reader(BufReader::new(File::open(file).unwrap())).unwrap();
+        let stem = file.file_stem().unwrap().to_str().unwrap();
         // Pattern: ser_egraph_root_<id>_...
-        let after_root = stem.strip_prefix("ser_egraph_root_")?;
-        let id_str = after_root.split('_').next()?;
-        let id: usize = id_str.parse().ok()?;
-        Some(EClassId::new(id))
+        let after_root = stem.strip_prefix("ser_egraph_root_").unwrap();
+        let id_str = after_root.split('_').next().unwrap();
+        graph.set_root(EClassId::new(id_str.parse().unwrap()));
+        graph
     }
 
     /// Canonicalize an `EClassId` through the union-find.
@@ -325,8 +335,40 @@ pub struct MinEditResult<L: Label> {
 /// This uses dynamic enumeration: it extracts all possible trees from the graph (bounded by
 /// `max_revisits` for cycles) and computes the full Zhang-Shasha distance for each.
 ///
+/// fast uses some optimization
+///
 /// Returns None if no valid trees can be extracted from the graph.
 pub fn min_distance_extract<L: Label, C: EditCosts<L>>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    max_revisits: usize,
+    costs: &C,
+    fast: bool,
+) -> Option<MinEditResult<L>> {
+    if fast {
+        min_distance_extract_fast(graph, reference, max_revisits, costs)
+    } else {
+        min_distance_extract_slow(graph, reference, max_revisits, costs)
+    }
+}
+
+/// See `min_distance_extract` but with unit costs
+pub fn min_distance_extract_unit<L: Label>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    max_revisits: usize,
+    fast: bool,
+) -> Option<MinEditResult<L>> {
+    min_distance_extract(graph, reference, max_revisits, &UnitCost, fast)
+}
+
+/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
+///
+/// This uses dynamic enumeration: it extracts all possible trees from the graph (bounded by
+/// `max_revisits` for cycles) and computes the full Zhang-Shasha distance for each.
+///
+/// Returns None if no valid trees can be extracted from the graph.
+fn min_distance_extract_slow<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     max_revisits: usize,
@@ -340,17 +382,107 @@ pub fn min_distance_extract<L: Label, C: EditCosts<L>>(
         .min_by_key(|result| result.distance)
 }
 
-/// See `min_distance_extract` but with unit costs
-pub fn min_distance_extract_unit<L: Label>(
+/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
+///
+/// This is an optimized version that preprocesses the reference tree once,
+/// avoiding redundant work when comparing against many candidates.
+///
+/// Returns None if no valid trees can be extracted from the graph.
+fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     max_revisits: usize,
+    costs: &C,
 ) -> Option<MinEditResult<L>> {
-    min_distance_extract(graph, reference, max_revisits, &UnitCost)
+    let ref_preprocessed = PreprocessedTree::new(reference);
+
+    let mut best_tree: Option<TreeNode<L>> = None;
+    let mut best_distance = usize::MAX;
+
+    for tree in TreeIter::new(graph, max_revisits) {
+        let distance = tree_distance_with_ref(&tree, &ref_preprocessed, costs);
+
+        if distance < best_distance {
+            best_distance = distance;
+            best_tree = Some(tree);
+        }
+    }
+
+    best_tree.map(|tree| MinEditResult {
+        tree,
+        distance: best_distance,
+    })
+}
+
+/// Statistics from filtered extraction
+#[derive(Debug, Clone, Default)]
+pub struct ExtractionStats {
+    /// Total number of trees enumerated
+    pub trees_enumerated: usize,
+    /// Number of trees pruned by lower bound filter
+    pub trees_pruned: usize,
+    /// Number of trees for which full distance was computed
+    pub full_comparisons: usize,
+}
+
+/// Find the tree in the `EGraph` with minimum edit distance to the reference tree.
+///
+/// This version uses a lower bound filter to skip trees that cannot possibly
+/// be better than the current best. The lower bound is based on label histogram
+/// differences, which is fast to compute.
+///
+/// Only works with unit costs (the lower bound assumes unit cost model).
+///
+/// Returns the result along with statistics about pruning effectiveness.
+#[must_use]
+pub fn min_distance_extract_filtered(
+    graph: &EGraph<String>,
+    reference: &TreeNode<String>,
+    max_revisits: usize,
+) -> (Option<MinEditResult<String>>, ExtractionStats) {
+    let ref_preprocessed = PreprocessedTree::new(reference);
+    let ref_histogram = reference.label_histogram();
+
+    let mut best_tree: Option<TreeNode<String>> = None;
+    let mut best_distance = usize::MAX;
+    let mut stats = ExtractionStats::default();
+
+    for tree in TreeIter::new(graph, max_revisits) {
+        stats.trees_enumerated += 1;
+
+        // Compute cheap lower bound first
+        let candidate_histogram = tree.label_histogram();
+        let lower_bound = label_histogram_distance(&candidate_histogram, &ref_histogram);
+
+        // Skip if lower bound already exceeds best distance
+        if lower_bound >= best_distance {
+            stats.trees_pruned += 1;
+            eprintln!("SKIPPED");
+            continue;
+        }
+
+        // Compute full distance
+        stats.full_comparisons += 1;
+        let distance = tree_distance_with_ref(&tree, &ref_preprocessed, &UnitCost);
+        eprintln!("TREE COMPARED");
+
+        if distance < best_distance {
+            best_distance = distance;
+            best_tree = Some(tree);
+        }
+    }
+
+    let result = best_tree.map(|tree| MinEditResult {
+        tree,
+        distance: best_distance,
+    });
+
+    (result, stats)
 }
 
 #[cfg(test)]
 mod tests {
+
     use crate::distance::ids::NumericId;
 
     use super::*;
@@ -571,7 +703,7 @@ mod tests {
                 leaf("0".to_owned()), // type tree (dummy nat)
             ],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
+        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
         assert_eq!(result.distance, 0);
     }
@@ -597,7 +729,7 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
+        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
         assert_eq!(result.distance, 0);
         assert_eq!(result.tree.children()[0].label(), "a");
@@ -643,7 +775,7 @@ mod tests {
                 leaf("0".to_owned()),
             ],
         );
-        let result = min_distance_extract_unit(&graph, &reference, 0).unwrap();
+        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
 
         assert_eq!(result.distance, 0);
         // The expr part of typeOf wrapper should have 1 child
@@ -1002,21 +1134,15 @@ mod tests {
 
     #[test]
     fn deserialize_json_file() {
-        let json = include_str!("../../data/ser_egraph_root_39_arrayPacking_SRCL_0.json");
-        let mut graph: EGraph<String> = serde_json::from_str(json).unwrap();
-
-        // Parse root from the filename pattern
-        let root = EGraph::<String>::parse_root_from_filename(
-            "ser_egraph_root_39_arrayPacking_SRCL_0.json",
-        )
-        .unwrap();
-        graph.set_root(root);
+        let graph = EGraph::<String>::parse_from_file(Path::new(
+            "data/rise/egraph_jsons/ser_egraph_root_129_arrayPacking_SRCL_0.json",
+        ));
 
         // Verify root is correct
-        assert_eq!(root.to_index(), 39);
+        assert_eq!(graph.root().to_index(), 129);
 
         // Verify we can access the root class
-        let root_class = graph.class(root);
+        let root_class = graph.class(graph.root());
         assert!(!root_class.nodes().is_empty());
 
         // Verify some classes exist
@@ -1024,5 +1150,264 @@ mod tests {
 
         // Verify nat nodes exist
         assert!(!graph.nat_nodes.is_empty());
+    }
+
+    #[test]
+    fn min_distance_extract_fast_exact_match() {
+        // Graph contains the exact reference tree
+        let graph = EGraph::new(
+            cfv(vec![
+                EClass::new(
+                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
+                    dummy_ty(),
+                ),
+                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
+                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
+            ]),
+            eid(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        // Reference must match the typeOf wrapper structure
+        let reference = node(
+            "typeOf".to_owned(),
+            vec![
+                node(
+                    "a".to_owned(),
+                    vec![
+                        node(
+                            "typeOf".to_owned(),
+                            vec![leaf("b".to_owned()), leaf("0".to_owned())],
+                        ),
+                        node(
+                            "typeOf".to_owned(),
+                            vec![leaf("c".to_owned()), leaf("0".to_owned())],
+                        ),
+                    ],
+                ),
+                leaf("0".to_owned()),
+            ],
+        );
+
+        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        assert_eq!(result.distance, 0);
+    }
+
+    #[test]
+    fn min_distance_extract_fast_chooses_best() {
+        // Graph with OR choice: "a" or "x"
+        let graph = EGraph::new(
+            cfv(vec![EClass::new(
+                vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
+                dummy_ty(),
+            )]),
+            eid(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        // Reference is "a", so should choose "a" with distance 0
+        let reference = node(
+            "typeOf".to_owned(),
+            vec![leaf("a".to_owned()), leaf("0".to_owned())],
+        );
+
+        let result = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+        assert_eq!(result.distance, 0);
+        assert_eq!(result.tree.children()[0].label(), "a");
+    }
+
+    #[test]
+    fn min_distance_extract_fast_matches_original() {
+        // Verify fast version produces same results as original
+        let graph = EGraph::new(
+            cfv(vec![
+                EClass::new(
+                    vec![
+                        ENode::new("a".to_owned(), vec![eid(1)]),
+                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]),
+                    ],
+                    dummy_ty(),
+                ),
+                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
+                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
+            ]),
+            eid(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        let reference = node(
+            "typeOf".to_owned(),
+            vec![
+                node(
+                    "a".to_owned(),
+                    vec![node(
+                        "typeOf".to_owned(),
+                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
+                    )],
+                ),
+                leaf("0".to_owned()),
+            ],
+        );
+
+        let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
+        let fast = min_distance_extract_unit(&graph, &reference, 0, true).unwrap();
+
+        assert_eq!(original.distance, fast.distance);
+    }
+
+    #[test]
+    fn min_distance_extract_filtered_matches_original() {
+        // Verify filtered version produces same results as original
+        let graph = EGraph::new(
+            cfv(vec![
+                EClass::new(
+                    vec![
+                        ENode::new("a".to_owned(), vec![eid(1)]),
+                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]),
+                    ],
+                    dummy_ty(),
+                ),
+                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
+                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
+            ]),
+            eid(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        let reference = node(
+            "typeOf".to_owned(),
+            vec![
+                node(
+                    "a".to_owned(),
+                    vec![node(
+                        "typeOf".to_owned(),
+                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
+                    )],
+                ),
+                leaf("0".to_owned()),
+            ],
+        );
+
+        let original = min_distance_extract_unit(&graph, &reference, 0, false).unwrap();
+        let (filtered, stats) = min_distance_extract_filtered(&graph, &reference, 0);
+
+        assert_eq!(original.distance, filtered.unwrap().distance);
+        // Should have enumerated both trees
+        assert_eq!(stats.trees_enumerated, 2);
+    }
+
+    #[test]
+    fn min_distance_extract_filtered_prunes_bad_trees() {
+        // Create a graph where one option is clearly worse
+        // Option 1: typeOf(a, 0) - matches reference exactly
+        // Option 2: typeOf(x, 0) - has different label, lower bound >= 1
+        let graph = EGraph::new(
+            cfv(vec![EClass::new(
+                vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
+                dummy_ty(),
+            )]),
+            eid(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        let reference = node(
+            "typeOf".to_owned(),
+            vec![leaf("a".to_owned()), leaf("0".to_owned())],
+        );
+
+        let (result, stats) = min_distance_extract_filtered(&graph, &reference, 0);
+
+        assert_eq!(result.unwrap().distance, 0);
+        assert_eq!(stats.trees_enumerated, 2);
+        // After finding exact match (distance 0), the second tree should be pruned
+        // because its lower bound (1) >= best distance (0)
+        assert_eq!(stats.trees_pruned, 1);
+        assert_eq!(stats.full_comparisons, 1);
+    }
+
+    #[test]
+    fn label_histogram_basic() {
+        let tree = node(
+            "a".to_owned(),
+            vec![
+                leaf("b".to_owned()),
+                leaf("b".to_owned()),
+                leaf("c".to_owned()),
+            ],
+        );
+
+        let hist = tree.label_histogram();
+        assert_eq!(hist.get("a"), Some(&1));
+        assert_eq!(hist.get("b"), Some(&2));
+        assert_eq!(hist.get("c"), Some(&1));
+        assert_eq!(hist.get("x"), None);
+    }
+
+    #[test]
+    fn label_histogram_distance_identical() {
+        use crate::distance::tree::label_histogram_distance;
+
+        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+        let tree2 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+
+        let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
+        assert_eq!(dist, 0);
+    }
+
+    #[test]
+    fn label_histogram_distance_one_diff() {
+        use crate::distance::tree::label_histogram_distance;
+
+        let tree1 = node("a".to_owned(), vec![leaf("b".to_owned())]);
+        let tree2 = node("a".to_owned(), vec![leaf("c".to_owned())]);
+
+        // tree1 has: a=1, b=1
+        // tree2 has: a=1, c=1
+        // diff: b differs by 1, c differs by 1 = total 2, lower bound = 1
+        let dist = label_histogram_distance(&tree1.label_histogram(), &tree2.label_histogram());
+        assert_eq!(dist, 1);
+    }
+
+    #[test]
+    fn label_histogram_is_lower_bound() {
+        use crate::distance::tree::{label_histogram_distance, tree_distance_unit};
+
+        // Verify that histogram distance is always <= actual distance
+        let trees = vec![
+            node("a".to_owned(), vec![leaf("b".to_owned())]),
+            node("a".to_owned(), vec![leaf("c".to_owned())]),
+            node("x".to_owned(), vec![leaf("y".to_owned())]),
+            node(
+                "a".to_owned(),
+                vec![leaf("b".to_owned()), leaf("c".to_owned())],
+            ),
+            leaf("single".to_owned()),
+        ];
+
+        for t1 in &trees {
+            for t2 in &trees {
+                let lower = label_histogram_distance(&t1.label_histogram(), &t2.label_histogram());
+                let actual = tree_distance_unit(t1, t2);
+                assert!(
+                    lower <= actual,
+                    "Lower bound {lower} > actual {actual} for trees"
+                );
+            }
+        }
     }
 }
