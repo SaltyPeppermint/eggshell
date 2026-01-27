@@ -2,6 +2,7 @@ use std::fs;
 use std::str::FromStr;
 
 use clap::Parser;
+
 use eggshell::distance::{TreeNode, tree_distance_unit};
 
 #[derive(Parser)]

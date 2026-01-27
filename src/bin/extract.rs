@@ -1,8 +1,10 @@
+use std::fs;
+use std::path::Path;
 use std::str::FromStr;
 use std::time::Instant;
-use std::{fs, path::Path};
 
 use clap::Parser;
+
 use eggshell::distance::{
     EGraph, TreeNode, min_distance_extract_filtered, min_distance_extract_unit,
 };
