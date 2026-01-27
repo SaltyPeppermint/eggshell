@@ -299,7 +299,7 @@ mod tests {
 
     #[test]
     fn pp_reduce_seq_map_fusion_rhs() {
-        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf (app (typeOf (app (typeOf (app (typeOf reduceSeq (fun (fun ?dt0 (fun ?dt2 ?dt0)) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0)))) (typeOf (lam (typeOf (lam (typeOf (app (typeOf (app (typeOf ?4 (fun ?dt3 (fun ?dt4 ?dt3))) (typeOf %e0 ?dt3)) (fun ?dt4 ?dt3)) (typeOf (app (typeOf ?5 (fun ?dt5 ?dt4)) (typeOf %e0 ?dt5)) ?dt4)) ?dt3)) (fun ?dt6 ?dt7))) (fun ?dt0 (fun ?dt2 ?dt0)))) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0))) (typeOf ?1 ?dt0)) (fun (arrT ?n0 ?dt2) ?dt0)) (typeOf ?3 (arrT ?n0 ?dt2))) ?dt0)".parse().unwrap();
+        let r: RecExpr<ENodeOrVar<Rise>> = "(typeOf (app (typeOf (app (typeOf (app (typeOf reduceSeq (fun (fun ?dt0 (fun ?dt2 ?dt0)) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0)))) (typeOf (lam (typeOf (lam (typeOf (app (typeOf (app (typeOf ?4 (fun ?dt3 (fun ?dt4 ?dt3))) (typeOf $e0 ?dt3)) (fun ?dt4 ?dt3)) (typeOf (app (typeOf ?5 (fun ?dt5 ?dt4)) (typeOf $e0 ?dt5)) ?dt4)) ?dt3)) (fun ?dt6 ?dt7))) (fun ?dt0 (fun ?dt2 ?dt0)))) (fun ?dt0 (fun (arrT ?n0 ?dt2) ?dt0))) (typeOf ?1 ?dt0)) (fun (arrT ?n0 ?dt2) ?dt0)) (typeOf ?3 (arrT ?n0 ?dt2))) ?dt0)".parse().unwrap();
         r.pp(false);
     }
 }

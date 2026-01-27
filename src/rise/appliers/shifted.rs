@@ -185,38 +185,38 @@ mod tests {
             assert_eq!(&a, b);
         }
         check(
-            "(app %e0 %e1)",
-            "(app %e1 %e2)",
+            "(app $e0 $e1)",
+            "(app $e1 $e2)",
             (0, 0, 0, 0, 0),
             (1, 0, 0, 0, 0),
         );
         check(
-            "(typeOf (app %e0 %e1) f32)",
-            "(typeOf (app %e1 %e2) f32)",
+            "(typeOf (app $e0 $e1) f32)",
+            "(typeOf (app $e1 $e2) f32)",
             (0, 0, 0, 0, 0),
             (1, 0, 0, 0, 0),
         );
         check(
-            "(typeOf (app %e0 %e1) f32)",
-            "(typeOf (app %e0 %e2) f32)",
+            "(typeOf (app $e0 $e1) f32)",
+            "(typeOf (app $e0 $e2) f32)",
             (1, 0, 0, 0, 0),
             (1, 0, 0, 0, 0),
         );
         check(
-            "(typeOf (lam (typeOf (app %e0 %e2) f32)) f32)",
-            "(typeOf (lam (typeOf (app %e0 %e3) f32)) f32)",
+            "(typeOf (lam (typeOf (app $e0 $e2) f32)) f32)",
+            "(typeOf (lam (typeOf (app $e0 $e3) f32)) f32)",
             (1, 0, 0, 0, 0),
             (1, 0, 0, 0, 0),
         );
         check(
-            "(typeOf (lam (typeOf (app %e0 %e2) f32)) f32)",
-            "(typeOf (lam (typeOf (app %e0 %e1) f32)) f32)",
+            "(typeOf (lam (typeOf (app $e0 $e2) f32)) f32)",
+            "(typeOf (lam (typeOf (app $e0 $e1) f32)) f32)",
             (1, 0, 0, 0, 0),
             (-1, 0, 0, 0, 0),
         );
         check(
-            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %e3 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %e3 (pairT f32 f32))) f32)) f32))",
-            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf %e5 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf %e5 (pairT f32 f32))) f32)) f32))",
+            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf $e3 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf $e3 (pairT f32 f32))) f32)) f32))",
+            "(lam (typeOf (app (typeOf (app (typeOf mul (fun f32 (fun f32 f32))) (typeOf (app (typeOf fst (fun (pairT f32 f32) f32)) (typeOf $e5 (pairT f32 f32))) f32)) (fun f32 f32)) (typeOf (app (typeOf snd (fun (pairT f32 f32) f32)) (typeOf $e5 (pairT f32 f32))) f32)) f32))",
             (0, 0, 0, 0, 0),
             (2, 0, 0, 0, 0),
         );

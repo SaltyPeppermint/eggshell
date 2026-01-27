@@ -609,7 +609,7 @@ mod tests {
 
     #[test]
     fn n2_only_variable() {
-        let expr: RecExpr<Rise> = "(natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) \"%n2\")))))))".parse().unwrap();
+        let expr: RecExpr<Rise> = "(natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) (natMul (natPow 32n -1n) \"$n2\")))))))".parse().unwrap();
         let _: RationalFunction = expr.try_into().unwrap();
     }
 

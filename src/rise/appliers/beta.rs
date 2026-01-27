@@ -106,22 +106,22 @@ mod tests {
         }
         // (λ. (λ. ((λ. (0 1)) (0 1)))) --> (λ. (λ. ((0 1) 0)))
         // (λ. (0 1)) (0 1) --> (0 1) 0
-        check("(app %e0 %e1)", "(app %e0 %e1)", "(app (app %e0 %e1) %e0)");
-        // r1 = (app (lam (app "%e6" (app "%e5" "%e0"))) "%e0")
-        // r2 = (app (lam (app "%e6" r1)) "%e0")
-        // r3 = (app (lam (app "%e6" r2)) %e0)
-        // (app map (lam (app "%e6" r3)))
-        // --> (app map (lam (app "%e6" (app "%e5" (app "%e4" (app "%e3" (app "%e2" "%e0")))))))
-        check("(app %e6 (app %e5 %e0))", "%e0", "(app %e5 (app %e4 %e0))");
+        check("(app $e0 $e1)", "(app $e0 $e1)", "(app (app $e0 $e1) $e0)");
+        // r1 = (app (lam (app "$e6" (app "$e5" "$e0"))) "$e0")
+        // r2 = (app (lam (app "$e6" r1)) "$e0")
+        // r3 = (app (lam (app "$e6" r2)) $e0)
+        // (app map (lam (app "$e6" r3)))
+        // --> (app map (lam (app "$e6" (app "$e5" (app "$e4" (app "$e3" (app "$e2" "$e0")))))))
+        check("(app $e6 (app $e5 $e0))", "$e0", "(app $e5 (app $e4 $e0))");
         check(
-            "(app %e6 (app %e5 (app %e4 %e0)))",
-            "%e0",
-            "(app %e5 (app %e4 (app %e3 %e0)))",
+            "(app $e6 (app $e5 (app $e4 $e0)))",
+            "$e0",
+            "(app $e5 (app $e4 (app $e3 $e0)))",
         );
         check(
-            "(app %e6 (app %e5 (app %e4 (app %e3 %e0))))",
-            "%e0",
-            "(app %e5 (app %e4 (app %e3 (app %e2 %e0))))",
+            "(app $e6 (app $e5 (app $e4 (app $e3 $e0))))",
+            "$e0",
+            "(app $e5 (app $e4 (app $e3 (app $e2 $e0))))",
         );
     }
 }
