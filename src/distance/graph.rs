@@ -109,10 +109,9 @@ impl<L: Label> EGraph<L> {
     pub fn parse_from_file(file: &Path) -> EGraph<String> {
         let mut graph: EGraph<String> =
             serde_json::from_reader(BufReader::new(File::open(file).unwrap())).unwrap();
+        // Pattern: ..._root_123.json
         let stem = file.file_stem().unwrap().to_str().unwrap();
-        // Pattern: ser_egraph_root_<id>_...
-        let after_root = stem.strip_prefix("ser_egraph_root_").unwrap();
-        let id_str = after_root.split('_').next().unwrap();
+        let id_str = stem.split('_').next_back().unwrap();
         graph.set_root(EClassId::new(id_str.parse().unwrap()));
         graph
     }
