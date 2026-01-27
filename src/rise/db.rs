@@ -59,8 +59,8 @@ impl std::str::FromStr for Index {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let stripped_s = s
-            .strip_prefix("%")
-            .ok_or(IndexError::MissingPercentPrefix(s.to_owned()))?;
+            .strip_prefix("$")
+            .ok_or(IndexError::MissingDollarPrefix(s.to_owned()))?;
         let mut chars = stripped_s.chars();
         let kind = chars
             .next()
@@ -73,7 +73,7 @@ impl std::str::FromStr for Index {
 
 impl fmt::Display for Index {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "%{}{}", self.kind.prefix(), self.value)
+        write!(f, "${}{}", self.kind.prefix(), self.value)
     }
 }
 
@@ -298,8 +298,8 @@ impl fmt::Display for Cutoff {
 
 #[derive(Error, Debug)]
 pub enum IndexError {
-    #[error("Missing % Prefix: {0}")]
-    MissingPercentPrefix(String),
+    #[error("Missing $ Prefix: {0}")]
+    MissingDollarPrefix(String),
     #[error("Improper Tag {0}")]
     ImproperTag(#[from] super::kind::KindError),
     #[error("Missing Tag {0}")]
