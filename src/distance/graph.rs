@@ -11,6 +11,7 @@ use std::io::BufReader;
 use std::path::Path;
 
 use hashbrown::HashMap;
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use super::TreeNode;
@@ -395,22 +396,14 @@ fn min_distance_extract_fast<L: Label, C: EditCosts<L>>(
 ) -> Option<MinEditResult<L>> {
     let ref_preprocessed = PreprocessedTree::new(reference);
 
-    let mut best_tree: Option<TreeNode<L>> = None;
-    let mut best_distance = usize::MAX;
-
-    for tree in TreeIter::new(graph, max_revisits) {
-        let distance = tree_distance_with_ref(&tree, &ref_preprocessed, costs);
-
-        if distance < best_distance {
-            best_distance = distance;
-            best_tree = Some(tree);
-        }
-    }
-
-    best_tree.map(|tree| MinEditResult {
-        tree,
-        distance: best_distance,
-    })
+    TreeIter::new(graph, max_revisits)
+        .par_bridge()
+        .map(|tree| {
+            let distance = tree_distance_with_ref(&tree, &ref_preprocessed, costs);
+            (tree, distance)
+        })
+        .min_by_key(|(_, distance)| *distance)
+        .map(|(tree, distance)| MinEditResult { tree, distance })
 }
 
 /// Statistics from filtered extraction
@@ -1132,11 +1125,11 @@ mod tests {
     #[test]
     fn deserialize_json_file() {
         let graph = EGraph::<String>::parse_from_file(Path::new(
-            "data/rise/egraph_jsons/ser_egraph_root_129_arrayPacking_SRCL_0.json",
+            "data/rise/egraph_jsons/ser_egraph_vectorization_SRL_step_2_iteration_0_root_150.json",
         ));
 
         // Verify root is correct
-        assert_eq!(graph.root().to_index(), 129);
+        assert_eq!(graph.root().to_index(), 150);
 
         // Verify we can access the root class
         let root_class = graph.class(graph.root());

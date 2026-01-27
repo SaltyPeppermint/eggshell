@@ -265,7 +265,7 @@ impl<L: Label> PreprocessedTree<L> {
 }
 
 /// Cost functions for tree edit operations
-pub trait EditCosts<L> {
+pub trait EditCosts<L>: Send + Sync {
     /// Cost of deleting a node with the given label
     fn delete(&self, label: &L) -> usize;
 

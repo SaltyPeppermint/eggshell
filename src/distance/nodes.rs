@@ -6,7 +6,7 @@ use super::ids::{EClassId, NatId, NatOrDTId, TypeId};
 
 /// Trait for node labels
 pub trait Label:
-    Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de>
+    Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de> + Send + Sync
 {
     fn type_of() -> Self;
 
