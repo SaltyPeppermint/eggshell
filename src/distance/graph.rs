@@ -456,14 +456,12 @@ pub fn min_distance_extract_filtered(
         // Skip if lower bound already exceeds best distance
         if lower_bound >= best_distance {
             stats.trees_pruned += 1;
-            eprintln!("SKIPPED");
             continue;
         }
 
         // Compute full distance
         stats.full_comparisons += 1;
         let distance = tree_distance_with_ref(&tree, &ref_preprocessed, &UnitCost);
-        eprintln!("TREE COMPARED");
 
         if distance < best_distance {
             best_distance = distance;
