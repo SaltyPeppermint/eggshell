@@ -312,42 +312,17 @@ impl<L: Label> EGraph<L> {
 
     #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
-        let mut path = PathTracker::new(max_revisits);
-        self.count_trees_from(self.root(), &mut path)
-    }
-
-    /// Count trees rooted at the given class with the current path state.
-    /// Uses recursion with path tracking for cycle handling.
-    fn count_trees_from(&self, id: EClassId, path: &mut PathTracker) -> usize {
-        if !path.can_visit(id) {
-            return 0;
-        }
-
-        let class = self.class(id);
-        path.enter(id);
-
-        let count = class
-            .nodes()
-            .iter()
-            .map(|node| {
-                if node.children().is_empty() {
-                    1
-                } else {
-                    node.children()
-                        .iter()
-                        .map(|c_id| self.count_trees_from(*c_id, path))
-                        .product()
-                }
-            })
-            .sum();
-
-        path.leave(id);
-        count
+        ChoiceIter::new(self, max_revisits).count()
     }
 
     #[must_use]
     pub fn choice_iter(&self, max_revisits: usize) -> ChoiceIter<'_, L> {
         ChoiceIter::new(self, max_revisits)
+    }
+
+    #[must_use]
+    pub fn tree_iter(&self, max_revisits: usize, with_type: bool) -> TreeIter<'_, L> {
+        TreeIter::new(self, max_revisits, with_type)
     }
 
     /// Find the tree with minimum edit distance to the reference tree.
@@ -374,35 +349,13 @@ impl<L: Label> EGraph<L> {
         max_revisits: usize,
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
-        TreeIter::new(self, max_revisits, true)
+        self.tree_iter(max_revisits, true)
             .progress_count(self.count_trees(max_revisits) as u64)
             .map(|tree| {
                 let distance = tree_distance(&tree, reference, costs);
                 (tree, distance)
             })
             .min_by_key(|result| result.1)
-    }
-
-    /// Try to extract a tree, using size difference as a lower bound for pruning.
-    fn try_filtered<C: EditCosts<L>>(
-        &self,
-        choices: &[usize],
-        ref_pp: &PreprocessedTree<L>,
-        running_best: &AtomicUsize,
-        costs: &C,
-    ) -> Option<(TreeNode<L>, usize)> {
-        let tree = self.tree_from_choices(self.root(), choices, true);
-
-        // Fast pruning: size difference is a lower bound on edit distance
-        // (need at least |n1 - n2| insertions or deletions)
-        let size_diff = tree.size().abs_diff(ref_pp.size());
-        if size_diff > running_best.load(Ordering::Relaxed) {
-            return None;
-        }
-
-        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
-        running_best.fetch_min(distance, Ordering::Relaxed);
-        Some((tree, distance))
     }
 
     /// Parallel iteration with preprocessing and pruning optimizations.
@@ -415,7 +368,7 @@ impl<L: Label> EGraph<L> {
         let ref_pp = PreprocessedTree::new(reference);
         let best_distance = AtomicUsize::new(usize::MAX);
 
-        ChoiceIter::new(self, max_revisits)
+        self.choice_iter(max_revisits)
             .par_bridge()
             .progress_count(self.count_trees(max_revisits) as u64)
             .filter_map(|choices| self.try_filtered(&choices, &ref_pp, &best_distance, costs))
@@ -433,7 +386,8 @@ impl<L: Label> EGraph<L> {
         let ref_pp = PreprocessedTree::new(reference);
         let running_best = AtomicUsize::new(usize::MAX);
 
-        let (result, stats) = ChoiceIter::new(self, max_revisits)
+        let (result, stats) = self
+            .choice_iter(max_revisits)
             .par_bridge()
             .progress_count(self.count_trees(max_revisits) as u64)
             .map(|choices| {
@@ -457,6 +411,28 @@ impl<L: Label> EGraph<L> {
             );
 
         (result, stats)
+    }
+
+    /// Try to extract a tree, using size difference as a lower bound for pruning.
+    fn try_filtered<C: EditCosts<L>>(
+        &self,
+        choices: &[usize],
+        ref_pp: &PreprocessedTree<L>,
+        running_best: &AtomicUsize,
+        costs: &C,
+    ) -> Option<(TreeNode<L>, usize)> {
+        let tree = self.tree_from_choices(self.root(), choices, true);
+
+        // Fast pruning: size difference is a lower bound on edit distance
+        // (need at least |n1 - n2| insertions or deletions)
+        let size_diff = tree.size().abs_diff(ref_pp.size());
+        if size_diff > running_best.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
+        running_best.fetch_min(distance, Ordering::Relaxed);
+        Some((tree, distance))
     }
 }
 
@@ -1417,89 +1393,5 @@ mod tests {
             stats.trees_pruned + stats.full_comparisons,
             stats.trees_enumerated
         );
-    }
-
-    #[test]
-    fn count_trees_matches_enumeration() {
-        // Test various graph structures
-        let graphs: Vec<EGraph<String>> = vec![
-            // Single leaf
-            single_node_graph("a"),
-            // OR choice
-            EGraph::new(
-                cfv(vec![EClass::new(
-                    vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
-                    dummy_ty(),
-                )]),
-                eid(0),
-                Vec::new(),
-                HashMap::new(),
-                dummy_nat_nodes(),
-                HashMap::new(),
-            ),
-            // AND children
-            EGraph::new(
-                cfv(vec![
-                    EClass::new(
-                        vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
-                        dummy_ty(),
-                    ),
-                    EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                    EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-                ]),
-                eid(0),
-                Vec::new(),
-                HashMap::new(),
-                dummy_nat_nodes(),
-                HashMap::new(),
-            ),
-            // Nested OR choices (2x2 = 4 trees)
-            EGraph::new(
-                cfv(vec![
-                    EClass::new(
-                        vec![
-                            ENode::new("x".to_owned(), vec![eid(1)]),
-                            ENode::new("y".to_owned(), vec![eid(1)]),
-                        ],
-                        dummy_ty(),
-                    ),
-                    EClass::new(
-                        vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
-                        dummy_ty(),
-                    ),
-                ]),
-                eid(0),
-                Vec::new(),
-                HashMap::new(),
-                dummy_nat_nodes(),
-                HashMap::new(),
-            ),
-            // Cycle with escape
-            EGraph::new(
-                cfv(vec![EClass::new(
-                    vec![
-                        ENode::new("rec".to_owned(), vec![eid(0)]),
-                        ENode::leaf("leaf".to_owned()),
-                    ],
-                    dummy_ty(),
-                )]),
-                eid(0),
-                Vec::new(),
-                HashMap::new(),
-                dummy_nat_nodes(),
-                HashMap::new(),
-            ),
-        ];
-
-        for (i, graph) in graphs.iter().enumerate() {
-            for max_revisits in 0..=2 {
-                let iter_count = TreeIter::new(graph, max_revisits, false).count();
-                let direct_count = graph.count_trees(max_revisits);
-                assert_eq!(
-                    iter_count, direct_count,
-                    "Graph {i}, max_revisits {max_revisits}: iter={iter_count}, direct={direct_count}"
-                );
-            }
-        }
     }
 }
