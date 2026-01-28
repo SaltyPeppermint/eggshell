@@ -312,7 +312,37 @@ impl<L: Label> EGraph<L> {
 
     #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
-        TreeIter::new(self, max_revisits, false).count()
+        let mut path = PathTracker::new(max_revisits);
+        self.count_trees_from(self.root(), &mut path)
+    }
+
+    /// Count trees rooted at the given class with the current path state.
+    /// Uses recursion with path tracking for cycle handling.
+    fn count_trees_from(&self, id: EClassId, path: &mut PathTracker) -> usize {
+        if !path.can_visit(id) {
+            return 0;
+        }
+
+        let class = self.class(id);
+        path.enter(id);
+
+        let count = class
+            .nodes()
+            .iter()
+            .map(|node| {
+                if node.children().is_empty() {
+                    1
+                } else {
+                    node.children()
+                        .iter()
+                        .map(|c_id| self.count_trees_from(*c_id, path))
+                        .product()
+                }
+            })
+            .sum();
+
+        path.leave(id);
+        count
     }
 
     #[must_use]
@@ -1387,5 +1417,89 @@ mod tests {
             stats.trees_pruned + stats.full_comparisons,
             stats.trees_enumerated
         );
+    }
+
+    #[test]
+    fn count_trees_matches_enumeration() {
+        // Test various graph structures
+        let graphs: Vec<EGraph<String>> = vec![
+            // Single leaf
+            single_node_graph("a"),
+            // OR choice
+            EGraph::new(
+                cfv(vec![EClass::new(
+                    vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
+                    dummy_ty(),
+                )]),
+                eid(0),
+                Vec::new(),
+                HashMap::new(),
+                dummy_nat_nodes(),
+                HashMap::new(),
+            ),
+            // AND children
+            EGraph::new(
+                cfv(vec![
+                    EClass::new(
+                        vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
+                        dummy_ty(),
+                    ),
+                    EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
+                    EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
+                ]),
+                eid(0),
+                Vec::new(),
+                HashMap::new(),
+                dummy_nat_nodes(),
+                HashMap::new(),
+            ),
+            // Nested OR choices (2x2 = 4 trees)
+            EGraph::new(
+                cfv(vec![
+                    EClass::new(
+                        vec![
+                            ENode::new("x".to_owned(), vec![eid(1)]),
+                            ENode::new("y".to_owned(), vec![eid(1)]),
+                        ],
+                        dummy_ty(),
+                    ),
+                    EClass::new(
+                        vec![ENode::leaf("a".to_owned()), ENode::leaf("b".to_owned())],
+                        dummy_ty(),
+                    ),
+                ]),
+                eid(0),
+                Vec::new(),
+                HashMap::new(),
+                dummy_nat_nodes(),
+                HashMap::new(),
+            ),
+            // Cycle with escape
+            EGraph::new(
+                cfv(vec![EClass::new(
+                    vec![
+                        ENode::new("rec".to_owned(), vec![eid(0)]),
+                        ENode::leaf("leaf".to_owned()),
+                    ],
+                    dummy_ty(),
+                )]),
+                eid(0),
+                Vec::new(),
+                HashMap::new(),
+                dummy_nat_nodes(),
+                HashMap::new(),
+            ),
+        ];
+
+        for (i, graph) in graphs.iter().enumerate() {
+            for max_revisits in 0..=2 {
+                let iter_count = TreeIter::new(graph, max_revisits, false).count();
+                let direct_count = graph.count_trees(max_revisits);
+                assert_eq!(
+                    iter_count, direct_count,
+                    "Graph {i}, max_revisits {max_revisits}: iter={iter_count}, direct={direct_count}"
+                );
+            }
+        }
     }
 }
