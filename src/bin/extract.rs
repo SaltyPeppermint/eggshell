@@ -58,7 +58,7 @@ fn main() {
         })
         .unwrap_or_else(|| panic!("No tree with name {} found", args.ref_name));
 
-    let ref_node_count = ref_tree.node_count();
+    let ref_node_count = ref_tree.size();
     println!("  Reference tree has {ref_node_count} nodes");
 
     // Count trees in the e-graph
