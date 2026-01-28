@@ -359,18 +359,15 @@ impl<L: Label> EGraph<L> {
         running_best: &AtomicUsize,
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
+        let tree = self.tree_from_choices(self.root(), choices, true);
+
         // Fast pruning: size difference is a lower bound on edit distance
         // (need at least |n1 - n2| insertions or deletions)
-        let candidate_size = choices.len();
-        let ref_size = ref_pp.size();
-        let size_diff = candidate_size.abs_diff(ref_size);
-
-        // If size difference alone exceeds best known distance, skip entirely
+        let size_diff = tree.size().abs_diff(ref_pp.size());
         if size_diff > running_best.load(Ordering::Relaxed) {
             return None;
         }
 
-        let tree = self.tree_from_choices(self.root(), choices, true);
         let distance = tree_distance_with_ref(&tree, ref_pp, costs);
         running_best.fetch_min(distance, Ordering::Relaxed);
         Some((tree, distance))

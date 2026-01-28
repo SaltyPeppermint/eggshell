@@ -114,8 +114,8 @@ impl<L: Label> TreeNode<L> {
     }
 
     /// Count total number of nodes in this tree.
-    pub fn node_count(&self) -> usize {
-        1 + self.children.iter().map(Self::node_count).sum::<usize>()
+    pub fn size(&self) -> usize {
+        1 + self.children.iter().map(Self::size).sum::<usize>()
     }
 }
 
