@@ -19,9 +19,7 @@ use super::ids::{
     DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::tree::{
-    EditCosts, PreprocessedTree, TreeNode, UnitCost, tree_distance, tree_distance_with_ref,
-};
+use super::tree::{EditCosts, PreprocessedTree, TreeNode, tree_distance, tree_distance_with_ref};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -351,25 +349,29 @@ impl<L: Label> EGraph<L> {
             .min_by_key(|result| result.1)
     }
 
-    /// Try to extract a tree, using untyped distance as a lower bound for pruning.
+    /// Try to extract a tree, using size difference as a lower bound for pruning.
     fn try_filtered<C: EditCosts<L>>(
         &self,
         choices: &[usize],
         ref_pp: &PreprocessedTree<L>,
-        ref_untyped_pp: &PreprocessedTree<L>,
-        best_untyped_distance: &AtomicUsize,
+        running_best: &AtomicUsize,
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
-        let untyped_tree = self.tree_from_choices(self.root(), choices, false);
-        let untyped_distance = tree_distance_with_ref(&untyped_tree, ref_untyped_pp, &UnitCost);
+        // Fast pruning: size difference is a lower bound on edit distance
+        // (need at least |n1 - n2| insertions or deletions)
+        let candidate_size = choices.len();
+        let ref_size = ref_pp.size();
+        let size_diff = candidate_size.abs_diff(ref_size);
 
-        if untyped_distance <= best_untyped_distance.fetch_min(untyped_distance, Ordering::Relaxed)
-        {
-            let tree = self.tree_from_choices(self.root(), choices, true);
-            let distance = tree_distance_with_ref(&tree, ref_pp, costs);
-            return Some((tree, distance));
+        // If size difference alone exceeds best known distance, skip entirely
+        if size_diff > running_best.load(Ordering::Relaxed) {
+            return None;
         }
-        None
+
+        let tree = self.tree_from_choices(self.root(), choices, true);
+        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
+        running_best.fetch_min(distance, Ordering::Relaxed);
+        Some((tree, distance))
     }
 
     /// Parallel iteration with preprocessing and pruning optimizations.
@@ -380,20 +382,11 @@ impl<L: Label> EGraph<L> {
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
         let ref_pp = PreprocessedTree::new(reference);
-        let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
-        let best_untyped_distance = AtomicUsize::new(usize::MAX);
+        let best_distance = AtomicUsize::new(usize::MAX);
 
         ChoiceIter::new(self, max_revisits)
             .par_bridge()
-            .filter_map(|choices| {
-                self.try_filtered(
-                    &choices,
-                    &ref_pp,
-                    &ref_untyped_pp,
-                    &best_untyped_distance,
-                    costs,
-                )
-            })
+            .filter_map(|choices| self.try_filtered(&choices, &ref_pp, &best_distance, costs))
             .min_by_key(|(_, distance)| *distance)
     }
 
@@ -406,20 +399,12 @@ impl<L: Label> EGraph<L> {
         costs: &C,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
         let ref_pp = PreprocessedTree::new(reference);
-        let ref_untyped_pp = PreprocessedTree::new(&reference.strip_types());
-
-        let best_untyped_distance = AtomicUsize::new(usize::MAX);
+        let running_best = AtomicUsize::new(usize::MAX);
 
         let (result, stats) = ChoiceIter::new(self, max_revisits)
             .par_bridge()
             .map(|choices| {
-                let result = self.try_filtered(
-                    &choices,
-                    &ref_pp,
-                    &ref_untyped_pp,
-                    &best_untyped_distance,
-                    costs,
-                );
+                let result = self.try_filtered(&choices, &ref_pp, &running_best, costs);
                 let stats = if result.is_some() {
                     ExtractionStats::compared()
                 } else {
@@ -599,6 +584,7 @@ impl std::ops::Add for ExtractionStats {
 mod tests {
 
     use crate::distance::ids::NumericId;
+    use crate::distance::tree::UnitCost;
 
     use super::*;
 
