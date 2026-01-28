@@ -12,6 +12,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hashbrown::HashMap;
+use indicatif::{ParallelProgressIterator, ProgressIterator};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -344,6 +345,7 @@ impl<L: Label> EGraph<L> {
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
         TreeIter::new(self, max_revisits, true)
+            .progress_count(self.count_trees(max_revisits) as u64)
             .map(|tree| {
                 let distance = tree_distance(&tree, reference, costs);
                 (tree, distance)
@@ -385,6 +387,7 @@ impl<L: Label> EGraph<L> {
 
         ChoiceIter::new(self, max_revisits)
             .par_bridge()
+            .progress_count(self.count_trees(max_revisits) as u64)
             .filter_map(|choices| self.try_filtered(&choices, &ref_pp, &best_distance, costs))
             .min_by_key(|(_, distance)| *distance)
     }
@@ -402,6 +405,7 @@ impl<L: Label> EGraph<L> {
 
         let (result, stats) = ChoiceIter::new(self, max_revisits)
             .par_bridge()
+            .progress_count(self.count_trees(max_revisits) as u64)
             .map(|choices| {
                 let result = self.try_filtered(&choices, &ref_pp, &running_best, costs);
                 let stats = if result.is_some() {
