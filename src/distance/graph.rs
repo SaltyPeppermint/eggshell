@@ -197,9 +197,10 @@ impl<L: Label> EGraph<L> {
             if let Some((children, curr_idx)) = result {
                 path.leave(id);
                 let eclass_tree = if with_type {
-                    let expr_tree = TreeNode::new(node.label().clone(), children);
+                    let mut expr_tree = TreeNode::new(node.label().clone(), children);
                     let type_tree = TreeNode::from_eclass(self, id);
-                    TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
+                    expr_tree.children_mut().push(type_tree);
+                    expr_tree
                 } else {
                     TreeNode::new(node.label().clone(), children)
                 };
@@ -293,9 +294,10 @@ impl<L: Label> EGraph<L> {
         );
 
         let eclass_tree = if with_type {
-            let expr_tree = TreeNode::new(node.label().clone(), children);
+            let mut expr_tree = TreeNode::new(node.label().clone(), children);
             let type_tree = TreeNode::from_eclass(self, id);
-            TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
+            expr_tree.children_mut().push(type_tree);
+            expr_tree
         } else {
             TreeNode::new(node.label().clone(), children)
         };
@@ -642,10 +644,10 @@ mod tests {
         let trees = graph.enumerate_trees(0, true);
 
         assert_eq!(trees.len(), 1);
-        // Trees are now wrapped: typeOf(expr_tree, type_tree)
-        assert_eq!(trees[0].label(), "typeOf");
-        assert_eq!(trees[0].children().len(), 2);
-        assert_eq!(trees[0].children()[0].label(), "a");
+        // Type is now pushed as last child: a(type)
+        assert_eq!(trees[0].label(), "a");
+        assert_eq!(trees[0].children().len(), 1); // just the type
+        assert_eq!(trees[0].children()[0].label(), "0"); // dummy nat type
     }
 
     #[test]
@@ -666,11 +668,8 @@ mod tests {
         let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 2);
 
-        // Extract expr labels from typeOf(expr, type) wrapper
-        let labels: Vec<_> = trees
-            .iter()
-            .map(|t| t.children()[0].label().as_str())
-            .collect();
+        // Extract expr labels directly (type is last child, not wrapper)
+        let labels: Vec<_> = trees.iter().map(|t| t.label().as_str()).collect();
         assert!(labels.contains(&"a"));
         assert!(labels.contains(&"b"));
     }
@@ -699,13 +698,14 @@ mod tests {
 
         let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 1);
-        // Root is typeOf(expr, type), expr is "a" with children that are also typeOf wrapped
-        let expr = &trees[0].children()[0];
+        // Root is "a" with children [b(...), c(...), type]
+        let expr = &trees[0];
         assert_eq!(expr.label(), "a");
-        assert_eq!(expr.children().len(), 2);
-        // Children are typeOf(b, type) and typeOf(c, type)
-        assert_eq!(expr.children()[0].children()[0].label(), "b");
-        assert_eq!(expr.children()[1].children()[0].label(), "c");
+        assert_eq!(expr.children().len(), 3); // b, c, type
+        // Children are b(type) and c(type), last child is a's type
+        assert_eq!(expr.children()[0].label(), "b");
+        assert_eq!(expr.children()[1].label(), "c");
+        assert_eq!(expr.children()[2].label(), "0"); // a's type
     }
 
     #[test]
@@ -729,7 +729,7 @@ mod tests {
         // With 0 revisits, we can only take the leaf option
         let trees = graph.enumerate_trees(0, true);
         assert_eq!(trees.len(), 1);
-        assert_eq!(trees[0].children()[0].label(), "leaf");
+        assert_eq!(trees[0].label(), "leaf");
     }
 
     #[test]
@@ -758,10 +758,10 @@ mod tests {
         // Let's verify we get more trees than with 0 revisits
         assert!(trees.len() > 1);
 
-        // Check that we have the recursive structure (expr part of typeOf wrapper)
+        // Check that we have the recursive structure (type is last child now)
         let has_recursive = trees
             .iter()
-            .any(|t| t.children()[0].label() == "rec" && !t.children()[0].children().is_empty());
+            .any(|t| t.label() == "rec" && t.children().len() > 1);
         assert!(has_recursive);
     }
 
@@ -784,24 +784,14 @@ mod tests {
             HashMap::new(),
         );
 
-        // Reference must match the typeOf wrapper structure
+        // Reference: type is now last child of each node
+        // a(b(type_b), c(type_c), type_a)
         let reference = node(
-            "typeOf".to_owned(),
+            "a".to_owned(),
             vec![
-                node(
-                    "a".to_owned(),
-                    vec![
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                        ),
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("c".to_owned()), leaf("0".to_owned())],
-                        ),
-                    ],
-                ),
-                leaf("0".to_owned()), // type tree (dummy nat)
+                node("b".to_owned(), vec![leaf("0".to_owned())]),
+                node("c".to_owned(), vec![leaf("0".to_owned())]),
+                leaf("0".to_owned()), // a's type
             ],
         );
         let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
@@ -825,15 +815,12 @@ mod tests {
             HashMap::new(),
         );
 
-        // Reference must match typeOf wrapper
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
+        // Reference: a(type)
+        let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
         let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(result.1, 0);
-        assert_eq!(result.0.children()[0].label(), "a");
+        assert_eq!(result.0.label(), "a");
     }
 
     #[test]
@@ -862,25 +849,19 @@ mod tests {
             HashMap::new(),
         );
 
-        // Reference with typeOf wrapper: typeOf(a(typeOf(b, 0)), 0)
+        // Reference: a(b(type_b), type_a)
         let reference = node(
-            "typeOf".to_owned(),
+            "a".to_owned(),
             vec![
-                node(
-                    "a".to_owned(),
-                    vec![node(
-                        "typeOf".to_owned(),
-                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                    )],
-                ),
-                leaf("0".to_owned()),
+                node("b".to_owned(), vec![leaf("0".to_owned())]),
+                leaf("0".to_owned()), // a's type
             ],
         );
         let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
 
         assert_eq!(result.1, 0);
-        // The expr part of typeOf wrapper should have 1 child
-        assert_eq!(result.0.children()[0].children().len(), 1);
+        // a should have 2 children: b(...) and type
+        assert_eq!(result.0.children().len(), 2);
     }
 
     #[test]
@@ -890,9 +871,10 @@ mod tests {
 
         let tree = graph.tree_from_choices(eid(0), &choices, true);
 
-        // typeOf wrapper
-        assert_eq!(tree.label(), "typeOf");
-        assert_eq!(tree.children()[0].label(), "a");
+        // type is last child
+        assert_eq!(tree.label(), "a");
+        assert_eq!(tree.children().len(), 1);
+        assert_eq!(tree.children()[0].label(), "0"); // type
     }
 
     #[test]
@@ -913,7 +895,7 @@ mod tests {
         let choices = vec![0];
         let tree = graph.tree_from_choices(eid(0), &choices, true);
 
-        assert_eq!(tree.children()[0].label(), "a");
+        assert_eq!(tree.label(), "a");
     }
 
     #[test]
@@ -934,7 +916,7 @@ mod tests {
         let choices = vec![1];
         let tree = graph.tree_from_choices(eid(0), &choices, true);
 
-        assert_eq!(tree.children()[0].label(), "b");
+        assert_eq!(tree.label(), "b");
     }
 
     #[test]
@@ -959,13 +941,12 @@ mod tests {
         let choices = vec![0, 0, 0];
         let tree = graph.tree_from_choices(eid(0), &choices, true);
 
-        // typeOf(a(...), type)
-        let expr = &tree.children()[0];
-        assert_eq!(expr.label(), "a");
-        assert_eq!(expr.children().len(), 2);
-        // Children are typeOf wrapped
-        assert_eq!(expr.children()[0].children()[0].label(), "b");
-        assert_eq!(expr.children()[1].children()[0].label(), "c");
+        // a(b(...), c(...), type)
+        assert_eq!(tree.label(), "a");
+        assert_eq!(tree.children().len(), 3); // b, c, type
+        assert_eq!(tree.children()[0].label(), "b");
+        assert_eq!(tree.children()[1].label(), "c");
+        assert_eq!(tree.children()[2].label(), "0"); // a's type
     }
 
     #[test]
@@ -996,29 +977,29 @@ mod tests {
             HashMap::new(),
         );
 
-        // Test x(a) - expr part of wrapper
+        // Test x(a(...), type) - structure is now x(a(type_a), type_x)
         let choices1 = vec![0, 0];
         let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
-        assert_eq!(tree1.children()[0].label(), "x");
-        assert_eq!(tree1.children()[0].children()[0].children()[0].label(), "a");
+        assert_eq!(tree1.label(), "x");
+        assert_eq!(tree1.children()[0].label(), "a"); // first child is a
 
         // Test x(b)
         let choices2 = vec![0, 1];
         let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
-        assert_eq!(tree2.children()[0].label(), "x");
-        assert_eq!(tree2.children()[0].children()[0].children()[0].label(), "b");
+        assert_eq!(tree2.label(), "x");
+        assert_eq!(tree2.children()[0].label(), "b");
 
         // Test y(a)
         let choices3 = vec![1, 0];
         let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
-        assert_eq!(tree3.children()[0].label(), "y");
-        assert_eq!(tree3.children()[0].children()[0].children()[0].label(), "a");
+        assert_eq!(tree3.label(), "y");
+        assert_eq!(tree3.children()[0].label(), "a");
 
         // Test y(b)
         let choices4 = vec![1, 1];
         let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
-        assert_eq!(tree4.children()[0].label(), "y");
-        assert_eq!(tree4.children()[0].children()[0].children()[0].label(), "b");
+        assert_eq!(tree4.label(), "y");
+        assert_eq!(tree4.children()[0].label(), "b");
     }
 
     #[test]
@@ -1049,37 +1030,33 @@ mod tests {
             HashMap::new(),
         );
 
-        // Test p(a, x) - check expr children (which are typeOf wrapped)
+        // Test p(a, x, type) - structure is p(a(...), x(...), type_p)
         let choices1 = vec![0, 0, 0];
         let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
-        let expr1 = &tree1.children()[0];
-        assert_eq!(expr1.label(), "p");
-        assert_eq!(expr1.children()[0].children()[0].label(), "a");
-        assert_eq!(expr1.children()[1].children()[0].label(), "x");
+        assert_eq!(tree1.label(), "p");
+        assert_eq!(tree1.children()[0].label(), "a");
+        assert_eq!(tree1.children()[1].label(), "x");
 
         // Test p(a, y)
         let choices2 = vec![0, 0, 1];
         let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
-        let expr2 = &tree2.children()[0];
-        assert_eq!(expr2.label(), "p");
-        assert_eq!(expr2.children()[0].children()[0].label(), "a");
-        assert_eq!(expr2.children()[1].children()[0].label(), "y");
+        assert_eq!(tree2.label(), "p");
+        assert_eq!(tree2.children()[0].label(), "a");
+        assert_eq!(tree2.children()[1].label(), "y");
 
         // Test p(b, x)
         let choices3 = vec![0, 1, 0];
         let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
-        let expr3 = &tree3.children()[0];
-        assert_eq!(expr3.label(), "p");
-        assert_eq!(expr3.children()[0].children()[0].label(), "b");
-        assert_eq!(expr3.children()[1].children()[0].label(), "x");
+        assert_eq!(tree3.label(), "p");
+        assert_eq!(tree3.children()[0].label(), "b");
+        assert_eq!(tree3.children()[1].label(), "x");
 
         // Test p(b, y)
         let choices4 = vec![0, 1, 1];
         let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
-        let expr4 = &tree4.children()[0];
-        assert_eq!(expr4.label(), "p");
-        assert_eq!(expr4.children()[0].children()[0].label(), "b");
-        assert_eq!(expr4.children()[1].children()[0].label(), "y");
+        assert_eq!(tree4.label(), "p");
+        assert_eq!(tree4.children()[0].label(), "b");
+        assert_eq!(tree4.children()[1].label(), "y");
     }
 
     #[test]
@@ -1110,41 +1087,35 @@ mod tests {
             HashMap::new(),
         );
 
-        // Test a(b1(c1)) - navigate through typeOf wrappers
+        // Test a(b1(c1(...), type_b1), type_a)
         let choices1 = vec![0, 0, 0];
         let tree1 = graph.tree_from_choices(eid(0), &choices1, true);
-        let expr1 = &tree1.children()[0]; // a
-        assert_eq!(expr1.label(), "a");
-        let b1 = &expr1.children()[0].children()[0]; // typeOf -> b1
+        assert_eq!(tree1.label(), "a");
+        let b1 = &tree1.children()[0]; // first child is b1
         assert_eq!(b1.label(), "b1");
-        let c1 = &b1.children()[0].children()[0]; // typeOf -> c1
+        let c1 = &b1.children()[0]; // first child of b1 is c1
         assert_eq!(c1.label(), "c1");
 
         // Test a(b1(c2))
         let choices2 = vec![0, 0, 1];
         let tree2 = graph.tree_from_choices(eid(0), &choices2, true);
-        let expr2 = &tree2.children()[0];
-        let b1_2 = &expr2.children()[0].children()[0];
-        let c2 = &b1_2.children()[0].children()[0];
-        assert_eq!(c2.label(), "c2");
+        assert_eq!(tree2.label(), "a");
+        assert_eq!(tree2.children()[0].label(), "b1");
+        assert_eq!(tree2.children()[0].children()[0].label(), "c2");
 
         // Test a(b2(c1))
         let choices3 = vec![0, 1, 0];
         let tree3 = graph.tree_from_choices(eid(0), &choices3, true);
-        let expr3 = &tree3.children()[0];
-        let b2 = &expr3.children()[0].children()[0];
-        assert_eq!(b2.label(), "b2");
-        let c1_3 = &b2.children()[0].children()[0];
-        assert_eq!(c1_3.label(), "c1");
+        assert_eq!(tree3.label(), "a");
+        assert_eq!(tree3.children()[0].label(), "b2");
+        assert_eq!(tree3.children()[0].children()[0].label(), "c1");
 
         // Test a(b2(c2))
         let choices4 = vec![0, 1, 1];
         let tree4 = graph.tree_from_choices(eid(0), &choices4, true);
-        let expr4 = &tree4.children()[0];
-        let b2_4 = &expr4.children()[0].children()[0];
-        assert_eq!(b2_4.label(), "b2");
-        let c2_4 = &b2_4.children()[0].children()[0];
-        assert_eq!(c2_4.label(), "c2");
+        assert_eq!(tree4.label(), "a");
+        assert_eq!(tree4.children()[0].label(), "b2");
+        assert_eq!(tree4.children()[0].children()[0].label(), "c2");
     }
 
     #[test]
@@ -1170,13 +1141,12 @@ mod tests {
         let choices = vec![0, 0, 0, 0];
         let tree = graph.tree_from_choices(eid(0), &choices, true);
 
-        let expr = &tree.children()[0];
-        assert_eq!(expr.label(), "f");
-        assert_eq!(expr.children().len(), 3);
-        // Children are typeOf wrapped
-        assert_eq!(expr.children()[0].children()[0].label(), "a");
-        assert_eq!(expr.children()[1].children()[0].label(), "b");
-        assert_eq!(expr.children()[2].children()[0].label(), "c");
+        assert_eq!(tree.label(), "f");
+        assert_eq!(tree.children().len(), 4); // a, b, c, type
+        assert_eq!(tree.children()[0].label(), "a");
+        assert_eq!(tree.children()[1].label(), "b");
+        assert_eq!(tree.children()[2].label(), "c");
+        assert_eq!(tree.children()[3].label(), "0"); // f's type
     }
 
     #[test]
@@ -1272,23 +1242,12 @@ mod tests {
             HashMap::new(),
         );
 
-        // Reference must match the typeOf wrapper structure
+        // Reference: type is last child of each node
         let reference = node(
-            "typeOf".to_owned(),
+            "a".to_owned(),
             vec![
-                node(
-                    "a".to_owned(),
-                    vec![
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                        ),
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("c".to_owned()), leaf("0".to_owned())],
-                        ),
-                    ],
-                ),
+                node("b".to_owned(), vec![leaf("0".to_owned())]),
+                node("c".to_owned(), vec![leaf("0".to_owned())]),
                 leaf("0".to_owned()),
             ],
         );
@@ -1312,15 +1271,12 @@ mod tests {
             HashMap::new(),
         );
 
-        // Reference is "a", so should choose "a" with distance 0
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
+        // Reference: a(type)
+        let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
 
         let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
         assert_eq!(result.1, 0);
-        assert_eq!(result.0.children()[0].label(), "a");
+        assert_eq!(result.0.label(), "a");
     }
 
     #[test]
@@ -1345,16 +1301,11 @@ mod tests {
             HashMap::new(),
         );
 
+        // Reference: a(b(type_b), type_a)
         let reference = node(
-            "typeOf".to_owned(),
+            "a".to_owned(),
             vec![
-                node(
-                    "a".to_owned(),
-                    vec![node(
-                        "typeOf".to_owned(),
-                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                    )],
-                ),
+                node("b".to_owned(), vec![leaf("0".to_owned())]),
                 leaf("0".to_owned()),
             ],
         );
@@ -1387,16 +1338,11 @@ mod tests {
             HashMap::new(),
         );
 
+        // Reference: a(b(type_b), type_a)
         let reference = node(
-            "typeOf".to_owned(),
+            "a".to_owned(),
             vec![
-                node(
-                    "a".to_owned(),
-                    vec![node(
-                        "typeOf".to_owned(),
-                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                    )],
-                ),
+                node("b".to_owned(), vec![leaf("0".to_owned())]),
                 leaf("0".to_owned()),
             ],
         );
@@ -1412,8 +1358,8 @@ mod tests {
     #[test]
     fn min_distance_extract_filtered_prunes_bad_trees() {
         // Create a graph where one option is clearly worse
-        // Option 1: typeOf(a, 0) - matches reference exactly
-        // Option 2: typeOf(x, 0) - has different label, lower bound >= 1
+        // Option 1: a(type) - matches reference exactly
+        // Option 2: x(type) - has different label, lower bound >= 1
         let graph = EGraph::new(
             cfv(vec![EClass::new(
                 vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
@@ -1426,10 +1372,8 @@ mod tests {
             HashMap::new(),
         );
 
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
+        // Reference: a(type)
+        let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
 
         let (result, stats) = graph.find_min_filtered(&reference, 0, &UnitCost);
 
