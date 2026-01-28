@@ -324,82 +324,89 @@ pub fn tree_distance_preprocessed<L: Label, C: EditCosts<L>>(
         return (0..n1).map(|i| costs.delete(t1.label(i))).sum();
     }
 
-    // Tree distance matrix (permanent)
-    let mut td = vec![vec![0; n2]; n1];
+    // Tree distance matrix (permanent) - flat for cache locality
+    // td[i, j] accessed as td[i * n2 + j]
+    let mut td = vec![0usize; n1 * n2];
 
     // Forest distance matrix (temporary, reused for each keyroot pair)
-    // We need indices from -1, so we use size+1 and offset by 1
-    let mut fd = vec![vec![0; n2 + 1]; n1 + 1];
+    // fd[x, y] accessed as fd[x * fd_stride + y]
+    let fd_stride = n2 + 1;
+    let mut fd = vec![0usize; (n1 + 1) * fd_stride];
 
     // Compute tree distance for each pair of keyroots
     for &i in t1.keyroots() {
         for &j in t2.keyroots() {
-            compute_forest_distance(t1, t2, i, j, &mut td, &mut fd, costs);
+            compute_forest_distance(t1, t2, i, j, &mut td, n2, &mut fd, fd_stride, costs);
         }
     }
 
     // The final answer is the distance between the full trees
-    td[n1 - 1][n2 - 1]
+    td[(n1 - 1) * n2 + (n2 - 1)]
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_forest_distance<L: Label, C: EditCosts<L>>(
     t1: &PreprocessedTree<L>,
     t2: &PreprocessedTree<L>,
     i: usize,
     j: usize,
-    td: &mut [Vec<usize>],
-    fd: &mut [Vec<usize>],
+    td: &mut [usize],
+    td_stride: usize,
+    fd: &mut [usize],
+    fd_stride: usize,
     costs: &C,
 ) {
     let l1 = t1.leftmost_leaf(i);
     let l2 = t2.leftmost_leaf(j);
 
-    // fd[x][y] represents the forest distance between:
+    // fd[x_idx, y_idx] represents the forest distance between:
     // - forest of t1 from l1 to x-1 (using 1-based indexing offset)
     // - forest of t2 from l2 to y-1
-    // fd[0][0] = 0 (empty forests)
+    // fd[0, 0] = 0 (empty forests)
 
     // Initialize: deleting all nodes from t1's forest
-    fd[0][0] = 0;
+    fd[0] = 0;
     for x in l1..=i {
         let x_idx = x - l1 + 1;
-        fd[x_idx][0] = fd[x_idx - 1][0] + costs.delete(t1.label(x));
+        fd[x_idx * fd_stride] = fd[(x_idx - 1) * fd_stride] + costs.delete(t1.label(x));
     }
 
     // Initialize: inserting all nodes into empty forest from t2
     for y in l2..=j {
         let y_idx = y - l2 + 1;
-        fd[0][y_idx] = fd[0][y_idx - 1] + costs.insert(t2.label(y));
+        fd[y_idx] = fd[y_idx - 1] + costs.insert(t2.label(y));
     }
 
     // Fill in the forest distance matrix
     // Note: we intentionally use x and y as indices into td, as td stores
     // tree distances for all node pairs using their postorder indices
-    #[allow(clippy::needless_range_loop)]
     for x in l1..=i {
         let x_idx = x - l1 + 1;
         let lx = t1.leftmost_leaf(x);
+        let fd_row = x_idx * fd_stride;
+        let fd_prev_row = (x_idx - 1) * fd_stride;
 
         for y in l2..=j {
             let y_idx = y - l2 + 1;
             let ly = t2.leftmost_leaf(y);
 
-            let delete_cost = fd[x_idx - 1][y_idx] + costs.delete(t1.label(x));
-            let insert_cost = fd[x_idx][y_idx - 1] + costs.insert(t2.label(y));
+            let delete_cost = fd[fd_prev_row + y_idx] + costs.delete(t1.label(x));
+            let insert_cost = fd[fd_row + y_idx - 1] + costs.insert(t2.label(y));
 
             if lx == l1 && ly == l2 {
                 // Both x and y have their leftmost leaves at the start of this subproblem,
                 // meaning we're computing the full subtree distance for (x, y)
                 let relabel_cost =
-                    fd[x_idx - 1][y_idx - 1] + costs.relabel(t1.label(x), t2.label(y));
-                fd[x_idx][y_idx] = delete_cost.min(insert_cost).min(relabel_cost);
+                    fd[fd_prev_row + y_idx - 1] + costs.relabel(t1.label(x), t2.label(y));
+                let dist = delete_cost.min(insert_cost).min(relabel_cost);
+                fd[fd_row + y_idx] = dist;
                 // Store in permanent tree distance matrix
-                td[x][y] = fd[x_idx][y_idx];
+                td[x * td_stride + y] = dist;
             } else {
                 // At least one of x or y has its leftmost leaf before the start of this
                 // subproblem, so we need to use the previously computed tree distance
-                let match_cost = fd[lx - l1][ly - l2] + td[x][y];
-                fd[x_idx][y_idx] = delete_cost.min(insert_cost).min(match_cost);
+                let match_cost = fd[(lx - l1) * fd_stride + (ly - l2)] + td[x * td_stride + y];
+                fd[fd_row + y_idx] = delete_cost.min(insert_cost).min(match_cost);
             }
         }
     }
