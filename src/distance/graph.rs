@@ -20,7 +20,9 @@ use super::ids::{
     DataTyId, EClassId, FunTyId, NatId, NumericId, TypeId, eclass_id_vec, numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::tree::{EditCosts, PreprocessedTree, TreeNode, tree_distance, tree_distance_with_ref};
+use super::str::EulerString;
+use super::tree::TreeNode;
+use super::zs::{EditCosts, PreprocessedTree, tree_distance, tree_distance_with_ref};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -366,12 +368,16 @@ impl<L: Label> EGraph<L> {
         costs: &C,
     ) -> Option<(TreeNode<L>, usize)> {
         let ref_pp = PreprocessedTree::new(reference);
+        let ref_euler = EulerString::new(reference);
         let best_distance = AtomicUsize::new(usize::MAX);
 
         self.choice_iter(max_revisits)
             .par_bridge()
             .progress_count(self.count_trees(max_revisits) as u64)
-            .filter_map(|choices| self.try_filtered(&choices, &ref_pp, &best_distance, costs))
+            .filter_map(|choices| {
+                self.try_filtered(&choices, &ref_pp, &ref_euler, &best_distance, costs)
+                    .0
+            })
             .min_by_key(|(_, distance)| *distance)
     }
 
@@ -384,6 +390,7 @@ impl<L: Label> EGraph<L> {
         costs: &C,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
         let ref_pp = PreprocessedTree::new(reference);
+        let ref_euler = EulerString::new(reference);
         let running_best = AtomicUsize::new(usize::MAX);
 
         let (result, stats) = self
@@ -391,12 +398,9 @@ impl<L: Label> EGraph<L> {
             .par_bridge()
             .progress_count(self.count_trees(max_revisits) as u64)
             .map(|choices| {
-                let result = self.try_filtered(&choices, &ref_pp, &running_best, costs);
-                let stats = if result.is_some() {
-                    ExtractionStats::compared()
-                } else {
-                    ExtractionStats::pruned()
-                };
+                let (result, stats) =
+                    self.try_filtered(&choices, &ref_pp, &ref_euler, &running_best, costs);
+
                 (result, stats)
             })
             .reduce(
@@ -413,26 +417,35 @@ impl<L: Label> EGraph<L> {
         (result, stats)
     }
 
-    /// Try to extract a tree, using size difference as a lower bound for pruning.
+    /// Try to extract a tree, using heuristics as lower bounds for pruning.
     fn try_filtered<C: EditCosts<L>>(
         &self,
         choices: &[usize],
         ref_pp: &PreprocessedTree<L>,
+        ref_euler: &EulerString<L>,
         running_best: &AtomicUsize,
         costs: &C,
-    ) -> Option<(TreeNode<L>, usize)> {
+    ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
         let tree = self.tree_from_choices(self.root(), choices, true);
+        let best = running_best.load(Ordering::Relaxed);
 
         // Fast pruning: size difference is a lower bound on edit distance
         // (need at least |n1 - n2| insertions or deletions)
         let size_diff = tree.size().abs_diff(ref_pp.size());
-        if size_diff > running_best.load(Ordering::Relaxed) {
-            return None;
+        if size_diff > best {
+            return (None, ExtractionStats::size_pruned());
+        }
+
+        // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
+        // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
+        let euler_lb = ref_euler.lower_bound(&tree, costs);
+        if euler_lb > best {
+            return (None, ExtractionStats::euler_pruned());
         }
 
         let distance = tree_distance_with_ref(&tree, ref_pp, costs);
         running_best.fetch_min(distance, Ordering::Relaxed);
-        Some((tree, distance))
+        (Some((tree, distance)), ExtractionStats::compared())
     }
 }
 
@@ -553,17 +566,29 @@ impl PathTracker {
 pub struct ExtractionStats {
     /// Total number of trees enumerated
     pub trees_enumerated: usize,
-    /// Number of trees pruned by lower bound filter
-    pub trees_pruned: usize,
+    /// Trees pruned by simple metric
+    pub size_pruned: usize,
+    /// Number of trees pruned by euler string filter
+    pub euler_pruned: usize,
     /// Number of trees for which full distance was computed
     pub full_comparisons: usize,
 }
 
 impl ExtractionStats {
-    fn pruned() -> Self {
+    fn size_pruned() -> Self {
         Self {
             trees_enumerated: 1,
-            trees_pruned: 1,
+            size_pruned: 1,
+            euler_pruned: 0,
+            full_comparisons: 0,
+        }
+    }
+
+    fn euler_pruned() -> Self {
+        Self {
+            trees_enumerated: 1,
+            size_pruned: 0,
+            euler_pruned: 1,
             full_comparisons: 0,
         }
     }
@@ -571,7 +596,8 @@ impl ExtractionStats {
     fn compared() -> Self {
         Self {
             trees_enumerated: 1,
-            trees_pruned: 0,
+            size_pruned: 0,
+            euler_pruned: 0,
             full_comparisons: 1,
         }
     }
@@ -583,7 +609,8 @@ impl std::ops::Add for ExtractionStats {
     fn add(self, rhs: Self) -> Self {
         Self {
             trees_enumerated: self.trees_enumerated + rhs.trees_enumerated,
-            trees_pruned: self.trees_pruned + rhs.trees_pruned,
+            size_pruned: self.size_pruned + rhs.size_pruned,
+            euler_pruned: self.euler_pruned + rhs.euler_pruned,
             full_comparisons: self.full_comparisons + rhs.full_comparisons,
         }
     }
@@ -593,7 +620,7 @@ impl std::ops::Add for ExtractionStats {
 mod tests {
 
     use crate::distance::ids::NumericId;
-    use crate::distance::tree::UnitCost;
+    use crate::distance::zs::UnitCost;
 
     use super::*;
 
@@ -1390,7 +1417,7 @@ mod tests {
         // may be processed before best_distance is updated. We just verify the
         // invariant that pruned + full_comparisons == trees_enumerated.
         assert_eq!(
-            stats.trees_pruned + stats.full_comparisons,
+            stats.size_pruned + stats.euler_pruned + stats.full_comparisons,
             stats.trees_enumerated
         );
     }
