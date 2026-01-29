@@ -372,16 +372,24 @@ impl<L: Label> EGraph<L> {
         costs: &C,
         progress_bar: ProgressBar,
     ) -> Option<(TreeNode<L>, usize)> {
-        let ref_pp = PreprocessedTree::new(reference);
+        let ref_size = reference.size();
         let ref_euler = EulerString::new(reference);
-        let best_distance = AtomicUsize::new(usize::MAX);
+        let ref_pp = PreprocessedTree::new(reference);
+        let running_best = AtomicUsize::new(usize::MAX);
 
         self.choice_iter(max_revisits)
             .par_bridge()
             .progress_with(progress_bar)
             .filter_map(|choices| {
-                self.try_filtered(&choices, &ref_pp, &ref_euler, &best_distance, costs)
-                    .0
+                self.try_filtered(
+                    &choices,
+                    ref_size,
+                    &ref_euler,
+                    &ref_pp,
+                    &running_best,
+                    costs,
+                )
+                .0
             })
             .min_by_key(|(_, distance)| *distance)
     }
@@ -396,8 +404,10 @@ impl<L: Label> EGraph<L> {
         costs: &C,
         quiet: bool,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-        let ref_pp = PreprocessedTree::new(reference);
+        let ref_size = reference.size();
         let ref_euler = EulerString::new(reference);
+        let ref_pp = PreprocessedTree::new(reference);
+
         let running_best = AtomicUsize::new(usize::MAX);
 
         let progress = self.progress_bar(max_revisits, quiet);
@@ -406,10 +416,14 @@ impl<L: Label> EGraph<L> {
             .par_bridge()
             .progress_with(progress)
             .map(|choices| {
-                let (result, stats) =
-                    self.try_filtered(&choices, &ref_pp, &ref_euler, &running_best, costs);
-
-                (result, stats)
+                self.try_filtered(
+                    &choices,
+                    ref_size,
+                    &ref_euler,
+                    &ref_pp,
+                    &running_best,
+                    costs,
+                )
             })
             .reduce(
                 || (None, ExtractionStats::default()),
@@ -429,8 +443,9 @@ impl<L: Label> EGraph<L> {
     fn try_filtered<C: EditCosts<L>>(
         &self,
         choices: &[usize],
-        ref_pp: &PreprocessedTree<L>,
+        ref_size: usize,
         ref_euler: &EulerString<L>,
+        ref_pp: &PreprocessedTree<L>,
         running_best: &AtomicUsize,
         costs: &C,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
@@ -439,7 +454,7 @@ impl<L: Label> EGraph<L> {
 
         // Fast pruning: size difference is a lower bound on edit distance
         // (need at least |n1 - n2| insertions or deletions)
-        let size_diff = tree.size().abs_diff(ref_pp.size());
+        let size_diff = tree.size().abs_diff(ref_size);
         if size_diff > best {
             return (None, ExtractionStats::size_pruned());
         }
