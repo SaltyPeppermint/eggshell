@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hashbrown::HashMap;
-use indicatif::{ParallelProgressIterator, ProgressIterator};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressDrawTarget, ProgressIterator};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -330,17 +330,23 @@ impl<L: Label> EGraph<L> {
     /// Find the tree with minimum edit distance to the reference tree.
     ///
     /// If `fast` is true, uses parallel iteration with pruning optimizations.
+    /// If `quiet` is true, hides the progress bar.
     pub fn find_min<C: EditCosts<L>>(
         &self,
         reference: &TreeNode<L>,
         max_revisits: usize,
         costs: &C,
         fast: bool,
+        quiet: bool,
     ) -> Option<(TreeNode<L>, usize)> {
+        let progress_bar = ProgressBar::new(self.count_trees(max_revisits) as u64);
+        if quiet {
+            progress_bar.set_draw_target(ProgressDrawTarget::hidden());
+        }
         if fast {
-            self.find_min_fast(reference, max_revisits, costs)
+            self.find_min_fast(reference, max_revisits, costs, progress_bar)
         } else {
-            self.find_min_slow(reference, max_revisits, costs)
+            self.find_min_slow(reference, max_revisits, costs, progress_bar)
         }
     }
 
@@ -350,9 +356,10 @@ impl<L: Label> EGraph<L> {
         reference: &TreeNode<L>,
         max_revisits: usize,
         costs: &C,
+        progress_bar: ProgressBar,
     ) -> Option<(TreeNode<L>, usize)> {
         self.tree_iter(max_revisits, true)
-            .progress_count(self.count_trees(max_revisits) as u64)
+            .progress_with(progress_bar)
             .map(|tree| {
                 let distance = tree_distance(&tree, reference, costs);
                 (tree, distance)
@@ -366,6 +373,7 @@ impl<L: Label> EGraph<L> {
         reference: &TreeNode<L>,
         max_revisits: usize,
         costs: &C,
+        progress_bar: ProgressBar,
     ) -> Option<(TreeNode<L>, usize)> {
         let ref_pp = PreprocessedTree::new(reference);
         let ref_euler = EulerString::new(reference);
@@ -373,7 +381,7 @@ impl<L: Label> EGraph<L> {
 
         self.choice_iter(max_revisits)
             .par_bridge()
-            .progress_count(self.count_trees(max_revisits) as u64)
+            .progress_with(progress_bar)
             .filter_map(|choices| {
                 self.try_filtered(&choices, &ref_pp, &ref_euler, &best_distance, costs)
                     .0
@@ -382,21 +390,27 @@ impl<L: Label> EGraph<L> {
     }
 
     /// Like `find_min` with `fast=true`, but also returns extraction statistics.
+    /// If `quiet` is true, hides the progress bar.
     #[must_use]
     pub fn find_min_filtered<C: EditCosts<L>>(
         &self,
         reference: &TreeNode<L>,
         max_revisits: usize,
         costs: &C,
+        quiet: bool,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
         let ref_pp = PreprocessedTree::new(reference);
         let ref_euler = EulerString::new(reference);
         let running_best = AtomicUsize::new(usize::MAX);
 
+        let progress = ProgressBar::new(self.count_trees(max_revisits) as u64);
+        if quiet {
+            progress.set_draw_target(ProgressDrawTarget::hidden());
+        }
         let (result, stats) = self
             .choice_iter(max_revisits)
             .par_bridge()
-            .progress_count(self.count_trees(max_revisits) as u64)
+            .progress_with(progress)
             .map(|choices| {
                 let (result, stats) =
                     self.try_filtered(&choices, &ref_pp, &ref_euler, &running_best, costs);
@@ -828,7 +842,9 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let result = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
 
         assert_eq!(result.1, 0);
     }
@@ -851,7 +867,9 @@ mod tests {
 
         // Reference: a(type)
         let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
-        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let result = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
 
         assert_eq!(result.1, 0);
         assert_eq!(result.0.label(), "a");
@@ -891,7 +909,9 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let result = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
 
         assert_eq!(result.1, 0);
         // a should have 2 children: b(...) and type
@@ -1286,7 +1306,9 @@ mod tests {
             ],
         );
 
-        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let result = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
         assert_eq!(result.1, 0);
     }
 
@@ -1308,7 +1330,9 @@ mod tests {
         // Reference: a(type)
         let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
 
-        let result = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let result = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
         assert_eq!(result.1, 0);
         assert_eq!(result.0.label(), "a");
     }
@@ -1344,8 +1368,12 @@ mod tests {
             ],
         );
 
-        let original = graph.find_min(&reference, 0, &UnitCost, false).unwrap();
-        let fast = graph.find_min(&reference, 0, &UnitCost, true).unwrap();
+        let original = graph
+            .find_min(&reference, 0, &UnitCost, false, true)
+            .unwrap();
+        let fast = graph
+            .find_min(&reference, 0, &UnitCost, true, true)
+            .unwrap();
 
         assert_eq!(original.1, fast.1);
     }
@@ -1381,8 +1409,10 @@ mod tests {
             ],
         );
 
-        let original = graph.find_min(&reference, 0, &UnitCost, false).unwrap();
-        let (filtered, stats) = graph.find_min_filtered(&reference, 0, &UnitCost);
+        let original = graph
+            .find_min(&reference, 0, &UnitCost, false, true)
+            .unwrap();
+        let (filtered, stats) = graph.find_min_filtered(&reference, 0, &UnitCost, true);
 
         assert_eq!(original.1, filtered.unwrap().1);
         // Should have enumerated both trees
@@ -1409,7 +1439,7 @@ mod tests {
         // Reference: a(type)
         let reference = node("a".to_owned(), vec![leaf("0".to_owned())]);
 
-        let (result, stats) = graph.find_min_filtered(&reference, 0, &UnitCost);
+        let (result, stats) = graph.find_min_filtered(&reference, 0, &UnitCost, true);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
