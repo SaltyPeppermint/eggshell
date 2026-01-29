@@ -339,10 +339,7 @@ impl<L: Label> EGraph<L> {
         fast: bool,
         quiet: bool,
     ) -> Option<(TreeNode<L>, usize)> {
-        let progress_bar = ProgressBar::new(self.count_trees(max_revisits) as u64);
-        if quiet {
-            progress_bar.set_draw_target(ProgressDrawTarget::hidden());
-        }
+        let progress_bar = self.progress_bar(max_revisits, quiet);
         if fast {
             self.find_min_fast(reference, max_revisits, costs, progress_bar)
         } else {
@@ -403,10 +400,7 @@ impl<L: Label> EGraph<L> {
         let ref_euler = EulerString::new(reference);
         let running_best = AtomicUsize::new(usize::MAX);
 
-        let progress = ProgressBar::new(self.count_trees(max_revisits) as u64);
-        if quiet {
-            progress.set_draw_target(ProgressDrawTarget::hidden());
-        }
+        let progress = self.progress_bar(max_revisits, quiet);
         let (result, stats) = self
             .choice_iter(max_revisits)
             .par_bridge()
@@ -460,6 +454,14 @@ impl<L: Label> EGraph<L> {
         let distance = tree_distance_with_ref(&tree, ref_pp, costs);
         running_best.fetch_min(distance, Ordering::Relaxed);
         (Some((tree, distance)), ExtractionStats::compared())
+    }
+
+    fn progress_bar(&self, max_revisits: usize, quiet: bool) -> ProgressBar {
+        let progress = ProgressBar::new(self.count_trees(max_revisits) as u64);
+        if quiet {
+            progress.set_draw_target(ProgressDrawTarget::hidden());
+        }
+        progress
     }
 }
 
