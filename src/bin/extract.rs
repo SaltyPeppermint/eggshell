@@ -87,14 +87,19 @@ fn main() {
             println!("  Best distance: {}", result.1);
             println!("  Time: {:.2?}", start.elapsed());
             println!("\n  Statistics:");
-            println!("    Trees enumerated: {}", stats.trees_enumerated);
+            println!("    Trees enumerated:   {}", stats.trees_enumerated);
             println!(
-                "    Trees pruned:     {} ({:.1}%)",
-                stats.trees_pruned,
-                100.0 * stats.trees_pruned as f64 / stats.trees_enumerated as f64
+                "    Trees size pruned:  {} ({:.1}%)",
+                stats.size_pruned,
+                100.0 * stats.size_pruned as f64 / stats.trees_enumerated as f64
             );
             println!(
-                "    Full comparisons: {} ({:.1}%)",
+                "    Trees euler pruned: {} ({:.1}%)",
+                stats.euler_pruned,
+                100.0 * stats.euler_pruned as f64 / stats.trees_enumerated as f64
+            );
+            println!(
+                "    Full comparisons:   {} ({:.1}%)",
                 stats.full_comparisons,
                 100.0 * stats.full_comparisons as f64 / stats.trees_enumerated as f64
             );
