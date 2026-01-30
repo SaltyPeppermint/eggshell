@@ -109,6 +109,9 @@ pub trait EditCosts<L>: Send + Sync {
 
     /// Cost of relabeling a node.
     fn relabel(&self, from: &L, to: &L) -> usize;
+
+    /// Euler in-out-same-node
+    fn euler_in_out(&self, label: &L) -> usize;
 }
 
 /// Unit cost model: all operations cost 1, relabeling identical labels costs 0.
@@ -125,6 +128,10 @@ impl<L: Eq> EditCosts<L> for UnitCost {
 
     fn relabel(&self, from: &L, to: &L) -> usize {
         usize::from(from != to)
+    }
+
+    fn euler_in_out(&self, _label: &L) -> usize {
+        1
     }
 }
 

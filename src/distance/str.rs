@@ -14,49 +14,59 @@ use super::nodes::Label;
 use super::tree::TreeNode;
 use super::zs::EditCosts;
 
-/// Compute the Euler string of a tree.
+/// Euler string element - distinguishes entering vs leaving a node.
 ///
-/// The Euler string records each node label twice: once when entering the subtree
-/// and once when leaving. This gives a string of length 2n for a tree with n nodes.
-pub fn euler_string<L: Label>(tree: &TreeNode<L>) -> Vec<L> {
-    fn euler_string_rec<LL: Label>(node: &TreeNode<LL>, out: &mut Vec<LL>) {
-        out.push(node.label().clone());
-        for child in node.children() {
-            euler_string_rec(child, out);
-        }
-        out.push(node.label().clone());
-    }
-    let mut result = Vec::with_capacity(tree.size() * 2);
-    euler_string_rec(tree, &mut result);
-    result
+/// The paper defines s(T)[i₁(e)] = L(e) and s(T)[i₂(e)] = L̄(e) where L̄(e) is a
+/// distinct "barred" version of the label. This distinction encodes directionality
+/// (going down vs up in the tree) and ensures the distance bound holds properly.
+#[derive(PartialEq, Eq, Hash, Debug)]
+pub enum EulerSymbol<'a, L> {
+    Enter(&'a L),
+    Leave(&'a L),
 }
 
-/// Compute string edit distance between two sequences using the given cost function.
-pub fn string_edit_distance<L, C: EditCosts<L>>(s1: &[L], s2: &[L], costs: &C) -> usize {
+impl<L> EulerSymbol<'_, L> {
+    fn label(&self) -> &L {
+        match self {
+            EulerSymbol::Enter(l) | EulerSymbol::Leave(l) => l,
+        }
+    }
+}
+
+/// Compute string edit distance between two Euler strings using the given cost function.
+///
+/// The cost function operates on the underlying labels. Enter and Leave variants
+/// with the same label have the same insert/delete cost. Relabeling between
+/// Enter(a) and Leave(a) (same label, different variant) costs 1.
+fn euler_string_edit_distance<L: Label, C: EditCosts<L>>(
+    s1: &[EulerSymbol<L>],
+    s2: &[EulerSymbol<L>],
+    costs: &C,
+) -> usize {
     let n = s1.len();
     let m = s2.len();
 
     if n == 0 {
-        return s2.iter().map(|l| costs.insert(l)).sum();
+        return s2.iter().map(|sym| costs.insert(sym.label())).sum();
     }
     if m == 0 {
-        return s1.iter().map(|l| costs.delete(l)).sum();
+        return s1.iter().map(|sym| costs.delete(sym.label())).sum();
     }
 
     // Use two-row optimization for O(min(n,m)) space
     let mut prev = Vec::with_capacity(m + 1);
     prev.push(0);
-    for l in s2 {
-        prev.push(prev.last().unwrap() + costs.insert(l));
+    for sym in s2 {
+        prev.push(prev.last().unwrap() + costs.insert(sym.label()));
     }
     let mut curr = vec![0; m + 1];
 
     for c1 in s1 {
-        curr[0] = prev[0] + costs.delete(c1);
+        curr[0] = prev[0] + costs.delete(c1.label());
         for (j, c2) in s2.iter().enumerate() {
-            let relabel = prev[j] + costs.relabel(c1, c2);
-            let delete = prev[j + 1] + costs.delete(c1);
-            let insert = curr[j] + costs.insert(c2);
+            let relabel = prev[j] + relabel_cost(c1, c2, costs);
+            let delete = prev[j + 1] + costs.delete(c1.label());
+            let insert = curr[j] + costs.insert(c2.label());
             curr[j + 1] = relabel.min(delete).min(insert);
         }
         std::mem::swap(&mut prev, &mut curr);
@@ -74,32 +84,54 @@ pub fn tree_distance_euler_bound<L: Label, C: EditCosts<L>>(
     t2: &TreeNode<L>,
     costs: &C,
 ) -> usize {
-    let s1 = euler_string(t1);
-    let s2 = euler_string(t2);
-    let eds = string_edit_distance(&s1, &s2, costs);
-    // EDT ≥ EDS / 2, so we use ceiling division
-    eds.div_ceil(2)
+    EulerString::new(t1).lower_bound(t2, costs)
+}
+
+// Cost for relabeling Euler symbols
+fn relabel_cost<L: Label, C: EditCosts<L>>(
+    a: &EulerSymbol<L>,
+    b: &EulerSymbol<L>,
+    costs: &C,
+) -> usize {
+    if a == b {
+        0
+    } else if a.label() == b.label() {
+        // Same label but different variant (Enter vs Leave)
+        costs.euler_in_out(a.label())
+    } else {
+        costs.relabel(a.label(), b.label())
+    }
 }
 
 /// Precomputed Euler string for a reference tree.
 ///
 /// Reuse this when comparing against multiple candidate trees.
-pub struct EulerString<L> {
-    string: Vec<L>,
+pub struct EulerString<'a, L> {
+    string: Vec<EulerSymbol<'a, L>>,
 }
 
-impl<L: Label> EulerString<L> {
+impl<'a, L: Label> EulerString<'a, L> {
     /// Create an Euler string from a tree.
-    pub fn new(tree: &TreeNode<L>) -> Self {
-        Self {
-            string: euler_string(tree),
+    ///
+    /// The Euler string records each node with Enter when entering the subtree
+    /// and Leave when leaving. This gives a string of length 2n for a tree with n nodes.
+    pub fn new(tree: &'a TreeNode<L>) -> Self {
+        fn build<'b, LL: Label>(node: &'b TreeNode<LL>, out: &mut Vec<EulerSymbol<'b, LL>>) {
+            out.push(EulerSymbol::Enter(node.label()));
+            for child in node.children() {
+                build(child, out);
+            }
+            out.push(EulerSymbol::Leave(node.label()));
         }
+        let mut string = Vec::with_capacity(tree.size() * 2);
+        build(tree, &mut string);
+        Self { string }
     }
 
     /// Compute a lower bound on tree edit distance to the given tree.
-    pub fn lower_bound<C: EditCosts<L>>(&self, tree: &TreeNode<L>, costs: &C) -> usize {
-        let other = euler_string(tree);
-        let eds = string_edit_distance(&self.string, &other, costs);
+    pub fn lower_bound<C: EditCosts<L>>(&self, tree: &'a TreeNode<L>, costs: &C) -> usize {
+        let other = Self::new(tree);
+        let eds = euler_string_edit_distance(&self.string, &other.string, costs);
         eds.div_ceil(2)
     }
 }
@@ -120,8 +152,14 @@ mod tests {
     #[test]
     fn euler_string_leaf() {
         let tree = leaf("a");
-        let euler = euler_string(&tree);
-        assert_eq!(euler, vec!["a", "a"]);
+        let euler = EulerString::new(&tree);
+        assert_eq!(
+            euler.string,
+            vec![
+                EulerSymbol::Enter(tree.label()),
+                EulerSymbol::Leave(tree.label()),
+            ]
+        );
     }
 
     #[test]
@@ -130,9 +168,20 @@ mod tests {
         //    / \
         //   b   c
         let tree = node("a", vec![leaf("b"), leaf("c")]);
-        let euler = euler_string(&tree);
+        let euler = EulerString::new(&tree);
+        let [b, c] = tree.children() else { panic!() };
         // Enter a, enter b, leave b, enter c, leave c, leave a
-        assert_eq!(euler, vec!["a", "b", "b", "c", "c", "a"]);
+        assert_eq!(
+            euler.string,
+            vec![
+                EulerSymbol::Enter(tree.label()),
+                EulerSymbol::Enter(b.label()),
+                EulerSymbol::Leave(b.label()),
+                EulerSymbol::Enter(c.label()),
+                EulerSymbol::Leave(c.label()),
+                EulerSymbol::Leave(tree.label()),
+            ]
+        );
     }
 
     #[test]
@@ -143,29 +192,62 @@ mod tests {
         //     |
         //     c
         let tree = node("a", vec![node("b", vec![leaf("c")])]);
-        let euler = euler_string(&tree);
-        assert_eq!(euler, vec!["a", "b", "c", "c", "b", "a"]);
+        let euler = EulerString::new(&tree);
+        let [b] = tree.children() else { panic!() };
+        let [c] = b.children() else { panic!() };
+        assert_eq!(
+            euler.string,
+            vec![
+                EulerSymbol::Enter(tree.label()),
+                EulerSymbol::Enter(b.label()),
+                EulerSymbol::Enter(c.label()),
+                EulerSymbol::Leave(c.label()),
+                EulerSymbol::Leave(b.label()),
+                EulerSymbol::Leave(tree.label()),
+            ]
+        );
     }
 
     #[test]
-    fn string_edit_distance_identical() {
-        let s = vec!["a", "b", "c"];
-        assert_eq!(string_edit_distance(&s, &s, &UnitCost), 0);
+    fn euler_edit_distance_identical() {
+        let (a, b) = ("a".to_owned(), "b".to_owned());
+        let s: Vec<EulerSymbol<String>> = vec![
+            EulerSymbol::Enter(&a),
+            EulerSymbol::Enter(&b),
+            EulerSymbol::Leave(&b),
+            EulerSymbol::Leave(&a),
+        ];
+        assert_eq!(euler_string_edit_distance(&s, &s, &UnitCost), 0);
     }
 
     #[test]
-    fn string_edit_distance_empty() {
-        let empty: Vec<&str> = vec![];
-        let s = vec!["a", "b", "c"];
-        assert_eq!(string_edit_distance(&empty, &s, &UnitCost), 3);
-        assert_eq!(string_edit_distance(&s, &empty, &UnitCost), 3);
+    fn euler_edit_distance_empty() {
+        let (a, b) = ("a".to_owned(), "b".to_owned());
+        let empty: Vec<EulerSymbol<String>> = vec![];
+        let s: Vec<EulerSymbol<String>> = vec![
+            EulerSymbol::Enter(&a),
+            EulerSymbol::Enter(&b),
+            EulerSymbol::Leave(&b),
+        ];
+        assert_eq!(euler_string_edit_distance(&empty, &s, &UnitCost), 3);
+        assert_eq!(euler_string_edit_distance(&s, &empty, &UnitCost), 3);
     }
 
     #[test]
-    fn string_edit_distance_one_diff() {
-        let s1 = vec!["a", "b", "c"];
-        let s2 = vec!["a", "x", "c"];
-        assert_eq!(string_edit_distance(&s1, &s2, &UnitCost), 1);
+    fn euler_edit_distance_one_diff() {
+        let (a, b, x) = ("a".to_owned(), "b".to_owned(), "x".to_owned());
+        let s1: Vec<EulerSymbol<String>> = vec![
+            EulerSymbol::Enter(&a),
+            EulerSymbol::Enter(&b),
+            EulerSymbol::Leave(&b),
+        ];
+        let s2: Vec<EulerSymbol<String>> = vec![
+            EulerSymbol::Enter(&a),
+            EulerSymbol::Enter(&x),
+            EulerSymbol::Leave(&x),
+        ];
+        // Changing "b" to "x" requires 2 edits (Enter(b)->Enter(x) and Leave(b)->Leave(x))
+        assert_eq!(euler_string_edit_distance(&s1, &s2, &UnitCost), 2);
     }
 
     #[test]
