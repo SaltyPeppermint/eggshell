@@ -3,24 +3,24 @@ use super::tree::TreeNode;
 
 /// Postorder traversal information for a tree node.
 #[derive(Debug, Clone)]
-pub struct PostorderNode<L: Label> {
-    label: L,
+struct PostorderNode<'a, L: Label> {
+    label: &'a L,
     leftmost_leaf: usize,
 }
 
 /// Preprocessed tree for Zhang-Shasha algorithm.
 ///
 /// Reuse this when computing distances against multiple candidate trees.
-pub struct PreprocessedTree<L: Label> {
-    nodes: Vec<PostorderNode<L>>,
+pub struct PreprocessedTree<'a, L: Label> {
+    nodes: Vec<PostorderNode<'a, L>>,
     keyroots: Vec<usize>,
 }
 
-impl<L: Label> PreprocessedTree<L> {
+impl<'a, L: Label> PreprocessedTree<'a, L> {
     /// Create a preprocessed tree from a tree node.
     /// This performs a single postorder traversal to compute leftmost leaf descendants
     /// and keyroots.
-    pub fn new(root: &TreeNode<L>) -> Self {
+    pub fn new(root: &'a TreeNode<L>) -> Self {
         let mut nodes = Vec::new();
 
         // Perform postorder traversal and compute leftmost leaf descendants
@@ -51,7 +51,7 @@ impl<L: Label> PreprocessedTree<L> {
         PreprocessedTree { nodes, keyroots }
     }
 
-    fn postorder_traverse(node: &TreeNode<L>, nodes: &mut Vec<PostorderNode<L>>) -> usize {
+    fn postorder_traverse(node: &'a TreeNode<L>, nodes: &mut Vec<PostorderNode<'a, L>>) -> usize {
         // First, traverse all children
         let child_indices = node
             .children()
@@ -71,7 +71,7 @@ impl<L: Label> PreprocessedTree<L> {
         };
 
         nodes.push(PostorderNode {
-            label: node.label().clone(),
+            label: node.label(),
             leftmost_leaf,
         });
 
@@ -90,7 +90,7 @@ impl<L: Label> PreprocessedTree<L> {
 
     /// Returns the label of node i
     pub fn label(&self, i: usize) -> &L {
-        &self.nodes[i].label
+        self.nodes[i].label
     }
 
     /// Returns the keyroots of the tree (nodes that start new subproblems)
