@@ -119,6 +119,27 @@ impl<L: Label> TreeNode<L> {
     pub fn size(&self) -> usize {
         1 + self.children.iter().map(Self::size).sum::<usize>()
     }
+
+    /// Remove the typeof node by pushing the typeof in the rightmost child
+    /// trades height and node number vs child number
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn flattify_type(mut self) -> Self {
+        if self.label().is_type_of() {
+            let mut child_iter = self.children.into_iter();
+            let mut expr_tree = child_iter.next().unwrap().flattify_type();
+            let type_tree = child_iter.next().unwrap();
+            expr_tree.children.push(type_tree);
+            expr_tree
+        } else {
+            self.children = self
+                .children
+                .into_iter()
+                .map(|c| c.flattify_type())
+                .collect();
+            self
+        }
+    }
 }
 
 impl FromStr for TreeNode<String> {
