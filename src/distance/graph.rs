@@ -343,34 +343,15 @@ impl<L: Label> EGraph<L> {
         TreeIter::new(self, max_revisits, with_type)
     }
 
-    /// Find the tree with minimum edit distance to the reference tree.
-    ///
-    /// If `fast` is true, uses parallel iteration with pruning optimizations.
-    /// If `quiet` is true, hides the progress bar.
-    pub fn find_min<C: EditCosts<L>>(
+    /// Sequential enumeration of all trees, computing full distance for each.
+    pub fn find_min_slow<C: EditCosts<L>>(
         &self,
         reference: &TreeNode<L>,
         max_revisits: usize,
         costs: &C,
-        fast: bool,
         quiet: bool,
     ) -> Option<(TreeNode<L>, usize)> {
         let progress_bar = self.progress_bar(max_revisits, quiet);
-        if fast {
-            self.find_min_fast(reference, max_revisits, costs, progress_bar)
-        } else {
-            self.find_min_slow(reference, max_revisits, costs, progress_bar)
-        }
-    }
-
-    /// Sequential enumeration of all trees, computing full distance for each.
-    fn find_min_slow<C: EditCosts<L>>(
-        &self,
-        reference: &TreeNode<L>,
-        max_revisits: usize,
-        costs: &C,
-        progress_bar: ProgressBar,
-    ) -> Option<(TreeNode<L>, usize)> {
         self.tree_iter(max_revisits, true)
             .progress_with(progress_bar)
             .map(|tree| {
@@ -378,37 +359,6 @@ impl<L: Label> EGraph<L> {
                 (tree, distance)
             })
             .min_by_key(|result| result.1)
-    }
-
-    /// Parallel iteration with preprocessing and pruning optimizations.
-    fn find_min_fast<C: EditCosts<L>>(
-        &self,
-        reference: &TreeNode<L>,
-        max_revisits: usize,
-        costs: &C,
-        progress_bar: ProgressBar,
-    ) -> Option<(TreeNode<L>, usize)> {
-        let ref_squashed = reference.to_owned().squash_types();
-        let ref_size = ref_squashed.size();
-        let ref_euler = EulerString::new(&ref_squashed);
-        let ref_pp = PreprocessedTree::new(&ref_squashed);
-        let running_best = AtomicUsize::new(usize::MAX);
-
-        self.choice_iter(max_revisits)
-            .par_bridge()
-            .progress_with(progress_bar)
-            .filter_map(|choices| {
-                self.try_filtered(
-                    &choices,
-                    ref_size,
-                    &ref_euler,
-                    &ref_pp,
-                    &running_best,
-                    costs,
-                )
-                .0
-            })
-            .min_by_key(|(_, distance)| *distance)
     }
 
     /// Like `find_min` with `fast=true`, but also returns extraction statistics.
@@ -420,7 +370,7 @@ impl<L: Label> EGraph<L> {
         max_revisits: usize,
         costs: &C,
         quiet: bool,
-    ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
+    ) -> (Option<(TreeNode<L>, usize)>, Stats) {
         let ref_squashed = reference.to_owned().squash_types();
         let ref_size = ref_squashed.size();
         let ref_euler = EulerString::new(&ref_squashed);
@@ -433,61 +383,39 @@ impl<L: Label> EGraph<L> {
             .par_bridge()
             .progress_with(progress)
             .map(|choices| {
-                self.try_filtered(
-                    &choices,
-                    ref_size,
-                    &ref_euler,
-                    &ref_pp,
-                    &running_best,
-                    costs,
-                )
+                {
+                    let squashed_candidate = self
+                        .tree_from_choices(self.root(), &choices, true)
+                        .squash_types();
+                    let best = running_best.load(Ordering::Relaxed);
+
+                    // Fast pruning: size difference is a lower bound on edit distance
+                    // (need at least |n1 - n2| insertions or deletions)
+                    if squashed_candidate.size().abs_diff(ref_size) > best {
+                        return (None, Stats::size_pruned());
+                    }
+
+                    // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
+                    // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
+                    if ref_euler.lower_bound(&squashed_candidate, costs) > best {
+                        return (None, Stats::euler_pruned());
+                    }
+
+                    let distance = tree_distance_with_ref(&squashed_candidate, &ref_pp, costs);
+                    running_best.fetch_min(distance, Ordering::Relaxed);
+                    let tree = self.tree_from_choices(self.root(), &choices, true);
+                    (Some((tree, distance)), Stats::compared())
+                }
             })
             .reduce(
-                || (None, ExtractionStats::default()),
-                |(best_a, stats_a), (best_b, stats_b)| {
-                    let best = [best_a, best_b]
-                        .into_iter()
-                        .flatten()
-                        .min_by_key(|(_, d)| *d);
-                    (best, stats_a + stats_b)
+                || (None, Stats::default()),
+                |a, b| {
+                    let best = [a.0, b.0].into_iter().flatten().min_by_key(|v| v.1);
+                    (best, a.1 + b.1)
                 },
             );
 
         (result, stats)
-    }
-
-    /// Try to extract a tree, using heuristics as lower bounds for pruning.
-    fn try_filtered<C: EditCosts<L>>(
-        &self,
-        choices: &[usize],
-        ref_size: usize,
-        ref_euler: &EulerString<L>,
-        ref_pp: &PreprocessedTree<L>,
-        running_best: &AtomicUsize,
-        costs: &C,
-    ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-        let tree = self
-            .tree_from_choices(self.root(), choices, true)
-            .squash_types();
-        let best = running_best.load(Ordering::Relaxed);
-
-        // Fast pruning: size difference is a lower bound on edit distance
-        // (need at least |n1 - n2| insertions or deletions)
-        let size_diff = tree.size().abs_diff(ref_size);
-        if size_diff > best {
-            return (None, ExtractionStats::size_pruned());
-        }
-
-        // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
-        // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
-        let euler_lb = ref_euler.lower_bound(&tree, costs);
-        if euler_lb > best {
-            return (None, ExtractionStats::euler_pruned());
-        }
-
-        let distance = tree_distance_with_ref(&tree, ref_pp, costs);
-        running_best.fetch_min(distance, Ordering::Relaxed);
-        (Some((tree, distance)), ExtractionStats::compared())
     }
 
     fn progress_bar(&self, max_revisits: usize, quiet: bool) -> ProgressBar {
@@ -613,7 +541,7 @@ impl PathTracker {
 
 /// Statistics from filtered extraction
 #[derive(Debug, Clone, Default)]
-pub struct ExtractionStats {
+pub struct Stats {
     /// Total number of trees enumerated
     pub trees_enumerated: usize,
     /// Trees pruned by simple metric
@@ -624,7 +552,7 @@ pub struct ExtractionStats {
     pub full_comparisons: usize,
 }
 
-impl ExtractionStats {
+impl Stats {
     fn size_pruned() -> Self {
         Self {
             trees_enumerated: 1,
@@ -653,7 +581,7 @@ impl ExtractionStats {
     }
 }
 
-impl std::ops::Add for ExtractionStats {
+impl std::ops::Add for Stats {
     type Output = Self;
 
     fn add(self, rhs: Self) -> Self {
@@ -899,7 +827,8 @@ mod tests {
             ],
         );
         let result = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
+            .find_min_filtered(&reference, 0, &UnitCost, true)
+            .0
             .unwrap();
 
         assert_eq!(result.1, 0);
@@ -927,7 +856,8 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
         let result = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
+            .find_min_filtered(&reference, 0, &UnitCost, true)
+            .0
             .unwrap();
 
         assert_eq!(result.1, 0);
@@ -978,7 +908,8 @@ mod tests {
             ],
         );
         let result = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
+            .find_min_filtered(&reference, 0, &UnitCost, true)
+            .0
             .unwrap();
 
         assert_eq!(result.1, 0);
@@ -1439,7 +1370,8 @@ mod tests {
         );
 
         let result = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
+            .find_min_filtered(&reference, 0, &UnitCost, true)
+            .0
             .unwrap();
         assert_eq!(result.1, 0);
     }
@@ -1466,94 +1398,13 @@ mod tests {
         );
 
         let result = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
+            .find_min_filtered(&reference, 0, &UnitCost, true)
+            .0
             .unwrap();
         assert_eq!(result.1, 0);
         // Result is wrapped in typeOf
         assert_eq!(result.0.label(), "typeOf");
         assert_eq!(result.0.children()[0].label(), "a");
-    }
-
-    #[test]
-    fn min_distance_extract_fast_matches_original() {
-        // Verify fast version produces same results as original
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![
-                        ENode::new("a".to_owned(), vec![eid(1)]),
-                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]),
-                    ],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: a(b(type_b), type_a)
-        let reference = node(
-            "a".to_owned(),
-            vec![
-                node("b".to_owned(), vec![leaf("0".to_owned())]),
-                leaf("0".to_owned()),
-            ],
-        );
-
-        let original = graph
-            .find_min(&reference, 0, &UnitCost, false, true)
-            .unwrap();
-        let fast = graph
-            .find_min(&reference, 0, &UnitCost, true, true)
-            .unwrap();
-
-        assert_eq!(original.1, fast.1);
-    }
-
-    #[test]
-    fn min_distance_extract_filtered_matches_original() {
-        // Verify filtered version produces same results as original
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![
-                        ENode::new("a".to_owned(), vec![eid(1)]),
-                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]),
-                    ],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: a(b(type_b), type_a)
-        let reference = node(
-            "a".to_owned(),
-            vec![
-                node("b".to_owned(), vec![leaf("0".to_owned())]),
-                leaf("0".to_owned()),
-            ],
-        );
-
-        let original = graph
-            .find_min(&reference, 0, &UnitCost, false, true)
-            .unwrap();
-        let (filtered, stats) = graph.find_min_filtered(&reference, 0, &UnitCost, true);
-
-        assert_eq!(original.1, filtered.unwrap().1);
-        // Should have enumerated both trees
-        assert_eq!(stats.trees_enumerated, 2);
     }
 
     #[test]

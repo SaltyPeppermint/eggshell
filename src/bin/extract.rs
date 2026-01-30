@@ -166,7 +166,9 @@ fn main() {
     if args.baseline {
         qprintln!(quiet, "\n--- Unfiltered extraction (baseline) ---");
         let start = Instant::now();
-        if let Some(result) = graph.find_min(&ref_tree, args.max_revisits, &UnitCost, false, quiet)
+        if let Some(result) = graph
+            .find_min_filtered(&ref_tree, args.max_revisits, &UnitCost, false)
+            .0
         {
             if quiet {
                 println!("{}", Sexp::from(&result.0));
