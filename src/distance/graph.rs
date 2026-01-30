@@ -388,9 +388,10 @@ impl<L: Label> EGraph<L> {
         costs: &C,
         progress_bar: ProgressBar,
     ) -> Option<(TreeNode<L>, usize)> {
-        let ref_size = reference.size();
-        let ref_euler = EulerString::new(reference);
-        let ref_pp = PreprocessedTree::new(reference);
+        let ref_squashed = reference.to_owned().squash_types();
+        let ref_size = ref_squashed.size();
+        let ref_euler = EulerString::new(&ref_squashed);
+        let ref_pp = PreprocessedTree::new(&ref_squashed);
         let running_best = AtomicUsize::new(usize::MAX);
 
         self.choice_iter(max_revisits)
@@ -420,10 +421,10 @@ impl<L: Label> EGraph<L> {
         costs: &C,
         quiet: bool,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-        let ref_size = reference.size();
-        let ref_euler = EulerString::new(reference);
-        let ref_pp = PreprocessedTree::new(reference);
-
+        let ref_squashed = reference.to_owned().squash_types();
+        let ref_size = ref_squashed.size();
+        let ref_euler = EulerString::new(&ref_squashed);
+        let ref_pp = PreprocessedTree::new(&ref_squashed);
         let running_best = AtomicUsize::new(usize::MAX);
 
         let progress = self.progress_bar(max_revisits, quiet);
@@ -465,7 +466,9 @@ impl<L: Label> EGraph<L> {
         running_best: &AtomicUsize,
         costs: &C,
     ) -> (Option<(TreeNode<L>, usize)>, ExtractionStats) {
-        let tree = self.tree_from_choices(self.root(), choices, true);
+        let tree = self
+            .tree_from_choices(self.root(), choices, true)
+            .squash_types();
         let best = running_best.load(Ordering::Relaxed);
 
         // Fast pruning: size difference is a lower bound on edit distance

@@ -124,10 +124,10 @@ impl<L: Label> TreeNode<L> {
     /// trades height and node number vs child number
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
-    pub fn flattify_type(mut self) -> Self {
+    pub fn squash_types(mut self) -> Self {
         if self.label().is_type_of() {
             let mut child_iter = self.children.into_iter();
-            let mut expr_tree = child_iter.next().unwrap().flattify_type();
+            let mut expr_tree = child_iter.next().unwrap().squash_types();
             let type_tree = child_iter.next().unwrap();
             expr_tree.children.push(type_tree);
             expr_tree
@@ -135,7 +135,7 @@ impl<L: Label> TreeNode<L> {
             self.children = self
                 .children
                 .into_iter()
-                .map(|c| c.flattify_type())
+                .map(|c| c.squash_types())
                 .collect();
             self
         }
