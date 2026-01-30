@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use symbolic_expressions::{IntoSexp, Sexp, SexpError};
 
 use super::graph::EGraph;
-use super::ids::{DataTyId, EClassId, FunTyId, NatId, NatOrDTId, TypeId};
+use super::ids::{DataChildId, DataId, EClassId, FunId, NatId, TypeChildId};
 use super::nodes::Label;
 
 /// A node in a labeled, ordered tree.
@@ -59,15 +59,15 @@ impl<L: Label> TreeNode<L> {
         Self::from_type(egraph, ty_id)
     }
 
-    fn from_type(egraph: &EGraph<L>, id: TypeId) -> Self {
+    fn from_type(egraph: &EGraph<L>, id: TypeChildId) -> Self {
         match id {
-            TypeId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
-            TypeId::Type(fun_ty_id) => Self::from_fun(egraph, fun_ty_id),
-            TypeId::DataType(data_ty_id) => Self::from_data_ty(egraph, data_ty_id),
+            TypeChildId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
+            TypeChildId::Type(fun_ty_id) => Self::from_fun(egraph, fun_ty_id),
+            TypeChildId::Data(data_ty_id) => Self::from_data(egraph, data_ty_id),
         }
     }
 
-    fn from_fun(egraph: &EGraph<L>, id: FunTyId) -> Self {
+    fn from_fun(egraph: &EGraph<L>, id: FunId) -> Self {
         let node = egraph.fun_ty(id).label().to_owned();
         let children = egraph
             .fun_ty(id)
@@ -78,21 +78,23 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
-    fn from_data_ty(egraph: &EGraph<L>, id: DataTyId) -> Self {
+    #[must_use]
+    pub fn from_data(egraph: &EGraph<L>, id: DataId) -> Self {
         let node = egraph.data_ty(id).label().to_owned();
         let children = egraph
             .data_ty(id)
             .children()
             .iter()
             .map(|&c_id| match c_id {
-                NatOrDTId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
-                NatOrDTId::DataType(data_ty_id) => Self::from_data_ty(egraph, data_ty_id),
+                DataChildId::Nat(nat_id) => Self::from_nat(egraph, nat_id),
+                DataChildId::DataType(data_ty_id) => Self::from_data(egraph, data_ty_id),
             })
             .collect();
         TreeNode::new(node, children)
     }
 
-    fn from_nat(egraph: &EGraph<L>, id: NatId) -> Self {
+    #[must_use]
+    pub fn from_nat(egraph: &EGraph<L>, id: NatId) -> Self {
         let node = egraph.nat(id).label().to_owned();
         let children = egraph
             .nat(id)

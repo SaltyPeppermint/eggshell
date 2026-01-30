@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use serde::{Deserialize, Serialize};
 
-use super::ids::{EClassId, NatId, NatOrDTId, TypeId};
+use super::ids::{DataChildId, ExprChildId, NatId, TypeChildId};
 
 /// Trait for node labels in e-graphs and trees.
 pub trait Label:
@@ -77,7 +77,7 @@ macro_rules! define_node {
 
 define_node!(
     /// Expression node in an e-graph. Children reference `EClass` entries.
-    ENode, EClassId
+    ENode, ExprChildId
 );
 
 define_node!(
@@ -87,10 +87,10 @@ define_node!(
 
 define_node!(
     /// Node for function type expressions. Children can be function types, datatypes, or nats.
-    FunTyNode, TypeId
+    FunTyNode, TypeChildId
 );
 
 define_node!(
     /// Node for datatype expressions. Children can be datatypes or nats.
-    DataTyNode, NatOrDTId
+    DataTyNode, DataChildId
 );

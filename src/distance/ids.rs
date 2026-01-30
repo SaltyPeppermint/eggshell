@@ -78,24 +78,33 @@ macro_rules! define_id {
 
 define_id!(EClassId, "EClassId");
 define_id!(NatId, "NatId");
-define_id!(FunTyId, "NotDataTypeId");
-define_id!(DataTyId, "DataTypeId");
+define_id!(FunId, "NotDataTypeId");
+define_id!(DataId, "DataTypeId");
 
 /// Type identifier: can be a nat, function type, or datatype.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum TypeId {
+pub enum ExprChildId {
     Nat(NatId),
-    Type(FunTyId),
-    DataType(DataTyId),
+    Data(DataId),
+    EClass(EClassId),
+}
+
+/// Type identifier: can be a nat, function type, or datatype.
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum TypeChildId {
+    Nat(NatId),
+    Type(FunId),
+    Data(DataId),
 }
 
 /// Identifier for nat or datatype nodes.
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum NatOrDTId {
+pub enum DataChildId {
     Nat(NatId),
-    DataType(DataTyId),
+    DataType(DataId),
 }
 
 /// Serde helpers for `Vec<EClassId>` (e.g., `[0, 1, 2]` -> `Vec<EClassId>`)
@@ -196,12 +205,12 @@ mod tests {
 
     #[test]
     fn parse_funty_id() {
-        assert_eq!("NotDataTypeId(141)".parse(), Ok(FunTyId::new(141)));
+        assert_eq!("NotDataTypeId(141)".parse(), Ok(FunId::new(141)));
     }
 
     #[test]
     fn parse_dataty_id() {
-        assert_eq!("DataTypeId(242)".parse(), Ok(DataTyId::new(242)));
+        assert_eq!("DataTypeId(242)".parse(), Ok(DataId::new(242)));
     }
 
     #[test]
