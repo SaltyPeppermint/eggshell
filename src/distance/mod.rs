@@ -1,9 +1,13 @@
 mod graph;
 mod ids;
 mod nodes;
+pub mod rise;
 mod str;
 mod tree;
 mod zs;
+
+// Re-export rise types at this level for convenience
+pub use rise::{Expr, Nat, Type};
 
 pub use graph::{EClass, EGraph, Stats, find_min};
 pub use str::tree_distance_euler_bound;
