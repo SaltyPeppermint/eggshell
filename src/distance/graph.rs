@@ -11,7 +11,6 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use bon::Builder;
 use hashbrown::HashMap;
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressDrawTarget};
 use rayon::iter::{ParallelBridge, ParallelIterator};
@@ -343,25 +342,6 @@ impl<L: Label> EGraph<L> {
     pub fn tree_iter(&self, max_revisits: usize, with_type: bool) -> TreeIter<'_, L> {
         TreeIter::new(self, max_revisits, with_type)
     }
-
-    fn progress_bar(&self, max_revisits: usize, quiet: bool) -> ProgressBar {
-        let progress = ProgressBar::new(self.count_trees(max_revisits) as u64);
-        if quiet {
-            progress.set_draw_target(ProgressDrawTarget::hidden());
-        }
-        progress
-    }
-}
-
-#[derive(Builder, Debug)]
-#[builder(derive(Clone, Debug))]
-pub struct ZSConfig {
-    #[builder(default)]
-    max_revisits: usize,
-    #[builder(default = true)]
-    with_types: bool,
-    #[builder(default = false)]
-    quiet: bool,
 }
 
 /// If `quiet` is true, hides the progress bar.
@@ -371,9 +351,10 @@ pub fn find_min<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     costs: &C,
-    config: &ZSConfig,
+    max_revisits: usize,
+    with_types: bool,
 ) -> (Option<(TreeNode<L>, usize)>, Stats) {
-    let ref_tree = if config.with_types {
+    let ref_tree = if with_types {
         reference
     } else {
         &reference.strip_types()
@@ -384,15 +365,18 @@ pub fn find_min<L: Label, C: EditCosts<L>>(
     let ref_pp = PreprocessedTree::new(ref_tree);
     let running_best = AtomicUsize::new(usize::MAX);
 
-    let progress = graph.progress_bar(config.max_revisits, config.quiet);
+    let progress = ProgressBar::with_draw_target(
+        Some(graph.count_trees(max_revisits) as u64),
+        ProgressDrawTarget::stderr(),
+    );
     let (result, stats) = graph
-        .choice_iter(config.max_revisits)
+        .choice_iter(max_revisits)
         .par_bridge()
         .progress_with(progress)
         .map(|choices| {
             {
                 let stripped_candidated =
-                    graph.tree_from_choices(graph.root(), &choices, config.with_types);
+                    graph.tree_from_choices(graph.root(), &choices, with_types);
                 let best = running_best.load(Ordering::Relaxed);
 
                 // Fast pruning: size difference is a lower bound on edit distance
@@ -824,9 +808,7 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
-            .0
-            .unwrap();
+        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
 
         assert_eq!(result.1, 0);
     }
@@ -852,9 +834,7 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
-            .0
-            .unwrap();
+        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
 
         assert_eq!(result.1, 0);
         // Result is wrapped in typeOf
@@ -903,9 +883,7 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
-            .0
-            .unwrap();
+        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
 
         assert_eq!(result.1, 0);
         // Result is typeOf(a(...), type), so outer node has 2 children
@@ -1364,9 +1342,7 @@ mod tests {
             ],
         );
 
-        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
-            .0
-            .unwrap();
+        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
         assert_eq!(result.1, 0);
     }
 
@@ -1391,9 +1367,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
-            .0
-            .unwrap();
+        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
         assert_eq!(result.1, 0);
         // Result is wrapped in typeOf
         assert_eq!(result.0.label(), "typeOf");
@@ -1423,7 +1397,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build());
+        let (result, stats) = find_min(&graph, &reference, &UnitCost, 0, true);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);

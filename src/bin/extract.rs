@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use clap::{Args as ClapArgs, Parser};
 
-use eggshell::distance::{EGraph, TreeNode, UnitCost, ZSConfig, find_min};
+use eggshell::distance::{EGraph, TreeNode, UnitCost, find_min};
 use symbolic_expressions::Sexp;
 
 #[derive(Parser)]
@@ -38,7 +38,7 @@ struct Args {
 
     /// Quiet mode (minimal output)
     #[arg(short, long)]
-    quiet: bool,
+    cmd: bool,
 }
 
 #[derive(ClapArgs)]
@@ -56,32 +56,24 @@ struct RefSource {
     name: Option<String>,
 }
 
-macro_rules! qprintln {
-    ($quiet:expr, $($arg:tt)*) => {
-        if !$quiet {
-            println!($($arg)*);
-        }
-    };
-}
-
 #[allow(clippy::cast_precision_loss)]
 fn main() {
     let args = Args::parse();
     // Load and parse the e-graph
-    qprintln!(args.quiet, "Loading e-graph from: {}", args.egraph);
+    eprintln!("Loading e-graph from: {}", args.egraph);
 
     let graph = EGraph::<String>::parse_from_file(Path::new(&args.egraph));
 
-    qprintln!(args.quiet, "  Root e-class: {:?}", graph.root());
+    eprintln!("  Root e-class: {:?}", graph.root());
 
     // Parse the reference tree
     let ref_tree = if let Some(expr) = args.reference.expr {
-        qprintln!(args.quiet, "Parsing reference tree from command line...");
+        eprintln!("Parsing reference tree from command line...");
         TreeNode::from_str(&expr).expect("Failed to parse s-expression")
     } else {
         let file = args.reference.file.unwrap();
         let name = args.reference.name.unwrap();
-        qprintln!(args.quiet, "Parsing reference tree '{}' from file...", name);
+        eprintln!("Parsing reference tree '{name}' from file...");
         let content =
             fs::read_to_string(&file).unwrap_or_else(|e| panic!("Failed to read '{file}': {e}"));
         content
@@ -99,18 +91,17 @@ fn main() {
     };
 
     let ref_node_count = ref_tree.size();
-    qprintln!(args.quiet, "  Reference tree has {ref_node_count} nodes");
+    eprintln!("  Reference tree has {ref_node_count} nodes");
 
     // Count trees in the e-graph
-    qprintln!(
-        args.quiet,
+    eprintln!(
         "\nCounting trees in e-graph (max_revisits={})...",
         args.max_revisits
     );
     let count_start = Instant::now();
     let tree_count = graph.count_trees(args.max_revisits);
     let count_time = count_start.elapsed();
-    qprintln!(args.quiet, "  Found {tree_count} trees in {count_time:.2?}");
+    eprintln!("  Found {tree_count} trees in {count_time:.2?}");
 
     if tree_count == 0 {
         println!("No trees found in e-graph!");
@@ -119,44 +110,43 @@ fn main() {
 
     // Run filtered extraction
 
-    qprintln!(
-        args.quiet,
-        "\n--- Filtered extraction (with lower-bound pruning) ---"
-    );
+    eprintln!("\n--- Filtered extraction (with lower-bound pruning) ---");
     let start = Instant::now();
 
-    let config = &ZSConfig::builder()
-        .quiet(args.quiet)
-        .with_types(args.with_types)
-        .max_revisits(args.max_revisits)
-        .build();
-    if let (Some(result), stats) = find_min(&graph, &ref_tree, &UnitCost, config) {
+    if let (Some(result), stats) = find_min(
+        &graph,
+        &ref_tree,
+        &UnitCost,
+        args.max_revisits,
+        args.with_types,
+    ) {
         let best_tree = Sexp::from(&result.0).to_string();
-        if args.quiet {
+
+        eprintln!("  Best distance: {}", result.1);
+        eprintln!("  Time: {:.2?}", start.elapsed());
+        eprintln!("\n  Statistics:");
+        eprintln!("    Trees enumerated:   {}", stats.trees_enumerated);
+        eprintln!(
+            "    Trees size pruned:  {} ({:.1}%)",
+            stats.size_pruned,
+            100.0 * stats.size_pruned as f64 / stats.trees_enumerated as f64
+        );
+        eprintln!(
+            "    Trees euler pruned: {} ({:.1}%)",
+            stats.euler_pruned,
+            100.0 * stats.euler_pruned as f64 / stats.trees_enumerated as f64
+        );
+        eprintln!(
+            "    Full comparisons:   {} ({:.1}%)",
+            stats.full_comparisons,
+            100.0 * stats.full_comparisons as f64 / stats.trees_enumerated as f64
+        );
+        eprintln!("\n  Best tree:");
+        eprintln!("{best_tree}");
+        if args.cmd {
             println!("{best_tree}");
-        } else {
-            println!("  Best distance: {}", result.1);
-            println!("  Time: {:.2?}", start.elapsed());
-            println!("\n  Statistics:");
-            println!("    Trees enumerated:   {}", stats.trees_enumerated);
-            println!(
-                "    Trees size pruned:  {} ({:.1}%)",
-                stats.size_pruned,
-                100.0 * stats.size_pruned as f64 / stats.trees_enumerated as f64
-            );
-            println!(
-                "    Trees euler pruned: {} ({:.1}%)",
-                stats.euler_pruned,
-                100.0 * stats.euler_pruned as f64 / stats.trees_enumerated as f64
-            );
-            println!(
-                "    Full comparisons:   {} ({:.1}%)",
-                stats.full_comparisons,
-                100.0 * stats.full_comparisons as f64 / stats.trees_enumerated as f64
-            );
-            println!("\n  Best tree: {best_tree:?}");
         }
-    } else if !args.quiet {
-        println!("  No result found!");
+    } else if !args.cmd {
+        eprintln!("  No result found!");
     }
 }
