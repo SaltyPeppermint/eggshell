@@ -35,10 +35,6 @@ struct Args {
     /// Include the types in the comparison
     #[arg(short, long)]
     with_types: bool,
-
-    /// Quiet mode (minimal output)
-    #[arg(short, long)]
-    cmd: bool,
 }
 
 #[derive(ClapArgs)]
@@ -60,20 +56,20 @@ struct RefSource {
 fn main() {
     let args = Args::parse();
     // Load and parse the e-graph
-    eprintln!("Loading e-graph from: {}", args.egraph);
+    println!("Loading e-graph from: {}", args.egraph);
 
     let graph = EGraph::<String>::parse_from_file(Path::new(&args.egraph));
 
-    eprintln!("  Root e-class: {:?}", graph.root());
+    println!("  Root e-class: {:?}", graph.root());
 
     // Parse the reference tree
     let ref_tree = if let Some(expr) = args.reference.expr {
-        eprintln!("Parsing reference tree from command line...");
+        println!("Parsing reference tree from command line...");
         TreeNode::from_str(&expr).expect("Failed to parse s-expression")
     } else {
         let file = args.reference.file.unwrap();
         let name = args.reference.name.unwrap();
-        eprintln!("Parsing reference tree '{name}' from file...");
+        println!("Parsing reference tree '{name}' from file...");
         let content =
             fs::read_to_string(&file).unwrap_or_else(|e| panic!("Failed to read '{file}': {e}"));
         content
@@ -91,17 +87,17 @@ fn main() {
     };
 
     let ref_node_count = ref_tree.size();
-    eprintln!("  Reference tree has {ref_node_count} nodes");
+    println!("  Reference tree has {ref_node_count} nodes");
 
     // Count trees in the e-graph
-    eprintln!(
+    println!(
         "\nCounting trees in e-graph (max_revisits={})...",
         args.max_revisits
     );
     let count_start = Instant::now();
     let tree_count = graph.count_trees(args.max_revisits);
     let count_time = count_start.elapsed();
-    eprintln!("  Found {tree_count} trees in {count_time:.2?}");
+    println!("  Found {tree_count} trees in {count_time:.2?}");
 
     if tree_count == 0 {
         println!("No trees found in e-graph!");
@@ -110,7 +106,7 @@ fn main() {
 
     // Run filtered extraction
 
-    eprintln!("\n--- Filtered extraction (with lower-bound pruning) ---");
+    println!("\n--- Filtered extraction (with lower-bound pruning) ---");
     let start = Instant::now();
 
     if let (Some(result), stats) = find_min(
@@ -122,31 +118,28 @@ fn main() {
     ) {
         let best_tree = Sexp::from(&result.0).to_string();
 
-        eprintln!("  Best distance: {}", result.1);
-        eprintln!("  Time: {:.2?}", start.elapsed());
-        eprintln!("\n  Statistics:");
-        eprintln!("    Trees enumerated:   {}", stats.trees_enumerated);
-        eprintln!(
+        println!("  Best distance: {}", result.1);
+        println!("  Time: {:.2?}", start.elapsed());
+        println!("\n  Statistics:");
+        println!("    Trees enumerated:   {}", stats.trees_enumerated);
+        println!(
             "    Trees size pruned:  {} ({:.1}%)",
             stats.size_pruned,
             100.0 * stats.size_pruned as f64 / stats.trees_enumerated as f64
         );
-        eprintln!(
+        println!(
             "    Trees euler pruned: {} ({:.1}%)",
             stats.euler_pruned,
             100.0 * stats.euler_pruned as f64 / stats.trees_enumerated as f64
         );
-        eprintln!(
+        println!(
             "    Full comparisons:   {} ({:.1}%)",
             stats.full_comparisons,
             100.0 * stats.full_comparisons as f64 / stats.trees_enumerated as f64
         );
-        eprintln!("\n  Best tree:");
-        eprintln!("{best_tree}");
-        if args.cmd {
-            println!("{best_tree}");
-        }
-    } else if !args.cmd {
-        eprintln!("  No result found!");
+        println!("\n  Best tree:");
+        println!("{best_tree}");
+    } else {
+        println!("  No result found!");
     }
 }

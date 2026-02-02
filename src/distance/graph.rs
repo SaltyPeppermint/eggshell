@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hashbrown::HashMap;
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressDrawTarget};
+use indicatif::ParallelProgressIterator;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -365,14 +365,10 @@ pub fn find_min<L: Label, C: EditCosts<L>>(
     let ref_pp = PreprocessedTree::new(ref_tree);
     let running_best = AtomicUsize::new(usize::MAX);
 
-    let progress = ProgressBar::with_draw_target(
-        Some(graph.count_trees(max_revisits) as u64),
-        ProgressDrawTarget::stderr(),
-    );
     let (result, stats) = graph
         .choice_iter(max_revisits)
         .par_bridge()
-        .progress_with(progress)
+        .progress_count(graph.count_trees(max_revisits) as u64)
         .map(|choices| {
             {
                 let stripped_candidated =
