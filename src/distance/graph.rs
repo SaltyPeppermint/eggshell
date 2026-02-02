@@ -11,8 +11,9 @@ use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use bon::Builder;
 use hashbrown::HashMap;
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressDrawTarget, ProgressIterator};
+use indicatif::{ParallelProgressIterator, ProgressBar, ProgressDrawTarget};
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
@@ -23,7 +24,7 @@ use super::ids::{
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
 use super::str::EulerString;
 use super::tree::TreeNode;
-use super::zs::{EditCosts, PreprocessedTree, tree_distance, tree_distance_with_ref};
+use super::zs::{EditCosts, PreprocessedTree, tree_distance_with_ref};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -343,81 +344,6 @@ impl<L: Label> EGraph<L> {
         TreeIter::new(self, max_revisits, with_type)
     }
 
-    /// Sequential enumeration of all trees, computing full distance for each.
-    pub fn find_min_slow<C: EditCosts<L>>(
-        &self,
-        reference: &TreeNode<L>,
-        max_revisits: usize,
-        costs: &C,
-        quiet: bool,
-    ) -> Option<(TreeNode<L>, usize)> {
-        let progress_bar = self.progress_bar(max_revisits, quiet);
-        self.tree_iter(max_revisits, true)
-            .progress_with(progress_bar)
-            .map(|tree| {
-                let distance = tree_distance(&tree, reference, costs);
-                (tree, distance)
-            })
-            .min_by_key(|result| result.1)
-    }
-
-    /// Like `find_min` with `fast=true`, but also returns extraction statistics.
-    /// If `quiet` is true, hides the progress bar.
-    #[must_use]
-    pub fn find_min_filtered<C: EditCosts<L>>(
-        &self,
-        reference: &TreeNode<L>,
-        max_revisits: usize,
-        costs: &C,
-        quiet: bool,
-    ) -> (Option<(TreeNode<L>, usize)>, Stats) {
-        let ref_squashed = reference.to_owned().squash_types();
-        let ref_size = ref_squashed.size();
-        let ref_euler = EulerString::new(&ref_squashed);
-        let ref_pp = PreprocessedTree::new(&ref_squashed);
-        let running_best = AtomicUsize::new(usize::MAX);
-
-        let progress = self.progress_bar(max_revisits, quiet);
-        let (result, stats) = self
-            .choice_iter(max_revisits)
-            .par_bridge()
-            .progress_with(progress)
-            .map(|choices| {
-                {
-                    let squashed_candidate = self
-                        .tree_from_choices(self.root(), &choices, true)
-                        .squash_types();
-                    let best = running_best.load(Ordering::Relaxed);
-
-                    // Fast pruning: size difference is a lower bound on edit distance
-                    // (need at least |n1 - n2| insertions or deletions)
-                    if squashed_candidate.size().abs_diff(ref_size) > best {
-                        return (None, Stats::size_pruned());
-                    }
-
-                    // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
-                    // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
-                    if ref_euler.lower_bound(&squashed_candidate, costs) > best {
-                        return (None, Stats::euler_pruned());
-                    }
-
-                    let distance = tree_distance_with_ref(&squashed_candidate, &ref_pp, costs);
-                    running_best.fetch_min(distance, Ordering::Relaxed);
-                    let tree = self.tree_from_choices(self.root(), &choices, true);
-                    (Some((tree, distance)), Stats::compared())
-                }
-            })
-            .reduce(
-                || (None, Stats::default()),
-                |a, b| {
-                    let best = [a.0, b.0].into_iter().flatten().min_by_key(|v| v.1);
-                    (best, a.1 + b.1)
-                },
-            );
-
-        (result, stats)
-    }
-
     fn progress_bar(&self, max_revisits: usize, quiet: bool) -> ProgressBar {
         let progress = ProgressBar::new(self.count_trees(max_revisits) as u64);
         if quiet {
@@ -425,6 +351,78 @@ impl<L: Label> EGraph<L> {
         }
         progress
     }
+}
+
+#[derive(Builder, Debug)]
+#[builder(derive(Clone, Debug))]
+pub struct ZSConfig {
+    #[builder(default)]
+    max_revisits: usize,
+    #[builder(default = true)]
+    with_types: bool,
+    #[builder(default = false)]
+    quiet: bool,
+}
+
+/// If `quiet` is true, hides the progress bar.
+/// If `strip_types`, ignores the types
+#[must_use]
+pub fn find_min<L: Label, C: EditCosts<L>>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    costs: &C,
+    config: &ZSConfig,
+) -> (Option<(TreeNode<L>, usize)>, Stats) {
+    let ref_tree = if config.with_types {
+        reference
+    } else {
+        &reference.strip_types()
+    };
+
+    let ref_size = ref_tree.size();
+    let ref_euler = EulerString::new(ref_tree);
+    let ref_pp = PreprocessedTree::new(ref_tree);
+    let running_best = AtomicUsize::new(usize::MAX);
+
+    let progress = graph.progress_bar(config.max_revisits, config.quiet);
+    let (result, stats) = graph
+        .choice_iter(config.max_revisits)
+        .par_bridge()
+        .progress_with(progress)
+        .map(|choices| {
+            {
+                let stripped_candidated =
+                    graph.tree_from_choices(graph.root(), &choices, config.with_types);
+                let best = running_best.load(Ordering::Relaxed);
+
+                // Fast pruning: size difference is a lower bound on edit distance
+                // (need at least |n1 - n2| insertions or deletions)
+                if stripped_candidated.size().abs_diff(ref_size) > best {
+                    return (None, Stats::size_pruned());
+                }
+
+                // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
+                // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
+                if ref_euler.lower_bound(&stripped_candidated, costs) > best {
+                    return (None, Stats::euler_pruned());
+                }
+
+                let distance = tree_distance_with_ref(&stripped_candidated, &ref_pp, costs);
+                running_best.fetch_min(distance, Ordering::Relaxed);
+
+                let tree = graph.tree_from_choices(graph.root(), &choices, true);
+                (Some((tree, distance)), Stats::compared())
+            }
+        })
+        .reduce(
+            || (None, Stats::default()),
+            |a, b| {
+                let best = [a.0, b.0].into_iter().flatten().min_by_key(|v| v.1);
+                (best, a.1 + b.1)
+            },
+        );
+
+    (result, stats)
 }
 
 #[derive(Debug)]
@@ -826,8 +824,7 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = graph
-            .find_min_filtered(&reference, 0, &UnitCost, true)
+        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
             .0
             .unwrap();
 
@@ -855,8 +852,7 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = graph
-            .find_min_filtered(&reference, 0, &UnitCost, true)
+        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
             .0
             .unwrap();
 
@@ -907,8 +903,7 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = graph
-            .find_min_filtered(&reference, 0, &UnitCost, true)
+        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
             .0
             .unwrap();
 
@@ -1369,8 +1364,7 @@ mod tests {
             ],
         );
 
-        let result = graph
-            .find_min_filtered(&reference, 0, &UnitCost, true)
+        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
             .0
             .unwrap();
         assert_eq!(result.1, 0);
@@ -1397,8 +1391,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let result = graph
-            .find_min_filtered(&reference, 0, &UnitCost, true)
+        let result = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build())
             .0
             .unwrap();
         assert_eq!(result.1, 0);
@@ -1430,7 +1423,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = graph.find_min_filtered(&reference, 0, &UnitCost, true);
+        let (result, stats) = find_min(&graph, &reference, &UnitCost, &ZSConfig::builder().build());
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
