@@ -65,6 +65,32 @@ impl LiteralData {
             LiteralData::Nat(n) => RiseLabel::NatLit(*n),
         }
     }
+
+    /// Try to parse a bool, int, float, or double literal from a string.
+    /// Returns `Ok(Some(...))` if parsed, `Ok(None)` if not a literal, or `Err` if malformed.
+    /// Try to parse a bool, int, float, or double literal from a string.
+    /// Does not handle `Nat` literals.
+    pub fn parse_trivial(s: &str) -> Option<Self> {
+        match s {
+            "true" => Some(LiteralData::Bool(true)),
+            "false" => Some(LiteralData::Bool(false)),
+            _ => {
+                let (num, suffix) = s.split_at(s.len().checked_sub(1)?);
+                match suffix {
+                    "i" => num.parse().ok().map(LiteralData::Int),
+                    "f" => num
+                        .parse()
+                        .ok()
+                        .map(|v| LiteralData::Float(OrderedFloat(v))),
+                    "d" => num
+                        .parse()
+                        .ok()
+                        .map(|v| LiteralData::Double(OrderedFloat(v))),
+                    _ => None,
+                }
+            }
+        }
+    }
 }
 
 // ============================================================================
@@ -431,25 +457,9 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
         return Ok(ExprNode::Var(idx));
     }
 
-    // Integer literal: <n>i
-    if let Some(num) = s.strip_suffix('i')
-        && let Ok(value) = num.parse::<i32>()
-    {
-        return Ok(ExprNode::Literal(LiteralData::Int(value)));
-    }
-
-    // Float literal: <n>f
-    if let Some(num) = s.strip_suffix('f')
-        && let Ok(value) = num.parse::<f32>()
-    {
-        return Ok(ExprNode::Literal(LiteralData::Float(OrderedFloat(value))));
-    }
-
-    // Double literal: <n>d
-    if let Some(num) = s.strip_suffix('d')
-        && let Ok(value) = num.parse::<f64>()
-    {
-        return Ok(ExprNode::Literal(LiteralData::Double(OrderedFloat(value))));
+    // Bool, int, float, or double literal
+    if let Some(lit) = LiteralData::parse_trivial(s) {
+        return Ok(ExprNode::Literal(lit));
     }
 
     // Nat literal in expression position: <n>n
@@ -469,21 +479,6 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
             })?;
         return Ok(ExprNode::NatLiteral(Nat::Var(idx)));
     }
-
-    // Boolean literals
-    if s == "true" {
-        return Ok(ExprNode::Literal(LiteralData::Bool(true)));
-    }
-    if s == "false" {
-        return Ok(ExprNode::Literal(LiteralData::Bool(false)));
-    }
-
-    // // Float/Double without suffix (decimal number)
-    // if (s.contains('.') || s.contains('E') || s.contains('e'))
-    //     && let Ok(value) = s.parse::<f32>()
-    // {
-    //     return Ok(ExprNode::Literal(LiteralData::Float(OrderedFloat(value))));
-    // }
 
     // Primitive
     Ok(ExprNode::Primitive(Primitive::from_name(s)?))
