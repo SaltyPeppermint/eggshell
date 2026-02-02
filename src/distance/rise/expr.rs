@@ -203,24 +203,27 @@ impl Expr {
 
     /// Convert this expression to a `TreeNode<RiseLabel>` for tree edit distance computation.
     #[must_use]
-    pub fn to_tree(&self) -> TreeNode<RiseLabel> {
-        self.to_tree_impl(true)
+    pub fn to_typed_tree(&self) -> TreeNode<RiseLabel> {
+        self.to_tree(true)
     }
 
     /// Convert this expression to a `TreeNode<RiseLabel>` without type annotations.
     #[must_use]
     pub fn to_untyped_tree(&self) -> TreeNode<RiseLabel> {
-        self.to_tree_impl(false)
+        self.to_tree(false)
     }
 
-    fn to_tree_impl(&self, include_types: bool) -> TreeNode<RiseLabel> {
-        let node_tree = self.node_to_tree(include_types);
+    /// Convert this expression to a `TreeNode<RiseLabel>`
+    #[must_use]
+    pub fn to_tree(&self, with_types: bool) -> TreeNode<RiseLabel> {
+        let node_tree = self.node_to_tree(with_types);
 
-        match &self.ty {
-            Some(ty) if include_types => {
-                TreeNode::new(RiseLabel::TypeOf, vec![node_tree, ty.to_tree()])
-            }
-            _ => node_tree,
+        if let Some(ty) = &self.ty
+            && with_types
+        {
+            TreeNode::new(RiseLabel::TypeOf, vec![node_tree, ty.to_tree()])
+        } else {
+            node_tree
         }
     }
 
@@ -233,23 +236,23 @@ impl Expr {
             ExprNode::NatLiteral(n) => n.to_tree(),
             ExprNode::App(f, e) => TreeNode::new(
                 label,
-                vec![f.to_tree_impl(include_types), e.to_tree_impl(include_types)],
+                vec![f.to_tree(include_types), e.to_tree(include_types)],
             ),
             ExprNode::Lambda(body)
             | ExprNode::NatLambda(body)
             | ExprNode::DataLambda(body)
             | ExprNode::AddrLambda(body)
             | ExprNode::NatNatLambda(body) => {
-                TreeNode::new(label, vec![body.to_tree_impl(include_types)])
+                TreeNode::new(label, vec![body.to_tree(include_types)])
             }
             ExprNode::NatApp(f, n) => {
-                TreeNode::new(label, vec![f.to_tree_impl(include_types), n.to_tree()])
+                TreeNode::new(label, vec![f.to_tree(include_types), n.to_tree()])
             }
             ExprNode::DataApp(f, dt) => {
-                TreeNode::new(label, vec![f.to_tree_impl(include_types), dt.to_tree()])
+                TreeNode::new(label, vec![f.to_tree(include_types), dt.to_tree()])
             }
             ExprNode::AddrApp(f, addr) => {
-                TreeNode::new(label, vec![f.to_tree_impl(include_types), addr.to_tree()])
+                TreeNode::new(label, vec![f.to_tree(include_types), addr.to_tree()])
             }
             ExprNode::IndexLiteral(i, n) => TreeNode::new(label, vec![i.to_tree(), n.to_tree()]),
         }
@@ -575,7 +578,7 @@ mod tests {
     #[test]
     fn to_tree_simple() {
         let expr: Expr = "(app map (lam $e0))".parse().unwrap();
-        let tree = expr.to_tree();
+        let tree = expr.to_typed_tree();
 
         assert_eq!(tree.label(), &RiseLabel::App);
         assert_eq!(tree.children().len(), 2);
@@ -590,7 +593,7 @@ mod tests {
     #[test]
     fn to_tree_typed() {
         let expr: Expr = "(typeOf $e0 f32)".parse().unwrap();
-        let tree = expr.to_tree();
+        let tree = expr.to_typed_tree();
 
         assert_eq!(tree.label(), &RiseLabel::TypeOf);
         assert_eq!(tree.children().len(), 2);
@@ -606,7 +609,7 @@ mod tests {
         let expr: Expr = "(typeOf (lam (typeOf $e0 f32)) (fun f32 f32))"
             .parse()
             .unwrap();
-        let tree = expr.to_tree();
+        let tree = expr.to_typed_tree();
 
         assert_eq!(tree.label(), &RiseLabel::TypeOf);
         assert_eq!(tree.children()[0].label(), &RiseLabel::Lambda);
