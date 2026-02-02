@@ -478,12 +478,12 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
         return Ok(ExprNode::Literal(LiteralData::Bool(false)));
     }
 
-    // Float/Double without suffix (decimal number)
-    if (s.contains('.') || s.contains('E') || s.contains('e'))
-        && let Ok(value) = s.parse::<f32>()
-    {
-        return Ok(ExprNode::Literal(LiteralData::Float(OrderedFloat(value))));
-    }
+    // // Float/Double without suffix (decimal number)
+    // if (s.contains('.') || s.contains('E') || s.contains('e'))
+    //     && let Ok(value) = s.parse::<f32>()
+    // {
+    //     return Ok(ExprNode::Literal(LiteralData::Float(OrderedFloat(value))));
+    // }
 
     // Primitive
     Ok(ExprNode::Primitive(Primitive::from_name(s)?))

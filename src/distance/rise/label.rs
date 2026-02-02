@@ -260,15 +260,15 @@ impl FromStr for RiseLabel {
             "arrT" => RiseLabel::ArrT,
             "vecT" => RiseLabel::VecT,
 
-            // Float/Double without suffix (decimal number like "0.0")
-            _ if s.contains('.') || s.contains('E') || s.contains('e') => {
-                if let Ok(value) = s.parse::<f32>() {
-                    RiseLabel::FloatLit(OrderedFloat(value))
-                } else {
-                    // Try as primitive
-                    RiseLabel::Primitive(Primitive::from_name(s)?)
-                }
-            }
+            // // Float/Double without suffix (decimal number like "0.0")
+            // _ if s.contains('.') || s.contains('E') || s.contains('e') => {
+            //     if let Ok(value) = s.parse::<f32>() {
+            //         RiseLabel::FloatLit(OrderedFloat(value))
+            //     } else {
+            //         // Try as primitive
+            //         RiseLabel::Primitive(Primitive::from_name(s)?)
+            //     }
+            // }
 
             // Everything else is a primitive
             _ => RiseLabel::Primitive(Primitive::from_name(s)?),
@@ -316,7 +316,7 @@ mod tests {
         assert_eq!(RiseLabel::from_str("32n").unwrap(), RiseLabel::NatCst(32));
         assert_eq!(RiseLabel::from_str("-1n").unwrap(), RiseLabel::NatCst(-1));
         assert_eq!(
-            RiseLabel::from_str("0.0").unwrap(),
+            RiseLabel::from_str("0.0f").unwrap(),
             RiseLabel::FloatLit(OrderedFloat(0.0))
         );
         assert_eq!(
