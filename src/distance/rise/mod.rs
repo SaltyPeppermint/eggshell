@@ -60,8 +60,6 @@ impl From<SexpError> for ParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::Path;
 
     use crate::distance::tree::TreeNode;
     use crate::distance::zs::tree_distance_unit;
