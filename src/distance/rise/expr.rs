@@ -486,7 +486,7 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
     }
 
     // Primitive
-    Ok(ExprNode::Primitive(Primitive::from_name(s)))
+    Ok(ExprNode::Primitive(Primitive::from_name(s)?))
 }
 
 #[cfg(test)]

@@ -5,6 +5,8 @@ use std::fmt::{self, Display};
 use serde::{Deserialize, Serialize};
 use symbolic_expressions::{IntoSexp, Sexp};
 
+use crate::distance::rise::ParseError;
+
 /// Built-in primitives in Rise.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Primitive {
@@ -86,15 +88,13 @@ pub enum Primitive {
     IterateStream,
     MapStream,
     MakeDepPair,
-    // Other primitive (fallback for unrecognized names)
-    Other(String),
 }
 
 impl Primitive {
     /// Parse a primitive from its name.
-    #[must_use]
-    pub fn from_name(name: &str) -> Self {
-        match name {
+    #[expect(clippy::missing_errors_doc)]
+    pub fn from_name(name: &str) -> Result<Self, super::ParseError> {
+        Ok(match name {
             "map" => Primitive::Map,
             "reduce" => Primitive::Reduce,
             "zip" => Primitive::Zip,
@@ -158,8 +158,8 @@ impl Primitive {
             "iterateStream" => Primitive::IterateStream,
             "mapStream" => Primitive::MapStream,
             "makeDepPair" => Primitive::MakeDepPair,
-            other => Primitive::Other(other.to_owned()),
-        }
+            other => return Err(ParseError::Prim(other.to_owned())),
+        })
     }
 
     /// Get the name of this primitive.
@@ -229,7 +229,6 @@ impl Primitive {
             Primitive::IterateStream => "iterateStream",
             Primitive::MapStream => "mapStream",
             Primitive::MakeDepPair => "makeDepPair",
-            Primitive::Other(s) => s,
         }
     }
 }

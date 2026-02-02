@@ -266,12 +266,12 @@ impl FromStr for RiseLabel {
                     RiseLabel::FloatLit(OrderedFloat(value))
                 } else {
                     // Try as primitive
-                    RiseLabel::Primitive(Primitive::from_name(s))
+                    RiseLabel::Primitive(Primitive::from_name(s)?)
                 }
             }
 
             // Everything else is a primitive
-            _ => RiseLabel::Primitive(Primitive::from_name(s)),
+            _ => RiseLabel::Primitive(Primitive::from_name(s)?),
         })
     }
 }

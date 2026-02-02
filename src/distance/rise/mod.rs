@@ -29,6 +29,8 @@ pub enum ParseError {
     Sexp(String),
     #[error("invalid expression: {0}")]
     Expr(String),
+    #[error("invalid primitive: {0}")]
+    Prim(String),
     #[error("invalid type: {0}")]
     Type(String),
     #[error("invalid nat: {0}")]
