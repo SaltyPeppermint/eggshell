@@ -335,7 +335,6 @@ impl FromStr for Expr {
 }
 
 /// Parse an expression from an S-expression.
-#[allow(clippy::missing_errors_doc)]
 pub fn parse_expr(sexp: &Sexp) -> Result<Expr, ParseError> {
     match sexp {
         Sexp::String(s) => {
@@ -349,7 +348,7 @@ pub fn parse_expr(sexp: &Sexp) -> Result<Expr, ParseError> {
                     Sexp::String(s_inner) => Some(s_inner.as_str()),
                     _ => None,
                 })
-                .ok_or_else(|| ParseError("expected expression".to_owned()))?;
+                .ok_or_else(|| ParseError::Expr("expected expression head".to_owned()))?;
 
             match head {
                 "typeOf" if items.len() == 3 => {
@@ -410,10 +409,10 @@ pub fn parse_expr(sexp: &Sexp) -> Result<Expr, ParseError> {
                     let n = parse_nat(sexp)?;
                     Ok(Expr::untyped(ExprNode::NatLiteral(n)))
                 }
-                _ => Err(ParseError(format!("unknown expression form: {head}"))),
+                _ => Err(ParseError::Expr(format!("unknown expression form: {head}"))),
             }
         }
-        Sexp::Empty => Err(ParseError("empty sexp in expression position".to_owned())),
+        Sexp::Empty => Err(ParseError::Expr("empty sexp".to_owned())),
     }
 }
 
@@ -422,7 +421,10 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
     if let Some(rest) = s.strip_prefix("$e") {
         let idx = rest
             .parse::<usize>()
-            .map_err(|e| ParseError(format!("invalid variable index: {s} ({e})")))?;
+            .map_err(|reason| ParseError::VarIndex {
+                input: s.to_owned(),
+                reason,
+            })?;
         return Ok(ExprNode::Var(idx));
     }
 
@@ -458,7 +460,10 @@ fn parse_expr_atom(s: &str) -> Result<ExprNode, ParseError> {
     if let Some(rest) = s.strip_prefix("$n") {
         let idx = rest
             .parse::<usize>()
-            .map_err(|e| ParseError(format!("invalid nat variable index: {s} ({e})")))?;
+            .map_err(|reason| ParseError::VarIndex {
+                input: s.to_owned(),
+                reason,
+            })?;
         return Ok(ExprNode::NatLiteral(Nat::Var(idx)));
     }
 

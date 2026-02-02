@@ -226,7 +226,7 @@ fn compute_forest_distance<L: Label, C: EditCosts<L>>(
     // Fill in the forest distance matrix
     // Note: we intentionally use x and y as indices into td, as td stores
     // tree distances for all node pairs using their postorder indices
-    #[allow(clippy::needless_range_loop)]
+    #[expect(clippy::needless_range_loop)]
     for x in l1..=i {
         let x_idx = x - l1 + 1;
         let lx = t1.leftmost_leaf(x);
@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn deep_vs_shallow() {
+    fn deep_vs_shexpect() {
         // Tree 1: a - b - c - d (linear chain)
         let tree1 = node(
             "a".to_owned(),

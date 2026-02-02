@@ -183,7 +183,6 @@ impl FromStr for DataType {
 }
 
 /// Parse a data type from an S-expression.
-#[allow(clippy::missing_errors_doc)]
 pub fn parse_data_type(sexp: &Sexp) -> Result<DataType, ParseError> {
     match sexp {
         Sexp::String(s) => parse_data_type_atom(s),
@@ -194,7 +193,7 @@ pub fn parse_data_type(sexp: &Sexp) -> Result<DataType, ParseError> {
                     Sexp::String(s_inner) => Some(s_inner.as_str()),
                     _ => None,
                 })
-                .ok_or_else(|| ParseError("expected data type expression".to_owned()))?;
+                .ok_or_else(|| ParseError::Type("expected data type expression".to_owned()))?;
 
             match head {
                 "idxT" if items.len() == 2 => {
@@ -216,10 +215,12 @@ pub fn parse_data_type(sexp: &Sexp) -> Result<DataType, ParseError> {
                     let dt = parse_data_type(&items[2])?;
                     Ok(DataType::Vector(Box::new(n), Box::new(dt)))
                 }
-                _ => Err(ParseError(format!("unknown data type form: {head}"))),
+                _ => Err(ParseError::Type(format!("unknown data type form: {head}"))),
             }
         }
-        Sexp::Empty => Err(ParseError("empty sexp in data type position".to_owned())),
+        Sexp::Empty => Err(ParseError::Type(
+            "empty sexp in data type position".to_owned(),
+        )),
     }
 }
 
@@ -228,7 +229,10 @@ pub fn parse_data_type_atom(s: &str) -> Result<DataType, ParseError> {
     if let Some(rest) = s.strip_prefix("$d") {
         let idx = rest
             .parse::<usize>()
-            .map_err(|e| ParseError(format!("invalid data type variable index: {s} ({e})")))?;
+            .map_err(|reason| ParseError::VarIndex {
+                input: s.to_owned(),
+                reason,
+            })?;
         return Ok(DataType::Var(idx));
     }
 
@@ -242,7 +246,9 @@ pub fn parse_data_type_atom(s: &str) -> Result<DataType, ParseError> {
         return Ok(DataType::NatT);
     }
 
-    Err(ParseError(format!("cannot parse data type atom: {s}")))
+    Err(ParseError::Type(format!(
+        "cannot parse data type atom: {s}"
+    )))
 }
 
 // ============================================================================
@@ -348,7 +354,6 @@ impl FromStr for Type {
 }
 
 /// Parse a type from an S-expression.
-#[allow(clippy::missing_errors_doc)]
 pub fn parse_type(sexp: &Sexp) -> Result<Type, ParseError> {
     match sexp {
         Sexp::String(s) => {
@@ -363,7 +368,7 @@ pub fn parse_type(sexp: &Sexp) -> Result<Type, ParseError> {
                     Sexp::String(s_inner) => Some(s_inner.as_str()),
                     _ => None,
                 })
-                .ok_or_else(|| ParseError("expected type expression".to_owned()))?;
+                .ok_or_else(|| ParseError::Type("expected type expression".to_owned()))?;
 
             match head {
                 "fun" if items.len() == 3 => {
@@ -392,10 +397,10 @@ pub fn parse_type(sexp: &Sexp) -> Result<Type, ParseError> {
                     let dt = parse_data_type(sexp)?;
                     Ok(Type::Data(dt))
                 }
-                _ => Err(ParseError(format!("unknown type form: {head}"))),
+                _ => Err(ParseError::Type(format!("unknown type form: {head}"))),
             }
         }
-        Sexp::Empty => Err(ParseError("empty sexp in type position".to_owned())),
+        Sexp::Empty => Err(ParseError::Type("empty sexp in type position".to_owned())),
     }
 }
 

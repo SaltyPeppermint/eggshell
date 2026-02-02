@@ -10,6 +10,8 @@ mod nat;
 mod primitive;
 mod types;
 
+use std::num::ParseIntError;
+
 pub use address::Address;
 pub use expr::{Expr, ExprNode, LiteralData};
 pub use label::RiseLabel;
@@ -17,24 +19,39 @@ pub use nat::Nat;
 pub use primitive::Primitive;
 pub use types::{DataType, ScalarType, Type};
 
-use std::fmt::{self, Display};
 use symbolic_expressions::SexpError;
+use thiserror::Error;
 
 /// Error type for parsing Rise expressions.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParseError(pub String);
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum ParseError {
+    #[error("S-expression parse error: {0}")]
+    Sexp(String),
+    #[error("invalid expression: {0}")]
+    Expr(String),
+    #[error("invalid type: {0}")]
+    Type(String),
+    #[error("invalid nat: {0}")]
+    Nat(String),
+    #[error("invalid address: {0}")]
+    Address(String),
+    #[error("invalid label: {0}")]
+    Label(String),
+    #[error("invalid variable index '{input}': {reason}")]
+    VarIndex {
+        input: String,
+        reason: ParseIntError,
+    },
+    #[error("invalid literal '{input}': {reason}")]
+    Literal {
+        input: String,
+        reason: ParseIntError,
+    },
 }
-
-impl std::error::Error for ParseError {}
 
 impl From<SexpError> for ParseError {
     fn from(e: SexpError) -> Self {
-        ParseError(format!("S-expression parse error: {e:?}"))
+        ParseError::Sexp(format!("{e:?}"))
     }
 }
 
@@ -100,6 +117,33 @@ mod tests {
 
         // Different variable index - distance 1
         assert_eq!(tree_distance_unit(&tree1, &tree2), 1);
+    }
+
+    #[test]
+    fn rise_label_egraph_deserialize() {
+        use crate::distance::EGraph;
+        use crate::distance::ids::NumericId;
+        use std::path::Path;
+
+        let path = Path::new(
+            "data/rise/egraph_jsons/ser_egraph_vectorization_SRL_step_2_iteration_0_root_150.json",
+        );
+        if !path.exists() {
+            return;
+        }
+
+        let graph: EGraph<RiseLabel> = EGraph::parse_from_file(path);
+
+        // Verify root is correct
+        assert_eq!(graph.root().to_index(), 150);
+
+        // Verify we can access the root class
+        let root_class = graph.class(graph.root());
+        assert!(!root_class.nodes().is_empty());
+
+        // Verify the first node has the expected label
+        let first_node = &root_class.nodes()[0];
+        assert_eq!(*first_node.label(), RiseLabel::NatLambda);
     }
 
     #[test]

@@ -66,7 +66,7 @@ impl Address {
 pub fn parse_address(sexp: &Sexp) -> Result<Address, ParseError> {
     match sexp {
         Sexp::String(s) => parse_address_atom(s),
-        _ => Err(ParseError("expected address atom".to_owned())),
+        _ => Err(ParseError::Address("expected address atom".to_owned())),
     }
 }
 
@@ -75,7 +75,10 @@ fn parse_address_atom(s: &str) -> Result<Address, ParseError> {
     if let Some(rest) = s.strip_prefix("$a") {
         let idx = rest
             .parse::<usize>()
-            .map_err(|e| ParseError(format!("invalid variable index: {s} ({e})")))?;
+            .map_err(|reason| ParseError::VarIndex {
+                input: s.to_owned(),
+                reason,
+            })?;
         return Ok(Address::Var(idx));
     }
 
@@ -84,6 +87,6 @@ fn parse_address_atom(s: &str) -> Result<Address, ParseError> {
         "local" => Ok(Address::Local),
         "private" => Ok(Address::Private),
         "constant" => Ok(Address::Constant),
-        _ => Err(ParseError(format!("unknown address: {s}"))),
+        _ => Err(ParseError::Address(format!("unknown address: {s}"))),
     }
 }

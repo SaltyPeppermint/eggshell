@@ -140,7 +140,6 @@ impl FromStr for Nat {
 }
 
 /// Parse a nat from an S-expression.
-#[allow(clippy::missing_errors_doc)]
 pub fn parse_nat(sexp: &Sexp) -> Result<Nat, ParseError> {
     match sexp {
         Sexp::String(s) => parse_nat_atom(s),
@@ -151,7 +150,7 @@ pub fn parse_nat(sexp: &Sexp) -> Result<Nat, ParseError> {
                     Sexp::String(inner_s) => Some(inner_s.as_str()),
                     _ => None,
                 })
-                .ok_or_else(|| ParseError("expected nat expression".to_owned()))?;
+                .ok_or_else(|| ParseError::Nat("expected nat expression head".to_owned()))?;
 
             match head {
                 "natAdd" if items.len() == 3 => {
@@ -179,10 +178,10 @@ pub fn parse_nat(sexp: &Sexp) -> Result<Nat, ParseError> {
                     let b = parse_nat(&items[2])?;
                     Ok(Nat::FloorDiv(Box::new(a), Box::new(b)))
                 }
-                _ => Err(ParseError(format!("unknown nat form: {head}"))),
+                _ => Err(ParseError::Nat(format!("unknown nat form: {head}"))),
             }
         }
-        Sexp::Empty => Err(ParseError("empty sexp in nat position".to_owned())),
+        Sexp::Empty => Err(ParseError::Nat("empty sexp".to_owned())),
     }
 }
 
@@ -191,15 +190,19 @@ fn parse_nat_atom(s: &str) -> Result<Nat, ParseError> {
     if let Some(rest) = s.strip_prefix("$n") {
         let idx = rest
             .parse::<usize>()
-            .map_err(|e| ParseError(format!("invalid nat variable index: {s} ({e})")))?;
+            .map_err(|reason| ParseError::VarIndex {
+                input: s.to_owned(),
+                reason,
+            })?;
         return Ok(Nat::Var(idx));
     }
 
     // Nat constant: <value>n
     if let Some(num) = s.strip_suffix('n') {
-        let value = num
-            .parse::<i64>()
-            .map_err(|e| ParseError(format!("invalid nat constant: {s} ({e})")))?;
+        let value = num.parse::<i64>().map_err(|reason| ParseError::Literal {
+            input: s.to_owned(),
+            reason,
+        })?;
         return Ok(Nat::Cst(value));
     }
 
@@ -208,7 +211,7 @@ fn parse_nat_atom(s: &str) -> Result<Nat, ParseError> {
         return Ok(Nat::Cst(value));
     }
 
-    Err(ParseError(format!("cannot parse nat atom: {s}")))
+    Err(ParseError::Nat(format!("cannot parse nat atom: {s}")))
 }
 
 #[cfg(test)]

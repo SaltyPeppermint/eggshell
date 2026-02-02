@@ -112,8 +112,8 @@ impl<L: Label> EGraph<L> {
     /// # Panics
     /// Panics if the file cannot be read, parsed, or if the filename doesn't match the expected format.
     #[must_use]
-    pub fn parse_from_file(file: &Path) -> EGraph<String> {
-        let mut graph: EGraph<String> =
+    pub fn parse_from_file(file: &Path) -> EGraph<L> {
+        let mut graph: EGraph<L> =
             serde_json::from_reader(BufReader::new(File::open(file).unwrap())).unwrap();
         // Pattern: ..._root_123.json
         let stem = file.file_stem().unwrap().to_str().unwrap();

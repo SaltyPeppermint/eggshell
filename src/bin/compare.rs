@@ -1,15 +1,22 @@
 use std::fs;
-use std::str::FromStr;
 
 use clap::Parser;
 
-use eggshell::distance::{TreeNode, tree_distance_unit};
+use eggshell::distance::{Expr, Label, RiseLabel, TreeNode, tree_distance_unit};
 
 #[derive(Parser)]
 #[command(about = "Compare trees using Zhang-Shasha edit distance")]
 struct Args {
     /// File containing trees in "Name: sexpr" format
     file: String,
+
+    /// Use raw string labels instead of Rise-typed labels (for regression testing)
+    #[arg(long)]
+    raw_strings: bool,
+
+    /// Strip type annotations from trees before comparison
+    #[arg(long)]
+    strip_types: bool,
 }
 
 fn main() {
@@ -17,23 +24,66 @@ fn main() {
     let content = fs::read_to_string(&args.file)
         .unwrap_or_else(|e| panic!("Failed to read '{}': {e}", args.file));
 
+    if args.raw_strings {
+        run_with_strings(&content, args.strip_types);
+    } else {
+        run_with_rise(&content, args.strip_types);
+    }
+}
+
+fn run_with_rise(content: &str, strip_types: bool) {
+    let trees: Vec<(String, TreeNode<RiseLabel>)> = content
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let (name, sexpr) = line.split_once(':').expect("Line must be 'Name: sexpr'");
+            let expr: Expr = sexpr
+                .trim()
+                .parse()
+                .expect("Failed to parse Rise expression");
+            let tree = if strip_types {
+                expr.to_untyped_tree()
+            } else {
+                expr.to_tree()
+            };
+            (name.trim().to_owned(), tree)
+        })
+        .collect();
+
+    print_distance_matrix(&trees);
+}
+
+fn run_with_strings(content: &str, strip_types: bool) {
     let trees: Vec<(String, TreeNode<String>)> = content
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
             let (name, sexpr) = line.split_once(':').expect("Line must be 'Name: sexpr'");
-            let tree = TreeNode::from_str(sexpr.trim()).expect("Failed to parse s-expression");
+            let raw_tree: TreeNode<String> =
+                sexpr.trim().parse().expect("Failed to parse s-expression");
+            let tree = if strip_types {
+                raw_tree.strip_types()
+            } else {
+                raw_tree
+            };
             (name.trim().to_owned(), tree)
         })
         .collect();
 
+    print_distance_matrix(&trees);
+}
+
+fn print_distance_matrix<L>(trees: &[(String, TreeNode<L>)])
+where
+    L: Label,
+{
     if trees.is_empty() {
         println!("No trees found in file.");
         return;
     }
 
     println!("Loaded {} trees:", trees.len());
-    for (name, _) in &trees {
+    for (name, _) in trees {
         println!("  - {name}");
     }
     println!();
@@ -43,7 +93,7 @@ fn main() {
 
     // Print header
     print!("{:width$}", "", width = max_name_len + 2);
-    for (name, _) in &trees {
+    for (name, _) in trees {
         print!("{:>width$}", name, width = max_name_len + 2);
     }
     println!();

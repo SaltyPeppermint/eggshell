@@ -4,6 +4,7 @@
 //! The algorithm runs in O(n1 * n2 * min(depth1, leaves1) * min(depth2, leaves2))
 //! time and O(n1 * n2) space.
 
+use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -105,44 +106,12 @@ impl<L: Label> TreeNode<L> {
         TreeNode::new(node, children)
     }
 
-    // /// Remove type annotation wrappers from this tree.
-    // #[must_use]
-    // pub fn strip_types(&self) -> Self {
-    //     if self.label.is_type_of() {
-    //         self.children()[0].strip_types()
-    //     } else {
-    //         self.clone()
-    //     }
-    // }
-
     /// Count total number of nodes in this tree.
     pub fn size(&self) -> usize {
         1 + self.children.iter().map(Self::size).sum::<usize>()
     }
 
-    // /// Remove the typeof node by pushing the typeof in the rightmost child
-    // /// trades height and node number vs child number
-    // #[allow(clippy::missing_panics_doc)]
-    // #[must_use]
-    // pub fn squash_types(mut self) -> Self {
-    //     if self.label().is_type_of() {
-    //         let mut child_iter = self.children.into_iter();
-    //         let mut expr_tree = child_iter.next().unwrap().squash_types();
-    //         let type_tree = child_iter.next().unwrap();
-    //         expr_tree.children.push(type_tree);
-    //         expr_tree
-    //     } else {
-    //         self.children = self
-    //             .children
-    //             .into_iter()
-    //             .map(|c| c.squash_types())
-    //             .collect();
-    //         self
-    //     }
-    // }
-
     /// Strip the types for quicker comparison
-    #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn strip_types(&self) -> Self {
         if self.label().is_type_of() {
@@ -152,6 +121,20 @@ impl<L: Label> TreeNode<L> {
                 label: self.label().clone(),
                 children: self.children.iter().map(|c| c.strip_types()).collect(),
             }
+        }
+    }
+}
+
+impl<L: Label + Display> Display for TreeNode<L> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_leaf() {
+            write!(f, "{}", self.label)
+        } else {
+            write!(f, "({}", self.label)?;
+            for child in &self.children {
+                write!(f, " {child}")?;
+            }
+            write!(f, ")")
         }
     }
 }
