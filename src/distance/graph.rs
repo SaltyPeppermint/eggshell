@@ -416,6 +416,7 @@ pub fn find_min_struct<L: Label, C: EditCosts<L>>(
     costs: &C,
     max_revisits: usize,
     with_types: bool,
+    ignore_labels: bool,
 ) -> Option<(TreeNode<L>, usize)> {
     let ref_tree = if with_types {
         reference
@@ -428,7 +429,7 @@ pub fn find_min_struct<L: Label, C: EditCosts<L>>(
         .progress_count(graph.count_trees(max_revisits) as u64)
         .map(|choices| {
             let stripped_candidated = graph.tree_from_choices(graph.root(), &choices, with_types);
-            let distance = structural_diff(ref_tree, &stripped_candidated, costs);
+            let distance = structural_diff(ref_tree, &stripped_candidated, costs, ignore_labels);
             let tree = graph.tree_from_choices(graph.root(), &choices, true);
             (tree, distance)
         })

@@ -6,25 +6,30 @@ use super::{EditCosts, Label, TreeNode};
 pub fn structural_diff<L: Label, C: EditCosts<L>>(
     reference: &TreeNode<L>,
     candidate: &TreeNode<L>,
-    cost: &C,
+    costs: &C,
+    ignore_labels: bool,
 ) -> usize {
     if reference.children().len() != candidate.children().len() {
-        return cost_rec(reference, cost);
+        return cost_rec(reference, costs);
     }
-    reference
+    let children_diff = reference
         .children()
         .iter()
         .zip(candidate.children())
-        .map(|(r, c)| structural_diff(r, c, cost))
-        .sum()
+        .map(|(r, c)| structural_diff(r, c, costs, ignore_labels))
+        .sum();
+    if !ignore_labels && reference.label() != candidate.label() {
+        return costs.relabel(candidate.label(), reference.label()) + children_diff;
+    }
+    children_diff
 }
 
-fn cost_rec<L: Label, C: EditCosts<L>>(tree: &TreeNode<L>, cost: &C) -> usize {
-    cost.insert(tree.label())
+fn cost_rec<L: Label, C: EditCosts<L>>(tree: &TreeNode<L>, costs: &C) -> usize {
+    costs.insert(tree.label())
         + tree
             .children()
             .iter()
-            .map(|c| cost_rec(c, cost))
+            .map(|c| cost_rec(c, costs))
             .sum::<usize>()
 }
 
@@ -51,7 +56,7 @@ mod tests {
             "a".to_owned(),
             vec![leaf("b".to_owned()), leaf("c".to_owned())],
         );
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 0);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 0);
     }
 
     #[test]
@@ -59,7 +64,7 @@ mod tests {
         let tree1 = leaf("a".to_owned());
         let tree2 = leaf("b".to_owned());
         // Labels are ignored, both are leaves with no children
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 0);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 0);
     }
 
     #[test]
@@ -71,7 +76,7 @@ mod tests {
         );
         // Different number of children -> cost of entire reference tree
         // tree1 has 2 nodes: "a" and "b"
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 2);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 2);
     }
 
     #[test]
@@ -99,7 +104,7 @@ mod tests {
         );
         // Root matches (1 child each), but b's children differ (2 vs 1)
         // Cost is the subtree rooted at b in reference: b, c, d = 3 nodes
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 3);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 3);
     }
 
     #[test]
@@ -113,7 +118,7 @@ mod tests {
             "x".to_owned(),
             vec![leaf("y".to_owned()), leaf("z".to_owned())],
         );
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 0);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 0);
     }
 
     #[test]
@@ -133,7 +138,7 @@ mod tests {
                 vec![node("y".to_owned(), vec![leaf("z".to_owned())])],
             )],
         );
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 0);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 0);
     }
 
     #[test]
@@ -173,7 +178,7 @@ mod tests {
         // b has 2 children in tree1 vs 1 in tree2 - mismatch at b
         // Cost is subtree at b: b, e, f = 3 nodes
         // c and d match (both leaves)
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 3);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 3);
     }
 
     #[test]
@@ -185,7 +190,7 @@ mod tests {
         );
         // tree1 (reference) is a leaf (0 children), tree2 has 2 children
         // Mismatch at root -> cost of reference = 1 node
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 1);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 1);
     }
 
     #[test]
@@ -197,6 +202,6 @@ mod tests {
         let tree2 = leaf("a".to_owned());
         // tree1 (reference) has 2 children, tree2 has 0
         // Mismatch at root -> cost of reference = 3 nodes
-        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost), 3);
+        assert_eq!(structural_diff(&tree1, &tree2, &UnitCost, true), 3);
     }
 }

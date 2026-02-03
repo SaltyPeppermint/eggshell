@@ -22,6 +22,7 @@ Examples:
   # With revisits and quiet mode
   extract graph.json -e '(foo bar)' -r 2 -q
 ")]
+#[expect(clippy::struct_excessive_bools)]
 struct Args {
     /// Path to the serialized e-graph JSON file
     egraph: String,
@@ -44,6 +45,10 @@ struct Args {
     /// Use structural distance instead of Zhang-Shasha tree edit distance
     #[arg(short, long)]
     structural: bool,
+
+    /// Ignore the labels when using the structural option
+    #[arg(short, long, requires_all = ["structural"])]
+    ignore_labels: bool,
 }
 
 #[derive(ClapArgs)]
@@ -191,6 +196,7 @@ fn run_structural<L: Label>(graph: &EGraph<L>, ref_tree: &TreeNode<L>, args: &Ar
         &UnitCost,
         args.max_revisits,
         args.with_types,
+        args.ignore_labels,
     ) {
         println!("  Best distance: {distance}");
         println!("  Time: {:.2?}", start.elapsed());
