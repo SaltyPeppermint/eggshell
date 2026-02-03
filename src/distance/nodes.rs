@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 
@@ -6,7 +6,15 @@ use super::ids::{DataChildId, ExprChildId, NatId, TypeChildId};
 
 /// Trait for node labels in e-graphs and trees.
 pub trait Label:
-    Clone + Eq + std::hash::Hash + std::fmt::Debug + Serialize + for<'de> Deserialize<'de> + Send + Sync
+    Clone
+    + Eq
+    + std::hash::Hash
+    + std::fmt::Debug
+    + Serialize
+    + for<'de> Deserialize<'de>
+    + Send
+    + Sync
+    + Display
 {
     /// Returns the label used for type annotations (e.g., "typeOf").
     fn type_of() -> Self;

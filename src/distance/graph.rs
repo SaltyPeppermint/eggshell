@@ -16,6 +16,8 @@ use indicatif::ParallelProgressIterator;
 use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
+use crate::distance::structural::structural_diff;
+
 use super::ids::{
     DataId, EClassId, ExprChildId, FunId, NatId, NumericId, TypeChildId, eclass_id_vec,
     numeric_key_map,
@@ -347,7 +349,7 @@ impl<L: Label> EGraph<L> {
 /// If `quiet` is true, hides the progress bar.
 /// If `strip_types`, ignores the types
 #[must_use]
-pub fn find_min<L: Label, C: EditCosts<L>>(
+pub fn find_min_zs<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     costs: &C,
@@ -403,6 +405,34 @@ pub fn find_min<L: Label, C: EditCosts<L>>(
         );
 
     (result, stats)
+}
+
+/// If `quiet` is true, hides the progress bar.
+/// If `strip_types`, ignores the types
+#[must_use]
+pub fn find_min_struct<L: Label, C: EditCosts<L>>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    costs: &C,
+    max_revisits: usize,
+    with_types: bool,
+) -> Option<(TreeNode<L>, usize)> {
+    let ref_tree = if with_types {
+        reference
+    } else {
+        &reference.strip_types()
+    };
+    graph
+        .choice_iter(max_revisits)
+        .par_bridge()
+        .progress_count(graph.count_trees(max_revisits) as u64)
+        .map(|choices| {
+            let stripped_candidated = graph.tree_from_choices(graph.root(), &choices, with_types);
+            let distance = structural_diff(ref_tree, &stripped_candidated, costs);
+            let tree = graph.tree_from_choices(graph.root(), &choices, true);
+            (tree, distance)
+        })
+        .min_by_key(|(_, d)| *d)
 }
 
 #[derive(Debug)]
@@ -804,7 +834,9 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
+        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+            .0
+            .unwrap();
 
         assert_eq!(result.1, 0);
     }
@@ -830,7 +862,9 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
+        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+            .0
+            .unwrap();
 
         assert_eq!(result.1, 0);
         // Result is wrapped in typeOf
@@ -879,7 +913,9 @@ mod tests {
                 leaf("0".to_owned()), // a's type
             ],
         );
-        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
+        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+            .0
+            .unwrap();
 
         assert_eq!(result.1, 0);
         // Result is typeOf(a(...), type), so outer node has 2 children
@@ -1338,7 +1374,9 @@ mod tests {
             ],
         );
 
-        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
+        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+            .0
+            .unwrap();
         assert_eq!(result.1, 0);
     }
 
@@ -1363,7 +1401,9 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let result = find_min(&graph, &reference, &UnitCost, 0, true).0.unwrap();
+        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+            .0
+            .unwrap();
         assert_eq!(result.1, 0);
         // Result is wrapped in typeOf
         assert_eq!(result.0.label(), "typeOf");
@@ -1393,7 +1433,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = find_min(&graph, &reference, &UnitCost, 0, true);
+        let (result, stats) = find_min_zs(&graph, &reference, &UnitCost, 0, true);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);

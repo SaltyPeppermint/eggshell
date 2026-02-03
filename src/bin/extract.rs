@@ -7,7 +7,7 @@ use clap::{Args as ClapArgs, Parser};
 
 use serde::de::DeserializeOwned;
 
-use eggshell::distance::{EGraph, Expr, Label, TreeNode, UnitCost, find_min};
+use eggshell::distance::{EGraph, Expr, Label, TreeNode, UnitCost, find_min_struct, find_min_zs};
 
 #[derive(Parser)]
 #[command(about = "Find the closest tree in an e-graph to a reference tree")]
@@ -40,6 +40,10 @@ struct Args {
     /// Use raw string labels instead of Rise-typed labels (for regression testing)
     #[arg(long)]
     raw_strings: bool,
+
+    /// Use structural distance instead of Zhang-Shasha tree edit distance
+    #[arg(short, long)]
+    structural: bool,
 }
 
 #[derive(ClapArgs)]
@@ -111,7 +115,6 @@ where
     run_extraction(&graph, &ref_tree, args);
 }
 
-#[expect(clippy::cast_precision_loss)]
 fn run_extraction<L: Label + std::fmt::Display>(
     graph: &EGraph<L>,
     ref_tree: &TreeNode<L>,
@@ -135,11 +138,18 @@ fn run_extraction<L: Label + std::fmt::Display>(
         return;
     }
 
-    // Run filtered extraction
-    println!("\n--- Filtered extraction (with lower-bound pruning) ---");
-    let start = Instant::now();
+    if args.structural {
+        run_structural(graph, ref_tree, args);
+    } else {
+        run_zs(graph, ref_tree, args);
+    }
+}
 
-    if let (Some(result), stats) = find_min(
+#[expect(clippy::cast_precision_loss)]
+fn run_zs<L: Label>(graph: &EGraph<L>, ref_tree: &TreeNode<L>, args: &Args) {
+    let start = Instant::now();
+    println!("\n--- Zhang-Shasha extraction (with lower-bound pruning) ---");
+    if let (Some(result), stats) = find_min_zs(
         graph,
         ref_tree,
         &UnitCost,
@@ -167,6 +177,25 @@ fn run_extraction<L: Label + std::fmt::Display>(
         );
         println!("\n  Best tree:");
         println!("{}", result.0);
+    } else {
+        println!("  No result found!");
+    }
+}
+
+fn run_structural<L: Label>(graph: &EGraph<L>, ref_tree: &TreeNode<L>, args: &Args) {
+    let start = Instant::now();
+    println!("\n--- Structural distance extraction ---");
+    if let Some((tree, distance)) = find_min_struct(
+        graph,
+        ref_tree,
+        &UnitCost,
+        args.max_revisits,
+        args.with_types,
+    ) {
+        println!("  Best distance: {distance}");
+        println!("  Time: {:.2?}", start.elapsed());
+        println!("\n  Best tree:");
+        println!("{tree}");
     } else {
         println!("  No result found!");
     }
