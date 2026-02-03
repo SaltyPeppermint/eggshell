@@ -2,6 +2,7 @@ mod graph;
 mod ids;
 mod nodes;
 pub mod rise;
+mod sampling;
 mod str;
 mod structural;
 mod tree;
@@ -12,6 +13,10 @@ pub use rise::{Expr, Nat, RiseLabel, Type};
 
 pub use graph::{EClass, EGraph, Stats, find_min_struct, find_min_zs};
 pub use nodes::Label;
+pub use sampling::{
+    DiverseSampler, DiverseSamplerConfig, FixpointSampler, FixpointSamplerConfig, Sampler,
+    find_critical_lambda, structural_hash,
+};
 pub use str::tree_distance_euler_bound;
 pub use tree::TreeNode;
 pub use zs::{EditCosts, UnitCost, tree_distance, tree_distance_unit};

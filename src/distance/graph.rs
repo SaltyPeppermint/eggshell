@@ -159,6 +159,11 @@ impl<L: Label> EGraph<L> {
         &self.nat_nodes[&id]
     }
 
+    /// Returns an iterator over all e-class IDs in the graph.
+    pub fn class_ids(&self) -> impl Iterator<Item = EClassId> + '_ {
+        self.classes.keys().copied()
+    }
+
     /// Find the next valid choice vector, modifying `choices` in place.
     ///
     /// If `choices` is empty or shorter than needed, finds the first valid tree.
