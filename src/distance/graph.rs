@@ -159,123 +159,131 @@ impl<L: Label> EGraph<L> {
         &self.nat_nodes[&id]
     }
 
-    /// Enumerate all possible trees extractable from an `EGraph` starting at a given class,
-    /// respecting the cycle revisit limit.
+    /// Find the next valid choice vector, modifying `choices` in place.
     ///
-    /// Returns the tree and the index of the last choice used, or None if no more trees exist.
-    /// The `choices` vector is modified to record/follow choices at each `EClass`.
-    fn next_tree(
-        &self,
-        id: EClassId,
-        choice_idx: usize,
-        choices: &mut Vec<usize>,
-        path: &mut PathTracker,
-        with_type: bool,
-    ) -> Option<(TreeNode<L>, usize)> {
-        // Cycle detection
-        if !path.can_visit(id) {
-            return None;
-        }
-
-        let class = self.class(id);
-        let choice = choices.get(choice_idx).copied().unwrap_or_else(|| {
-            choices.push(0);
-            0
-        });
-
-        path.enter(id);
-        // Try choices starting from `choice`, looking for a valid one
-        for (node_idx, node) in class.nodes().iter().enumerate().skip(choice) {
-            // Set the choice_idx for future choices
-            // Useless write if the choice is correct
-            choices[choice_idx] = node_idx;
-
-            let result = node.children().iter().try_fold(
-                (Vec::new(), choice_idx),
-                |(mut children, curr_idx): (Vec<_>, _), child_id| {
-                    let (child_tree, last_idx) = match child_id {
-                        // With nats and dt we cannot make a choice so do not add anything to the choice
-                        ExprChildId::Nat(nat_id) => (TreeNode::from_nat(self, *nat_id), curr_idx),
-                        ExprChildId::Data(dt_id) => (TreeNode::from_data(self, *dt_id), curr_idx),
-                        ExprChildId::EClass(eclass_id) => {
-                            self.next_tree(*eclass_id, curr_idx + 1, choices, path, with_type)?
-                        }
-                    };
-
-                    children.push(child_tree);
-                    Some((children, last_idx))
-                },
-            );
-
-            if let Some((children, curr_idx)) = result {
-                path.leave(id);
-                let expr_tree = TreeNode::new(node.label().clone(), children);
-                let eclass_tree = if with_type {
-                    let type_tree = TreeNode::from_eclass(self, id);
-                    TreeNode::new(L::type_of(), vec![expr_tree, type_tree])
-                } else {
-                    expr_tree
-                };
-                return Some((eclass_tree, curr_idx));
-            }
-
-            // This node's children failed, try next node in this class
-            // Reset choices for children (truncate to current position + 1)
-            choices.truncate(choice_idx + 1);
-        }
-
-        path.leave(id);
-        // No valid choice found at this level, need to backtrack
-        None
-    }
-
-    /// Advance to the next valid choice vector without materializing the tree.
-    /// Returns the last choice index used, or None if no more valid choices exist.
+    /// If `choices` is empty or shorter than needed, finds the first valid tree.
+    /// If `choices` already represents a tree and `advance` is true, finds the
+    /// lexicographically next one.
+    ///
+    /// Returns `Some(last_idx)` on success, `None` if no more trees exist.
     fn next_choices(
         &self,
         id: EClassId,
         choice_idx: usize,
         choices: &mut Vec<usize>,
         path: &mut PathTracker,
+        advance: bool,
     ) -> Option<usize> {
-        // Cycle detection
         if !path.can_visit(id) {
             return None;
         }
 
         let class = self.class(id);
-        let choice = choices.get(choice_idx).copied().unwrap_or_else(|| {
+
+        // Determine starting node and whether to advance children
+        let (start_node, advance_children) = if let Some(&c) = choices.get(choice_idx) {
+            (c, advance)
+        } else {
             choices.push(0);
-            0
-        });
+            (0, false)
+        };
 
         path.enter(id);
-        // Try choices starting from `choice`, looking for a valid one
-        for (node_idx, node) in class.nodes().iter().enumerate().skip(choice) {
-            choices[choice_idx] = node_idx;
 
-            let result = node
-                .children()
+        let result =
+            class
+                .nodes()
                 .iter()
-                .try_fold(choice_idx, |curr_idx, child_id| match child_id {
-                    // With nats and dt we cannot make a choice so do not add anything to the choice
-                    ExprChildId::Nat(_) | ExprChildId::Data(_) => Some(curr_idx),
-                    ExprChildId::EClass(eclass_id) => {
-                        self.next_choices(*eclass_id, curr_idx + 1, choices, path)
-                    }
+                .enumerate()
+                .skip(start_node)
+                .find_map(|(node_idx, node)| {
+                    choices[choice_idx] = node_idx;
+                    let should_advance = advance_children && node_idx == start_node;
+
+                    self.next_choices_children(
+                        node.children(),
+                        choice_idx,
+                        choices,
+                        path,
+                        should_advance,
+                    )
+                    .or_else(|| {
+                        choices.truncate(choice_idx + 1);
+                        None
+                    })
                 });
 
-            if let Some(curr_idx) = result {
-                path.leave(id);
-                return Some(curr_idx);
-            }
-
-            // This node's children failed, try next node in this class
-            choices.truncate(choice_idx + 1);
-        }
-
         path.leave(id);
-        None
+        result
+    }
+
+    /// Process children, optionally advancing to find the next combination.
+    fn next_choices_children(
+        &self,
+        children: &[ExprChildId],
+        parent_idx: usize,
+        choices: &mut Vec<usize>,
+        path: &mut PathTracker,
+        advance: bool,
+    ) -> Option<usize> {
+        let eclass_children = children
+            .iter()
+            .filter_map(|c| match c {
+                ExprChildId::EClass(id) => Some(*id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        match (eclass_children.is_empty(), advance) {
+            (true, true) => None,              // No children to advance
+            (true, false) => Some(parent_idx), // Leaf node, nothing to do
+            (false, false) => self.first_children(&eclass_children, parent_idx, choices, path),
+            (false, true) => self.advance_children(&eclass_children, parent_idx, choices, path),
+        }
+    }
+
+    /// Find the first valid combination for all children using fold.
+    fn first_children(
+        &self,
+        children: &[EClassId],
+        parent_idx: usize,
+        choices: &mut Vec<usize>,
+        path: &mut PathTracker,
+    ) -> Option<usize> {
+        children.iter().try_fold(parent_idx, |curr_idx, &child_id| {
+            self.next_choices(child_id, curr_idx + 1, choices, path, false)
+        })
+    }
+
+    /// Advance to the next combination by trying to advance rightmost child first.
+    fn advance_children(
+        &self,
+        children: &[EClassId],
+        parent_idx: usize,
+        choices: &mut Vec<usize>,
+        path: &mut PathTracker,
+    ) -> Option<usize> {
+        // Try advancing each child from right to left
+        (0..children.len()).rev().find_map(|advance_idx| {
+            // Rebuild prefix (children before advance_idx)
+            let prefix_idx =
+                children[..advance_idx]
+                    .iter()
+                    .try_fold(parent_idx, |curr_idx, &child_id| {
+                        self.next_choices(child_id, curr_idx + 1, choices, path, false)
+                    })?;
+
+            // Try to advance child at advance_idx
+            let advanced_idx =
+                self.next_choices(children[advance_idx], prefix_idx + 1, choices, path, true)?;
+
+            // Rebuild suffix (children after advance_idx)
+            children[advance_idx + 1..]
+                .iter()
+                .try_fold(advanced_idx, |curr_idx, &child_id| {
+                    self.next_choices(child_id, curr_idx + 1, choices, path, false)
+                })
+        })
     }
 
     #[must_use]
@@ -488,17 +496,21 @@ impl<L: Label> Iterator for TreeIter<'_, L> {
     type Item = TreeNode<L>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (tree, _) = self.egraph.next_tree(
+        // Use choice_iter logic to get next valid choices, then materialize the tree
+        let advance = !self.choices.is_empty();
+
+        self.egraph.next_choices(
             self.egraph.root(),
             0,
             &mut self.choices,
             &mut self.path,
-            self.with_type,
+            advance,
         )?;
-        if let Some(last) = self.choices.last_mut() {
-            *last += 1;
-        }
-        Some(tree)
+
+        Some(
+            self.egraph
+                .tree_from_choices(self.egraph.root(), &self.choices, self.with_type),
+        )
     }
 }
 
@@ -525,13 +537,20 @@ impl<L: Label> Iterator for ChoiceIter<'_, L> {
     type Item = Vec<usize>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.egraph
-            .next_choices(self.egraph.root(), 0, &mut self.choices, &mut self.path)?;
-        let result = self.choices.clone();
-        if let Some(last) = self.choices.last_mut() {
-            *last += 1;
-        }
-        Some(result)
+        // On first call, choices is empty, so advance=false finds the first tree.
+        // On subsequent calls, choices contains the previous result, so advance=true
+        // finds the next tree.
+        let advance = !self.choices.is_empty();
+
+        self.egraph.next_choices(
+            self.egraph.root(),
+            0,
+            &mut self.choices,
+            &mut self.path,
+            advance,
+        )?;
+
+        Some(self.choices.clone())
     }
 }
 
@@ -721,10 +740,10 @@ mod tests {
 
         // with_type=true wraps in typeOf(expr, type)
         // Extract expr labels from inside the typeOf wrapper
-        let labels: Vec<_> = trees
+        let labels = trees
             .iter()
             .map(|t| t.children()[0].label().as_str())
-            .collect();
+            .collect::<Vec<_>>();
         assert!(labels.contains(&"a"));
         assert!(labels.contains(&"b"));
     }
@@ -1474,5 +1493,67 @@ mod tests {
             stats.size_pruned + stats.euler_pruned + stats.full_comparisons,
             stats.trees_enumerated
         );
+    }
+
+    #[test]
+    fn choice_iter_enumerates_all_trees_diamond_cycle() {
+        // Diamond with cycle at shared node - this pattern previously caused
+        // the iterator to miss some valid trees due to incomplete backtracking
+        // Class 0 -> a(1, 2), Class 1 -> b(3), Class 2 -> c(3), Class 3 -> [rec(3), d]
+        let graph = EGraph::new(
+            cfv(vec![
+                EClass::new(
+                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
+                    dummy_ty(),
+                ),
+                EClass::new(vec![ENode::new("b".to_owned(), vec![eid(3)])], dummy_ty()),
+                EClass::new(vec![ENode::new("c".to_owned(), vec![eid(3)])], dummy_ty()),
+                EClass::new(
+                    vec![
+                        ENode::new("rec".to_owned(), vec![eid(3)]),
+                        ENode::leaf("d".to_owned()),
+                    ],
+                    dummy_ty(),
+                ),
+            ]),
+            EClassId::new(0),
+            Vec::new(),
+            HashMap::new(),
+            dummy_nat_nodes(),
+            HashMap::new(),
+        );
+
+        // With revisits=1, valid trees are (siblings are independent):
+        // 1. a(b(d), c(d)) - no revisits used
+        // 2. a(b(d), c(rec(d))) - c's branch revisits class 3 once
+        // 3. a(b(rec(d)), c(d)) - b's branch revisits class 3 once
+        // 4. a(b(rec(d)), c(rec(d))) - both branches revisit class 3 once each
+        assert_eq!(graph.choice_iter(1).count(), 4);
+        assert_eq!(graph.count_trees(1), graph.choice_iter(1).count());
+
+        // Verify specific trees are found
+        let trees = graph
+            .choice_iter(1)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, false).to_string())
+            .collect::<Vec<_>>();
+        assert!(trees.contains(&"(a (b d) (c d))".to_owned()));
+        assert!(trees.contains(&"(a (b d) (c (rec d)))".to_owned()));
+        assert!(trees.contains(&"(a (b (rec d)) (c d))".to_owned()));
+        assert!(trees.contains(&"(a (b (rec d)) (c (rec d)))".to_owned()));
+
+        // With revisits=0, only one tree is valid (no revisits allowed)
+        assert_eq!(graph.choice_iter(0).count(), 1);
+        assert_eq!(graph.count_trees(0), graph.choice_iter(0).count());
+
+        // Verify TreeIter produces the same trees as ChoiceIter
+        let tree_iter_trees = graph
+            .tree_iter(1, false)
+            .map(|t| t.to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(tree_iter_trees.len(), 4);
+        assert!(tree_iter_trees.contains(&"(a (b d) (c d))".to_owned()));
+        assert!(tree_iter_trees.contains(&"(a (b d) (c (rec d)))".to_owned()));
+        assert!(tree_iter_trees.contains(&"(a (b (rec d)) (c d))".to_owned()));
+        assert!(tree_iter_trees.contains(&"(a (b (rec d)) (c (rec d)))".to_owned()));
     }
 }
