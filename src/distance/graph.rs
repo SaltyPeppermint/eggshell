@@ -332,7 +332,36 @@ impl<L: Label> EGraph<L> {
 
     #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
-        ChoiceIter::new(self, max_revisits).count()
+        let mut p = PathTracker::new(max_revisits);
+        self.count_rec(self.root(), &mut p)
+    }
+
+    fn count_rec(&self, id: EClassId, path: &mut PathTracker) -> usize {
+        // Cycle detection
+        if !path.can_visit(id) {
+            return 0;
+        }
+
+        path.enter(id);
+        let c = self
+            .class(id)
+            .nodes()
+            .iter()
+            .map(|node| {
+                node.children()
+                    .iter()
+                    .map(|child_id| {
+                        if let ExprChildId::EClass(inner_id) = child_id {
+                            self.count_rec(*inner_id, path)
+                        } else {
+                            1
+                        }
+                    })
+                    .product::<usize>() // product for children (and-choices)
+            })
+            .sum::<usize>(); // sum for nodes (or-choices)
+        path.leave(id);
+        c
     }
 
     #[must_use]
