@@ -15,11 +15,11 @@ pub use rise::{Expr, Nat, RiseLabel, Type};
 
 pub use extract::ChoiceIter;
 pub use graph::{EClass, EGraph};
-pub use min::{Stats, find_min_struct, find_min_zs};
+pub use min::{Stats, find_min_exhaustive_zs, find_min_sampling_zs, find_min_struct};
 pub use nodes::Label;
 pub use sampling::{
     DiverseSampler, DiverseSamplerConfig, FixpointSampler, FixpointSamplerConfig, Sampler,
-    SamplingIter, find_critical_lambda, structural_hash,
+    SamplingIter, structural_hash,
 };
 pub use str::tree_distance_euler_bound;
 pub use tree::TreeNode;

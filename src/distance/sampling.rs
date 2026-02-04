@@ -16,6 +16,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use hashbrown::{HashMap, HashSet};
+use rand::SeedableRng;
 use rand::distributions::WeightedIndex;
 use rand::prelude::*;
 
@@ -25,12 +26,14 @@ use super::nodes::Label;
 use super::tree::TreeNode;
 
 /// Trait for samplers that can draw terms from an e-graph.
-pub trait Sampler<L: Label>: Sized {
+pub trait Sampler: Sized {
+    type Label: Label;
+
     /// Sample a single term, returning `None` if sampling fails.
-    fn sample(&mut self) -> Option<TreeNode<L>>;
+    fn sample(&mut self) -> Option<TreeNode<Self::Label>>;
 
     /// Sample multiple terms.
-    fn sample_many(&mut self, count: usize) -> Vec<TreeNode<L>> {
+    fn sample_many(&mut self, count: usize) -> Vec<TreeNode<Self::Label>> {
         (0..count).filter_map(|_| self.sample()).collect()
     }
 
@@ -46,7 +49,7 @@ pub trait Sampler<L: Label>: Sized {
     ///     println!("{:?}", tree);
     /// }
     /// ```
-    fn into_iter(self) -> SamplingIter<L, Self> {
+    fn into_sample_iter(self) -> SamplingIter<Self> {
         SamplingIter::new(self)
     }
 }
@@ -66,6 +69,7 @@ pub struct FixpointSampler<'a, L: Label, R: Rng> {
 
 /// Configuration for the fixed-point sampler.
 #[derive(Debug, Clone, bon::Builder)]
+#[builder(derive(Clone, Debug))]
 pub struct FixpointSamplerConfig {
     /// Boltzmann parameter in (0, 1). Must be < 1 for cyclic graphs.
     #[builder(default = 0.8)]
@@ -87,6 +91,129 @@ impl FixpointSamplerConfig {
     pub fn for_cyclic() -> Self {
         Self::builder().lambda(0.5).max_depth(100).build()
     }
+}
+
+/// Find the lambda value that produces trees of approximately the target size.
+///
+/// Uses binary search over lambda, estimating average tree size at each point
+/// by sampling. Larger lambda values produce larger trees (monotonic relationship).
+///
+/// # Arguments
+/// * `graph` - The e-graph to sample from
+/// * `target_size` - The desired average tree size (number of nodes)
+/// * `config` - Configuration for the search
+/// * `rng` - Random number generator (will be used to create seedable sub-rngs)
+///
+/// # Returns
+/// * `Ok((lambda, actual_avg_size))` - The found lambda and the actual average size achieved
+/// * `Err(FindLambdaError)` - If the search fails (e.g., target unreachable)
+pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
+    graph: &EGraph<L>,
+    target_size: usize,
+    epsilon: f64,
+    max_iterations: usize,
+    max_depth: usize,
+    rng: &mut R,
+) -> Result<(f64, f64), FindLambdaError> {
+    let mut lo = 0.001;
+    let mut hi = 0.95; // Keep below 1 for convergence on cyclic graphs
+    let sampler_epsilon = 1e-6;
+
+    let c = FixpointSamplerConfig::builder()
+        .epsilon(sampler_epsilon)
+        .max_depth(max_depth)
+        .max_iterations(max_iterations);
+
+    // First, check bounds to ensure target is achievable
+    // Use a relative epsilon for convergence that scales with expected weight magnitude
+    let size_at_min = estimate_avg_size(
+        graph,
+        &c.clone().lambda(lo).build(),
+        R::seed_from_u64(rng.next_u64()),
+    )?;
+    let size_at_max = estimate_avg_size(
+        graph,
+        &c.clone().lambda(hi).build(),
+        R::seed_from_u64(rng.next_u64()),
+    )?;
+
+    #[expect(clippy::cast_precision_loss)]
+    let target = target_size as f64;
+
+    if target < size_at_min {
+        return Err(FindLambdaError::TargetTooSmall {
+            target: target_size,
+            min_achievable: size_at_min,
+        });
+    }
+    if target > size_at_max {
+        return Err(FindLambdaError::TargetTooLarge {
+            target: target_size,
+            max_achievable: size_at_max,
+        });
+    }
+
+    // Binary search
+    let mut best_lambda = f64::midpoint(lo, hi);
+    let mut best_size = 0.0;
+
+    while hi - lo > epsilon {
+        let mid = f64::midpoint(lo, hi);
+        let avg_size = estimate_avg_size(
+            graph,
+            &c.clone().lambda(mid).build(),
+            R::seed_from_u64(rng.next_u64()),
+        )?;
+
+        best_lambda = mid;
+        best_size = avg_size;
+
+        if avg_size < target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+
+    Ok((best_lambda, best_size))
+}
+
+/// Errors that can occur when finding lambda for a target size.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum FindLambdaError {
+    /// The target size is smaller than achievable with the minimum lambda.
+    #[error("target size {target} is too small; minimum achievable is {min_achievable:.1}")]
+    TargetTooSmall { target: usize, min_achievable: f64 },
+    /// The target size is larger than achievable with the maximum lambda.
+    #[error("target size {target} is too large; maximum achievable is {max_achievable:.1}")]
+    TargetTooLarge { target: usize, max_achievable: f64 },
+    /// The sampler failed to converge for a given lambda.
+    #[error("sampler did not converge for lambda={lambda}")]
+    SamplerDidNotConverge { lambda: f64 },
+}
+
+/// Estimate the average tree size for a given lambda by sampling.
+fn estimate_avg_size<L: Label, R: Rng>(
+    graph: &EGraph<L>,
+    config: &FixpointSamplerConfig,
+    rng: R,
+) -> Result<f64, FindLambdaError> {
+    let samples = FixpointSampler::new(graph, config, rng)
+        .ok_or(FindLambdaError::SamplerDidNotConverge {
+            lambda: config.lambda,
+        })?
+        .sample_many(1000);
+
+    if samples.is_empty() {
+        return Err(FindLambdaError::SamplerDidNotConverge {
+            lambda: config.lambda,
+        });
+    }
+
+    #[expect(clippy::cast_precision_loss)]
+    let avg = samples.iter().map(|t| t.size()).sum::<usize>() as f64 / samples.len() as f64;
+
+    Ok(avg)
 }
 
 impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
@@ -205,7 +332,9 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
     }
 }
 
-impl<L: Label, R: Rng> Sampler<L> for FixpointSampler<'_, L, R> {
+impl<L: Label, R: Rng> Sampler for FixpointSampler<'_, L, R> {
+    type Label = L;
+
     fn sample(&mut self) -> Option<TreeNode<L>> {
         self.sample_from(self.graph.root(), 0)
     }
@@ -224,14 +353,14 @@ pub struct DiverseSamplerConfig {
 
 /// Sampler that produces diverse terms using structural deduplication.
 /// Generic over any underlying sampler.
-pub struct DiverseSampler<L: Label, S: Sampler<L>> {
+pub struct DiverseSampler<S: Sampler> {
     sampler: S,
     config: DiverseSamplerConfig,
     seen_hashes: HashSet<u64>,
-    seen_features: HashSet<(L, usize, L)>,
+    seen_features: HashSet<(S::Label, usize, S::Label)>,
 }
 
-impl<L: Label, S: Sampler<L>> DiverseSampler<L, S> {
+impl<S: Sampler> DiverseSampler<S> {
     /// Create a new diverse sampler wrapping an existing sampler.
     pub fn new(sampler: S, config: DiverseSamplerConfig) -> Self {
         Self {
@@ -243,7 +372,11 @@ impl<L: Label, S: Sampler<L>> DiverseSampler<L, S> {
     }
 
     /// Check if a term is novel enough to accept.
-    fn is_novel(&self, term: &TreeNode<L>) -> (bool, u64, HashSet<(L, usize, L)>) {
+    #[expect(clippy::type_complexity)]
+    fn is_novel(
+        &self,
+        term: &TreeNode<S::Label>,
+    ) -> (bool, u64, HashSet<(S::Label, usize, S::Label)>) {
         let hash = structural_hash(term);
         let features = extract_features(term);
 
@@ -273,7 +406,7 @@ impl<L: Label, S: Sampler<L>> DiverseSampler<L, S> {
     }
 
     /// Accept a term, updating seen hashes and features.
-    fn accept(&mut self, hash: u64, features: HashSet<(L, usize, L)>) {
+    fn accept(&mut self, hash: u64, features: HashSet<(S::Label, usize, S::Label)>) {
         self.seen_hashes.insert(hash);
         self.seen_features.extend(features);
     }
@@ -288,13 +421,15 @@ impl<L: Label, S: Sampler<L>> DiverseSampler<L, S> {
         &self.seen_hashes
     }
 
-    pub fn seen_features(&self) -> &HashSet<(L, usize, L)> {
+    pub fn seen_features(&self) -> &HashSet<(S::Label, usize, S::Label)> {
         &self.seen_features
     }
 }
 
-impl<L: Label, S: Sampler<L>> Sampler<L> for DiverseSampler<L, S> {
-    fn sample(&mut self) -> Option<TreeNode<L>> {
+impl<S: Sampler> Sampler for DiverseSampler<S> {
+    type Label = S::Label;
+
+    fn sample(&mut self) -> Option<TreeNode<Self::Label>> {
         let this = &mut *self;
         for _ in 0..this.config.max_attempts_per_sample {
             let term = this.sampler.sample()?;
@@ -342,139 +477,6 @@ fn collect_features<L: Label>(tree: &TreeNode<L>, features: &mut HashSet<(L, usi
     }
 }
 
-/// Find the critical λ that gives approximately the target expected size.
-/// Uses binary search over λ values.
-///
-/// Returns the λ value and the actual expected size at that λ.
-#[must_use]
-pub fn find_critical_lambda<L: Label>(
-    graph: &EGraph<L>,
-    target_size: usize,
-    tolerance: f64,
-) -> (f64, f64) {
-    #[expect(clippy::cast_precision_loss)]
-    let target = target_size as f64;
-    let mut lo = 0.01;
-    let mut hi = 1.0;
-
-    for _ in 0..50 {
-        let mid = f64::midpoint(lo, hi);
-        let expected = expected_size(graph, mid);
-        let diff = expected - target;
-
-        if diff.abs() < tolerance {
-            return (mid, expected);
-        } else if diff > 0.0 {
-            hi = mid;
-        } else {
-            lo = mid;
-        }
-    }
-
-    let lambda = f64::midpoint(lo, hi);
-    (lambda, expected_size(graph, lambda))
-}
-
-/// Compute the expected size of a term sampled with parameter λ.
-/// Uses fixed-point iteration to handle cyclic graphs.
-///
-/// `E[size] = λ × W'(λ) / W(λ)`
-fn expected_size<L: Label>(graph: &EGraph<L>, lambda: f64) -> f64 {
-    let epsilon = 1e-9;
-    let max_iterations = 1000;
-
-    // Initialize all classes with (W, dW) = (λ, 1) - the leaf case
-    let mut wd: HashMap<EClassId, WD> = graph
-        .class_ids()
-        .map(|id| (graph.canonicalize(id), WD::leaf(lambda)))
-        .collect();
-    let class_ids = wd.keys().copied().collect::<Vec<_>>();
-
-    // Iterate until convergence
-    for _ in 0..max_iterations {
-        let mut max_delta: f64 = 0.0;
-
-        for &id in &class_ids {
-            let new_wd = graph
-                .class(id)
-                .nodes()
-                .iter()
-                .map(|node| {
-                    node.children()
-                        .iter()
-                        .map(|child| match child {
-                            ExprChildId::EClass(eid) => wd[&graph.canonicalize(*eid)],
-                            ExprChildId::Nat(_) | ExprChildId::Data(_) => WD::leaf(lambda),
-                        })
-                        .fold(WD::one(), WD::mul)
-                        .scale_by_lambda(lambda)
-                })
-                .fold(WD::zero(), WD::add);
-
-            let old_wd = wd[&id];
-            max_delta = max_delta.max((new_wd.w - old_wd.w).abs());
-            max_delta = max_delta.max((new_wd.dw - old_wd.dw).abs());
-            wd.insert(id, new_wd);
-        }
-
-        if max_delta < epsilon {
-            break;
-        }
-    }
-
-    let root_wd = wd[&graph.canonicalize(graph.root())];
-    if root_wd.w > 0.0 {
-        lambda * root_wd.dw / root_wd.w
-    } else {
-        0.0
-    }
-}
-
-/// Weight-derivative pair with arithmetic operations for automatic differentiation.
-#[derive(Clone, Copy)]
-struct WD {
-    w: f64,  // Weight W(λ)
-    dw: f64, // Derivative dW/dλ
-}
-
-impl WD {
-    const fn leaf(lambda: f64) -> Self {
-        Self { w: lambda, dw: 1.0 }
-    }
-
-    const fn zero() -> Self {
-        Self { w: 0.0, dw: 0.0 }
-    }
-
-    const fn one() -> Self {
-        Self { w: 1.0, dw: 0.0 }
-    }
-
-    /// Multiply two weight-derivatives using product rule: (fg)' = f'g + fg'
-    const fn mul(self, other: Self) -> Self {
-        Self {
-            w: self.w * other.w,
-            dw: self.dw * other.w + self.w * other.dw,
-        }
-    }
-
-    /// Add two weight-derivatives
-    const fn add(self, other: Self) -> Self {
-        Self {
-            w: self.w + other.w,
-            dw: self.dw + other.dw,
-        }
-    }
-
-    /// Scale by λ: (λf)' = f + λf'
-    const fn scale_by_lambda(self, lambda: f64) -> Self {
-        Self {
-            w: lambda * self.w,
-            dw: self.w + lambda * self.dw,
-        }
-    }
-}
-
 /// Iterator adapter that yields samples from any `Sampler`.
 ///
 /// This iterator wraps a sampler and calls `sample()` on each `next()`.
@@ -489,18 +491,14 @@ impl WD {
 ///     println!("{:?}", tree);
 /// }
 /// ```
-pub struct SamplingIter<L: Label, S: Sampler<L>> {
+pub struct SamplingIter<S: Sampler> {
     sampler: S,
-    _marker: std::marker::PhantomData<L>,
 }
 
-impl<L: Label, S: Sampler<L>> SamplingIter<L, S> {
+impl<S: Sampler> SamplingIter<S> {
     /// Create a new sampling iterator from a sampler.
     pub fn new(sampler: S) -> Self {
-        Self {
-            sampler,
-            _marker: std::marker::PhantomData,
-        }
+        Self { sampler }
     }
 
     /// Consume the iterator and return the underlying sampler.
@@ -519,8 +517,8 @@ impl<L: Label, S: Sampler<L>> SamplingIter<L, S> {
     }
 }
 
-impl<L: Label, S: Sampler<L>> Iterator for SamplingIter<L, S> {
-    type Item = TreeNode<L>;
+impl<S: Sampler> Iterator for SamplingIter<S> {
+    type Item = TreeNode<S::Label>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.sampler.sample()
@@ -640,7 +638,7 @@ mod tests {
         // Use the iterator interface
         let samples = FixpointSampler::new(&graph, &config, rng)
             .expect("Should converge with λ < 1 on cyclic graph")
-            .into_iter()
+            .into_sample_iter()
             .take(50)
             .collect::<Vec<_>>();
 
@@ -674,5 +672,28 @@ mod tests {
 
         // And recover the sampler when done
         let _sampler = iter.into_inner();
+    }
+
+    #[test]
+    fn find_lambda_for_target_size_works() {
+        let graph = cyclic_graph();
+
+        let mut rng = StdRng::seed_from_u64(42);
+
+        // Target size of 2 (e.g., f(x) has 2 nodes)
+        let result = find_lambda_for_target_size(&graph, 2, 0.01, 1000, 100, &mut rng);
+        assert!(
+            result.is_ok(),
+            "Should find a lambda for target size 2: {:?}",
+            result.err()
+        );
+
+        let (lambda, avg_size) = result.unwrap();
+        assert!(lambda > 0.0 && lambda < 1.0, "Lambda should be in (0, 1)");
+        // Allow some variance in the achieved size
+        assert!(
+            (1.5..4.0).contains(&avg_size),
+            "Average size {avg_size} should be roughly near target 2"
+        );
     }
 }
