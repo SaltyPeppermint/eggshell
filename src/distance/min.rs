@@ -5,7 +5,12 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use indicatif::ParallelProgressIterator;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use rayon::iter::{ParallelBridge, ParallelIterator};
+
+use crate::distance::sampling::find_lambda_for_target_size;
+use crate::distance::{FixpointSampler, FixpointSamplerConfig, Sampler};
 
 use super::graph::EGraph;
 use super::nodes::Label;
@@ -86,7 +91,7 @@ impl std::ops::Add for Stats {
 /// A tuple of (`best_result`, statistics) where `best_result` is `Some((tree, distance))`
 /// if a tree was found.
 #[must_use]
-pub fn find_min_zs<L: Label, C: EditCosts<L>>(
+pub fn find_min_exhaustive_zs<L: Label, C: EditCosts<L>>(
     graph: &EGraph<L>,
     reference: &TreeNode<L>,
     costs: &C,
@@ -131,6 +136,106 @@ pub fn find_min_zs<L: Label, C: EditCosts<L>>(
 
                 let tree = graph.tree_from_choices(graph.root(), &choices, true);
                 (Some((tree, distance)), Stats::compared())
+            }
+        })
+        .reduce(
+            || (None, Stats::default()),
+            |a, b| {
+                let best = [a.0, b.0].into_iter().flatten().min_by_key(|v| v.1);
+                (best, a.1 + b.1)
+            },
+        );
+
+    (result, stats)
+}
+
+/// Find the tree in the e-graph with minimum Zhang-Shasha edit distance to the reference.
+///
+/// Uses fixpoint-based sampling instead of exhaustive enumeration. This is more efficient
+/// for large e-graphs where exhaustive search is infeasible. Samples are drawn according to
+/// a Boltzmann distribution that favors trees of a target weight.
+///
+/// Uses the same parallel pruning heuristics as exhaustive search:
+/// - Size difference lower bound
+/// - Euler string distance lower bound
+///
+/// # Arguments
+/// * `graph` - The e-graph to search
+/// * `reference` - The target tree to match
+/// * `costs` - Edit cost function
+/// * `with_types` - Whether to include type annotations in comparison
+/// * `n_samples` - Number of trees to sample from the e-graph
+/// * `target_weight` - Target tree size for the Boltzmann distribution (controls sampling bias)
+/// * `seed` - Random seed for reproducible sampling
+///
+/// # Returns
+/// A tuple of (`best_result`, statistics) where `best_result` is `Some((tree, distance))`
+/// if a tree was found.
+///
+/// # Panics
+///
+/// Panics if no sampler can be built
+///
+/// # Note
+/// The critical lambda parameter is automatically computed to target trees of the specified
+#[must_use]
+pub fn find_min_sampling_zs<L: Label, C: EditCosts<L>>(
+    graph: &EGraph<L>,
+    reference: &TreeNode<L>,
+    costs: &C,
+    with_types: bool,
+    n_samples: usize,
+    target_weight: usize,
+    seed: u64,
+) -> (Option<(TreeNode<L>, usize)>, Stats) {
+    let ref_tree = if with_types {
+        reference
+    } else {
+        &reference.strip_types()
+    };
+
+    let ref_size = ref_tree.size();
+    let ref_euler = EulerString::new(ref_tree);
+    let ref_pp = PreprocessedTree::new(ref_tree);
+    let running_best = AtomicUsize::new(usize::MAX);
+
+    let mut rng = StdRng::seed_from_u64(seed);
+    let (lambda, expected_size) =
+        find_lambda_for_target_size(graph, target_weight, 0.4, 1000, 1000, &mut rng).unwrap();
+    eprintln!("LAMBDA IS {lambda}");
+    eprintln!("EXPECTED SIZE IS {expected_size}");
+    let config = FixpointSamplerConfig::builder().lambda(lambda).build();
+    let (result, stats) = FixpointSampler::new(graph, &config, rng)
+        .unwrap()
+        .into_sample_iter()
+        .take(n_samples)
+        .par_bridge()
+        .progress_count(n_samples as u64)
+        .map(|candidate| {
+            {
+                let candidate_tree = if with_types {
+                    &candidate
+                } else {
+                    &candidate.strip_types()
+                };
+                let best = running_best.load(Ordering::Relaxed);
+
+                // Fast pruning: size difference is a lower bound on edit distance
+                // (need at least |n1 - n2| insertions or deletions)
+                if candidate_tree.size().abs_diff(ref_size) > best {
+                    return (None, Stats::size_pruned());
+                }
+
+                // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
+                // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
+                if ref_euler.lower_bound(candidate_tree, costs) > best {
+                    return (None, Stats::euler_pruned());
+                }
+
+                let distance = tree_distance_with_ref(candidate_tree, &ref_pp, costs);
+                running_best.fetch_min(distance, Ordering::Relaxed);
+
+                (Some((candidate, distance)), Stats::compared())
             }
         })
         .reduce(
@@ -260,7 +365,7 @@ mod tests {
                 leaf("0".to_owned()),
             ],
         );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+        let result = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true)
             .0
             .unwrap();
 
@@ -285,7 +390,7 @@ mod tests {
             "typeOf".to_owned(),
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+        let result = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true)
             .0
             .unwrap();
 
@@ -328,7 +433,7 @@ mod tests {
                 leaf("0".to_owned()),
             ],
         );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+        let result = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true)
             .0
             .unwrap();
 
@@ -375,7 +480,7 @@ mod tests {
             ],
         );
 
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+        let result = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true)
             .0
             .unwrap();
         assert_eq!(result.1, 0);
@@ -400,7 +505,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
+        let result = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true)
             .0
             .unwrap();
         assert_eq!(result.1, 0);
@@ -427,7 +532,7 @@ mod tests {
             vec![leaf("a".to_owned()), leaf("0".to_owned())],
         );
 
-        let (result, stats) = find_min_zs(&graph, &reference, &UnitCost, 0, true);
+        let (result, stats) = find_min_exhaustive_zs(&graph, &reference, &UnitCost, 0, true);
 
         assert_eq!(result.unwrap().1, 0);
         assert_eq!(stats.trees_enumerated, 2);
