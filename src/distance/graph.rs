@@ -1,31 +1,22 @@
-//! `EGraph` Extension for Zhang-Shasha Tree Edit Distance
+//! E-Graph data structure with tree extraction support.
 //!
-//! Finds the solution tree in a bounded `EGraph` with minimum edit distance
-//! to a target tree. Assumes bounded maximum number of nodes in an `EClass` (N) and bounded depth (d).
-//!
-//! With strict alternation (`EClass` -> `ENode` -> `EClass` ->...),
-//! complexity is O(N^(d/2) * |T|^2) for single-path graphs
+//! This module provides the core `EGraph` and `EClass` types for representing
+//! equivalence graphs with type annotations.
 
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use hashbrown::HashMap;
-use indicatif::ParallelProgressIterator;
-use rayon::iter::{ParallelBridge, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
-use crate::distance::structural::structural_diff;
-
+use super::extract::ChoiceIter;
 use super::ids::{
     DataId, EClassId, ExprChildId, FunId, NatId, NumericId, TypeChildId, eclass_id_vec,
     numeric_key_map,
 };
 use super::nodes::{DataTyNode, ENode, FunTyNode, Label, NatNode};
-use super::str::EulerString;
 use super::tree::TreeNode;
-use super::zs::{EditCosts, PreprocessedTree, tree_distance_with_ref};
 
 /// `EClass`: choose exactly one child (`ENode`)
 /// Children are `ENode` instances directly
@@ -164,133 +155,6 @@ impl<L: Label> EGraph<L> {
         self.classes.keys().copied()
     }
 
-    /// Find the next valid choice vector, modifying `choices` in place.
-    ///
-    /// If `choices` is empty or shorter than needed, finds the first valid tree.
-    /// If `choices` already represents a tree and `advance` is true, finds the
-    /// lexicographically next one.
-    ///
-    /// Returns `Some(last_idx)` on success, `None` if no more trees exist.
-    fn next_choices(
-        &self,
-        id: EClassId,
-        choice_idx: usize,
-        choices: &mut Vec<usize>,
-        path: &mut PathTracker,
-        advance: bool,
-    ) -> Option<usize> {
-        if !path.can_visit(id) {
-            return None;
-        }
-
-        let class = self.class(id);
-
-        // Determine starting node and whether to advance children
-        let (start_node, advance_children) = if let Some(&c) = choices.get(choice_idx) {
-            (c, advance)
-        } else {
-            choices.push(0);
-            (0, false)
-        };
-
-        path.enter(id);
-
-        let result =
-            class
-                .nodes()
-                .iter()
-                .enumerate()
-                .skip(start_node)
-                .find_map(|(node_idx, node)| {
-                    choices[choice_idx] = node_idx;
-                    let should_advance = advance_children && node_idx == start_node;
-
-                    self.next_choices_children(
-                        node.children(),
-                        choice_idx,
-                        choices,
-                        path,
-                        should_advance,
-                    )
-                    .or_else(|| {
-                        choices.truncate(choice_idx + 1);
-                        None
-                    })
-                });
-
-        path.leave(id);
-        result
-    }
-
-    /// Process children, optionally advancing to find the next combination.
-    fn next_choices_children(
-        &self,
-        children: &[ExprChildId],
-        parent_idx: usize,
-        choices: &mut Vec<usize>,
-        path: &mut PathTracker,
-        advance: bool,
-    ) -> Option<usize> {
-        let eclass_children = children
-            .iter()
-            .filter_map(|c| match c {
-                ExprChildId::EClass(id) => Some(*id),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        match (eclass_children.is_empty(), advance) {
-            (true, true) => None,              // No children to advance
-            (true, false) => Some(parent_idx), // Leaf node, nothing to do
-            (false, false) => self.first_children(&eclass_children, parent_idx, choices, path),
-            (false, true) => self.advance_children(&eclass_children, parent_idx, choices, path),
-        }
-    }
-
-    /// Find the first valid combination for all children using fold.
-    fn first_children(
-        &self,
-        children: &[EClassId],
-        parent_idx: usize,
-        choices: &mut Vec<usize>,
-        path: &mut PathTracker,
-    ) -> Option<usize> {
-        children.iter().try_fold(parent_idx, |curr_idx, &child_id| {
-            self.next_choices(child_id, curr_idx + 1, choices, path, false)
-        })
-    }
-
-    /// Advance to the next combination by trying to advance rightmost child first.
-    fn advance_children(
-        &self,
-        children: &[EClassId],
-        parent_idx: usize,
-        choices: &mut Vec<usize>,
-        path: &mut PathTracker,
-    ) -> Option<usize> {
-        // Try advancing each child from right to left
-        (0..children.len()).rev().find_map(|advance_idx| {
-            // Rebuild prefix (children before advance_idx)
-            let prefix_idx =
-                children[..advance_idx]
-                    .iter()
-                    .try_fold(parent_idx, |curr_idx, &child_id| {
-                        self.next_choices(child_id, curr_idx + 1, choices, path, false)
-                    })?;
-
-            // Try to advance child at advance_idx
-            let advanced_idx =
-                self.next_choices(children[advance_idx], prefix_idx + 1, choices, path, true)?;
-
-            // Rebuild suffix (children after advance_idx)
-            children[advance_idx + 1..]
-                .iter()
-                .try_fold(advanced_idx, |curr_idx, &child_id| {
-                    self.next_choices(child_id, curr_idx + 1, choices, path, false)
-                })
-        })
-    }
-
     #[must_use]
     pub fn tree_from_choices(
         &self,
@@ -339,320 +203,13 @@ impl<L: Label> EGraph<L> {
     }
 
     #[must_use]
-    pub fn enumerate_trees(&self, max_revisits: usize, with_type: bool) -> Vec<TreeNode<L>> {
-        TreeIter::new(self, max_revisits, with_type).collect()
-    }
-
-    #[must_use]
     pub fn count_trees(&self, max_revisits: usize) -> usize {
-        let mut p = PathTracker::new(max_revisits);
-        self.count_rec(self.root(), &mut p)
-    }
-
-    fn count_rec(&self, id: EClassId, path: &mut PathTracker) -> usize {
-        // Cycle detection
-        if !path.can_visit(id) {
-            return 0;
-        }
-
-        path.enter(id);
-        let c = self
-            .class(id)
-            .nodes()
-            .iter()
-            .map(|node| {
-                node.children()
-                    .iter()
-                    .map(|child_id| {
-                        if let ExprChildId::EClass(inner_id) = child_id {
-                            self.count_rec(*inner_id, path)
-                        } else {
-                            1
-                        }
-                    })
-                    .product::<usize>() // product for children (and-choices)
-            })
-            .sum::<usize>(); // sum for nodes (or-choices)
-        path.leave(id);
-        c
+        super::extract::count_trees(self, max_revisits)
     }
 
     #[must_use]
     pub fn choice_iter(&self, max_revisits: usize) -> ChoiceIter<'_, L> {
         ChoiceIter::new(self, max_revisits)
-    }
-
-    #[must_use]
-    pub fn tree_iter(&self, max_revisits: usize, with_type: bool) -> TreeIter<'_, L> {
-        TreeIter::new(self, max_revisits, with_type)
-    }
-}
-
-/// If `quiet` is true, hides the progress bar.
-/// If `strip_types`, ignores the types
-#[must_use]
-pub fn find_min_zs<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    costs: &C,
-    max_revisits: usize,
-    with_types: bool,
-) -> (Option<(TreeNode<L>, usize)>, Stats) {
-    let ref_tree = if with_types {
-        reference
-    } else {
-        &reference.strip_types()
-    };
-
-    let ref_size = ref_tree.size();
-    let ref_euler = EulerString::new(ref_tree);
-    let ref_pp = PreprocessedTree::new(ref_tree);
-    let running_best = AtomicUsize::new(usize::MAX);
-
-    let (result, stats) = graph
-        .choice_iter(max_revisits)
-        .par_bridge()
-        .progress_count(graph.count_trees(max_revisits) as u64)
-        .map(|choices| {
-            {
-                let stripped_candidated =
-                    graph.tree_from_choices(graph.root(), &choices, with_types);
-                let best = running_best.load(Ordering::Relaxed);
-
-                // Fast pruning: size difference is a lower bound on edit distance
-                // (need at least |n1 - n2| insertions or deletions)
-                if stripped_candidated.size().abs_diff(ref_size) > best {
-                    return (None, Stats::size_pruned());
-                }
-
-                // Euler string heuristic: EDS(s(T1), s(T2)) ≤ 2 · EDT(T1, T2)
-                // Therefore EDT ≥ EDS / 2, giving us a tighter lower bound
-                if ref_euler.lower_bound(&stripped_candidated, costs) > best {
-                    return (None, Stats::euler_pruned());
-                }
-
-                let distance = tree_distance_with_ref(&stripped_candidated, &ref_pp, costs);
-                running_best.fetch_min(distance, Ordering::Relaxed);
-
-                let tree = graph.tree_from_choices(graph.root(), &choices, true);
-                (Some((tree, distance)), Stats::compared())
-            }
-        })
-        .reduce(
-            || (None, Stats::default()),
-            |a, b| {
-                let best = [a.0, b.0].into_iter().flatten().min_by_key(|v| v.1);
-                (best, a.1 + b.1)
-            },
-        );
-
-    (result, stats)
-}
-
-/// If `quiet` is true, hides the progress bar.
-/// If `strip_types`, ignores the types
-#[must_use]
-pub fn find_min_struct<L: Label, C: EditCosts<L>>(
-    graph: &EGraph<L>,
-    reference: &TreeNode<L>,
-    costs: &C,
-    max_revisits: usize,
-    with_types: bool,
-    ignore_labels: bool,
-) -> Option<(TreeNode<L>, usize)> {
-    let ref_tree = if with_types {
-        reference
-    } else {
-        &reference.strip_types()
-    };
-    graph
-        .choice_iter(max_revisits)
-        .par_bridge()
-        .progress_count(graph.count_trees(max_revisits) as u64)
-        .map(|choices| {
-            let stripped_candidated = graph.tree_from_choices(graph.root(), &choices, with_types);
-            let distance = structural_diff(ref_tree, &stripped_candidated, costs, ignore_labels);
-            let tree = graph.tree_from_choices(graph.root(), &choices, true);
-            (tree, distance)
-        })
-        .min_by_key(|(_, d)| *d)
-}
-
-#[derive(Debug)]
-pub struct TreeIter<'a, L: Label> {
-    choices: Vec<usize>,
-    path: PathTracker,
-    egraph: &'a EGraph<L>,
-    with_type: bool,
-}
-
-impl<'a, L: Label> TreeIter<'a, L> {
-    pub fn new(egraph: &'a EGraph<L>, max_revisits: usize, with_type: bool) -> Self {
-        Self {
-            choices: Vec::new(),
-            path: PathTracker::new(max_revisits),
-            egraph,
-            with_type,
-        }
-    }
-}
-
-impl<L: Label> Iterator for TreeIter<'_, L> {
-    type Item = TreeNode<L>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // Use choice_iter logic to get next valid choices, then materialize the tree
-        let advance = !self.choices.is_empty();
-
-        self.egraph.next_choices(
-            self.egraph.root(),
-            0,
-            &mut self.choices,
-            &mut self.path,
-            advance,
-        )?;
-
-        Some(
-            self.egraph
-                .tree_from_choices(self.egraph.root(), &self.choices, self.with_type),
-        )
-    }
-}
-
-/// Iterator that yields choice vectors without materializing trees.
-/// Each choice vector can later be used with `tree_from_choices` to get the actual tree.
-#[derive(Debug)]
-pub struct ChoiceIter<'a, L: Label> {
-    choices: Vec<usize>,
-    path: PathTracker,
-    egraph: &'a EGraph<L>,
-}
-
-impl<'a, L: Label> ChoiceIter<'a, L> {
-    pub fn new(egraph: &'a EGraph<L>, max_revisits: usize) -> Self {
-        Self {
-            choices: Vec::new(),
-            path: PathTracker::new(max_revisits),
-            egraph,
-        }
-    }
-}
-
-impl<L: Label> Iterator for ChoiceIter<'_, L> {
-    type Item = Vec<usize>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        // On first call, choices is empty, so advance=false finds the first tree.
-        // On subsequent calls, choices contains the previous result, so advance=true
-        // finds the next tree.
-        let advance = !self.choices.is_empty();
-
-        self.egraph.next_choices(
-            self.egraph.root(),
-            0,
-            &mut self.choices,
-            &mut self.path,
-            advance,
-        )?;
-
-        Some(self.choices.clone())
-    }
-}
-
-/// Path tracker for cycle detection in the `EGraph`.
-/// Tracks how many times each class has been visited on the current path
-/// and allows configurable revisit limits.
-#[derive(Debug, Clone)]
-struct PathTracker {
-    /// Visit counts for classes on the current path
-    visits: HashMap<EClassId, usize>,
-    /// Maximum number of times any node may be revisited (0 = no revisits allowed)
-    max_revisits: usize,
-}
-
-impl PathTracker {
-    fn new(max_revisits: usize) -> Self {
-        PathTracker {
-            visits: HashMap::new(),
-            max_revisits,
-        }
-    }
-
-    /// Check if visiting this OR node would exceed the revisit limit.
-    /// Returns true if the visit is allowed.
-    fn can_visit(&self, id: EClassId) -> bool {
-        let count = self.visits.get(&id).copied().unwrap_or(0);
-        count <= self.max_revisits
-    }
-
-    /// Mark an OR node as visited on the current path.
-    fn enter(&mut self, id: EClassId) {
-        *self.visits.entry(id).or_insert(0) += 1;
-    }
-
-    /// Unmark an OR node when leaving the current path.
-    fn leave(&mut self, id: EClassId) {
-        if let Some(count) = self.visits.get_mut(&id) {
-            *count = count.saturating_sub(1);
-            if *count == 0 {
-                self.visits.remove(&id);
-            }
-        }
-    }
-}
-
-/// Statistics from filtered extraction
-#[derive(Debug, Clone, Default)]
-pub struct Stats {
-    /// Total number of trees enumerated
-    pub trees_enumerated: usize,
-    /// Trees pruned by simple metric
-    pub size_pruned: usize,
-    /// Number of trees pruned by euler string filter
-    pub euler_pruned: usize,
-    /// Number of trees for which full distance was computed
-    pub full_comparisons: usize,
-}
-
-impl Stats {
-    fn size_pruned() -> Self {
-        Self {
-            trees_enumerated: 1,
-            size_pruned: 1,
-            euler_pruned: 0,
-            full_comparisons: 0,
-        }
-    }
-
-    fn euler_pruned() -> Self {
-        Self {
-            trees_enumerated: 1,
-            size_pruned: 0,
-            euler_pruned: 1,
-            full_comparisons: 0,
-        }
-    }
-
-    fn compared() -> Self {
-        Self {
-            trees_enumerated: 1,
-            size_pruned: 0,
-            euler_pruned: 0,
-            full_comparisons: 1,
-        }
-    }
-}
-
-impl std::ops::Add for Stats {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self {
-        Self {
-            trees_enumerated: self.trees_enumerated + rhs.trees_enumerated,
-            size_pruned: self.size_pruned + rhs.size_pruned,
-            euler_pruned: self.euler_pruned + rhs.euler_pruned,
-            full_comparisons: self.full_comparisons + rhs.full_comparisons,
-        }
     }
 }
 
@@ -660,17 +217,8 @@ impl std::ops::Add for Stats {
 mod tests {
 
     use crate::distance::ids::NumericId;
-    use crate::distance::zs::UnitCost;
 
     use super::*;
-
-    fn leaf<L: Label>(label: impl Into<L>) -> TreeNode<L> {
-        TreeNode::leaf(label.into())
-    }
-
-    fn node<L: Label>(label: L, children: Vec<TreeNode<L>>) -> TreeNode<L> {
-        TreeNode::new(label, children)
-    }
 
     fn eid(i: usize) -> ExprChildId {
         ExprChildId::EClass(EClassId::new(i))
@@ -713,9 +261,12 @@ mod tests {
     }
 
     #[test]
-    fn enumerate_single_leaf() {
+    fn choice_iter_single_leaf() {
         let graph = single_node_graph("a");
-        let trees = graph.enumerate_trees(0, true);
+        let trees: Vec<_> = graph
+            .choice_iter(0)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, true))
+            .collect();
 
         assert_eq!(trees.len(), 1);
         // with_type=true wraps in typeOf(expr, type)
@@ -726,7 +277,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerate_with_or_choice() {
+    fn choice_iter_with_or_choice() {
         // Graph with one class containing two node choices
         let graph = EGraph::new(
             cfv(vec![EClass::new(
@@ -740,21 +291,24 @@ mod tests {
             HashMap::new(),
         );
 
-        let trees = graph.enumerate_trees(0, true);
+        let trees: Vec<_> = graph
+            .choice_iter(0)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, true))
+            .collect();
         assert_eq!(trees.len(), 2);
 
         // with_type=true wraps in typeOf(expr, type)
         // Extract expr labels from inside the typeOf wrapper
-        let labels = trees
+        let labels: Vec<_> = trees
             .iter()
             .map(|t| t.children()[0].label().as_str())
-            .collect::<Vec<_>>();
+            .collect();
         assert!(labels.contains(&"a"));
         assert!(labels.contains(&"b"));
     }
 
     #[test]
-    fn enumerate_with_and_children() {
+    fn choice_iter_with_and_children() {
         // Graph: root class -> node with two child classes (each has one leaf)
         // Class 0: root, has node "a" pointing to classes 1 and 2
         // Class 1: leaf "b"
@@ -775,7 +329,10 @@ mod tests {
             HashMap::new(),
         );
 
-        let trees = graph.enumerate_trees(0, true);
+        let trees: Vec<_> = graph
+            .choice_iter(0)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, true))
+            .collect();
         assert_eq!(trees.len(), 1);
         // with_type=true wraps in typeOf(expr, type)
         // typeOf(a(typeOf(b, type), typeOf(c, type)), type)
@@ -789,7 +346,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerate_with_cycle_no_revisits() {
+    fn choice_iter_with_cycle_no_revisits() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
             cfv(vec![EClass::new(
@@ -807,7 +364,10 @@ mod tests {
         );
 
         // With 0 revisits, we can only take the leaf option
-        let trees = graph.enumerate_trees(0, true);
+        let trees: Vec<_> = graph
+            .choice_iter(0)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, true))
+            .collect();
         assert_eq!(trees.len(), 1);
         // with_type=true wraps in typeOf(expr, type)
         assert_eq!(trees[0].label(), "typeOf");
@@ -815,7 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn enumerate_with_cycle_one_revisit() {
+    fn choice_iter_with_cycle_one_revisit() {
         // Graph with a cycle: class 0 -> node -> class 0
         let graph = EGraph::new(
             cfv(vec![EClass::new(
@@ -833,7 +393,10 @@ mod tests {
         );
 
         // With 1 revisit, we can go one level deep
-        let trees = graph.enumerate_trees(1, true);
+        let trees: Vec<_> = graph
+            .choice_iter(1)
+            .map(|c| graph.tree_from_choices(graph.root(), &c, true))
+            .collect();
 
         // Should have: "leaf", "rec(leaf)", "rec(rec(leaf))"
         // Actually: at depth 0 we have 2 choices, at depth 1 we have 2 choices...
@@ -846,136 +409,6 @@ mod tests {
             .iter()
             .any(|t| t.label() == "typeOf" && t.children()[0].label() == "rec");
         assert!(has_recursive);
-    }
-
-    #[test]
-    fn min_distance_exact_match() {
-        // Graph contains the exact reference tree
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: with_type=true wraps in typeOf(expr, type)
-        // typeOf(a(typeOf(b, type), typeOf(c, type)), type)
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![
-                node(
-                    "a".to_owned(),
-                    vec![
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                        ),
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("c".to_owned()), leaf("0".to_owned())],
-                        ),
-                    ],
-                ),
-                leaf("0".to_owned()), // a's type
-            ],
-        );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
-            .0
-            .unwrap();
-
-        assert_eq!(result.1, 0);
-    }
-
-    #[test]
-    fn min_distance_chooses_best() {
-        // Graph with OR choice: "a" or "x"
-        // Reference is "a", so should choose "a" with distance 0
-        let graph = EGraph::new(
-            cfv(vec![EClass::new(
-                vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
-                dummy_ty(),
-            )]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: with_type=true wraps in typeOf(expr, type)
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
-            .0
-            .unwrap();
-
-        assert_eq!(result.1, 0);
-        // Result is wrapped in typeOf
-        assert_eq!(result.0.label(), "typeOf");
-        assert_eq!(result.0.children()[0].label(), "a");
-    }
-
-    #[test]
-    fn min_distance_with_structure_choice() {
-        // Graph offers two structures:
-        // Option 1: a(b)
-        // Option 2: a(b, c)
-        // Reference: a(b)
-        // Should choose option 1 with distance 0
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![
-                        ENode::new("a".to_owned(), vec![eid(1)]),         // a(b)
-                        ENode::new("a".to_owned(), vec![eid(1), eid(2)]), // a(b, c)
-                    ],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: with_type=true wraps in typeOf(expr, type)
-        // typeOf(a(typeOf(b, type)), type)
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![
-                node(
-                    "a".to_owned(),
-                    vec![node(
-                        "typeOf".to_owned(),
-                        vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                    )],
-                ),
-                leaf("0".to_owned()), // a's type
-            ],
-        );
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
-            .0
-            .unwrap();
-
-        assert_eq!(result.1, 0);
-        // Result is typeOf(a(...), type), so outer node has 2 children
-        assert_eq!(result.0.children().len(), 2);
-        // Inner 'a' has 1 child (b wrapped in typeOf)
-        assert_eq!(result.0.children()[0].children().len(), 1);
     }
 
     #[test]
@@ -1314,19 +747,8 @@ mod tests {
     }
 
     #[test]
-    fn tree_from_choices_matches_enumeration() {
-        // Helper to check if two trees are structurally equal
-        fn trees_equal<L: Label>(a: &TreeNode<L>, b: &TreeNode<L>) -> bool {
-            if a.label() != b.label() || a.children().len() != b.children().len() {
-                return false;
-            }
-            a.children()
-                .iter()
-                .zip(b.children().iter())
-                .all(|(x, y)| trees_equal(x, y))
-        }
-
-        // Verify that tree_from_choices produces the same trees as enumeration
+    fn tree_from_choices_matches_choice_iter() {
+        // Verify that tree_from_choices produces correct trees for each choice vector
         let graph = EGraph::new(
             cfv(vec![
                 EClass::new(
@@ -1348,23 +770,23 @@ mod tests {
             HashMap::new(),
         );
 
-        let enumerated = graph.enumerate_trees(0, true);
+        let choices: Vec<_> = graph.choice_iter(0).collect();
 
         // Should produce: x(a), x(b), y
-        assert_eq!(enumerated.len(), 3);
+        assert_eq!(choices.len(), 3);
+        assert_eq!(choices[0], vec![0, 0]);
+        assert_eq!(choices[1], vec![0, 1]);
+        assert_eq!(choices[2], vec![1]);
 
-        // Reconstruct using tree_from_choices
-        let choices1 = vec![0, 0];
-        let tree1 = graph.tree_from_choices(EClassId::new(0), &choices1, true);
-        assert!(trees_equal(&tree1, &enumerated[0]));
+        // Verify tree_from_choices produces expected trees
+        let tree1 = graph.tree_from_choices(graph.root(), &choices[0], true);
+        assert_eq!(tree1.children()[0].label(), "x");
 
-        let choices2 = vec![0, 1];
-        let tree2 = graph.tree_from_choices(EClassId::new(0), &choices2, true);
-        assert!(trees_equal(&tree2, &enumerated[1]));
+        let tree2 = graph.tree_from_choices(graph.root(), &choices[1], true);
+        assert_eq!(tree2.children()[0].label(), "x");
 
-        let choices3 = vec![1];
-        let tree3 = graph.tree_from_choices(EClassId::new(0), &choices3, true);
-        assert!(trees_equal(&tree3, &enumerated[2]));
+        let tree3 = graph.tree_from_choices(graph.root(), &choices[2], true);
+        assert_eq!(tree3.children()[0].label(), "y");
     }
 
     #[test]
@@ -1385,180 +807,5 @@ mod tests {
 
         // Verify nat nodes exist
         assert!(!graph.nat_nodes.is_empty());
-    }
-
-    #[test]
-    fn min_distance_extract_fast_exact_match() {
-        // Graph contains the exact reference tree
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::leaf("b".to_owned())], dummy_ty()),
-                EClass::new(vec![ENode::leaf("c".to_owned())], dummy_ty()),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: with_type=true wraps in typeOf(expr, type)
-        // typeOf(a(typeOf(b, type), typeOf(c, type)), type)
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![
-                node(
-                    "a".to_owned(),
-                    vec![
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("b".to_owned()), leaf("0".to_owned())],
-                        ),
-                        node(
-                            "typeOf".to_owned(),
-                            vec![leaf("c".to_owned()), leaf("0".to_owned())],
-                        ),
-                    ],
-                ),
-                leaf("0".to_owned()),
-            ],
-        );
-
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
-            .0
-            .unwrap();
-        assert_eq!(result.1, 0);
-    }
-
-    #[test]
-    fn min_distance_extract_fast_chooses_best() {
-        // Graph with OR choice: "a" or "x"
-        let graph = EGraph::new(
-            cfv(vec![EClass::new(
-                vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
-                dummy_ty(),
-            )]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: with_type=true wraps in typeOf(expr, type)
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
-
-        let result = find_min_zs(&graph, &reference, &UnitCost, 0, true)
-            .0
-            .unwrap();
-        assert_eq!(result.1, 0);
-        // Result is wrapped in typeOf
-        assert_eq!(result.0.label(), "typeOf");
-        assert_eq!(result.0.children()[0].label(), "a");
-    }
-
-    #[test]
-    fn min_distance_extract_filtered_prunes_bad_trees() {
-        // Create a graph where one option is clearly worse
-        // Option 1: typeOf(a, type) - matches reference exactly
-        // Option 2: typeOf(x, type) - has different label, lower bound >= 1
-        let graph = EGraph::new(
-            cfv(vec![EClass::new(
-                vec![ENode::leaf("a".to_owned()), ENode::leaf("x".to_owned())],
-                dummy_ty(),
-            )]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // Reference: typeOf(a, type) - tree_from_choices wraps in typeOf
-        let reference = node(
-            "typeOf".to_owned(),
-            vec![leaf("a".to_owned()), leaf("0".to_owned())],
-        );
-
-        let (result, stats) = find_min_zs(&graph, &reference, &UnitCost, 0, true);
-
-        assert_eq!(result.unwrap().1, 0);
-        assert_eq!(stats.trees_enumerated, 2);
-        // With parallel execution, pruning is non-deterministic since both trees
-        // may be processed before best_distance is updated. We just verify the
-        // invariant that pruned + full_comparisons == trees_enumerated.
-        assert_eq!(
-            stats.size_pruned + stats.euler_pruned + stats.full_comparisons,
-            stats.trees_enumerated
-        );
-    }
-
-    #[test]
-    fn choice_iter_enumerates_all_trees_diamond_cycle() {
-        // Diamond with cycle at shared node - this pattern previously caused
-        // the iterator to miss some valid trees due to incomplete backtracking
-        // Class 0 -> a(1, 2), Class 1 -> b(3), Class 2 -> c(3), Class 3 -> [rec(3), d]
-        let graph = EGraph::new(
-            cfv(vec![
-                EClass::new(
-                    vec![ENode::new("a".to_owned(), vec![eid(1), eid(2)])],
-                    dummy_ty(),
-                ),
-                EClass::new(vec![ENode::new("b".to_owned(), vec![eid(3)])], dummy_ty()),
-                EClass::new(vec![ENode::new("c".to_owned(), vec![eid(3)])], dummy_ty()),
-                EClass::new(
-                    vec![
-                        ENode::new("rec".to_owned(), vec![eid(3)]),
-                        ENode::leaf("d".to_owned()),
-                    ],
-                    dummy_ty(),
-                ),
-            ]),
-            EClassId::new(0),
-            Vec::new(),
-            HashMap::new(),
-            dummy_nat_nodes(),
-            HashMap::new(),
-        );
-
-        // With revisits=1, valid trees are (siblings are independent):
-        // 1. a(b(d), c(d)) - no revisits used
-        // 2. a(b(d), c(rec(d))) - c's branch revisits class 3 once
-        // 3. a(b(rec(d)), c(d)) - b's branch revisits class 3 once
-        // 4. a(b(rec(d)), c(rec(d))) - both branches revisit class 3 once each
-        assert_eq!(graph.choice_iter(1).count(), 4);
-        assert_eq!(graph.count_trees(1), graph.choice_iter(1).count());
-
-        // Verify specific trees are found
-        let trees = graph
-            .choice_iter(1)
-            .map(|c| graph.tree_from_choices(graph.root(), &c, false).to_string())
-            .collect::<Vec<_>>();
-        assert!(trees.contains(&"(a (b d) (c d))".to_owned()));
-        assert!(trees.contains(&"(a (b d) (c (rec d)))".to_owned()));
-        assert!(trees.contains(&"(a (b (rec d)) (c d))".to_owned()));
-        assert!(trees.contains(&"(a (b (rec d)) (c (rec d)))".to_owned()));
-
-        // With revisits=0, only one tree is valid (no revisits allowed)
-        assert_eq!(graph.choice_iter(0).count(), 1);
-        assert_eq!(graph.count_trees(0), graph.choice_iter(0).count());
-
-        // Verify TreeIter produces the same trees as ChoiceIter
-        let tree_iter_trees = graph
-            .tree_iter(1, false)
-            .map(|t| t.to_string())
-            .collect::<Vec<_>>();
-        assert_eq!(tree_iter_trees.len(), 4);
-        assert!(tree_iter_trees.contains(&"(a (b d) (c d))".to_owned()));
-        assert!(tree_iter_trees.contains(&"(a (b d) (c (rec d)))".to_owned()));
-        assert!(tree_iter_trees.contains(&"(a (b (rec d)) (c d))".to_owned()));
-        assert!(tree_iter_trees.contains(&"(a (b (rec d)) (c (rec d)))".to_owned()));
     }
 }

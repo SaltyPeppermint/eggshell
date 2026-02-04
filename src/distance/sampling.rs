@@ -25,13 +25,29 @@ use super::nodes::Label;
 use super::tree::TreeNode;
 
 /// Trait for samplers that can draw terms from an e-graph.
-pub trait Sampler<L: Label> {
+pub trait Sampler<L: Label>: Sized {
     /// Sample a single term, returning `None` if sampling fails.
     fn sample(&mut self) -> Option<TreeNode<L>>;
 
     /// Sample multiple terms.
     fn sample_many(&mut self, count: usize) -> Vec<TreeNode<L>> {
         (0..count).filter_map(|_| self.sample()).collect()
+    }
+
+    /// Convert this sampler into an iterator that yields samples.
+    ///
+    /// The iterator will call `sample()` on each `next()` and terminate
+    /// when the sampler returns `None`. Use `.take(n)` to limit samples.
+    ///
+    /// # Example
+    /// ```
+    /// let sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
+    /// for tree in sampler.into_iter().take(100) {
+    ///     println!("{:?}", tree);
+    /// }
+    /// ```
+    fn into_iter(self) -> SamplingIter<L, Self> {
+        SamplingIter::new(self)
     }
 }
 
@@ -94,7 +110,7 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
             .class_ids()
             .map(|id| (graph.canonicalize(id), config.lambda))
             .collect::<HashMap<_, _>>();
-        let class_ids: Vec<EClassId> = weights.keys().copied().collect();
+        let class_ids = weights.keys().copied().collect::<Vec<_>>();
 
         for _ in 0..config.max_iterations {
             let mut max_delta: f64 = 0.0;
@@ -372,7 +388,7 @@ fn expected_size<L: Label>(graph: &EGraph<L>, lambda: f64) -> f64 {
         .class_ids()
         .map(|id| (graph.canonicalize(id), WD::leaf(lambda)))
         .collect();
-    let class_ids: Vec<_> = wd.keys().copied().collect();
+    let class_ids = wd.keys().copied().collect::<Vec<_>>();
 
     // Iterate until convergence
     for _ in 0..max_iterations {
@@ -456,6 +472,58 @@ impl WD {
             w: lambda * self.w,
             dw: self.w + lambda * self.dw,
         }
+    }
+}
+
+/// Iterator adapter that yields samples from any `Sampler`.
+///
+/// This iterator wraps a sampler and calls `sample()` on each `next()`.
+/// The iterator terminates when the sampler returns `None`, or you can
+/// use methods like `.take(n)` to limit the number of samples.
+///
+/// # Example
+/// ```ignore
+/// let sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
+/// let iter = SamplingIter::new(sampler);
+/// for tree in iter.take(100) {
+///     println!("{:?}", tree);
+/// }
+/// ```
+pub struct SamplingIter<L: Label, S: Sampler<L>> {
+    sampler: S,
+    _marker: std::marker::PhantomData<L>,
+}
+
+impl<L: Label, S: Sampler<L>> SamplingIter<L, S> {
+    /// Create a new sampling iterator from a sampler.
+    pub fn new(sampler: S) -> Self {
+        Self {
+            sampler,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Consume the iterator and return the underlying sampler.
+    pub fn into_inner(self) -> S {
+        self.sampler
+    }
+
+    /// Get a reference to the underlying sampler.
+    pub fn sampler(&self) -> &S {
+        &self.sampler
+    }
+
+    /// Get a mutable reference to the underlying sampler.
+    pub fn sampler_mut(&mut self) -> &mut S {
+        &mut self.sampler
+    }
+}
+
+impl<L: Label, S: Sampler<L>> Iterator for SamplingIter<L, S> {
+    type Item = TreeNode<L>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.sampler.sample()
     }
 }
 
@@ -561,5 +629,50 @@ mod tests {
             (400..600).contains(&leaf_count),
             "Expected ~50% leaves, got {leaf_count}/1000"
         );
+    }
+
+    #[test]
+    fn sampling_iter_yields_samples() {
+        let graph = cyclic_graph();
+        let config = FixpointSamplerConfig::for_cyclic();
+        let rng = StdRng::seed_from_u64(42);
+
+        // Use the iterator interface
+        let samples = FixpointSampler::new(&graph, &config, rng)
+            .expect("Should converge with λ < 1 on cyclic graph")
+            .into_iter()
+            .take(50)
+            .collect::<Vec<_>>();
+
+        assert_eq!(samples.len(), 50, "Should yield exactly 50 samples");
+
+        // All samples should have valid root labels
+        for sample in &samples {
+            assert!(
+                sample.label() == "f" || sample.label() == "x",
+                "Unexpected root label: {}",
+                sample.label()
+            );
+        }
+    }
+
+    #[test]
+    fn sampling_iter_can_access_sampler() {
+        let graph = cyclic_graph();
+        let config = FixpointSamplerConfig::for_cyclic();
+        let rng = StdRng::seed_from_u64(42);
+
+        let sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
+        let mut iter = SamplingIter::new(sampler);
+
+        // Take some samples
+        let _ = iter.next();
+        let _ = iter.next();
+
+        // We can still access the sampler through the iterator
+        let _sampler_ref = iter.sampler();
+
+        // And recover the sampler when done
+        let _sampler = iter.into_inner();
     }
 }
