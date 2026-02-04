@@ -1,6 +1,7 @@
 mod extract;
 mod graph;
 mod ids;
+mod min;
 mod nodes;
 pub mod rise;
 mod sampling;
@@ -12,8 +13,9 @@ mod zs;
 // Re-export rise types at this level for convenience
 pub use rise::{Expr, Nat, RiseLabel, Type};
 
-pub use extract::{ChoiceIter, Stats, find_min_struct, find_min_zs};
+pub use extract::ChoiceIter;
 pub use graph::{EClass, EGraph};
+pub use min::{Stats, find_min_struct, find_min_zs};
 pub use nodes::Label;
 pub use sampling::{
     DiverseSampler, DiverseSamplerConfig, FixpointSampler, FixpointSamplerConfig, Sampler,
