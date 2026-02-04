@@ -1,3 +1,4 @@
+mod extract;
 mod graph;
 mod ids;
 mod nodes;
@@ -11,11 +12,12 @@ mod zs;
 // Re-export rise types at this level for convenience
 pub use rise::{Expr, Nat, RiseLabel, Type};
 
-pub use graph::{EClass, EGraph, Stats, find_min_struct, find_min_zs};
+pub use extract::{ChoiceIter, Stats, find_min_struct, find_min_zs};
+pub use graph::{EClass, EGraph};
 pub use nodes::Label;
 pub use sampling::{
     DiverseSampler, DiverseSamplerConfig, FixpointSampler, FixpointSamplerConfig, Sampler,
-    find_critical_lambda, structural_hash,
+    SamplingIter, find_critical_lambda, structural_hash,
 };
 pub use str::tree_distance_euler_bound;
 pub use tree::TreeNode;
