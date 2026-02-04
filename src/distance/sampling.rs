@@ -71,11 +71,8 @@ pub struct FixpointSampler<'a, L: Label, R: Rng> {
 #[derive(Debug, Clone, bon::Builder)]
 #[builder(derive(Clone, Debug))]
 pub struct FixpointSamplerConfig {
-    /// Boltzmann parameter in (0, 1). Must be < 1 for cyclic graphs.
-    #[builder(default = 0.8)]
-    pub lambda: f64,
     /// Convergence threshold for weight computation.
-    #[builder(default = 1e-9)]
+    #[builder(default = 1e-6)]
     pub epsilon: f64,
     /// Maximum iterations for weight convergence.
     #[builder(default = 1000)]
@@ -89,7 +86,7 @@ impl FixpointSamplerConfig {
     /// Config for graphs with cycles - uses smaller lambda for faster convergence.
     #[must_use]
     pub fn for_cyclic() -> Self {
-        Self::builder().lambda(0.5).max_depth(100).build()
+        Self::builder().max_depth(100).build()
     }
 }
 
@@ -110,32 +107,18 @@ impl FixpointSamplerConfig {
 pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
     graph: &EGraph<L>,
     target_size: usize,
-    epsilon: f64,
-    max_iterations: usize,
-    max_depth: usize,
+    fixpoint_config: &FixpointSamplerConfig,
     rng: &mut R,
 ) -> Result<(f64, f64), FindLambdaError> {
     let mut lo = 0.001;
     let mut hi = 0.95; // Keep below 1 for convergence on cyclic graphs
-    let sampler_epsilon = 1e-6;
-
-    let c = FixpointSamplerConfig::builder()
-        .epsilon(sampler_epsilon)
-        .max_depth(max_depth)
-        .max_iterations(max_iterations);
 
     // First, check bounds to ensure target is achievable
     // Use a relative epsilon for convergence that scales with expected weight magnitude
-    let size_at_min = estimate_avg_size(
-        graph,
-        &c.clone().lambda(lo).build(),
-        R::seed_from_u64(rng.next_u64()),
-    )?;
-    let size_at_max = estimate_avg_size(
-        graph,
-        &c.clone().lambda(hi).build(),
-        R::seed_from_u64(rng.next_u64()),
-    )?;
+    let size_at_min =
+        estimate_avg_size(graph, fixpoint_config, lo, R::seed_from_u64(rng.next_u64()))?;
+    let size_at_max =
+        estimate_avg_size(graph, fixpoint_config, hi, R::seed_from_u64(rng.next_u64()))?;
 
     #[expect(clippy::cast_precision_loss)]
     let target = target_size as f64;
@@ -157,11 +140,12 @@ pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
     let mut best_lambda = f64::midpoint(lo, hi);
     let mut best_size = 0.0;
 
-    while hi - lo > epsilon {
+    while hi - lo > fixpoint_config.epsilon {
         let mid = f64::midpoint(lo, hi);
         let avg_size = estimate_avg_size(
             graph,
-            &c.clone().lambda(mid).build(),
+            fixpoint_config,
+            mid,
             R::seed_from_u64(rng.next_u64()),
         )?;
 
@@ -196,18 +180,15 @@ pub enum FindLambdaError {
 fn estimate_avg_size<L: Label, R: Rng>(
     graph: &EGraph<L>,
     config: &FixpointSamplerConfig,
+    lambda: f64,
     rng: R,
 ) -> Result<f64, FindLambdaError> {
-    let samples = FixpointSampler::new(graph, config, rng)
-        .ok_or(FindLambdaError::SamplerDidNotConverge {
-            lambda: config.lambda,
-        })?
+    let samples = FixpointSampler::new(graph, lambda, config, rng)
+        .ok_or(FindLambdaError::SamplerDidNotConverge { lambda })?
         .sample_many(1000);
 
     if samples.is_empty() {
-        return Err(FindLambdaError::SamplerDidNotConverge {
-            lambda: config.lambda,
-        });
+        return Err(FindLambdaError::SamplerDidNotConverge { lambda });
     }
 
     #[expect(clippy::cast_precision_loss)]
@@ -225,17 +206,19 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
     /// `None` if weight computation does not converge, otherwise the sampler.
     ///
     /// # Panics
-    /// Panics if `config.lambda` is not in the range (0, 1].
-    pub fn new(graph: &'a EGraph<L>, config: &FixpointSamplerConfig, rng: R) -> Option<Self> {
-        assert!(
-            config.lambda > 0.0 && config.lambda <= 1.0,
-            "λ must be in (0, 1]"
-        );
+    /// Panics if `lambda` is not in the range (0, 1].
+    pub fn new(
+        graph: &'a EGraph<L>,
+        lambda: f64,
+        config: &FixpointSamplerConfig,
+        rng: R,
+    ) -> Option<Self> {
+        assert!(lambda > 0.0 && lambda <= 1.0, "λ must be in (0, 1]");
 
         // Collect canonical class IDs and initialize weights
         let mut weights = graph
             .class_ids()
-            .map(|id| (graph.canonicalize(id), config.lambda))
+            .map(|id| (graph.canonicalize(id), lambda))
             .collect::<HashMap<_, _>>();
         let class_ids = weights.keys().copied().collect::<Vec<_>>();
 
@@ -253,10 +236,10 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
                             .iter()
                             .map(|child| match child {
                                 ExprChildId::EClass(eid) => weights[&graph.canonicalize(*eid)],
-                                ExprChildId::Nat(_) | ExprChildId::Data(_) => config.lambda,
+                                ExprChildId::Nat(_) | ExprChildId::Data(_) => lambda,
                             })
                             .product();
-                        config.lambda * child_product
+                        lambda * child_product
                     })
                     .sum();
 
@@ -268,7 +251,7 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
             if max_delta < config.epsilon {
                 return Some(Self {
                     graph,
-                    lambda: config.lambda,
+                    lambda,
                     weights,
                     rng,
                     max_depth: config.max_depth,
@@ -582,7 +565,7 @@ mod tests {
         let config = FixpointSamplerConfig::for_cyclic();
         let rng = StdRng::seed_from_u64(42);
 
-        let mut sampler = FixpointSampler::new(&graph, &config, rng)
+        let mut sampler = FixpointSampler::new(&graph, 0.5, &config, rng)
             .expect("Should converge with λ < 1 on cyclic graph");
 
         // Should be able to sample without infinite loop
@@ -608,12 +591,9 @@ mod tests {
         // W = 1.0
         //
         // This means P(x) = 0.5/1.0 = 50%, P(f(...)) = 50%
-        let config = FixpointSamplerConfig::builder()
-            .lambda(0.5)
-            .max_depth(100)
-            .build();
+        let config = FixpointSamplerConfig::builder().max_depth(100).build();
         let rng = StdRng::seed_from_u64(42);
-        let mut sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
+        let mut sampler = FixpointSampler::new(&graph, 0.5, &config, rng).unwrap();
 
         // Verify the probability distribution matches theory
         let leaf_count = sampler
@@ -636,7 +616,7 @@ mod tests {
         let rng = StdRng::seed_from_u64(42);
 
         // Use the iterator interface
-        let samples = FixpointSampler::new(&graph, &config, rng)
+        let samples = FixpointSampler::new(&graph, 0.5, &config, rng)
             .expect("Should converge with λ < 1 on cyclic graph")
             .into_sample_iter()
             .take(50)
@@ -660,7 +640,7 @@ mod tests {
         let config = FixpointSamplerConfig::for_cyclic();
         let rng = StdRng::seed_from_u64(42);
 
-        let sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
+        let sampler = FixpointSampler::new(&graph, 0.5, &config, rng).unwrap();
         let mut iter = SamplingIter::new(sampler);
 
         // Take some samples
@@ -679,9 +659,10 @@ mod tests {
         let graph = cyclic_graph();
 
         let mut rng = StdRng::seed_from_u64(42);
+        let config = FixpointSamplerConfig::builder().build();
 
         // Target size of 2 (e.g., f(x) has 2 nodes)
-        let result = find_lambda_for_target_size(&graph, 2, 0.01, 1000, 100, &mut rng);
+        let result = find_lambda_for_target_size(&graph, 2, &config, &mut rng);
         assert!(
             result.is_ok(),
             "Should find a lambda for target size 2: {:?}",

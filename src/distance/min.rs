@@ -200,12 +200,12 @@ pub fn find_min_sampling_zs<L: Label, C: EditCosts<L>>(
     let running_best = AtomicUsize::new(usize::MAX);
 
     let mut rng = StdRng::seed_from_u64(seed);
+    let config = FixpointSamplerConfig::builder().build();
     let (lambda, expected_size) =
-        find_lambda_for_target_size(graph, target_weight, 0.4, 1000, 1000, &mut rng).unwrap();
+        find_lambda_for_target_size(graph, target_weight, &config, &mut rng).unwrap();
     eprintln!("LAMBDA IS {lambda}");
     eprintln!("EXPECTED SIZE IS {expected_size}");
-    let config = FixpointSamplerConfig::builder().lambda(lambda).build();
-    let (result, stats) = FixpointSampler::new(graph, &config, rng)
+    let (result, stats) = FixpointSampler::new(graph, lambda, &config, rng)
         .unwrap()
         .into_sample_iter()
         .take(n_samples)
