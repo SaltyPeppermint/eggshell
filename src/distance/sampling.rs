@@ -16,13 +16,12 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 use hashbrown::{HashMap, HashSet};
-use rand::SeedableRng;
-use rand::distributions::WeightedIndex;
+use ordered_float::OrderedFloat;
 use rand::prelude::*;
 
 use super::graph::EGraph;
-use super::ids::{EClassId, ExprChildId};
-use super::nodes::Label;
+use super::ids::{DataChildId, DataId, EClassId, ExprChildId, NatId};
+use super::nodes::{ENode, Label};
 use super::tree::TreeNode;
 
 /// Trait for samplers that can draw terms from an e-graph.
@@ -30,11 +29,11 @@ pub trait Sampler: Sized {
     type Label: Label;
 
     /// Sample a single term, returning `None` if sampling fails.
-    fn sample(&mut self) -> Option<TreeNode<Self::Label>>;
+    fn sample(&mut self, with_types: bool) -> Option<TreeNode<Self::Label>>;
 
     /// Sample multiple terms.
-    fn sample_many(&mut self, count: usize) -> Vec<TreeNode<Self::Label>> {
-        (0..count).filter_map(|_| self.sample()).collect()
+    fn sample_many(&mut self, count: usize, with_types: bool) -> Vec<TreeNode<Self::Label>> {
+        (0..count).filter_map(|_| self.sample(with_types)).collect()
     }
 
     /// Convert this sampler into an iterator that yields samples.
@@ -45,12 +44,12 @@ pub trait Sampler: Sized {
     /// # Example
     /// ```
     /// let sampler = FixpointSampler::new(&graph, &config, rng).unwrap();
-    /// for tree in sampler.into_iter().take(100) {
+    /// for tree in sampler.into_sample_iter(true).take(100) {
     ///     println!("{:?}", tree);
     /// }
     /// ```
-    fn into_sample_iter(self) -> SamplingIter<Self> {
-        SamplingIter::new(self)
+    fn into_sample_iter(self, with_types: bool) -> SamplingIter<Self> {
+        SamplingIter::new(self, with_types)
     }
 }
 
@@ -59,10 +58,14 @@ pub trait Sampler: Sized {
 /// This sampler handles cyclic e-graphs correctly by computing weights
 /// via iterative convergence rather than recursion. Use this when your
 /// e-graph may contain cycles.
+///
+/// Internally uses log-space arithmetic for numerical stability when
+/// λ is small or trees are deep.
 pub struct FixpointSampler<'a, L: Label, R: Rng> {
     graph: &'a EGraph<L>,
-    lambda: f64,
-    weights: HashMap<EClassId, f64>,
+    log_lambda: OrderedFloat<f64>,
+    /// Log-weights for each e-class: log(W[id])
+    log_weights: HashMap<EClassId, OrderedFloat<f64>>,
     rng: R,
     max_depth: usize,
 }
@@ -72,7 +75,7 @@ pub struct FixpointSampler<'a, L: Label, R: Rng> {
 #[builder(derive(Clone, Debug))]
 pub struct FixpointSamplerConfig {
     /// Convergence threshold for weight computation.
-    #[builder(default = 1e-6)]
+    #[builder(default = 1e-3)]
     pub epsilon: f64,
     /// Maximum iterations for weight convergence.
     #[builder(default = 1000)]
@@ -108,17 +111,35 @@ pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
     graph: &EGraph<L>,
     target_size: usize,
     fixpoint_config: &FixpointSamplerConfig,
+    with_types: bool,
     rng: &mut R,
 ) -> Result<(f64, f64), FindLambdaError> {
     let mut lo = 0.001;
-    let mut hi = 0.95; // Keep below 1 for convergence on cyclic graphs
+
+    // For cyclic graphs, we need to find the maximum lambda that converges.
+    // Binary search to find the critical lambda (highest that still converges).
+    let mut hi = find_critical_lambda(graph, fixpoint_config, rng)?;
+    eprintln!("Critical lambda found: {hi}");
 
     // First, check bounds to ensure target is achievable
     // Use a relative epsilon for convergence that scales with expected weight magnitude
-    let size_at_min =
-        estimate_avg_size(graph, fixpoint_config, lo, R::seed_from_u64(rng.next_u64()))?;
-    let size_at_max =
-        estimate_avg_size(graph, fixpoint_config, hi, R::seed_from_u64(rng.next_u64()))?;
+    let size_at_min = estimate_avg_size(
+        graph,
+        fixpoint_config,
+        lo,
+        with_types,
+        R::seed_from_u64(rng.next_u64()),
+    )?;
+    // eprintln!("size_min is doable");
+    let size_at_max = estimate_avg_size(
+        graph,
+        fixpoint_config,
+        hi,
+        with_types,
+        R::seed_from_u64(rng.next_u64()),
+    )?;
+    // eprintln!("size_max is doable");
+    eprintln!("Achievable size range: {size_at_min:.1} - {size_at_max:.1} (target: {target_size})");
 
     #[expect(clippy::cast_precision_loss)]
     let target = target_size as f64;
@@ -141,11 +162,15 @@ pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
     let mut best_size = 0.0;
 
     while hi - lo > fixpoint_config.epsilon {
+        // eprintln!("Current best lambda: {best_lambda}");
+        // eprintln!("current best size: {best_size}");
+
         let mid = f64::midpoint(lo, hi);
         let avg_size = estimate_avg_size(
             graph,
             fixpoint_config,
             mid,
+            with_types,
             R::seed_from_u64(rng.next_u64()),
         )?;
 
@@ -162,6 +187,59 @@ pub fn find_lambda_for_target_size<L: Label, R: Rng + SeedableRng>(
     Ok((best_lambda, best_size))
 }
 
+/// Find the critical lambda - the highest value where the sampler still converges.
+///
+/// For cyclic e-graphs, there's a threshold lambda above which the fixed-point
+/// iteration diverges. This function uses binary search to find that threshold.
+fn find_critical_lambda<L: Label, R: Rng + SeedableRng>(
+    graph: &EGraph<L>,
+    config: &FixpointSamplerConfig,
+    rng: &mut R,
+) -> Result<f64, FindLambdaError> {
+    let mut lo = 0.001; // Known to converge (very small lambda)
+    let mut hi = 1.0; // Upper bound to search
+
+    // First verify that lo converges
+    if FixpointSampler::new(graph, lo, config, R::seed_from_u64(rng.next_u64())).is_none() {
+        return Err(FindLambdaError::SamplerDidNotConverge { lambda: lo });
+    }
+
+    // Binary search for the critical lambda
+    while hi - lo > 0.001 {
+        let mid = f64::midpoint(lo, hi);
+        if FixpointSampler::new(graph, mid, config, R::seed_from_u64(rng.next_u64())).is_some() {
+            lo = mid; // mid converges, try higher
+        } else {
+            hi = mid; // mid diverges, try lower
+        }
+    }
+
+    // Return slightly below the critical point for safety margin
+    Ok(lo * 0.99)
+}
+
+/// Estimate the average tree size for a given lambda by sampling.
+fn estimate_avg_size<L: Label, R: Rng>(
+    graph: &EGraph<L>,
+    config: &FixpointSamplerConfig,
+    lambda: f64,
+    with_types: bool,
+    rng: R,
+) -> Result<f64, FindLambdaError> {
+    let samples = FixpointSampler::new(graph, lambda, config, rng)
+        .ok_or(FindLambdaError::SamplerDidNotConverge { lambda })?
+        .sample_many(1000, with_types);
+
+    if samples.is_empty() {
+        return Err(FindLambdaError::SamplerDidNotConverge { lambda });
+    }
+
+    #[expect(clippy::cast_precision_loss)]
+    let avg = samples.iter().map(|t| t.size()).sum::<usize>() as f64 / samples.len() as f64;
+
+    Ok(avg)
+}
+
 /// Errors that can occur when finding lambda for a target size.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum FindLambdaError {
@@ -176,31 +254,11 @@ pub enum FindLambdaError {
     SamplerDidNotConverge { lambda: f64 },
 }
 
-/// Estimate the average tree size for a given lambda by sampling.
-fn estimate_avg_size<L: Label, R: Rng>(
-    graph: &EGraph<L>,
-    config: &FixpointSamplerConfig,
-    lambda: f64,
-    rng: R,
-) -> Result<f64, FindLambdaError> {
-    let samples = FixpointSampler::new(graph, lambda, config, rng)
-        .ok_or(FindLambdaError::SamplerDidNotConverge { lambda })?
-        .sample_many(1000);
-
-    if samples.is_empty() {
-        return Err(FindLambdaError::SamplerDidNotConverge { lambda });
-    }
-
-    #[expect(clippy::cast_precision_loss)]
-    let avg = samples.iter().map(|t| t.size()).sum::<usize>() as f64 / samples.len() as f64;
-
-    Ok(avg)
-}
-
 impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
     /// Create a new fixed-point sampler.
     ///
     /// Computes weights via fixed-point iteration until convergence.
+    /// Uses log-space arithmetic internally for numerical stability.
     ///
     /// # Returns
     /// `None` if weight computation does not converge, otherwise the sampler.
@@ -215,100 +273,177 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
     ) -> Option<Self> {
         assert!(lambda > 0.0 && lambda <= 1.0, "λ must be in (0, 1]");
 
-        // Collect canonical class IDs and initialize weights
-        let mut weights = graph
+        let log_lambda = OrderedFloat(lambda.ln());
+
+        // Collect canonical class IDs and initialize log-weights to log(λ)
+        let mut log_weights = graph
             .class_ids()
-            .map(|id| (graph.canonicalize(id), lambda))
+            .map(|id| (graph.canonicalize(id), log_lambda))
             .collect::<HashMap<_, _>>();
-        let class_ids = weights.keys().copied().collect::<Vec<_>>();
+        let class_ids = log_weights.keys().copied().collect::<Vec<_>>();
+
+        let mut prev_max_delta = f64::INFINITY;
+        let mut divergence_count = 0;
 
         for _ in 0..config.max_iterations {
             let mut max_delta: f64 = 0.0;
 
             for &id in &class_ids {
-                let new_weight: f64 = graph
-                    .class(id)
-                    .nodes()
-                    .iter()
-                    .map(|node| {
-                        let child_product: f64 = node
-                            .children()
-                            .iter()
-                            .map(|child| match child {
-                                ExprChildId::EClass(eid) => weights[&graph.canonicalize(*eid)],
-                                ExprChildId::Nat(_) | ExprChildId::Data(_) => lambda,
-                            })
-                            .product();
-                        lambda * child_product
-                    })
-                    .sum();
+                // new_log_weight = log(sum over nodes of (λ × product of child weights))
+                //                = log_sum_exp(log(λ) + sum of log(child weights))
+                let node_log_weights = graph.class(id).nodes().iter().map(|node| {
+                    node.children()
+                        .iter()
+                        .map(|child| match child {
+                            ExprChildId::EClass(eid) => log_weights[&graph.canonicalize(*eid)],
+                            ExprChildId::Nat(nat_id) => {
+                                Self::nat_log_weight(graph, *nat_id, log_lambda)
+                            }
+                            ExprChildId::Data(dt_id) => {
+                                Self::dt_log_weight(graph, *dt_id, log_lambda)
+                            }
+                        })
+                        .sum::<OrderedFloat<f64>>()
+                        + log_lambda
+                });
 
-                let old_weight = weights[&id];
-                max_delta = max_delta.max((new_weight - old_weight).abs());
-                weights.insert(id, new_weight);
+                let max = node_log_weights
+                    .clone()
+                    .max()
+                    .expect("log_sum_exp requires non-empty input");
+                let new_log_weight =
+                    max + node_log_weights.map(|v| (v - max).exp()).sum::<f64>().ln();
+
+                // Convergence check: |Δ log w| < ε means relative change |w_new/w_old - 1| ≈ ε
+                let delta = (new_log_weight - log_weights[&id]).abs();
+                max_delta = max_delta.max(delta);
+                log_weights.insert(id, new_log_weight);
             }
-
+            // eprintln!("max_delta at {max_delta}");
             if max_delta < config.epsilon {
                 return Some(Self {
                     graph,
-                    lambda,
-                    weights,
+                    log_lambda,
+                    log_weights,
                     rng,
                     max_depth: config.max_depth,
                 });
             }
+
+            // Detect divergence: if max_delta is consistently increasing, we're diverging
+            if max_delta > prev_max_delta * 1.5 {
+                divergence_count += 1;
+                if divergence_count >= 3 {
+                    // Weights are diverging - lambda is too large for this cyclic graph
+                    eprintln!("Divergence detected: lambda={lambda} is too large");
+                    return None;
+                }
+            } else {
+                divergence_count = 0;
+            }
+            prev_max_delta = max_delta;
         }
         None
     }
 
-    /// Compute weights for each node choice at an e-class.
-    fn node_weights(&self, id: EClassId) -> Vec<f64> {
-        let canonical = self.graph.canonicalize(id);
-        self.graph
-            .class(canonical)
-            .nodes()
+    fn nat_log_weight(
+        graph: &EGraph<L>,
+        id: NatId,
+        log_lambda: OrderedFloat<f64>,
+    ) -> OrderedFloat<f64> {
+        graph
+            .nat(id)
+            .children()
             .iter()
-            .map(|node| {
-                let child_product: f64 = node
-                    .children()
-                    .iter()
-                    .map(|child| match child {
-                        ExprChildId::EClass(eid) => {
-                            let c = self.graph.canonicalize(*eid);
-                            self.weights.get(&c).copied().unwrap_or(0.0)
-                        }
-                        ExprChildId::Nat(_) | ExprChildId::Data(_) => self.lambda,
-                    })
-                    .product();
-                self.lambda * child_product
+            .map(|child_id| Self::nat_log_weight(graph, *child_id, log_lambda))
+            .sum::<OrderedFloat<f64>>()
+            + log_lambda
+    }
+
+    fn dt_log_weight(
+        graph: &EGraph<L>,
+        id: DataId,
+        log_lambda: OrderedFloat<f64>,
+    ) -> OrderedFloat<f64> {
+        graph
+            .data_ty(id)
+            .children()
+            .iter()
+            .map(|child_id| match child_id {
+                DataChildId::Nat(nat_id) => Self::nat_log_weight(graph, *nat_id, log_lambda),
+                DataChildId::DataType(data_id) => Self::dt_log_weight(graph, *data_id, log_lambda),
             })
-            .collect()
+            .sum::<OrderedFloat<f64>>()
+            + log_lambda
+    }
+
+    /// Compute log-weight for a node (sum of children log-weights + log(λ)).
+    fn node_log_weight(&self, node: &ENode<L>) -> OrderedFloat<f64> {
+        node.children()
+            .iter()
+            .map(|child| match child {
+                ExprChildId::EClass(eid) => {
+                    let c = self.graph.canonicalize(*eid);
+                    self.log_weights[&c]
+                }
+                ExprChildId::Nat(nat_id) => {
+                    Self::nat_log_weight(self.graph, *nat_id, self.log_lambda)
+                }
+                ExprChildId::Data(dt_id) => {
+                    Self::dt_log_weight(self.graph, *dt_id, self.log_lambda)
+                }
+            })
+            .sum::<OrderedFloat<f64>>()
+            + self.log_lambda
     }
 
     /// Sample a term rooted at the given e-class.
-    fn sample_from(&mut self, id: EClassId, depth: usize) -> Option<TreeNode<L>> {
+    fn sample_from(&mut self, id: EClassId, depth: usize, with_types: bool) -> Option<TreeNode<L>> {
         if depth >= self.max_depth {
             return None;
         }
 
-        let canonical = self.graph.canonicalize(id);
-        let node_weights = self.node_weights(canonical);
-        let dist = WeightedIndex::new(&node_weights).ok()?;
-        let chosen_idx = self.rng.sample(dist);
-        let chosen_node = &self.graph.class(canonical).nodes()[chosen_idx];
+        let nodes = self.graph.class(id).nodes();
 
-        chosen_node
-            .children()
+        // Compute log-weights for each node
+        let log_weights = nodes
             .iter()
-            .map(|child| self.sample_child(child, depth + 1))
-            .collect::<Option<Vec<_>>>()
-            .map(|children| TreeNode::new(chosen_node.label().clone(), children))
+            .map(|node| (node, self.node_log_weight(node)))
+            .collect::<HashMap<_, _>>();
+
+        // Convert to probabilities using softmax (numerically stable)
+        let max_log = log_weights.values().max().expect("e-class has no nodes");
+
+        let chosen_node = nodes
+            // Compute exp(log_w - max) for numerical stability
+            .choose_weighted(&mut self.rng, |node| (log_weights[node] - max_log).exp())
+            .expect("weights are always positive");
+
+        let expr_tree = TreeNode::new(
+            chosen_node.label().clone(),
+            chosen_node
+                .children()
+                .iter()
+                .map(|c| self.sample_child(c, depth + 1, with_types))
+                .collect::<Option<_>>()?,
+        );
+        if with_types {
+            let type_tree = TreeNode::from_eclass(self.graph, id);
+            Some(TreeNode::new(L::type_of(), vec![expr_tree, type_tree]))
+        } else {
+            Some(expr_tree)
+        }
     }
 
     /// Sample a child, dispatching on child type.
-    fn sample_child(&mut self, child: &ExprChildId, depth: usize) -> Option<TreeNode<L>> {
+    fn sample_child(
+        &mut self,
+        child: &ExprChildId,
+        depth: usize,
+        with_types: bool,
+    ) -> Option<TreeNode<L>> {
         match child {
-            ExprChildId::EClass(eid) => self.sample_from(*eid, depth),
+            ExprChildId::EClass(eid) => self.sample_from(*eid, depth, with_types),
             ExprChildId::Nat(nid) => Some(TreeNode::from_nat(self.graph, *nid)),
             ExprChildId::Data(did) => Some(TreeNode::from_data(self.graph, *did)),
         }
@@ -318,8 +453,8 @@ impl<'a, L: Label, R: Rng> FixpointSampler<'a, L, R> {
 impl<L: Label, R: Rng> Sampler for FixpointSampler<'_, L, R> {
     type Label = L;
 
-    fn sample(&mut self) -> Option<TreeNode<L>> {
-        self.sample_from(self.graph.root(), 0)
+    fn sample(&mut self, with_types: bool) -> Option<TreeNode<L>> {
+        self.sample_from(self.graph.root(), 0, with_types)
     }
 }
 
@@ -412,10 +547,10 @@ impl<S: Sampler> DiverseSampler<S> {
 impl<S: Sampler> Sampler for DiverseSampler<S> {
     type Label = S::Label;
 
-    fn sample(&mut self) -> Option<TreeNode<Self::Label>> {
+    fn sample(&mut self, with_types: bool) -> Option<TreeNode<Self::Label>> {
         let this = &mut *self;
         for _ in 0..this.config.max_attempts_per_sample {
-            let term = this.sampler.sample()?;
+            let term = this.sampler.sample(with_types)?;
             let (is_novel, hash, features) = this.is_novel(&term);
             if is_novel {
                 this.accept(hash, features);
@@ -476,12 +611,16 @@ fn collect_features<L: Label>(tree: &TreeNode<L>, features: &mut HashSet<(L, usi
 /// ```
 pub struct SamplingIter<S: Sampler> {
     sampler: S,
+    with_types: bool,
 }
 
 impl<S: Sampler> SamplingIter<S> {
     /// Create a new sampling iterator from a sampler.
-    pub fn new(sampler: S) -> Self {
-        Self { sampler }
+    pub fn new(sampler: S, with_types: bool) -> Self {
+        Self {
+            sampler,
+            with_types,
+        }
     }
 
     /// Consume the iterator and return the underlying sampler.
@@ -498,13 +637,17 @@ impl<S: Sampler> SamplingIter<S> {
     pub fn sampler_mut(&mut self) -> &mut S {
         &mut self.sampler
     }
+
+    pub fn with_types(&self) -> bool {
+        self.with_types
+    }
 }
 
 impl<S: Sampler> Iterator for SamplingIter<S> {
     type Item = TreeNode<S::Label>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.sampler.sample()
+        self.sampler.sample(self.with_types)
     }
 }
 
@@ -569,7 +712,7 @@ mod tests {
             .expect("Should converge with λ < 1 on cyclic graph");
 
         // Should be able to sample without infinite loop
-        let terms = sampler.sample_many(100);
+        let terms = sampler.sample_many(100, false);
         assert!(!terms.is_empty(), "Should produce some terms");
 
         // With small lambda, most terms should be small
@@ -597,7 +740,7 @@ mod tests {
 
         // Verify the probability distribution matches theory
         let leaf_count = sampler
-            .sample_many(1000)
+            .sample_many(1000, false)
             .iter()
             .filter(|t| t.label() == "x")
             .count();
@@ -618,7 +761,7 @@ mod tests {
         // Use the iterator interface
         let samples = FixpointSampler::new(&graph, 0.5, &config, rng)
             .expect("Should converge with λ < 1 on cyclic graph")
-            .into_sample_iter()
+            .into_sample_iter(false)
             .take(50)
             .collect::<Vec<_>>();
 
@@ -641,7 +784,7 @@ mod tests {
         let rng = StdRng::seed_from_u64(42);
 
         let sampler = FixpointSampler::new(&graph, 0.5, &config, rng).unwrap();
-        let mut iter = SamplingIter::new(sampler);
+        let mut iter = SamplingIter::new(sampler, false);
 
         // Take some samples
         let _ = iter.next();
@@ -662,7 +805,7 @@ mod tests {
         let config = FixpointSamplerConfig::builder().build();
 
         // Target size of 2 (e.g., f(x) has 2 nodes)
-        let result = find_lambda_for_target_size(&graph, 2, &config, &mut rng);
+        let result = find_lambda_for_target_size(&graph, 2, &config, false, &mut rng);
         assert!(
             result.is_ok(),
             "Should find a lambda for target size 2: {:?}",
