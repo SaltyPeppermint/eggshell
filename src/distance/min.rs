@@ -202,12 +202,12 @@ pub fn find_min_sampling_zs<L: Label, C: EditCosts<L>>(
     let mut rng = StdRng::seed_from_u64(seed);
     let config = FixpointSamplerConfig::builder().build();
     let (lambda, expected_size) =
-        find_lambda_for_target_size(graph, target_weight, &config, &mut rng).unwrap();
+        find_lambda_for_target_size(graph, target_weight, &config, with_types, &mut rng).unwrap();
     eprintln!("LAMBDA IS {lambda}");
     eprintln!("EXPECTED SIZE IS {expected_size}");
     let (result, stats) = FixpointSampler::new(graph, lambda, &config, rng)
         .unwrap()
-        .into_sample_iter()
+        .into_sample_iter(with_types)
         .take(n_samples)
         .par_bridge()
         .progress_count(n_samples as u64)

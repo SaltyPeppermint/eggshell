@@ -134,7 +134,8 @@ where
 #[expect(clippy::cast_precision_loss)]
 fn run_extraction<L: Label>(graph: &EGraph<L>, ref_tree: &TreeNode<L>, args: &Args) {
     let ref_node_count = ref_tree.size();
-    println!("  Reference tree has {ref_node_count} nodes");
+    let ref_stripped_count = ref_tree.strip_types().size();
+    println!("  Reference tree has {ref_node_count} nodes ({ref_stripped_count} without types)");
 
     let start = Instant::now();
     println!("\n--- Zhang-Shasha extraction (with lower-bound pruning) ---");

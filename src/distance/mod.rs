@@ -1,3 +1,4 @@
+mod count;
 mod extract;
 mod graph;
 mod ids;
@@ -13,6 +14,7 @@ mod zs;
 // Re-export rise types at this level for convenience
 pub use rise::{Expr, Nat, RiseLabel, Type};
 
+pub use count::TermCount;
 pub use extract::ChoiceIter;
 pub use graph::{EClass, EGraph};
 pub use min::{Stats, find_min_exhaustive_zs, find_min_sampling_zs, find_min_struct};

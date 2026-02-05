@@ -152,7 +152,7 @@ impl<L: Label> EGraph<L> {
 
     /// Returns an iterator over all e-class IDs in the graph.
     pub fn class_ids(&self) -> impl Iterator<Item = EClassId> + '_ {
-        self.classes.keys().copied()
+        self.classes.keys().map(|k| self.canonicalize(*k))
     }
 
     #[must_use]
